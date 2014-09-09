@@ -1,0 +1,1967 @@
+/****************************************************************************************
+* Description: Oracle for Triangle Finding Problem
+*
+* Author: Chen-Fu Chiang @ USherbrooke
+*
+* Implementation of the Oracle for the triangle finding algorithm specified in the
+* Quantum Computer Science Program @ Government Furnished Information document
+*
+* GFI Document date: June 20, 2011
+* GFI Document Version: 1.0.0
+* GFI Document Reversion number: 188
+* Recent Update: Based on https://qcs.ornl.gov/trac/qcs-scaffold/ticket/3
+*****************************************************************************************/
+
+
+// FIXME: placeholder for now
+/***********************************************
+* 4-Qubit Toffoli
+************************************************/
+module C_Toffoli (qbit target, qbit ctrl1, qbit ctrl2, qbit ctrl3)
+{
+  CNOT (ctrl1, ctrl2);
+  Toffoli (target, ctrl1, ctrl3);
+}
+
+// FIXME: placeholder for now
+/***********************************************
+* 5-Qubit Toffoli
+************************************************/
+module C_C_Toffoli (qbit target, qbit ctrl1, qbit ctrl2, qbit ctrl3, qbit ctrl4)
+{
+  CNOT (ctrl1, ctrl2);
+  Toffoli (target, ctrl1, ctrl3);
+  X(ctrl4);
+}
+
+/***********************************************
+* Controlled Version of the C_EvaluateOR module
+************************************************/
+module C_EvaluateOR(qbit target, qbit ctr2, qbit ctr1, qbit ctrl)
+{
+	CNOT(ctr1, ctrl);
+	CNOT(ctr2, ctrl);
+	C_Toffoli(target, ctr2, ctr1, ctrl);
+	CNOT(target, ctrl);
+}
+
+/*************************************************
+* Controlled Version of the C_InvEvaluateOR module
+**************************************************/
+module C_InvEvaluateOR(qbit target, qbit ctr2, qbit ctr1, qbit ctrl)
+{
+	CNOT(target, ctrl);
+	C_Toffoli(target, ctr2, ctr1, ctrl);
+	CNOT(ctr2, ctrl);
+	CNOT(ctr1, ctrl);
+}
+
+/***********************************************
+* Controlled Version of the C_EvaluateOR module
+************************************************/
+module C_C_EvaluateOR(qbit target, qbit ctr2, qbit ctr1, qbit ctrl1, qbit ctrl2)
+{
+	Toffoli(ctr1, ctrl1, ctrl2);
+	Toffoli(ctr2, ctrl1, ctrl2);
+	C_C_Toffoli(target, ctr2, ctr1, ctrl1, ctrl2);
+	Toffoli(target, ctrl1, ctrl2);
+}
+
+/***********************************************
+* Controlled Version of the C_EvaluateOR module
+************************************************/
+module C_C_InvEvaluateOR(qbit target, qbit ctr2, qbit ctr1, qbit ctrl1, qbit ctrl2)
+{
+	Toffoli(target, ctrl1, ctrl2);
+	C_C_Toffoli(target, ctr2, ctr1, ctrl1, ctrl2);
+	Toffoli(ctr2, ctrl1, ctrl2);
+	Toffoli(ctr1, ctrl1, ctrl2);
+}
+
+/***********************************************
+* Controlled version of the ADD module
+************************************************/
+module C_ADD (qbit x[cn], qbit y[cn], qbit s[cn], qbit ctrl)
+{
+	// workspace registers
+	qbit c1[cn+1];
+	qbit c2[cn+1];
+	qbit tmp[2];
+	qbit s1[cn];
+
+	int j = 0;
+
+	PrepZ(c1[0],0);
+
+	/*************************************
+	* Bit-wise OR is just CNOT
+	* Bit-wise AND  is just Toffoli
+	**************************************/
+
+	/**********************************
+	* c1[0] is fresh, hence it is a 0
+	**********************************/
+
+	for(j = 0; j < cn; j++)
+	{
+		/***********************************************
+		* OK to do so since c1[j+1] always starts with 0
+		************************************************/
+		C_Toffoli(c1[j+1], x[j], y[j], ctrl);
+		C_Toffoli(tmp[0], x[j], c1[j], ctrl);
+		Toffoli(c1[j+1], tmp[0], ctrl);
+
+		// uncompute tmp[0]
+		C_Toffoli(tmp[0], x[j], c1[j], ctrl);
+
+		C_Toffoli(tmp[0], y[j], c1[j], ctrl);
+		Toffoli(c1[j+1], tmp[0], ctrl);
+
+		// uncompute tmp[0]
+		C_Toffoli(tmp[0], y[j], c1[j], ctrl);
+
+		C_EvaluateOR(tmp[0], y[j], c1[j], ctrl);
+		C_EvaluateOR(tmp[1], tmp[0], x[j], ctrl);
+
+		/***********************************************
+		* OK to do so since s1[j] always starts with 0
+		************************************************/
+		Toffoli(s1[j], tmp[1], ctrl);
+
+		/**************************************************************************************
+		* uncompute tmp[0], tmp[1]; also offset the "NOT" operation during EvaluateOR operation
+		***************************************************************************************/
+		C_InvEvaluateOR(tmp[1], tmp[0], x[j], ctrl);
+		C_InvEvaluateOR(tmp[0], y[j], c1[j], ctrl);
+	}
+
+	Toffoli(c2[0], c1[cn], ctrl);
+
+	for(j = 0; j < cn; j++)
+	{
+		/***********************************************
+		* OK to do so since c2[j+1] always starts with 0
+		************************************************/
+		C_Toffoli(c2[j+1], s1[j], c2[j], ctrl);
+
+		/*******************************************************************************
+		* if s register is passed in as a clean register; can do cnot to assign value
+		* if s register is passed in as a dirty register, then this step uncompte s[j]
+		********************************************************************************/
+		C_EvaluateOR(tmp[0], s1[j], c2[j], ctrl);
+		Toffoli(s[j], tmp[0], ctrl);
+
+
+		// uncompute tmp[0] and offset the "NOT" operation during EvaluateOR operation
+		C_InvEvaluateOR(tmp[0], s1[j], c2[j], ctrl);
+	}
+
+	/*******************************************************************************
+	* if s register is passed in as a clean register; can do cnot to assign value
+	* if s register is passed in as a dirty register, then this step uncompte s[j]
+	********************************************************************************/
+	Toffoli(s[1],  c2[cn], ctrl);
+
+
+	/********************************
+	* Uncompute process: c2 register
+	********************************/
+	for(j = cn-1; j > -1; j--)
+	{
+		C_Toffoli(c2[j+1], s1[j], c2[j], ctrl);
+	}
+
+	Toffoli(c2[0], c1[cn], ctrl);
+
+	/****************************************
+	* Uncompute process: c1 register and s1
+	* Run the process backward to uncompute
+	****************************************/
+	for(j = cn-1; j > -1; j--)
+	{
+		C_EvaluateOR(tmp[0], y[j], c1[j], ctrl);
+		C_EvaluateOR(tmp[1], tmp[0], x[j], ctrl);
+
+		// uncompute s1[j]
+		Toffoli(s1[j], tmp[1], ctrl);
+
+		// uncompute tmp[0], tmp[1] and offset NOT operation imposed by EvaluateOR
+		C_InvEvaluateOR(tmp[1], tmp[0], x[j], ctrl);
+		C_InvEvaluateOR(tmp[0], y[j], c1[j], ctrl);
+
+
+		C_Toffoli(tmp[0], y[j], c1[j], ctrl);
+		Toffoli(c1[j+1], tmp[0], ctrl);
+
+		// uncompute tmp[0]
+		C_Toffoli(tmp[0], y[j], c1[j], ctrl);
+
+		C_Toffoli(tmp[0], x[j], c1[j], ctrl);
+		Toffoli(c1[j+1], tmp[0], ctrl);
+
+		// uncompute tmp[0]
+		C_Toffoli(tmp[0], x[j], c1[j], ctrl);
+
+		// c1[j+1] uncomputed; no need to worry about c1[0] because it has never been changed
+		C_Toffoli(c1[j+1], x[j], y[j], ctrl);
+
+	}
+    
+}
+
+
+/***********************************************
+* Controlled version of the C_ADD module
+************************************************/
+module C_C_ADD (qbit x[cn], qbit y[cn], qbit s[cn], qbit ctrl1, qbit ctrl2)
+{
+	// workspace registers
+	qbit c1[cn+1];
+	qbit c2[cn+1];
+	qbit tmp[2];
+	qbit s1[cn];
+
+	int j = 0;
+
+	PrepZ(c1[0],0);
+
+	/*************************************
+	* Bit-wise OR is just CNOT
+	* Bit-wise AND  is just Toffoli
+	**************************************/
+
+	/**********************************
+	* c1[0] is fresh, hence it is a 0
+	**********************************/
+
+	for(j = 0; j < cn; j++)
+	{
+		/***********************************************
+		* OK to do so since c1[j+1] always starts with 0
+		************************************************/
+		C_C_Toffoli(c1[j+1], x[j], y[j], ctrl1, ctrl2);
+		C_C_Toffoli(tmp[0], x[j], c1[j], ctrl1, ctrl2);
+		C_Toffoli(c1[j+1], tmp[0], ctrl1, ctrl2);
+
+		// uncompute tmp[0]
+		C_C_Toffoli(tmp[0], x[j], c1[j], ctrl1, ctrl2);
+
+		C_C_Toffoli(tmp[0], y[j], c1[j], ctrl1, ctrl2);
+		C_Toffoli(c1[j+1], tmp[0], ctrl1, ctrl2);
+
+		// uncompute tmp[0]
+		C_C_Toffoli(tmp[0], y[j], c1[j], ctrl1, ctrl2);
+
+		C_C_EvaluateOR(tmp[0], y[j], c1[j], ctrl1, ctrl2);
+		C_C_EvaluateOR(tmp[1], tmp[0], x[j], ctrl1, ctrl2);
+
+		/***********************************************
+		* OK to do so since s1[j] always starts with 0
+		************************************************/
+		C_Toffoli(s1[j], tmp[1], ctrl1, ctrl2);
+
+		/**************************************************************************************
+		* uncompute tmp[0], tmp[1]; also offset the "NOT" operation during EvaluateOR operation
+		***************************************************************************************/
+		C_C_InvEvaluateOR(tmp[1], tmp[0], x[j], ctrl1, ctrl2);
+		C_C_InvEvaluateOR(tmp[0], y[j], c1[j], ctrl1, ctrl2);
+	}
+
+	C_Toffoli(c2[0], c1[cn], ctrl1, ctrl2);
+
+	for(j = 0; j < cn; j++)
+	{
+		/***********************************************
+		* OK to do so since c2[j+1] always starts with 0
+		************************************************/
+		C_C_Toffoli(c2[j+1], s1[j], c2[j], ctrl1, ctrl2);
+
+		/*******************************************************************************
+		* if s register is passed in as a clean register; can do cnot to assign value
+		* if s register is passed in as a dirty register, then this step uncompte s[j]
+		********************************************************************************/
+		C_C_EvaluateOR(tmp[0], s1[j], c2[j], ctrl1, ctrl2);
+		C_Toffoli(s[j], tmp[0], ctrl1, ctrl2);
+
+
+		// uncompute tmp[0] and offset the "NOT" operation during EvaluateOR operation
+		C_C_InvEvaluateOR(tmp[0], s1[j], c2[j], ctrl1, ctrl2);
+	}
+
+	/*******************************************************************************
+	* if s register is passed in as a clean register; can do cnot to assign value
+	* if s register is passed in as a dirty register, then this step uncompte s[j]
+	********************************************************************************/
+	C_Toffoli(s[1], c2[cn], ctrl1, ctrl2);
+
+
+	/********************************
+	* Uncompute process: c2 register
+	********************************/
+	for(j = cn-1; j > -1; j--)
+	{
+		C_C_Toffoli(c2[j+1], s1[j], c2[j], ctrl1, ctrl2);
+	}
+
+	C_Toffoli(c2[0], c1[cn], ctrl1, ctrl2);
+
+	/****************************************
+	* Uncompute process: c1 register and s1
+	* Run the process backward to uncompute
+	****************************************/
+	for(j = cn-1; j > -1; j--)
+	{
+		C_C_EvaluateOR(tmp[0], y[j], c1[j], ctrl1, ctrl2);
+		C_C_EvaluateOR(tmp[1], tmp[0], x[j], ctrl1, ctrl2);
+
+		// uncompute s1[j]
+		C_Toffoli(s1[j], tmp[1], ctrl1, ctrl2);
+
+		// uncompute tmp[0], tmp[1] and offset NOT operation imposed by EvaluateOR
+		C_C_InvEvaluateOR(tmp[1], tmp[0], x[j], ctrl1, ctrl2);
+		C_C_InvEvaluateOR(tmp[0], y[j], c1[j], ctrl1, ctrl2);
+
+
+		C_C_Toffoli(tmp[0], y[j], c1[j], ctrl1, ctrl2);
+		C_Toffoli(c1[j+1], tmp[0], ctrl1, ctrl2);
+
+		// uncompute tmp[0]
+		C_C_Toffoli(tmp[0], y[j], c1[j], ctrl1, ctrl2);
+
+		C_C_Toffoli(tmp[0], x[j], c1[j], ctrl1, ctrl2);
+		C_Toffoli(c1[j+1], tmp[0], ctrl1, ctrl2);
+
+		// uncompute tmp[0]
+		C_C_Toffoli(tmp[0], x[j], c1[j], ctrl1, ctrl2);
+
+		// c1[j+1] uncomputed; no need to worry about c1[0] because it has never been changed
+		C_C_Toffoli(c1[j+1], x[j], y[j], ctrl1, ctrl2);
+
+	}
+
+}
+
+/***********************************************
+* Controlled Version of the MUL module
+************************************************/
+module C_MUL (qbit x[cn], qbit y[cn], qbit p[cn], qbit ctrl)
+{
+	qbit tmp[cn];
+	qbit wrk[cn];
+	qbit wrk2[cn];
+
+	int i = 0;
+	int j = 0;
+	int k = 0;
+
+	for(j = 0; j < cn; j++)
+	{
+		/**************************************************************************************************************************
+		* In my case, I always pass in clean p array to do the computation, hence, do not need to worry about setting bits to zero
+		***************************************************************************************************************************/
+		PrepZ(p[j],0);
+    Toffoli(tmp[j], y[j], ctrl);
+	}
+
+	for(k = 0; k < cn; k++)
+	{
+		/************************************************
+		* Use the if, else if, else: provided by Scaffold
+		************************************************/
+		//if(x[k]==1) // ajavadia: converted controlled circuit to controlled unitaries
+		//{
+			C_C_ADD(p, tmp, wrk, x[k], ctrl);
+
+			/**************************************************************************************************************
+			* uncompute p back to all 0 register
+			* wrk2 remains as all 0 throughout the whole process
+			* Idea (at the checkpoint): because when k = 0, we have p = 0, wrk = 0;
+			* when k = 1; p = tmp, wrk = 2tmp; so, do ADD(wrk2, tmp, p) to clean up p
+			* when k = 2, p = 2tmp, wrk = 3tmp, so do ADD(wrk2, tmp, p) two times to clean up p (logically this should work)
+			****************************************************************************************************************/
+			for(i = 0; i < k; i++)
+			{
+				C_C_ADD(wrk2, tmp, p, x[k], ctrl);
+			}
+
+
+			for(j = 0; j < cn; j++)
+			{
+				/************************************************
+				* swap to assign the computed value to p
+				* also have wrk back to all 0
+				*************************************************/
+				C_Toffoli(p[j], wrk[j], x[k], ctrl);
+				C_Toffoli(wrk[j], p[j], x[k], ctrl);
+				C_Toffoli(p[j], wrk[j], x[k], ctrl);
+			}
+		//}
+
+		for(j = 0; j < cn-1; j++)
+		{
+			/***********************************************************
+			* 3 CNOT is a swap
+			************************************************************/
+			Toffoli(tmp[cn-1], tmp[j], ctrl);
+			Toffoli(tmp[j], tmp[cn-1], ctrl);
+			Toffoli(tmp[cn-1], tmp[j], ctrl);
+		}
+	}
+
+
+	/**************************************************************************
+	* Uncompute Process: roll back tmp register as wrk was already uncomputed
+	***************************************************************************/
+
+	for(k = cn-1; k > -1 ; k--)
+	{
+		for(j = cn-2; j > -1;  j--)
+		{
+			/******************************************
+			* swap again to be back to original value
+			*******************************************/
+			Toffoli(tmp[cn-1], tmp[j], ctrl);
+			Toffoli(tmp[j], tmp[cn-1], ctrl);
+			Toffoli(tmp[cn-1], tmp[j], ctrl);
+		}
+	}
+
+	for(j = cn-1; j > -1; j--)
+	{
+		Toffoli(tmp[j], y[j], ctrl);
+	}
+
+}
+
+/***********************************************
+* Controlled Version of the unMul module
+************************************************/
+module C_unMUL (qbit x[cn], qbit y[cn], qbit p[cn], qbit ctrl) 
+{
+	qbit tmp[cn];
+	qbit wrk[cn];
+	qbit tp[cn];
+	qbit wrk2[cn];
+
+	int i = 0;
+	int j = 0;
+	int k = 0;
+
+	for(j = 0; j < cn; j++)
+	{
+		Toffoli(tmp[j], y[j], ctrl);
+	}
+
+	for(k = 0; k < cn; k++)
+	{
+		/************************************************
+		* Use the if, else if, else: provided by Scaffold
+		************************************************/
+		// if(x[k]==1) // ajavadia: converted controlled circuit to controlled unitaries 
+		// {
+			C_C_ADD(tp, tmp, wrk, x[k], ctrl);
+
+			if(k!= cn-1)
+			{
+				/****************************************************
+				* uncompute tp back to all 0 register
+				* same reasoning as given in MUL module
+				****************************************************/
+				for(i = 0; i < k; i++)
+				{
+					C_C_ADD(wrk2, tmp, tp, x[k], ctrl);
+				}
+
+
+				for(j = 0; j < cn; j++)
+				{
+					/************************************************
+					* swap to assign the computed value to tp
+					* also have wrk back to all 0
+					*************************************************/
+					C_Toffoli(tp[j], wrk[j], x[k], ctrl);
+					C_Toffoli(wrk[j], tp[j], x[k], ctrl);
+					C_Toffoli(tp[j], wrk[j], x[k], ctrl);
+
+					/**********************************************
+					* Now we can use tp to reset p
+					* tp can be used and then cleaned up in next iteration
+					***********************************************/
+					C_Toffoli(p[j], tp[j], x[k], ctrl);
+				}
+			}
+
+
+			/**********************************************************************************************************
+			* Uncomputation process is a bit different in the order where the blocks of code appear
+			* at the final bit such that we can get every register back to all zero state
+			***********************************************************************************************************/
+			else
+			{
+				for(j = 0; j < cn; j++)
+				{
+					/*********************************************
+					* Now we can directly use wrk to reset p since
+					* we do not need tp register after this iteration
+					*********************************************/
+					C_Toffoli(p[j], wrk[j], x[k], ctrl);
+				}
+
+				/************************************
+				* uncompute wrk back to all 0
+				************************************/
+				C_C_ADD(tp, tmp, wrk, x[k], ctrl);
+
+				/****************************************************
+				* uncompute tp back to all 0 register
+				* same reasoning as given in MUL module
+				****************************************************/
+				for(i = 0; i < k; i++)
+				{
+					C_C_ADD(wrk2, tmp, tp, x[k], ctrl);
+				}
+
+
+			}
+		// }
+
+		for(j = 0; j < cn-1; j++)
+		{
+			/***********************************************************
+			* 3 CNOT is a swap
+			************************************************************/
+			Toffoli(tmp[cn-1], tmp[j], ctrl);
+			Toffoli(tmp[j], tmp[cn-1], ctrl);
+			Toffoli(tmp[cn-1], tmp[j], ctrl);
+		}
+	}
+
+
+	/**************************************************************************
+	* Uncompute Process: roll back : tmp register as wrk was already uncomputed
+	***************************************************************************/
+
+	for(k = cn-1; k > -1 ; k--)
+	{
+		for(j = cn-2; j > -1;  j--)
+		{
+			/******************************************
+			* swap again to be back to original value
+			*******************************************/
+			Toffoli(tmp[cn-1], tmp[j], ctrl);
+			Toffoli(tmp[j], tmp[cn-1], ctrl);
+			Toffoli(tmp[cn-1], tmp[j], ctrl);
+		}
+	}
+
+	for(j = cn-1; j > -1; j--)
+	{
+		Toffoli(tmp[j], y[j], ctrl);
+	}
+
+}
+
+/**************************************************************
+* 	Useful Ancillary Modules (used by Oracle and Algorithm)
+***************************************************************/
+module Swap(qbit q1, qbit q2)
+{
+	CNOT(q2,q1);
+	CNOT(q1,q2);
+	CNOT(q2,q1);
+}
+
+module ctrSwap(qbit q1,qbit q2, qbit q3)
+{
+	Toffoli(q2,q1, q3);
+	Toffoli(q1,q2, q3);
+	Toffoli(q2,q1, q3);
+}
+
+/***********************************************************
+*	target[0] = OR(ctr2[0] , ctr1[0])
+************************************************************/
+module EvaluateOR(qbit target, qbit ctr2, qbit ctr1)
+{
+	X(ctr1);
+	X(ctr2);
+	Toffoli(target, ctr2, ctr1);
+	X(target);
+}
+
+module InvEvaluateOR(qbit target, qbit ctr2, qbit ctr1)
+{
+	X(target);
+	Toffoli(target, ctr2, ctr1);
+	X(ctr2);
+	X(ctr1);
+}
+
+/*******************************************************
+* The following auxillary module(s) are used in Oracle
+********************************************************/
+module equalquInt2(qbit x[2], qbit y[2], qbit equal)
+{
+	int i = 0;
+	qbit dum[2];
+
+	for(i = 0; i < 2; i++)
+	{
+		Toffoli(dum[i], x[i], y[i]);
+	}
+
+	Toffoli(equal, dum[1], dum[0]);
+
+	//uncompute
+	for(i = 1; i > -1; i--)
+	{
+		Toffoli(dum[i], x[i], y[i]);
+	}
+}
+
+
+/*********************************************************************
+* The following module(s) listed in the GFI document
+* They are summoned by the main oracle function EdgeOracle
+* The apperance order is  6, 2, 3, 7, 8, 4, 5, and 1 (the EdgeOracle).
+***********************************************************************/
+
+/**************************************************************
+*	Algorithm O-6: SUB(qbit x[cn], int y, qbit d[cn])
+*	Para: x: qbit[cn]
+*		  y: int
+*		  d: qbit[cn]
+* 	It is clear to see that y's presentation in terms of the
+* 	sum of 2 to different power. This function is summoned
+* 	by ConvertNODE and y is hn, which is 2^(n-1). Hence,
+* 	all y_i are all 0 except at y_(n-1).
+**************************************************************/
+module SUB(qbit x[cn], int y, qbit d[cn])
+{
+	qbit c1[cn+1];
+	qbit c2[cn+1];
+
+	/*********************************
+	* yi cofficient; yes, just one bit
+	**********************************/
+	qbit yi[1];
+	qbit tmp[2];
+	qbit d1[cn];
+
+	int j = 0;
+
+	PrepZ(c1[0],0);
+
+	/************************
+	* cn is defined globally
+	*************************/
+	for(j = 0; j < cn; j++)
+	{
+		/********************************************
+		* n is defined globally
+		* when j=n-1, the coefficient should be 1
+		* when j!= n -1, the coefficients should be 0
+		*********************************************/
+		if(j == n-1)
+		{
+			// set yi to 1
+			X(yi[0]);
+		}
+
+		if(j == n)
+		{
+			// reset to 0; hence we don't care about uncomputation as yi[0] is restored back to 0
+			X(yi[0]);
+		}
+
+
+		/********************************
+		* doing the 1 xor yi onto tmp[0]
+		*********************************/
+		CNOT(tmp[0], yi[0]);
+		X(tmp[0]);
+
+		/***********************************************************
+		* assign value; ok to do so as c1 is instantiated with all 0
+		************************************************************/
+		Toffoli(c1[j+1], tmp[0], x[j]);
+
+		// uncompute tmp array
+		X(tmp[0]);
+		CNOT(tmp[0], yi[0]);
+
+		Toffoli(tmp[0], c1[j], x[j]);
+		CNOT(c1[j+1], tmp[0]);
+
+		// uncompute
+		Toffoli(tmp[0], c1[j], x[j]);
+
+		CNOT(tmp[0], yi[0]);
+		X(tmp[0]);
+		Toffoli(tmp[1], tmp[0], c1[j]);
+		CNOT(c1[j+1], tmp[1]);
+
+		// uncompute tmp[1]; do not uncompute tmp[0] as we still need it
+		Toffoli(tmp[1], tmp[0], c1[j]);
+
+		CNOT(tmp[0], c1[j]);
+		CNOT(tmp[0], x[j]);
+
+		/*********************************************************************
+		* Assign value to d1[j]; OK to do so as d1 is all 0 when instantiated
+		*********************************************************************/
+		CNOT(d1[j], tmp[0]);
+
+		// uncompute tmp[0]
+		CNOT(tmp[0], x[j]);
+		CNOT(tmp[0], c1[j]);
+		X(tmp[0]);
+		CNOT(tmp[0], yi[0]);
+	}
+
+
+	CNOT(c2[0], c1[cn]);
+
+	for(j = 0; j < cn; j++)
+	{
+		/************************************************************************************************
+		* (a) If value assigning to d[j]; OK to do so because of all 0 of d (run for the first time)
+		* (b) Uncomputation purpose: When SUB is run for the 2nd time with the same parameters (x and y)
+		* then the value of d[j] is then reset to 0.
+		*************************************************************************************************/
+		Toffoli(c2[j+1], d1[j], c2[j]);
+
+		CNOT(tmp[0], c2[j]);
+		CNOT(tmp[0], d1[j]);
+		CNOT(d[j], tmp[0]);
+
+		// uncompute tmp[0]
+		CNOT(tmp[0], d1[j]);
+		CNOT(tmp[0], c2[j]);
+	}
+
+	/**************************************************
+	* Same reason as given above in (a) and (b)
+	***************************************************/
+	//CNOT(d[0], c2[31]); //spatil
+        CNOT(d[0], c2[cn]);
+
+
+	/*********************************
+	* Uncompute Process: c2 register
+	*********************************/
+	for(j = cn - 1; j > -1; j--)
+	{
+		Toffoli(c2[j+1], d1[j], c2[j]);
+	}
+
+	CNOT(c2[0], c1[cn]);
+
+	/***********************************************
+	* Uncompute Process: c1 register and d1 register
+	***********************************************/
+	for(j = cn-1; j > -1; j--)
+	{
+		/************************
+		* n is defined globally
+		*************************/
+		if(j == n-1)
+		{
+			// set yi to 1
+			X(yi[0]);
+		}
+
+		if(j == n-2)
+		{
+			// reset to 0
+			X(yi[0]);
+		}
+
+		CNOT(tmp[0], yi[0]);
+		X(tmp[0]);
+		CNOT(tmp[0], c1[j]);
+		CNOT(tmp[0], x[j]);
+
+		// restore d1
+		CNOT(d1[j], tmp[0]);
+
+
+		// restore tmp[0] to the value of NOT(yi)
+		CNOT(tmp[0], c1[j]);
+		CNOT(tmp[0], x[j]);
+		Toffoli(tmp[1], tmp[0], c1[j]);
+		CNOT(c1[j+1], tmp[1]);
+
+		// make tmp[1] clean for reuse
+		Toffoli(tmp[1], tmp[0], c1[j]);
+
+		Toffoli(tmp[1], c1[j], x[j]);
+		CNOT(c1[j+1], tmp[1]);
+
+		// make tmp[1] clean
+		Toffoli(tmp[1], c1[j], x[j]);
+
+		Toffoli(c1[j+1], x[j], tmp[0]);
+
+		// uncompute tmp[0]
+		X(tmp[0]);
+		CNOT(tmp[0], yi[0]);
+	}
+}
+
+
+/**************************************************************
+*	Algorithm O-2: ConvertNODE
+*	Para: u: an qbit array of size n
+*	      uint: qbit[cn]
+*		  int: hn
+**************************************************************/
+module ConvertNode(qbit u[], int uoffset, qbit uint[cn], int hn)
+{
+	qbit w[cn];
+	int i = 0;
+
+	// Just copying and initializing the values of array w
+	for( i = 0; i < cn; i++)
+	{
+		/************************************
+		* Initialize local register; all 0s
+		************************************/
+		PrepZ(w[i],0);
+
+		if(i < n)
+		{
+			CNOT(w[i], u[uoffset+i]);
+		}
+	}
+
+
+	/*********************************
+	* Do SUB and store result in unit
+	**********************************/
+	SUB(w, hn, uint);
+
+
+
+	/***********************************************************************
+	* Uncomputation process: w register
+	* just need to run the loop again because w is not modify by SUB module
+	************************************************************************/
+	for( i = 0; i < cn; i++)
+	{
+		/************************************
+		* Initialize local register; all 0s
+		************************************/
+		PrepZ(w[i],0);
+
+		if(i < n)
+		{
+			CNOT(w[i], u[i]);
+		}
+	}
+}
+
+
+/**************************************************************
+*	Algorithm O-3: TestEqual(qbit x[cn], qbit y[cn], qbit t[1])
+*	Para: x: qbit[cn]
+*		  y: qbit[cn]
+*		  t: qbit
+**************************************************************/
+module TestEqual(qbit x[cn], qbit y[cn], qbit t)
+{
+	qbit dum[cn];
+	qbit dum2[cn];
+
+	int i = 0;
+	int j = 0;
+
+	for(i = 0; i < cn; i ++)
+	{
+		Toffoli(dum[i], x[i], y[i]);
+	}
+
+	Toffoli(dum2[0], dum[1], dum[0]);
+	for(j = 1; j < cn-1; j++)
+	{
+		Toffoli(dum2[j], dum2[j-1], dum[j+1]);
+	}
+
+
+	// store the retore in t[0]
+	CNOT(t, dum2[cn-2]);
+
+
+	/********************************
+	* uncompute process: dum2 array
+	********************************/
+	for(j = cn-2; j > 0; j--)
+	{
+		Toffoli(dum2[j], dum2[j-1], dum[j+1]);
+	}
+
+	Toffoli(dum2[0], dum[1], dum[0]);
+
+	/***********************
+	* Uncompute dum array
+	***********************/
+	for(i = 0; i < cn; i ++)
+	{
+		Toffoli(dum[i], x[i], y[i]);
+	}
+}
+
+
+
+/*************************************************************************
+*	Algorithm O-7: ADD(qbit x[cn], qbit y[cn], qbit s[cn])
+*	Para: x: qbit[cn]
+*		  y: qbit[cn]
+*		  s: qbit[cn]
+* 	The idea here is that when we want to (compute) uncompute s
+*   If s is clean, then it computes x+y mode 2^31 - 1
+* 	If s is dirty (got dirty from previous ADD(x, y, clean s), then
+*	the doing process again would undo the assignment done in ADD(x, y, clean s).
+**************************************************************************/
+module ADD(qbit x[cn], qbit y[cn], qbit s[cn])
+{
+	// workspace registers
+	qbit c1[cn+1];
+	qbit c2[cn+1];
+	qbit tmp[2];
+	qbit s1[cn];
+
+
+	int j = 0;
+
+	PrepZ(c1[0],0);
+
+	/*************************************
+	* Bit-wise OR is just CNOT
+	* Bit-wise AND  is just Toffoli
+	**************************************/
+
+	/**********************************
+	* c1[0] is fresh, hence it is a 0
+	**********************************/
+
+	for(j = 0; j < cn; j++)
+	{
+		/***********************************************
+		* OK to do so since c1[j+1] always starts with 0
+		************************************************/
+		Toffoli(c1[j+1], x[j], y[j]);
+		Toffoli(tmp[0], x[j], c1[j]);
+		CNOT(c1[j+1], tmp[0]);
+
+		// uncompute tmp[0]
+		Toffoli(tmp[0], x[j], c1[j]);
+
+		Toffoli(tmp[0], y[j], c1[j]);
+		CNOT(c1[j+1], tmp[0]);
+
+		// uncompute tmp[0]
+		Toffoli(tmp[0], y[j], c1[j]);
+
+		EvaluateOR(tmp[0], y[j], c1[j]);
+		EvaluateOR(tmp[1], tmp[0], x[j]);
+
+		/***********************************************
+		* OK to do so since s1[j] always starts with 0
+		************************************************/
+		CNOT(s1[j], tmp[1]);
+
+		/**************************************************************************************
+		* uncompute tmp[0], tmp[1]; also offset the "NOT" operation during EvaluateOR operation
+		***************************************************************************************/
+		InvEvaluateOR(tmp[1], tmp[0], x[j]);
+		InvEvaluateOR(tmp[0], y[j], c1[j]);
+	}
+
+	CNOT(c2[0], c1[cn]);
+
+	for(j = 0; j < cn; j++)
+	{
+		/***********************************************
+		* OK to do so since c2[j+1] always starts with 0
+		************************************************/
+		Toffoli(c2[j+1],s1[j], c2[j]);
+
+		/*******************************************************************************
+		* if s register is passed in as a clean register; can do cnot to assign value
+		* if s register is passed in as a dirty register, then this step uncompte s[j]
+		********************************************************************************/
+		EvaluateOR(tmp[0], s1[j], c2[j]);
+		CNOT(s[j], tmp[0]);
+
+
+		// uncompute tmp[0] and offset the "NOT" operation during EvaluateOR operation
+		InvEvaluateOR(tmp[0], s1[j], c2[j]);
+	}
+
+	/*******************************************************************************
+	* if s register is passed in as a clean register; can do cnot to assign value
+	* if s register is passed in as a dirty register, then this step uncompte s[j]
+	********************************************************************************/
+	CNOT(s[1],  c2[cn]);
+
+
+	/********************************
+	* Uncompute process: c2 register
+	********************************/
+	for(j = cn; j > 0; j--)
+	{
+		Toffoli(c2[j+1],s1[j], c2[j]);
+	}
+
+	CNOT(c2[0], c1[cn]);
+
+	/****************************************
+	* Uncompute process: c1 register and s1
+	* Run the process backward to uncompute
+	****************************************/
+	for(j = cn-1; j > -1; j--)
+	{
+		EvaluateOR(tmp[0], y[j], c1[j]);
+		EvaluateOR(tmp[1], tmp[0], x[j]);
+
+		// uncompute s1[j]
+		CNOT(s1[j], tmp[1]);
+
+		// uncompute tmp[0], tmp[1] and offset NOT operation imposed by EvaluateOR
+		InvEvaluateOR(tmp[1], tmp[0], x[j]);
+		InvEvaluateOR(tmp[0], y[j], c1[j]);
+
+
+		Toffoli(tmp[0], y[j], c1[j]);
+		CNOT(c1[j+1], tmp[0]);
+
+		// uncompute tmp[0]
+		Toffoli(tmp[0], y[j], c1[j]);
+
+		Toffoli(tmp[0], x[j], c1[j]);
+		CNOT(c1[j+1], tmp[0]);
+
+		// uncompute tmp[0]
+		Toffoli(tmp[0], x[j], c1[j]);
+
+		// c1[j+1] uncomputed; no need to worry about c1[0] because it has never been changed
+		Toffoli(c1[j+1], x[j], y[j]);
+
+	}
+}
+
+
+/**************************************************************
+*	Algorithm O-8: MUL(qbit x[cn], qbit y[cn], qbit p[cn])
+*	Para: x: qbit[cn]
+*		  y: qbit[cn]
+*		  p: qbit[cn] (suppose to be clean to be passed in)
+*		  notice that cn and n are defined globally
+**************************************************************/
+module MUL(qbit x[cn], qbit y[cn], qbit p[cn])
+{
+	qbit tmp[cn];
+	qbit wrk[cn];
+	qbit wrk2[cn];
+
+	int i = 0;
+	int j = 0;
+	int k = 0;
+
+	for(j = 0; j < cn; j++)
+	{
+		/**************************************************************************************************************************
+		* In my case, I always pass in clean p array to do the computation, hence, do not need to worry about setting bits to zero
+		***************************************************************************************************************************/
+		PrepZ(p[j],0);
+		CNOT(tmp[j], y[j]);
+	}
+
+	for(k = 0; k < cn; k++)
+	{
+		/************************************************
+		* Use the if, else if, else: provided by Scaffold
+		************************************************/
+		//if(x[k]==1) // ajavadia: converted controlled circuit to controlled unitaries
+		//{
+			C_ADD(p, tmp, wrk, x[k]);
+
+			/**************************************************************************************************************
+			* uncompute p back to all 0 register
+			* wrk2 remains as all 0 throughout the whole process
+			* Idea (at the checkpoint): because when k = 0, we have p = 0, wrk = 0;
+			* when k = 1; p = tmp, wrk = 2tmp; so, do ADD(wrk2, tmp, p) to clean up p
+			* when k = 2, p = 2tmp, wrk = 3tmp, so do ADD(wrk2, tmp, p) two times to clean up p (logically this should work)
+			****************************************************************************************************************/
+			for(i = 0; i < k; i++)
+			{
+				C_ADD(wrk2, tmp, p, x[k]);
+			}
+
+
+			for(j = 0; j < cn; j++)
+			{
+				/************************************************
+				* swap to assign the computed value to p
+				* also have wrk back to all 0
+				*************************************************/
+				Toffoli(p[j], wrk[j], x[k]);
+				Toffoli(wrk[j], p[j], x[k]);
+				Toffoli(p[j], wrk[j], x[k]);
+			}
+		//}
+
+		for(j = 0; j < cn-1; j++)
+		{
+			/***********************************************************
+			* 3 CNOT is a swap
+			************************************************************/
+			CNOT(tmp[cn-1], tmp[j]);
+			CNOT(tmp[j], tmp[cn-1]);
+			CNOT(tmp[cn-1], tmp[j]);
+		}
+	}
+
+
+	/**************************************************************************
+	* Uncompute Process: roll back tmp register as wrk was already uncomputed
+	***************************************************************************/
+
+	for(k = cn-1; k > -1 ; k--)
+	{
+		for(j = cn-2; j > -1;  j--)
+		{
+			/******************************************
+			* swap again to be back to original value
+			*******************************************/
+			CNOT(tmp[cn-1], tmp[j]);
+			CNOT(tmp[j], tmp[cn-1]);
+			CNOT(tmp[cn-1], tmp[j]);
+		}
+	}
+
+	for(j = cn-1; j > -1; j--)
+	{
+		CNOT(tmp[j], y[j]);
+	}
+
+}
+
+/*******************************************************************************
+*	Algorithm O-8: unMUL(qbit x[cn], qbit y[cn], qbit p[cn])
+*	Para: x: qbit[cn]
+*		  y: qbit[cn]
+*		  p: qbit[cn] (suppose to be dirty to be passed in)
+*		  notice that cn and n are defined globally
+*	The idea is similar to ADD in a sense that if we do this process again
+*	we can reset the dirty bits of p back to 0. However, we need to
+*	have an extra local register tp to behave as the clean p in MUL module
+*	then use the result in tp to reset p. And the final stage of the iteration
+*	needs to be a bit different in order to uncompute all registers.
+*********************************************************************************/
+module unMUL(qbit x[cn], qbit y[cn], qbit p[cn])
+{
+	qbit tmp[cn];
+	qbit wrk[cn];
+	qbit tp[cn];
+	qbit wrk2[cn];
+
+	int i = 0;
+	int j = 0;
+	int k = 0;
+
+	for(j = 0; j < cn; j++)
+	{
+		CNOT(tmp[j], y[j]);
+	}
+
+	for(k = 0; k < cn; k++)
+	{
+		/************************************************
+		* Use the if, else if, else: provided by Scaffold
+		************************************************/
+		// if(x[k]==1) // ajavadia: converted controlled circuit to controlled unitaries 
+		// {
+			C_ADD(tp, tmp, wrk, x[k]);
+
+			if(k!= cn-1)
+			{
+				/****************************************************
+				* uncompute tp back to all 0 register
+				* same reasoning as given in MUL module
+				****************************************************/
+				for(i = 0; i < k; i++)
+				{
+					C_ADD(wrk2, tmp, tp, x[k]);
+				}
+
+
+				for(j = 0; j < cn; j++)
+				{
+					/************************************************
+					* swap to assign the computed value to tp
+					* also have wrk back to all 0
+					*************************************************/
+					Toffoli(tp[j], wrk[j], x[k]);
+					Toffoli(wrk[j], tp[j], x[k]);
+					Toffoli(tp[j], wrk[j], x[k]);
+
+					/**********************************************
+					* Now we can use tp to reset p
+					* tp can be used and then cleaned up in next iteration
+					***********************************************/
+					Toffoli(p[j], tp[j], x[k]);
+				}
+			}
+
+
+			/**********************************************************************************************************
+			* Uncomputation process is a bit different in the order where the blocks of code appear
+			* at the final bit such that we can get every register back to all zero state
+			***********************************************************************************************************/
+			else
+			{
+				for(j = 0; j < cn; j++)
+				{
+					/*********************************************
+					* Now we can directly use wrk to reset p since
+					* we do not need tp register after this iteration
+					*********************************************/
+					Toffoli(p[j], wrk[j], x[k]);
+				}
+
+				/************************************
+				* uncompute wrk back to all 0
+				************************************/
+				C_ADD(tp, tmp, wrk, x[k]);
+
+				/****************************************************
+				* uncompute tp back to all 0 register
+				* same reasoning as given in MUL module
+				****************************************************/
+				for(i = 0; i < k; i++)
+				{
+					C_ADD(wrk2, tmp, tp, x[k]);
+				}
+
+
+			}
+		// }
+
+		for(j = 0; j < cn-1; j++)
+		{
+			/***********************************************************
+			* 3 CNOT is a swap
+			************************************************************/
+			CNOT(tmp[cn-1], tmp[j]);
+			CNOT(tmp[j], tmp[cn-1]);
+			CNOT(tmp[cn-1], tmp[j]);
+		}
+	}
+
+
+	/**************************************************************************
+	* Uncompute Process: roll back : tmp register as wrk was already uncomputed
+	***************************************************************************/
+
+	for(k = cn-1; k > -1 ; k--)
+	{
+		for(j = cn-2; j > -1;  j--)
+		{
+			/******************************************
+			* swap again to be back to original value
+			*******************************************/
+			CNOT(tmp[cn-1], tmp[j]);
+			CNOT(tmp[j], tmp[cn-1]);
+			CNOT(tmp[cn-1], tmp[j]);
+		}
+	}
+
+	for(j = cn-1; j > -1; j--)
+	{
+		CNOT(tmp[j], y[j]);
+	}
+
+}
+/**************************************************************
+*	Algorithm O-4: Pow17(qbit x[cn], qbit x17[cn], qbit flg[1])
+*	Para: x: qbit[cn]
+*		  y: qbit[cn]
+*		  flg[1]: qbit of size 1 used for determing for computing or uncomputing
+**************************************************************/
+module Pow17(qbit x[cn], qbit x17[cn], qbit flg)
+{
+	/************************************************************************
+	* Clean registers to be passed to MUL for computation when flg[0] is 0.
+	* By doing so, we do not have to force setting dirty registers
+	* back to 0 in MUL, which is important because if we do the enforcement,
+	* entanglement might occur and it might result in irreversible modules
+	**************************************************************************/
+	qbit w[cn];
+	qbit alpha[cn];
+	qbit beta[cn];
+	qbit gamma[cn];
+
+	/***************************************************************************
+	* x17 is clean when Pow17 is summoned in EdgeORACLE module with flg[0] = 0
+	* But we want it to remain clean till the very last function call
+	* in Pow17. The reason for this is because
+	* at MUL, the first prcoess is forcing the 3rd parameter to 0. We do
+	* not want to lose information or cause un-necessary entanglement.
+	* When flg[0] = 1, it means we want to uncompute x17 (as it is dirty when passed in).
+	****************************************************************************/
+	MUL(x,x,alpha);
+
+	// w is clean
+	MUL(alpha, alpha, w);
+
+	// beta is clean
+	MUL(w,w,beta);
+
+	// gamma is clean
+	MUL(beta, beta, gamma);
+
+  /*****************************************************************
+  * Use the if , else if and else flow control provided by Scaffold
+  ******************************************************************/  
+	//if(flg[0] == 0)
+	//{
+		// finally got the value back to x17 ; x17 is clean
+		C_MUL(gamma,x,x17,flg);
+	//}
+
+    X(flg);
+	//else
+	//{
+		// x17 needs to be uncomputed
+		C_unMUL(gamma,x,x17,flg);
+	//}
+
+
+	/*******************************************************
+	* Uncompute process: gamma, beta, w and alpha registers
+	********************************************************/
+	unMUL(beta, beta, gamma);
+	unMUL(w,w,beta);
+	unMUL(alpha, alpha, w);
+	unMUL(x,x,alpha);
+}
+
+/**************************************************************
+*	Algorithm O-5: MOD3(qbit x[cn], qbit m[2])
+*	Para: x: qbit[cn]  (array of size cn)
+*		  m: qbit[2] (array of size 2)
+*	     Return:
+**************************************************************/
+module MOD3(qbit x[cn], qbit m[2])
+{
+
+	/***********************
+	* workspace registers
+	***********************/
+	int j = 0;
+	qbit s3[3];
+	qbit s5[5];
+	qbit tmp[3];
+
+
+	/******************************************************************
+	* Initialize s5; assume when array is instantiated, all values are 0
+	* s5[4] does not need to be changed
+	*******************************************************************/
+	for(j = 0; j < 4; j++)
+	{
+		X(s5[j]);
+	}
+
+
+	/************************************************************
+	* 2^i = (-1)^i mod 3 add or subtract 1 from s5
+	************************************************************/
+	for(j = 0; j< cn-1; j++)
+	{
+		/*****************************************************************
+		* Use the if , else if and else flow control provided by Scaffold
+		******************************************************************/
+		// if(x[j]==1)
+		// {
+			// I think it would be nice to write a module to do this repetitive procedure
+			// compute s5[4]
+			C_Toffoli(tmp[0], s5[2], s5[3], x[j]);
+			C_Toffoli(tmp[1], s5[1], tmp[0], x[j]);
+			C_Toffoli(tmp[2], s5[0], tmp[1], x[j]);
+			Toffoli(s5[4], tmp[2], x[j]);
+
+			//uncompute tmp array
+			C_Toffoli(tmp[2], s5[0], tmp[1], x[j]);
+			C_Toffoli(tmp[1], s5[1], tmp[0], x[j]);
+			C_Toffoli(tmp[0], s5[2], s5[3], x[j]);
+
+			// compute s5[3]
+			C_Toffoli(tmp[0], s5[1], s5[2], x[j]);
+			C_Toffoli(tmp[1], s5[0], tmp[0], x[j]);
+			Toffoli(s5[3], tmp[1], x[j]);
+
+			//uncompute tmp array
+			C_Toffoli(tmp[1], s5[0], tmp[0], x[j]);
+			C_Toffoli(tmp[0], s5[1], s5[2], x[j]);
+
+			// compute s5[2]
+			C_Toffoli(tmp[0], s5[0], s5[1], x[j]);
+			Toffoli(s5[2], tmp[0], x[j]);
+
+			// uncompute tmp array
+			C_Toffoli(tmp[0], s5[0], s5[1], x[j]);
+
+			Toffoli(s5[1], s5[0], x[j]);
+
+			CNOT(s5[0], x[j]);
+
+		// }
+
+		//if(x[j+1] == 1)
+		//{
+			CNOT(s5[0], x[j+1]);
+			Toffoli(s5[1], s5[0], x[j+1]);
+
+			// compute s5[2]
+			C_Toffoli(tmp[0], s5[0], s5[1], x[j+1]);
+			Toffoli(s5[2], tmp[0], x[j+1]);
+
+			// uncompute tmp array
+			C_Toffoli(tmp[0], s5[0], s5[1], x[j+1]);
+
+			// compute s5[3]
+			C_Toffoli(tmp[0], s5[1], s5[2], x[j+1]);
+			C_Toffoli(tmp[1], s5[0], tmp[0], x[j+1]);
+			Toffoli(s5[3], tmp[1], x[j+1]);
+
+			//uncompute tmp array
+			C_Toffoli(tmp[1], s5[0], tmp[0], x[j+1]);
+			C_Toffoli(tmp[0], s5[1], s5[2], x[j+1]);
+
+			// compute s5[4]
+			C_Toffoli(tmp[0], s5[2], s5[3], x[j+1]);
+			C_Toffoli(tmp[1], s5[1], tmp[0], x[j+1]);
+			C_Toffoli(tmp[2], s5[0], tmp[1], x[j+1]);
+			Toffoli(s5[4], tmp[2], x[j+1]);
+
+			//uncompute tmp array
+			C_Toffoli(tmp[2], s5[0], tmp[1], x[j+1]);
+			C_Toffoli(tmp[1], s5[1], tmp[0], x[j+1]);
+			C_Toffoli(tmp[0], s5[2], s5[3], x[j+1]);
+		//}
+		j++;
+	}
+
+
+	// 0 <= s5<= 30; m = s5 mod 3
+	// set s3 to 3 and similary reduce s5
+	/******************************************************************
+	* Initialize s3; assume when array is instantiated, all values are 0
+	* s3[2] does not need to be changed
+	*******************************************************************/
+	for(j = 0; j < 2; j++)
+	{
+		X(s3[j]);
+	}
+
+	for(j = 0; j < 4; j++)
+	{
+		/***********************************************
+		* Use if else if and else provided by scaffold
+		************************************************/
+		//if(s5[j] == 1)
+		//{
+			C_Toffoli(tmp[0], s3[0], s3[1], s5[j]);
+			Toffoli(s3[2], tmp[0], s5[j]);
+
+			// uncompute tmp[0]
+			C_Toffoli(tmp[0], s3[0], s3[1], s5[j]);
+
+			Toffoli(s3[1], s3[0], s5[j]);
+			CNOT(s3[0], s5[j]);
+
+		//}
+
+		/**********************************************************************
+		* ASK: GFI used s3[j+1] == 1, is it a typo? If s3, out of bound easily
+		* I used s5
+		***********************************************************************/
+		//if(s5[j+1] == 1)
+		//{
+			CNOT(s3[0], s5[j+1]);
+			Toffoli(s3[1], s3[0], s5[j+1]);
+			C_Toffoli(tmp[0], s3[0], s3[1], s5[j+1]);
+
+			Toffoli(s3[2], tmp[0], s5[j+1]);
+
+			// uncompute tmp[0]
+			C_Toffoli(tmp[0], s3[0], s3[1], s5[j+1]);
+
+		//}
+		j++;
+	}
+
+	/******************************************
+	* s3 = s3 + 1
+	******************************************/
+	//if(s5[4] == 1)
+	//{
+		C_Toffoli(tmp[0], s3[0], s3[1], s5[4]);
+		Toffoli(s3[2], tmp[0], s5[4]);
+
+		// uncompute tmp[0]
+		C_Toffoli(tmp[0], s3[0], s3[1], s5[4]);
+
+		Toffoli(s3[1], s3[0], s5[4]);
+		CNOT(s3[0], s5[4]);
+	//}
+
+	/******************************************
+	* m = s3 mod 3
+	******************************************/
+	//if(s3[2] == 1)
+	//{
+		/**********************************************************************************
+		* ASK: (s3[1] bitadd s3[1] bitadd 1) in GFI
+		* It seems the formula is not working. eg. use 111
+		* Answer should be 100 but the code in GFI would be 110
+		* I think it should be (remember in this case s3[2] is 1 to begin with)
+		*		s3[1] = s3[1] bitadd s3[0]
+		*       s3[0] = s3[0] bitadd 1
+		************************************************************************************/
+			Toffoli(s3[1], s3[0], s3[2]);
+			CNOT(s3[0], s3[2]);
+
+	//}
+
+
+		/*****************************************************************************************
+		* m is of type qbit[2] and when it is passed into this module, it is either u3 or v3
+		* their value (at the moment of being passed in) is still the instantiated value (i.e. 00)
+		* Hence, it is ok to assign via cnot for assignment.
+		* However, if the values of v3, u3 are dirty, doing this would reset the dirty bits back to 00
+		******************************************************************************************/
+		CNOT(m[0], s3[0]);
+		CNOT(m[1], s3[1]);
+
+
+
+
+	/******************************************************
+	* Uncompute Process:
+	* In general, it is Just running the circuit backward
+	*******************************************************/
+	/******************************************
+	* m = s3 mod 3 reverse
+	******************************************/
+	//if(s3[2] == 1)
+	//{
+			CNOT(s3[0], s3[2]);
+			Toffoli(s3[1], s3[0], s3[2]);
+	//}
+
+	/******************************************
+	* s3 = s3 + 1 reverse
+	******************************************/
+	//if(s5[4] == 1)
+	//{
+		CNOT(s3[0], s5[4]);
+		Toffoli(s3[1], s3[0], s5[4]);
+
+		C_Toffoli(tmp[0], s3[0], s3[1], s5[4]);
+		Toffoli(s3[2], tmp[0], s5[4]);
+
+		// uncompute tmp[0]
+		C_Toffoli(tmp[0], s3[0], s3[1], s5[4]);
+	//}
+
+	/*********************************
+	* reverse process
+	**********************j************/
+	for(j = 3; j > -1; j--)
+	{
+
+		/***********************************************
+		* Use if else if and else provided by scaffold
+		************************************************/
+		/**********************************************************************
+		* ASK: GFI used s3[j+1] == 1, is it a typo? If s3, out of bound easily
+		* I used s5
+		***********************************************************************/
+		//if(s5[j+1] == 1)
+		//{
+			C_Toffoli(tmp[0], s3[0], s3[1], s5[j+1]);
+			Toffoli(s3[2], tmp[0], s5[j+1]);
+
+			// uncompute tmp[0]
+			C_Toffoli(tmp[0], s3[0], s3[1], s5[j+1]);
+
+			Toffoli(s3[1], s3[0], s5[j+1]);
+			CNOT(s3[0], s5[j+1]);
+		//}
+
+
+		//if(s5[j] == 1)
+		//{
+
+		   CNOT(s3[0], s5[j]);
+		   Toffoli(s3[1], s3[0], s5[j]);
+		   C_Toffoli(tmp[0], s3[0], s3[1], s5[j]);
+		   Toffoli(s3[2], tmp[0], s5[j]);
+
+		    // uncompute tmp[0]
+		   C_Toffoli(tmp[0], s3[0], s3[1], s5[j]);
+		//}
+		j--;
+	}
+
+
+	/******************************************************************
+	* reverse the assignment for s3 @ line 25-27 in GFI
+	*******************************************************************/
+	for(j = 0; j < 2; j++)
+	{
+		X(s3[j]);
+	}
+
+
+	/************************************************************
+	* uncompute for line 8-20 in GFI
+	************************************************************/
+	for(j = cn-2; j>-1; j--)
+	{
+		/*****************************************************************
+		* Use the if , else if and else flow control provided by Scaffold
+		******************************************************************/
+		//if(x[j+1] == 1)
+		//{
+			// compute s5[4]
+			C_Toffoli(tmp[0], s5[2], s5[3], x[j+1]);
+			C_Toffoli(tmp[1], s5[1], tmp[0], x[j+1]);
+			C_Toffoli(tmp[2], s5[0], tmp[1], x[j+1]);
+			Toffoli(s5[4], tmp[2], x[j+1]);
+
+			//uncompute tmp array
+			C_Toffoli(tmp[2], s5[0], tmp[1], x[j+1]);
+			C_Toffoli(tmp[1], s5[1], tmp[0], x[j+1]);
+			C_Toffoli(tmp[0], s5[2], s5[3], x[j+1]);
+
+			// compute s5[3]
+			C_Toffoli(tmp[0], s5[1], s5[2], x[j+1]);
+			C_Toffoli(tmp[1], s5[0], tmp[0], x[j+1]);
+			Toffoli(s5[3], tmp[1], x[j+1]);
+
+			//uncompute tmp array
+			C_Toffoli(tmp[1], s5[0], tmp[0], x[j+1]);
+			C_Toffoli(tmp[0], s5[1], s5[2], x[j+1]);
+
+			// compute s5[2]
+			C_Toffoli(tmp[0], s5[0], s5[1], x[j+1]);
+			Toffoli(s5[2], tmp[0], x[j+1]);
+
+			// uncompute tmp array
+			C_Toffoli(tmp[0], s5[0], s5[1], x[j+1]);
+
+			Toffoli(s5[1], s5[0], x[j+1]);
+
+			CNOT(s5[0], x[j+1]);
+		//}
+
+		//if(x[j]==1)
+		//{
+			CNOT(s5[0], x[j]);
+
+			Toffoli(s5[1], s5[0], x[j]);
+
+			// compute s5[2]
+			C_Toffoli(tmp[0], s5[0], s5[1], x[j]);
+			Toffoli(s5[2], tmp[0], x[j]);
+
+			// uncompute tmp array
+			C_Toffoli(tmp[0], s5[0], s5[1], x[j]);
+
+			// compute s5[3]
+			C_Toffoli(tmp[0], s5[1], s5[2], x[j]);
+			C_Toffoli(tmp[1], s5[0], tmp[0], x[j]);
+			Toffoli(s5[3], tmp[1], x[j]);
+
+			//uncompute tmp array
+			C_Toffoli(tmp[1], s5[0], tmp[0], x[j]);
+			C_Toffoli(tmp[0], s5[1], s5[2], x[j]);
+
+
+			C_Toffoli(tmp[0], s5[2], s5[3], x[j]);
+			C_Toffoli(tmp[1], s5[1], tmp[0], x[j]);
+			C_Toffoli(tmp[2], s5[0], tmp[1], x[j]);
+			Toffoli(s5[4], tmp[2], x[j]);
+
+			//uncompute tmp array
+			C_Toffoli(tmp[2], s5[0], tmp[1], x[j]);
+			C_Toffoli(tmp[1], s5[1], tmp[0], x[j]);
+			C_Toffoli(tmp[0], s5[2], s5[3], x[j]);
+		//}
+		j--;
+	}
+}
+
+
+
+/**************************************************************
+*	Algorithm O-1: ORACLE
+*	Para: u a qbit array of size n
+*	      v a qbit array of size n
+*		  edge a qbit; is 1 when u and v are connected
+**************************************************************/
+module EdgeORACLE(qbit u[], int uoffset, qbit v[], int voffset, qbit edge)
+{
+
+	int i;
+
+	// local quantum workspace registers
+	qbit uint[cn];
+	qbit vint[cn];
+	qbit u17[cn];
+	qbit v17[cn];
+	qbit u3[2];
+	qbit v3[2];
+
+	qbit t[1];
+	qbit uF[1];
+	qbit vF[1];
+	qbit uH[1];
+	qbit vH[1];
+	qbit diffuvH[1];
+	qbit uv3[1];
+	qbit uvF[1];
+	qbit diffuvF[1];
+	qbit equalbit[2];
+	qbit flg[1];
+
+	/*************************************************************
+	* This array is basically used to do the statement flow control
+	* location at 0 is for "NOT t[0]"
+	***************************************************************/
+	qbit ctrcentr[n];
+
+	int hn = N/2;
+
+	// initializing the values
+	PrepZ(edge,0);
+	PrepZ(t[0],0);
+	PrepZ(uF[0],0);
+	PrepZ(vF[0],0);
+	PrepZ(uH[0],0);
+	PrepZ(vH[0],0);
+	PrepZ(diffuvH[0],0);
+	PrepZ(uv3[0],0);
+	PrepZ(uvF[0],0);
+	PrepZ(diffuvF[0],0);
+	PrepZ(flg[0],0);
+
+	for(i = 0; i < 2; i++)
+	{
+		PrepZ(equalbit[i],0);
+	}
+
+	for(i = 0; i < n ; i++)
+	{
+		PrepZ(ctrcentr[i],0);
+	}
+
+
+	ConvertNode(u, uoffset, uint, hn);
+	ConvertNode(v, voffset, vint, hn);
+	TestEqual(uint, vint, t[0]);
+
+	Pow17(uint, u17, flg[0]);
+	Pow17(vint, v17, flg[0]);
+
+	TestEqual(uint, u17, uF[0]);
+	TestEqual(vint, v17, vF[0]);
+
+	/**************************************************************************
+	* Assigned value of u17[cn-1] to uH[0] (same for v17 and vH)
+	***************************************************************************/
+	CNOT(uH[0], u17[cn-1]);
+	CNOT(vH[0], v17[cn-1]);
+
+
+	/***************************************
+	* MOD3 operation takes place
+	****************************************/
+	MOD3(u17, u3);
+	MOD3(v17, v3);
+
+	/********************************
+	* uvF[0] = uF[0] AND vF[0]
+	*********************************/
+	Toffoli(uvF[0], uF[0], vF[0]);
+
+	/*********************************************************************
+	* diffuvF[0] = 1 iff uF and vF are of different value
+	***********************************************************************/
+	CNOT(diffuvF[0], uF[0]);
+	CNOT(diffuvF[0], vF[0]);
+
+	/***************************************************************
+	* test if u3 and v3 are equal, result is stored in equalbit[0]
+	****************************************************************/
+	equalquInt2(u3, v3, equalbit[0]);
+
+	/********************************
+	* diffuvH[0] = (uH[0] != vH[0])
+	*********************************/
+	CNOT(diffuvH[0], vH[0]);
+	CNOT(diffuvH[0], uH[0]);
+
+	/***************************************************************
+	* test if u3 != v3, result is stored in equalbit[1]
+	****************************************************************/
+	CNOT(equalbit[1], equalbit[0]);
+	X(equalbit[1]);
+
+	/*************************************************************
+	* Flow control: Start
+	**************************************************************/
+	CNOT(ctrcentr[0], t[0]);
+	X(ctrcentr[0]);
+
+	/*******************************************************************************************
+	* First level
+	* t[0] = 1 : Do nothing here since edge is initialized in 0
+	* t[0] = 0 : Do nothing as well since we need edge to remain 0 for next level if statement
+	*******************************************************************************************/
+
+
+	/*************************************************************************************
+	* Second level
+	* Need t[0] = 0 (i.e. ctrcentr[0] =1) and uvF[0] = 1
+	**************************************************************************************/
+	Toffoli(edge, ctrcentr[0], uvF[0]);
+
+
+	/****************************************************************************************
+	* 3rd level
+	* Need t[0] = 0 (i.e. ctrcentr[0] = 1), diffuvF[0] = 1
+	* diffuvF[0]=1 automatically excludes the case that uvF[0] = 1 (considered in 2nd level)
+	****************************************************************************************/
+	Toffoli(ctrcentr[1], ctrcentr[0], diffuvF[0]);
+
+		/******************************************
+		* edge[0] = 1 iff equalbit[0] = 1 (determined by u3 = v3) and  ctrcentr[1] = 1
+		*******************************************/
+		Toffoli(edge, ctrcentr[1], equalbit[0]);
+
+		/*************************************************************************
+		* If above condition is not fullfilled, should return 0
+		* For now, let us leave edge[0] unchanged as it is still 0 at this moment
+		* because we are in level 3 but the u3==v3 is not satisfied
+		* and in next level this value would not be touched because we condition
+		* on X(uvF[0]) at next level.
+		*************************************************************************/
+
+
+	/****************************************************************************
+	* 4th level: clearly this is the case when uF = vF = 0 because
+	* in level 2 and level 3, we have 3 cases (11, 01, 10) out of four considered
+	*******************************************************************************/
+	X(uvF[0]);
+	X(diffuvF[0]);
+
+	// the 00 case
+	Toffoli(ctrcentr[2], uvF[0], diffuvF[0]);
+
+	// u3!= v3 AND uH!=vH
+	Toffoli(ctrcentr[3], equalbit[1], diffuvH[0]);
+
+	// t[0] = 0 (i.e. ctrcentr[0] = 1) must be satsified (the original level one condition)
+	Toffoli(ctrcentr[4], ctrcentr[0], ctrcentr[3]);
+
+	CNOT(edge, ctrcentr[4]);
+
+
+
+
+	/**********************************************************************
+	* Uncompute Process
+	**********************************************************************/
+
+	/****************************
+	* Level 1 - 4 uncomputation
+	*****************************/
+	Toffoli(ctrcentr[4], ctrcentr[0], ctrcentr[3]);
+	Toffoli(ctrcentr[3], equalbit[1], diffuvH[0]);
+	Toffoli(ctrcentr[2], uvF[0], diffuvF[0]);
+	X(diffuvF[0]);
+	X(uvF[0]);
+	Toffoli(ctrcentr[1], ctrcentr[0], diffuvF[0]);
+	X(ctrcentr[0]);
+	CNOT(ctrcentr[0], t[0]);
+
+	/***********************************
+	* uncompute equalbit[1]
+	************************************/
+	X(equalbit[1]);
+	CNOT(equalbit[1], equalbit[0]);
+
+	/********************************
+	* uncompute diffuvH[0]
+	*********************************/
+	CNOT(diffuvH[0], vH[0]);
+	CNOT(diffuvH[0], uH[0]);
+
+	/***************************************************************
+	* uncompute equalbit[0]
+	****************************************************************/
+	equalquInt2(u3, v3, equalbit[0]);
+
+	/*********************************************************************
+	* uncompute diffuvF[0]
+	***********************************************************************/
+	CNOT(diffuvF[0], uF[0]);
+	CNOT(diffuvF[0], vF[0]);
+
+	/********************************
+	* uncompute uvF[0]
+	*********************************/
+	Toffoli(uvF[0], uF[0], vF[0]);
+
+	/**********************************
+	* Undo u3, v3 by doing MOD3 again
+	***********************************/
+	MOD3(u17, u3);
+	MOD3(v17, v3);
+
+	/*************************
+	* undo uH[0] , vH[0]
+	**************************/
+	CNOT(uH[0], u17[cn-1]);
+	CNOT(vH[0], v17[cn-1]);
+
+	/*************************************************************************************************
+	* uncompute uF, vF : same reasoning because doing TestEqual again would reset uF and vF back to 0
+	**************************************************************************************************/
+	TestEqual(uint, u17, uF[0]);
+	TestEqual(vint, v17, vF[0]);
+
+
+	/*******************************************
+	* uncompute u17, v17, then uncompute flg[0]
+	********************************************/
+	X(flg[0]);
+	Pow17(uint, u17, flg[0]);
+	Pow17(vint, v17, flg[0]);
+	X(flg[0]);
+
+
+	/*******************************************************************************************************
+	* Uncompute vint, uint: same reasoning. Running ConvertNode again will uncompute uint and vint back to 0
+	* since we are passing the same parameter (but uint and vint). Please see the explanation in module SUB
+	*******************************************************************************************************/
+	ConvertNode(u, uoffset, uint, hn);
+	ConvertNode(v, voffset, vint, hn);
+}
+

@@ -1,0 +1,692 @@
+/***********************************************
+* 
+* SHA-1 Encryption Function
+*
+************************************************/
+
+/*
+ctqg ToffoliImpl ( qbit target , qbit control1 , qbit control2 ) {
+  H ( target );
+  CNOT ( control2 , target );
+  Tdag ( target );
+  CNOT ( control1 , target );
+  T ( target );
+  CNOT ( control2 , target );
+  Tdag ( target );
+  CNOT ( control1 , target );
+  Tdag ( control2 );
+  T ( target );
+  CNOT ( control1 , control2 );
+  H ( target );
+  Tdag ( control2 );
+  CNOT ( control1 , control2 );
+  T ( control1 );
+  S ( control2 );
+ }*/
+
+/*-------------------------------------Helper functions-----------------------------------*/
+
+//Tweaked pseudo-classical gates
+// 32 control Toffoli
+ctqg nToffoli(qbit target[32], qbit in1[32], qbit in2[32]){
+    //This should not lead to a compile error as long as the values are set in compile time.
+    zero_to_garbage ancilla[32];
+    int i;
+  for (i=0; i<32; i++){  
+    $ toffoli(in1[i], in2[i], ancilla[i]);
+  }
+  $ target := ancilla;
+}
+
+ctqg AND(qbit target[32], qbit in1[32], qbit in2[32]){
+  $ nToffoli(target, in1, in2);
+}
+
+ctqg NAND(qbit target[32], qbit in1[32], qbit in2[32]){
+  int i;
+  $ AND(target, in1, in2);
+  for(i=0; i<32; i++){ //forall
+      $ not(target[i]);
+    }
+}
+
+ctqg NOR(qbit target[32], qbit in1[32], qbit in2[32]){
+    int i;
+    zero_to_garbage temp1[32];
+    zero_to_garbage temp2[32];
+    $ temp1 := in1;
+    $ temp2 := in2;
+    for(i=0; i<32; i++){ //forall
+      $ not(temp1[i]);
+    }
+    for(i=0; i<32; i++){ //forall
+      $ not(temp2[i]);
+    }    
+  $ AND(target, temp1, temp2);
+}
+
+ctqg OR(qbit target[32], qbit in1[32], qbit in2[32]){
+  int i;
+  $ NOR(target, in1, in2);
+  for(i=0; i<32; i++){ //forall
+      $ not(target[i]);
+  }
+}
+
+ctqg XOR(qbit target[32], qbit in1[32], qbit in2[32]){
+  /*OR(AND(target, NOT(in)), AND(NOT(target), in));*/
+  zero_to_garbage temp1[32];
+  zero_to_garbage temp2[32];
+  zero_to_garbage temp3[32];
+  zero_to_garbage temp4[32];
+  int i;
+  $ temp1 := in1;
+  $ temp2 := in2;
+
+  for(i=0; i<32; i++){ //forall
+      $ not(temp2[i]); 
+  }
+
+  $ AND(temp3, temp1, temp2);
+
+  for(i=0; i<32; i++){ //forall
+      $ not(temp2[i]);
+  }
+  for(i=0; i<32; i++){ //forall
+      $ not(temp1[i]);
+  }
+
+  $ AND(temp4, temp1, temp2);
+  $ OR(target, temp3, temp4);
+}
+
+ctqg <n> reverseBits(qbit a[n]){
+  zero_to_garbage temp[n];
+  $ temp := a;
+  int i;
+  INSTANTIATE_MODULE
+    for (i=0; i<n; i++){
+      MAP_SIGNAL(%%b[i], @temp[n-1-i]);
+    }
+    for (i=0; i<n; i++){
+      MAP_SIGNAL(%%a[i], @a[i]);
+    }
+  assign_value_of_b_to_a(LOCATION_INFO, n);
+}
+
+ctqg <n> leftrotate(qbit a[32]){
+  /*32 bit leftshift arithmetic by 1 bit, loop for multibit */
+  int i;
+  zero_to_garbage temp[32];
+  $ temp := a;
+  INSTANTIATE_MODULE
+    for(i=0; i<n; i++){
+      MAP_SIGNAL(%%b[i], @temp[(31-(n-1) + i)]);
+    }
+    for (i=n; i<32; i++){
+      MAP_SIGNAL(%%b[i], @temp[i-n]);
+    }
+    for (i=0; i<32; i++){
+      MAP_SIGNAL(%%a[i], @a[i]);
+    }
+  assign_value_of_b_to_a(LOCATION_INFO, 32);
+}
+
+ctqg leftshift(qbit a[32]){
+  /*32 bit leftshift arithmetic by 1 bit, loop for multibit */
+  int i;
+  zero_to_garbage temp[32];
+  zero_to_garbage zero[32];
+  $ zero := 0;
+  $ temp := a;
+  INSTANTIATE_MODULE
+  for (i=0; i<32; i++){
+    if (i == 0){
+      MAP_SIGNAL(%%b[i], @zero[31]);
+    }
+    else{
+      MAP_SIGNAL(%%b[i], @temp[i-1]);
+    }
+  }
+  for (i=0; i<32; i++){
+    MAP_SIGNAL(%%a[i], @a[i]);
+  }
+  assign_value_of_b_to_a(LOCATION_INFO, 32);
+}
+
+ctqg pad(qbit a[1024], qbit input[448], qbit padding[576]){
+
+  $ padding := "100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000111000000"; 
+  $ [576] reverseBits(padding);
+  int i;
+  INSTANTIATE_MODULE
+    for (i=1023; i>575; i--){
+      MAP_SIGNAL(%%b[i], @input[i-576]);
+    }
+    for (i=575; i>=0; i--){
+      MAP_SIGNAL(%%b[i], @padding[i]);
+    }
+    for (i=0; i<1024; i++){
+      MAP_SIGNAL(%%a[i], @a[i]);
+    }
+  assign_value_of_b_to_a(LOCATION_INFO, 1024);
+}
+
+/* Mapping Function */
+ctqg <n> map(qbit a[32], qbit in[512]){  
+  int i;
+
+  INSTANTIATE_MODULE
+    for(i=0; i<32; i++){
+      MAP_SIGNAL(%%b[i], @in[i + (32 * (15 - n))])
+    }
+
+    for (i = 0; i < 32; i++){
+      MAP_SIGNAL(%%a[i], @a[i]);
+    }
+  assign_value_of_b_to_a(LOCATION_INFO, 32); 
+}
+
+/* Create final hash, big endian*/
+ctqg finalHash(qbit a[160], qbit h0[32], qbit h1[32], qbit h2[32], qbit h3[32], qbit h4[32]){
+  int i;
+
+  INSTANTIATE_MODULE
+    for(i=0; i<32; i++){
+      MAP_SIGNAL(%%b[i], @h4[i]);
+    }
+    for(i=32; i<64; i++){
+      MAP_SIGNAL(%%b[i], @h3[(i-32)]);
+    }
+    for(i=64; i<96; i++){
+      MAP_SIGNAL(%%b[i], @h2[(i-64)]);
+    }
+    for(i=96; i<128; i++){
+      MAP_SIGNAL(%%b[i], @h1[(i-96)]);
+    }
+    for(i=128; i<160; i++){
+      MAP_SIGNAL(%%b[i], @h0[(i-128)]);
+    }
+
+
+    for (i=0; i<160; i++){
+      MAP_SIGNAL(%%a[i], @a[i]);
+    }
+    assign_value_of_b_to_a(LOCATION_INFO, 160);
+}
+
+ctqg firstBlock(qbit a[512], qbit in[1024]){
+  int i;
+  INSTANTIATE_MODULE
+    for(i=511; i>=0; i--){
+      MAP_SIGNAL(%%b[i], @in[i+512]);
+    }
+    for(i=0; i<512; i++){
+      MAP_SIGNAL(%%a[i], @a[i]);
+    }
+  assign_value_of_b_to_a(LOCATION_INFO, 512);
+}
+
+ctqg secondBlock(qbit a[512], qbit in[1024]){
+  int i;
+  INSTANTIATE_MODULE
+    for(i=511; i>=0; i--){
+      MAP_SIGNAL(%%b[i], @in[i]);
+    }
+    for(i=0; i<512; i++){
+      MAP_SIGNAL(%%a[i], @a[i]);
+    }
+  assign_value_of_b_to_a(LOCATION_INFO, 512);
+}
+
+ctqg f1(qbit f[32], qbit B[32], qbit C[32], qbit D[32], qbit temp[32], qbit temp1[32], qbit temp2[32]){
+  int i;
+  $ temp2 := B;
+  $ AND(temp, B, C);
+  for(i=0; i<32; i++){ //forall
+    $ not(temp2[i]);
+  }
+  $ AND(temp1, temp2, D);
+  $ XOR(f, temp, temp1);
+}
+
+ctqg f2(qbit f[32], qbit B[32], qbit C[32], qbit D[32], qbit temp[32]){
+  $ XOR(temp, B, C);
+  $ XOR(f, temp, D);
+}
+
+ctqg f3(qbit f[32], qbit B[32], qbit C[32], qbit D[32], qbit temp1[32], qbit temp2[32], qbit temp3[32], qbit temp4[32]){
+  $ AND(temp1, B, C);
+  $ AND(temp2, B, D);
+  $ XOR(temp3, temp1, temp2);
+  $ AND(temp4, C, D);
+  $ XOR(f, temp3, temp4); 
+}
+
+ctqg P(qbit f[32], qbit temp[32], qbit temp1[32], qbit temp2[32], qbit A[32], qbit B[32], qbit C[32], qbit D[32], qbit E[32], qbit W[32]){
+  int i;
+  $ temp1 := A;
+  $ temp2 := B;
+/*$ temp := (leftrotate(5, A) + f + E + kt + W[t]);*/
+  $ [5] leftrotate(temp1);
+  $ temp := temp1;
+  $ temp += f;  
+  $ temp += E;
+  $ temp += W;
+  $ E := D;
+  $ D := C;
+  $ [30] leftrotate(temp2);
+  $ C := temp2;
+  $ B := A;
+  $ A := temp;
+}
+
+
+/*---------------------------------------------Encryption Module---------------------------------------------------------------*/
+
+ctqg encrypt( qint[448] input, qint[160] hash) {
+
+  //padding specified by SHA1
+  zero_to_garbage padding[576];
+
+  //input concatenated with pre-processing "padding" as specified by SHA1
+  zero_to_garbage paddedInput[1024]; 
+
+  //Constants, also used for computation within the main blocks
+  zero_to_garbage h0[32];
+  zero_to_garbage h1[32];
+  zero_to_garbage h2[32];
+  zero_to_garbage h3[32]; 
+  zero_to_garbage h4[32];
+  zero_to_garbage A[32];
+  zero_to_garbage B[32]; 
+  zero_to_garbage C[32];  
+  zero_to_garbage D[32]; 
+  zero_to_garbage E[32];
+  zero_to_garbage K[4][32];
+  zero_to_garbage f[32];
+  zero_to_garbage a[32];
+  zero_to_garbage b[32];
+
+  //temporaries used for computation
+  zero_to_garbage temp[32];
+  zero_to_garbage temp1[32];
+  zero_to_garbage temp2[32];
+  zero_to_garbage temp3[32];
+  zero_to_garbage temp4[32];
+  zero_to_garbage temp5[32];
+  zero_to_garbage target[32];
+  zero_to_garbage k[32];
+
+  //Split input into two 512 bit blocks
+  zero_to_garbage block[2][512];
+
+  //Counters
+  int i;
+  int t;
+  int j;
+
+  //Initialize the constants for the rounds of SHA1, binary reversed due to bit indexing
+
+  $ h0 := "01100111010001010010001100000001"; //0x67452301;
+  $ [32] reverseBits(h0);
+  $ h1 := "11101111110011011010101110001001"; //0xEFCDAB89;
+  $ [32] reverseBits(h1);
+  $ h2 := "10011000101110101101110011111110"; //0x98BADCFE;
+  $ [32] reverseBits(h2);
+  $ h3 := "00010000001100100101010001110110"; //0x10325476;
+  $ [32] reverseBits(h3);
+  $ h4 := "11000011110100101110000111110000"; //0xC3D2E1F0;
+  $ [32] reverseBits(h4);
+
+  $ A := "01100111010001010010001100000001"; //0x67452301;
+  $ [32] reverseBits(A);
+  $ B := "11101111110011011010101110001001"; //0xEFCDAB89;
+  $ [32] reverseBits(B);
+  $ C := "10011000101110101101110011111110"; //0x98BADCFE;
+  $ [32] reverseBits(C);
+  $ D := "00010000001100100101010001110110"; //0x10325476;
+  $ [32] reverseBits(D);
+  $ E := "11000011110100101110000111110000"; //0xC3D2E1F0;
+  $ [32] reverseBits(E);
+
+  $ K[0] := "01011010100000100111100110011001"; //0x5A827999;
+  $ [32] reverseBits(K[0]);
+  $ K[1] := "01101110110110011110101110100001"; //0x6ED9EBA1;
+  $ [32] reverseBits(K[1]);
+  $ K[2] := "10001111000110111011110011011100"; //0x8F1BBCDC;
+  $ [32] reverseBits(K[2]);
+  $ K[3] := "11001010011000101100000111010110"; //0xCA62C1D6;
+  $ [32] reverseBits(K[3]);
+
+
+
+  /* Pre-processing: pad the input 
+  Concatenate 384 to satisfy paddedInput is congruent to 512
+  Input is 16 bytes, so padding is always 320 bits + 64 bits == 384 bits */
+
+  $ pad(paddedInput, input, padding);
+  $ firstBlock(block[0], paddedInput);
+  $ secondBlock(block[1], paddedInput);
+
+  //To hold ords of the original message block, extended to 80
+  zero_to_garbage  W[80][32];
+ 
+
+ /* Main Loop: Once for each 512 bit block of the original message */
+  for (j=0; j<2; j++){
+  //Processing: split message into 16 32-bit words
+    if(j!=0){
+      $ A := h0;
+      $ B := h1;
+      $ C := h2;
+      $ D := h3;
+      $ E := h4;
+    }
+  
+    //Parallelizable --> forall
+    for (i=0; i<16; i++){ 
+      $ [i] map(W[i], block[j]);
+    }
+
+    //Extend the 16 words into 80 words
+
+    $ temp1 := 0;
+
+    for(i=16; i<33; i+=4){
+
+      /*-------First four blocks can be done in parallel, but with one additional calculation-----*/
+      $ XOR(temp2, W[i-3], W[i-8]);
+      $ XOR(temp3, W[i-14], W[i-16]);
+      $ XOR(target, temp3, temp2);
+      $ [1] leftrotate(target);
+      $ W[i] := target;
+
+      $ XOR(temp2, W[i-2], W[i-7]);
+      $ XOR(temp3, W[i-13], W[i-15]);
+      $ XOR(target, temp3, temp2);
+      $ [1] leftrotate(target);
+      $ W[i + 1] := target;
+
+      $ XOR(temp2, W[i-1], W[i-6]);
+      $ XOR(temp3, W[i-12], W[i-14]);
+      $ XOR(target, temp3, temp2);
+      $ [1] leftrotate(target);
+      $ W[i + 2] := target;
+
+      $ XOR(temp2, temp1, W[i-5]);
+      $ XOR(temp3, W[i-11], W[i-13]);
+      $ XOR(target, temp3, temp2);
+      $ [1] leftrotate(target);
+
+      $ temp3 := W[i];
+      $ [1] leftrotate(temp3);
+      $ XOR(temp2, target, temp3);
+      $ W[i + 3] := temp2;
+    }
+
+    //Parallelizable --> 6 assignments can be done in parallel
+    for(i=33; i<=69; i+=6){
+    /*$ W[i] := leftrotate(1, XOR(XOR(XOR(W[i-3], W[i-8]), W[i-14]), W[i-16]);*/
+      $ XOR(temp1, W[i-6], W[i-16]);
+      $ XOR(temp2, W[i-28], W[i-32]);
+      $ XOR(target, temp1, temp2);
+      $ [2] leftrotate(target);
+      $ W[i] := target;
+
+      $ XOR(temp1, W[i-5], W[i-15]);
+      $ XOR(temp2, W[i-27], W[i-31]);
+      $ XOR(target, temp1, temp2);
+      $ [2] leftrotate(target);
+      $ W[i + 1] := target;
+
+      $ XOR(temp1, W[i-4], W[i-14]);
+      $ XOR(temp2, W[i-26], W[i-30]);
+      $ XOR(target, temp1, temp2);
+      $ [2] leftrotate(target);
+      $ W[i + 2] := target;
+
+      $ XOR(temp1, W[i-3], W[i-13]);
+      $ XOR(temp2, W[i-25], W[i-29]);
+      $ XOR(target, temp1, temp2);
+      $ [2] leftrotate(target);
+      $ W[i + 3] := target;
+
+      $ XOR(temp1, W[i-2], W[i-12]);
+      $ XOR(temp2, W[i-24], W[i-28]);
+      $ XOR(target, temp1, temp2);
+      $ [2] leftrotate(target);
+      $ W[i + 4] := target;
+
+      $ XOR(temp1, W[i-1], W[i-11]);
+      $ XOR(temp2, W[i-23], W[i-27]);
+      $ XOR(target, temp1, temp2);
+      $ [2] leftrotate(target);
+      $ W[i + 5] := target;
+    }
+
+  // Remaining block assignment, can be done in parallel
+    $ XOR(temp1, W[i-6], W[i-16]);
+    $ XOR(temp2, W[i-28], W[i-32]);
+    $ XOR(target, temp1, temp2);
+    $ [2] leftrotate(target);
+    $ W[i] := target;
+
+    $ XOR(temp1, W[i-5], W[i-15]);
+    $ XOR(temp2, W[i-27], W[i-31]);
+    $ XOR(target, temp1, temp2);
+    $ [2] leftrotate(target);
+    $ W[i + 1] := target;
+
+    $ XOR(temp1, W[i-4], W[i-14]);
+    $ XOR(temp2, W[i-26], W[i-30]);
+    $ XOR(target, temp1, temp2);
+    $ [2] leftrotate(target);
+    $ W[i + 2] := target;
+
+    $ XOR(temp1, W[i-3], W[i-13]);
+    $ XOR(temp2, W[i-25], W[i-29]);
+    $ XOR(target, temp1, temp2);
+    $ [2] leftrotate(target);
+    $ W[i + 3] := target;
+
+    $ XOR(temp1, W[i-2], W[i-12]);
+    $ XOR(temp2, W[i-24], W[i-28]);
+    $ XOR(target, temp1, temp2);
+    $ [2] leftrotate(target);
+    $ W[i + 4] := target;
+
+    //Parallelizable --> forall
+    for(i=0; i<80; i++){
+      $ W[i] += K[i/20];
+    }
+
+
+    /*-----------Part 1: First 20 Rounds-----------*/
+    $ f1(f, B, C, D, temp, temp1, temp2);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[0]);
+    $ f1(f, B, C, D, temp, temp1, temp2);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[1]);
+    $ f1(f, B, C, D, temp, temp1, temp2);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[2]);
+    $ f1(f, B, C, D, temp, temp1, temp2);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[3]);
+    $ f1(f, B, C, D, temp, temp1, temp2);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[4]);
+    $ f1(f, B, C, D, temp, temp1, temp2);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[5]);
+    $ f1(f, B, C, D, temp, temp1, temp2);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[6]);
+    $ f1(f, B, C, D, temp, temp1, temp2);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[7]);
+    $ f1(f, B, C, D, temp, temp1, temp2);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[8]);
+    $ f1(f, B, C, D, temp, temp1, temp2);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[9]);
+    $ f1(f, B, C, D, temp, temp1, temp2);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[10]);
+    $ f1(f, B, C, D, temp, temp1, temp2);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[11]);
+    $ f1(f, B, C, D, temp, temp1, temp2);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[12]);
+    $ f1(f, B, C, D, temp, temp1, temp2);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[13]);
+    $ f1(f, B, C, D, temp, temp1, temp2);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[14]);
+    $ f1(f, B, C, D, temp, temp1, temp2);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[15]);
+    $ f1(f, B, C, D, temp, temp1, temp2);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[16]);
+    $ f1(f, B, C, D, temp, temp1, temp2);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[17]);
+    $ f1(f, B, C, D, temp, temp1, temp2);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[18]);
+    $ f1(f, B, C, D, temp, temp1, temp2);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[19]);
+
+    /*-----------Part 2: Second 20 Rounds-----------*/
+    $ f2(f, B, C, D, temp);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[20]);
+    $ f2(f, B, C, D, temp);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[21]);
+    $ f2(f, B, C, D, temp);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[22]);
+    $ f2(f, B, C, D, temp);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[23]);
+    $ f2(f, B, C, D, temp);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[24]);
+    $ f2(f, B, C, D, temp);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[25]);
+    $ f2(f, B, C, D, temp);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[26]);
+    $ f2(f, B, C, D, temp);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[27]);
+    $ f2(f, B, C, D, temp);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[28]);
+    $ f2(f, B, C, D, temp);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[29]);
+    $ f2(f, B, C, D, temp);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[30]);
+    $ f2(f, B, C, D, temp);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[31]);
+    $ f2(f, B, C, D, temp);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[32]);
+    $ f2(f, B, C, D, temp);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[33]);
+    $ f2(f, B, C, D, temp);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[34]);
+    $ f2(f, B, C, D, temp);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[35]);
+    $ f2(f, B, C, D, temp);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[36]);
+    $ f2(f, B, C, D, temp);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[37]);
+    $ f2(f, B, C, D, temp);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[38]);
+    $ f2(f, B, C, D, temp);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[39]);
+
+    /*-----------Part 3: Third 20 Rounds-----------*/
+    $ f3(f, B, C, D, temp1, temp2, temp3, temp4);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[40]);
+    $ f3(f, B, C, D, temp1, temp2, temp3, temp4);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[41]);
+    $ f3(f, B, C, D, temp1, temp2, temp3, temp4);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[42]);
+    $ f3(f, B, C, D, temp1, temp2, temp3, temp4);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[43]);
+    $ f3(f, B, C, D, temp1, temp2, temp3, temp4);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[44]);
+    $ f3(f, B, C, D, temp1, temp2, temp3, temp4);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[45]);
+    $ f3(f, B, C, D, temp1, temp2, temp3, temp4);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[46]);
+    $ f3(f, B, C, D, temp1, temp2, temp3, temp4);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[47]);
+    $ f3(f, B, C, D, temp1, temp2, temp3, temp4);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[48]);
+    $ f3(f, B, C, D, temp1, temp2, temp3, temp4);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[49]);
+    $ f3(f, B, C, D, temp1, temp2, temp3, temp4);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[50]);
+    $ f3(f, B, C, D, temp1, temp2, temp3, temp4);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[51]);
+    $ f3(f, B, C, D, temp1, temp2, temp3, temp4);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[52]);
+    $ f3(f, B, C, D, temp1, temp2, temp3, temp4);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[53]);
+    $ f3(f, B, C, D, temp1, temp2, temp3, temp4);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[54]);
+    $ f3(f, B, C, D, temp1, temp2, temp3, temp4);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[55]);
+    $ f3(f, B, C, D, temp1, temp2, temp3, temp4);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[56]);
+    $ f3(f, B, C, D, temp1, temp2, temp3, temp4);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[57]);
+    $ f3(f, B, C, D, temp1, temp2, temp3, temp4);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[58]);
+    $ f3(f, B, C, D, temp1, temp2, temp3, temp4);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[59]);
+
+    /*-----------Part 4: Fourth 20 Rounds-----------*/
+    $ f2(f, B, C, D, temp);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[60]);
+    $ f2(f, B, C, D, temp);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[61]);
+    $ f2(f, B, C, D, temp);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[62]);
+    $ f2(f, B, C, D, temp);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[63]);
+    $ f2(f, B, C, D, temp);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[64]);
+    $ f2(f, B, C, D, temp);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[65]);
+    $ f2(f, B, C, D, temp);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[66]);
+    $ f2(f, B, C, D, temp);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[67]);
+    $ f2(f, B, C, D, temp);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[68]);
+    $ f2(f, B, C, D, temp);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[69]);
+    $ f2(f, B, C, D, temp);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[70]);
+    $ f2(f, B, C, D, temp);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[71]);
+    $ f2(f, B, C, D, temp);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[72]);
+    $ f2(f, B, C, D, temp);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[73]);
+    $ f2(f, B, C, D, temp);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[74]);
+    $ f2(f, B, C, D, temp);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[75]);
+    $ f2(f, B, C, D, temp);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[76]);
+    $ f2(f, B, C, D, temp);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[77]);
+    $ f2(f, B, C, D, temp);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[78]);
+    $ f2(f, B, C, D, temp);
+    $ P(f, temp, temp1, temp2, A, B, C, D, E, W[79]);
+
+    //Add to the intermediate hash
+    $ h0 += A;
+    $ h1 += B;
+    $ h2 += C;
+    $ h3 += D;
+    $ h4 += E;
+  }
+
+  
+  //Final hash big endian
+  /*$ hh := OR(OR(OR(OR(leftshift(128, h0), leftshift(96, h1)), leftshift(64, h2)), leftshift(32, h3)), h4), done with signal mapping*/
+  $ finalHash(hash, h0, h1, h2, h3, h4);
+}
+
+int main (int argc, char** argv){
+  qbit x[128];
+  qbit hash[160];
+  encrypt(x, hash);
+  return 0;
+}

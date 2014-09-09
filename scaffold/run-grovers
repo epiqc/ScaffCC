@@ -1,0 +1,37 @@
+#!/bin/sh
+
+echo "Compiling grovers.scaffold..."
+../build/Release+Asserts/bin/clang -cc1 -emit-llvm -I/usr/include -I/usr/include/x86_64-linux-gnu -I/usr/lib/gcc/x86_64-linux-gnu/4.6/include grovers.scaffold -o grovers.ll
+
+echo "Transforming cbits..."
+../build/Release+Asserts/bin/opt -S -load ../build/Release+Asserts/lib/Scaffold.dylib -xform-cbit-stores grovers.ll -o grovers1.ll
+
+echo "O1 optimizations..."
+../build/Release+Asserts/bin/opt -S grovers1.ll -no-aa -tbaa -targetlibinfo -basicaa -o grovers1a.ll
+
+../build/Release+Asserts/bin/opt -S grovers1a.ll -simplifycfg -domtree -o grovers1b.ll
+
+../build/Release+Asserts/bin/opt -S grovers1b.ll -early-cse -lower-expect -o grovers2.ll
+
+../build/Release+Asserts/bin/opt -S grovers2.ll -targetlibinfo -no-aa -tbaa -basicaa -globalopt -ipsccp -o grovers3.ll
+
+../build/Release+Asserts/bin/opt -S grovers3.ll -instcombine -simplifycfg -basiccg -prune-eh -always-inline -functionattrs -domtree -early-cse -simplify-libcalls -lazy-value-info -jump-threading -correlated-propagation -simplifycfg -instcombine -tailcallelim -simplifycfg -reassociate -domtree -loops -loop-simplify -lcssa -loop-rotate -licm -lcssa -loop-unswitch -instcombine -scalar-evolution -loop-simplify -lcssa -iv-users -indvars -loop-idiom -loop-deletion -loop-unroll -memdep -memcpyopt -sccp -instcombine -lazy-value-info -jump-threading -correlated-propagation -domtree -memdep -dse -adce -simplifycfg -instcombine -strip-dead-prototypes -preverify -domtree -verify -o grovers4.ll
+
+../build/Release+Asserts/bin/opt -S grovers4.ll -mem2reg -loops -loop-simplify -loop-rotate -lcssa -loop-unroll -unroll-threshold=100000000 -o grovers5.ll
+
+../build/Release+Asserts/bin/opt -S grovers5.ll -simplifycfg -o grovers6.ll
+
+echo "Function Cloning..."
+../build/Release+Asserts/bin/opt -S -load ../build/Release+Asserts/lib/Scaffold.dylib -FunctionClone grovers6.ll -o grovers7.ll
+
+echo "Gate Decomposition..."
+../build/Release+Asserts/bin/opt -S -load ../build/Release+Asserts/lib/Scaffold.dylib -ToffoliReplace grovers7.ll -o grovers8.ll
+
+echo "Generating grovers_res_count.log..."
+../build/Release+Asserts/bin/opt -load ../build/Release+Asserts/lib/Scaffold.dylib -ResourceCount grovers8.ll 2> grovers_res_count.log
+
+echo "Generating grovers_crit_path.log..."
+../build/Release+Asserts/bin/opt -load ../build/Release+Asserts/lib/Scaffold.dylib -CriticalResourceCount grovers8.ll 2> grovers_crit_path.log
+
+#rm grovers.ll grovers1.ll grovers1a.ll grovers1b.ll grovers2.ll grovers3.ll grovers4.ll grovers5.ll grovers6.ll grovers7.ll
+

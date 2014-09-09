@@ -1,0 +1,8 @@
+module
+main_module(
+  qint[24] x, qint[24] y, qint[24] z
+) {
+  $ [24] assign_value_of_b_to_a(x, 10);  /* Equivalent to (x, "01010")  */
+  $ [24] assign_value_of_b_to_a(y, -27); /* Equivalent to (y, "101001") */
+  $ [24] a__eq__a_plus_b_times_c(z, 0, -102030405060708090807060504030201);
+}

@@ -1,0 +1,1808 @@
+// Linear Systems Algorithm
+// Partial algorithms 
+// Algorithms 1-10, 11-13 oracles so ommited, 14-16 implemented, 17 removed, 18 not impelemented
+// Arvin Faruque
+// afaruque@umail.ucsb.edu or arvin.faruque@gmail.com
+
+// TODO: IntegerInverse not implemented
+// TODO: oracle_a not implemented - Algorithm #11
+// TODO: oracle_b not implemented - Algorithm #12
+// TODO: oracle_r not implemented - Algorithm #13
+// TODO: qlsa_Initialize not implemented - Algorithm #14
+// TODO: qlsa_MultiCNOT not implemented - Algorithm #18
+// TODO: daggered modules not implemented
+//        -U_b_algorithm2_dagger
+//        -U_bx_algorithm3_dagger
+//        -U_r_algorithm4_dagger
+//        -qlsa_HamiltonianSimulation_oracle_a_dagger
+//        -FourierTransfom_dagger
+
+
+// Basic gates: we want controlled versions of these also
+gate H(qreg target[1]);
+gate X(qreg target[1]);
+gate Z(qreg target[1]);
+gate R(qreg target[1], float angle);
+gate Rpi(qreg target[1], int d);
+gate S(qreg target[1]);
+gate T(qreg target[1]);
+gate SDagger(qreg target[1]);
+gate TDagger(qreg target[1]);
+gate CNOT(qreg[1] target, qreg[1] control);
+gate xmeasure(qreg[1] target, qreg[1] into);
+gate xprep(qreg[1], int value);
+
+// Controlled versions of all the gates here from the basic_gates file
+// .
+// .
+// .
+
+// #define M // Not used
+#define n_0 14 // Number of qubits in register 0
+#define n_1 24 // Number of qubits in register 1
+#define n_2 30 // Number of qubits in registers 2,3
+#define n_4 65 // Number of qubits in register 4,5
+#define epsilon 0.01 // Desired Precision
+#define b_max 5
+#define 2.5e12 // Suzuki integrator time spliting factor
+#define t_0 7.0e6 // Time constant for Hamiltonian simulation
+#define p_2 1/(4-pow(4, 1/3)) // Suzuki integrator constant
+#define d 7 // Maximum connectivity of matrix A
+#define T pow(2, n_1-1)
+
+// Global register definitions, useful for reusing ancilla
+
+// Global ancilla registers for algorithm 5
+qreg m[n_4];
+qreg p[n_4];
+
+// Global ancilla registers for algorithm 6
+qreg t[n_0];
+qreg f[n_0];
+
+// Global ancilla reigsters for algorithms 2 3 4 7 8 9 10 15
+qreg a[1];
+qreg b[1];
+qreg c[1];
+qreg r[1];
+qreg s[1];
+qreg a_hmag[1];
+qreg a_cphase[1];
+
+
+// Global main registers
+qreg g[n_0];
+creg z[n_0];
+qreg x[n_2];
+qreg y[n_2];
+
+// Algorithm 1: pure classical post processing of quantum results
+// Classical post processing omitted, just call the four quantum modules
+void module main() {
+	
+	// Apply four main functions
+	qlsa_AmpEst_phi_oracle_b();
+	qlsa_AmpEst_phi_bx_oracle_A_oracle_b();
+  //! Swap order of calls
+	qlsa_AmpEst_phi_bx_oracle_A_oracle_b_oracle_r(1);
+	qlsa_AmpEst_phi_bx_oracle_A_oracle_b_oracle_r(0);
+	
+}
+
+
+// -----------------------------------------------------------------------------------
+
+
+// Algorithm 2
+// Here, we implement the algorithm only to the point where the measurement is taken
+// It can be assumed that after the measurement is taken, the classical postprocessing
+// will be taken care of
+void module qlsa_AmpEst_phi_oracle_b() {
+	
+	// Integers
+	int i;
+	int j;
+	
+	// Start of algorithm, line 14 in Algorithm 2
+	// Note these function a variant of Algorithm 14
+	qlsa_Initialize_size(g[0], n_0);
+	qlsa_Initialize_size(x[0], n_2);
+	qlsa_Initialize_size(s[0], 1);
+	qlsa_Initialize_size(a[0], 1);
+	qlsa_Initialize_size(b[0], 1);
+	
+	// Apply H ^ tensor N to g
+	forall(i = 0; i < n_0; i++) {
+		H(g[i]);
+	}
+	
+	// Line 16, U_b which is just qlsa_StatePrep
+	U_b_algorithm2();
+	
+	// Line 17-22
+	forall(i = 0; i < n_0 - 1; i++) {
+		j = intexp(2, i);
+		
+    if (g[i])
+      U_g_to_j_algorithm2(j);
+	}
+	
+	FourierTransform(g[0]);
+	
+	// Measure all of the qubits of g into z
+	forall(i = 0; i < n_0; i++) {
+		xmeasure(g[i], z[i]);
+	}
+	
+}
+
+// Algorithm 2: U_b
+void module U_b_algorithm2() {
+	qlsa_StatePrep_oracle_b(1.0 / b_max);
+}
+
+// Algorithm 2: U_b dagger
+void module U_b_algorithm2_dagger() {
+  // TODO: WRITE ME
+}
+
+// Algorithm 2: U_g_to_j
+// NOTE: here we only have U_g impelemented
+// NEED TO FIX
+// We need this to implement U_g to the j efficiently
+void module U_g_to_j_algorithm2(int j) {
+	
+	// Z
+	Z(b[0]);
+	
+	// U_b dagger
+	U_b_algorithm2_dagger();
+	
+	// multi CNOT
+	qlsa_MultiCNOT_1(x[0], a[0], 1);
+	
+	// XZX a
+	X(a[0]);
+	Z(a[0]);
+	X(a[0]);
+	
+	// Multi CNOT
+	qlsa_MultiCNOT_1(x[0], a[0], 1);
+	
+	// u_b
+  
+	U_b_algorithm2();
+}
+
+// -----------------------------------------------------------------------------------
+
+// Algorithm 3: qlsa AmpEst phi bx(oracle , oracle b)
+void module qlsa_AmpEst_phi_bx_oracle_A_oracle_b() {
+	
+	// Integers
+	int i;
+	int j;
+	
+	// Note this function a variant of Algorithm 14
+	qlsa_Initialize_size(g[0], n_0);
+	qlsa_Initialize_size(x[0], n_2);U_b_algorithm2
+	qlsa_Initialize_size(s[0], 1);
+	qlsa_Initialize_size(a[0], 1);
+	qlsa_Initialize_size(b[0], 1);
+	
+	// Apply H ^ tensor N to g
+	forall(i = 0; i < n_0; i++) {
+		H(g[i]);
+	}
+	
+	// U_bx
+	U_bx_algorithm3();
+	
+	// Loop
+	forall(i = 0; i < n_0 - 1; i++) {
+		j = intexp(2, i);
+		
+    if ([i])
+      U_g_to_j_algorithm3();
+	}
+	
+	FourierTransform(g[0]);
+	
+	// Measure all of the qubits of g into z
+	forall(i = 0; i < n_0; i++) {
+		xmeasure(g[i], z[i]);
+	}
+	
+}
+
+
+// Algorithm 3: U_b
+void module U_bx_algorithm3() {
+	qlsa_StatePrep_oracle_b(1.0 / b_max);
+	// qlsa_State_Solve_x_oracle_a(); // Typo?
+	qlsa_Solve_x_oracle_a();
+}
+
+// Algorithm 3: U_b dagger
+void module U_bx_algorithm3_dagger() {
+  // TODO: WRITE ME
+}
+
+// Algorithm 3: U_g_to_j
+// NOTE: here we only have U_g impelemented
+// NEED TO FIX
+// We need this to implement U_g to the j efficiently
+void module U_g_to_j_algorithm3() {
+	
+	// multi CNOTqlsa_Initialize_size
+	qlsa_MultiCNOT2(b[0], s[0], a[0], 0, 0);
+	
+	// Za
+	Z(a[0]);
+	
+	// Multi CNOT
+	qlsa_MultiCNOT2(b[0], s[0], a[0], 0, 0);
+	
+	// U_bx dagger
+	U_bx_algorithm3_dagger();
+	
+	// Multi CNOT
+	qlsa_MultiCNOT2(x[0], b[0], s[0], 1);
+	
+	// XZX a
+	X(a[0]);
+	Z(a[0]);
+	X(a[0]);
+	
+	// Multi CNOT
+	qlsa_MultiCNOT(x[0], a[0], s[0], 1);
+	
+	// U_bx
+	U_bx_algorithm3();
+}
+
+// -----------------------------------------------------------------------------------
+
+// Algorithm 4: qlsa AmpEst phi bx(oracle A,oracle b, oracle 4, target)
+void module qlsa_AmpEst_phi_bx_oracle_A_oracle_b_oracle_r(int target) {
+	// Integers
+	int i;
+	int j;
+	
+	// Start of algorithm
+	// Note these function a variant of Algorithm 14
+	qlsa_Initialize_size(g[0], n_0);
+	qlsa_Initialize_size(y[0], n_2);
+	qlsa_Initialize_size(x[0], n_2);
+	qlsa_Initialize_size(s[0], 1);
+	qlsa_Initialize_size(a[0], 1);
+	qlsa_Initialize_size(b[0], 1);
+	qlsa_Initialize_size(r[0], 1);
+	qlsa_Initialize_size(c[0], 1);
+	
+	// Apply H ^ tensor N to g
+	forall(i = 0; i < n_0; i++) {
+		H(g[i]);
+	}
+	
+	// U_r
+	U_r_algorithm4();
+	
+	// Loop
+	forall(i = 0; i < n_0 - 1; i++) {
+		j = intexp(2, i);
+		
+    if (g[i])
+      U_g_to_j_algorithm4(target);
+	}
+	
+	// Fourier transform
+	FourierTransform(g[0]);
+	
+	// Measure all of the qubits of g into z
+	forall(i = 0; i < n_0; i++) {
+		xmeasure(g[i], z[i]);
+	}
+	
+}
+
+// Algorithm 4: U_r
+void module U_r_algorithm4() {
+	qlsa_Solve_xr();
+}
+
+// Algorithm 4: U_r dagger
+void module U_r_algorithm4_dagger() {
+  // TODO: WRITE ME
+}
+
+// Algorithm 4: U_g
+// NOTE: here we only have U_g impelemented
+// NEED TO FIX
+// We need this to implement U_g to the j efficiently
+// Also need to incorporate target into flags
+void module U_g_to_j_algorithm4(int target) {
+	qlsa_MultiCNOT4(b[0], s[0], r[0], c[0], a[0], 0, 0, 0, 0);
+	Z(a[0]);
+	qlsa_MultiCNOT4(b[0], s[0], r[0], c[0], a[0], 0, 0, 0, 0);
+	U_r_algorithm4_dagger();
+	qlsa_MultiCNOT6(x[0], y[0], b[0], s[0], r[0], c[0], a[0], 0, 0, 0, 0, 0, 0);
+	X(a[0]);
+	Z(a[0]);
+	X(a[0]);
+	qlsa_MultiCNOT3(x[0], b[0], s[0], a[0], 0);
+	U_r_algorithm4();
+}
+
+// ----------------------------------------------------------------------------------
+
+// Algorithm 5, oracle b version
+void module qlsa_StatePrep_oracle_b(float phi_b) {
+	
+	int i = 0;
+	
+	// Initialize
+	qlsa_Initialize(m[0], p[0]);
+	
+	// Apply H ^ tensor N_2 to x
+	forall(i = 0; i < n_2; i++) {
+		H(x[i]);
+	}
+	
+	// Call oracle
+	oracle_b(x[0], m[0], p[0]);
+	
+	// Call controlled phase, Algorithm 15
+	qlsa_ControlledPhase(p[0], epsilon, 0);
+	
+	// Call control rotation, Algorithm 16
+	qlsa_ControlledRotation(m[0], b[0], epsilon);
+	
+	// Call oracle
+	oracle_b(x[0], m[0], p[0]);
+	
+}
+
+// Algorithm 5, oracle r version
+void module qlsa_StatePrep_oracle_r(float phi_b) {
+	
+	int i = 0;
+	
+	// Initialize
+	qlsa_Initialize(m[0], p[0]);
+	
+	// Apply H ^ tensor N_2 to x
+	forall(i = 0; i < n_2; i++) {
+		H(x[i]);
+	}
+	
+	// Call oracle
+	oracle_r(x[0], m[0], p[0]);
+	
+	// Call controlled phase, Algorithm 15
+	qlsa_ControlledPhase(p[0], epsilon, a_cphase[0]);
+	
+	// Call control rotation, Algorithm 16
+	qlsa_ControlledRotation(m[0], b[0], epsilon, 0);
+	
+	// Call oracle
+	oracle_r(x[0], m[0], p[0]);
+	
+}
+
+// Algorithm 6, oracle A is hardcoded, this works since we don't call with any others
+void module qlsa_Solve_x_oracle_a() {
+	
+	int i;
+	
+	// Initialize
+	qlsa_Initialize_size(t[0], n_0);
+	qlsa_Initialize_size(f[0], t_0);
+	
+	// Compute Constant
+	float phi_0 = 2 * PI / (intexp(2, n0) - epsilon);
+	
+	// H tensor
+	forall(i = 0; i < n0; i++) {
+		H(t[i]);
+	}
+	
+	// U_hs, which is just qlsa_Hamiltonian_Simulation
+	qlsa_HamiltonianSimulation_oracle_a();
+	
+	// Uft, which is just the fourier transform
+	FourierTransform(t[0]);
+	
+	// Integer Inverse
+	IntegerInverse(t[0], f[0], epsilon);
+	
+	// Controlled rotation
+	qlsa_ControlledRotation(f[0], s[0], phi_0, 0);
+	
+	// Integer Inverse
+	IntegerInverse(t[0], f[0], epsilon);
+	
+	// Reverse ft
+	FourierTransform_dagger(t[0]);
+	
+	// Reverse Hamiltonian
+	qlsa_HamiltonianSimulation_oracle_a_dagger();
+	
+	// H tensor
+	forall(i = 0; i < n0; i++) {
+		H(t[i]);
+	}
+	
+}
+
+// Algorithm 7, qlsaSolve, oracles hardcoded in since this is not called with others
+void module qlsa_Solve_xr() {
+	
+	// Call state prep oracle
+	qlsa_StatePrep_oracle_b(1.0 / bmax);
+	
+	// Call state solve
+	qlsa_Solve_x_oracle_a();
+	
+	// Call state solve
+	qlsa_StatePrep_oracle_r(1.0 / bmax);
+	
+	// H
+	H(c[0]);
+	
+	// controlled swap
+  if (c[0])
+    largeSwap(x, y);
+	
+	// H
+	H(c[0]);
+}
+
+
+// Algorithm 8, qlsa HamiltonianSimulation with oracle A hardcoded
+void module qlsa_HamiltonianSimulation_oracle_a() {
+	
+	int i = 0;
+
+	float t1 = (p_2 * t_0) / (2 * r * T);
+	float t2 = ((1 - 4 * p_2) * t_0) / (2 * r * T);
+	
+	// Loop
+	for(i = 1; i <= r; i++) {
+		// Note apply operators twice to implement square
+		
+		// U_z^2
+		U_z_algorithm8(t1);
+		U_z_algorithm8(t1);
+		
+		// Uz
+		U_z_algorithm8(t2);
+		
+		// U_z^2
+		U_z_algorithm8(t1);
+		U_z_algorithm8(t1);
+		
+		
+	}
+	
+}
+
+// Algorithm 8, qlsa HamiltonianSimulation with oracle A dagger hardcoded
+void module qlsa_HamiltonianSimulation_oracle_a_dagger() {
+  // TODO: WRITE ME
+}
+
+// Algorithm 8: U_z
+void module U_z_algorithm8(float timestep) {
+	int j = 0;
+	
+	// Loop in order
+	for(j = 6 * d * d; j >= 1; j--) {
+		qlsa_HsimKernel_oracle_a(j, timestep);
+	}
+	
+	// Reverse order
+	for(j = 1; j <= 6 * d * d; j++) {
+		qlsa_HsimKernel_oracle_a(j, timestep);
+	}
+	
+	
+}
+
+// Algorithm 9: qlsa_HsimKernel hardcoded for oracle a work
+void module qlsa_HsimKernel_oracle_a(int color, float timestep) {
+
+  // Line 1
+  float phi_p = epsilon
+  float phi_m;
+
+	// Initalize
+	qlsa_Initialize_size(m[0], n_4);
+	qlsa_Initialize_size(p[0], n_4);
+	qlsa_Initialize_size(y[0], n_2);
+	
+	// Oracle with 1 for phase
+	oracle_a(x[0], y[0], p[0], color, 1);
+	
+	// Controlled phase
+	qlsa_ControlledPhase(p[0], phi_p, 0);
+	
+	// Oracle with 0 for 1 uncompute
+	oracle_a(x[0], y[0], p[0], color, 0);
+	
+	
+	// Compute magnitude
+	oracle_a(x[0], y[0], m[0], color, 1);
+	
+	// Loop
+	forall(i = 0; i < n_0 - 1; i++) {
+		phi_m = timestep * intexp(2, i);
+		if (t[i])
+      qlsa_ApplyHmag(phi_m);
+	}
+	
+	
+	// Uncompute magnitude
+	oracle_a(x[0], y[0], m[0], color, 0);
+	
+	
+	// Compute phases with 1 for phase
+	oracle_a(x[0], y[0], p[0], color, 1);
+	
+	// Controlled phase
+	qlsa_ControlledPhase(p[0], phi_p, 0);
+	
+	// Uncompute phase with 1 for phase
+	oracle_b(x[0], y[0], p[0], color, 1);
+	
+}
+
+
+// Algorithm 10: qlsa ApplyHmag(x,y,m;0)
+void module qlsa_ApplyHmag(float phi_0) {
+	
+	// Integer
+	int i = 0;
+	
+	// Initialize
+	qlsa_Initialize_size(a_hmag[0], 1);
+	
+	// Loop
+	forall(i = 0; i < n_2 - 1; i++) {
+		W_algorithm10(x[i], y[i]);
+		qlsa_MultiCNOT2(x[i], y[i], a_hmag[0], 0, 1);
+	}
+	
+	// Controlled phase
+	// qlsa_ControlledPhase(m[0], a_hmag[0], phi_0);
+	qlsa_ControlledPhase(m[0], phi_0, 0);
+	qlsa_ControlledPhase(a_hmag[0], phi_0, 0);
+	
+	// Loop
+	forall(i = 0; i < n_2 - 1; i++) {
+		W_algorithm10(x[i], y[i]);
+		qlsa_MultiCNOT2(x[i], y[i], a_hmag[0], 0, 1);
+	}
+	
+}
+
+
+// Algorithm 10: W
+void module W_algorithm10(qreg x[1], qreg y[1]) {
+	
+	
+	// Don't use qlsa_Controlled operation
+	// More efficient to use gates directly
+	
+	CNOT(y[0], x[0]);
+	CNOT(x[0], y[0]);
+  if (y[0])
+    H(x[0]);
+	CNOT(x[0], y[0]);
+	CNOT(y[0], x[0]);
+	
+	
+}
+
+
+// Algorithm 11-13 are oracle algorithms, also IntegerInverse from algorithm 6
+
+
+// Algorithm 14: qlsa_Initialize_size operation
+// Initialization, our version requires a size parameter
+// Need to add language feature for variable length data register
+void module qlsa_Initialize_size(qreg data[], int size) {
+
+	int i = 0;
+	
+	forall(i = 0; i < size; i++) {
+		xprep(data[i], 1);
+	}
+	
+}
+
+// Algorithm 15: qlsa_ControlledPhase
+void module qlsa_ControlledPhase(qreg control[], float phi_0, int flag) {
+	
+	int i;
+	float phi;
+	
+	int n = length(control);
+	
+	// Initialize
+	qlsa_Initialize_size(a_cphase, 1);
+	
+	// Flip based on sign
+	if(flag) {
+		X(a_cphase[0]);
+	}
+	
+	// CNOT
+	CNOT(a_cphase, control[n - 1]);
+	
+	// Loop
+	// Use controlled rotation instead of lqsacontrol
+	forall(i = 0; i <= n - 2; i++) {
+		phi = phi_0 * intexp(2, i);
+		if (control[i])
+      R(a_cphase[0], phi);
+	}
+	
+	// Unentangle ancilla
+	CNOT(a_cphase[0], control[n - 1]);
+	 
+	
+	
+}
+
+// Algorithm 16: qlsa_ControlledRotation
+void module qlsa_ControlledRotation(qreg control[], qreg target[1], float phi_0, int flag) {
+	
+	
+	int i = 0;
+	float phi;
+	
+	// Invert if flag
+	if(flag) {
+		CNOT(t[0]);
+	}
+	
+	int n = length(control);
+	
+	// Cnot
+	CNOT(target, control[length(c) - 1]);
+	
+	// Loop
+	// Use controlled rotation instead of lqsa
+	forall(i = 0; i <= n - 2; i++) {
+		phi = intexp(2, i) * phi_0;
+    if (control[i])
+      R(target[0], phi);
+	}
+	
+	
+	
+}
+
+// Algorithm 17: not implemented, we already have controlled operations so redundant
+
+// TODO: Not implemented
+// Algorithm 18: qlsa_MultiCNOT
+// NEED TO FIND A WAY TO IMPLEMENT THIS
+void module qlsa_MultiCNOT {}
+
+
+
+// Support algorithms
+
+// Fourier transform
+// CHECK MAYBE REODRDER
+void module FourierTransform(qreg reg[]) {
+
+	int i = 0;
+	int j = 0;
+	
+	int n = length(reg);
+	
+	for(i = 0; i < n i++) {
+		H(reg[i]);
+		for(j = i; j < n; j++) {
+      if (reg[i])
+        Rpi(reg[j], 2 + i);
+		}
+	}
+	
+}
+
+// Fourier transform dagger
+void module FourierTransfom_dagger(qreg reg[]) {
+  // TODO: WRITE ME
+}
+
+// Large swap
+void module largeSwap(qreg op1[], qreg op2[]) {
+	
+	int i;
+	int n = length(op1);
+	
+	// Swap every qubit pair
+	forall(i = 0; i < n - 1; i++) {
+		// swap(op1[i], op2[j]);
+		swap(op1[i], op2[i]);
+	}
+	
+}
+
+
+// Small swap operator
+void module sawp(qreg o1[1], qreg o2[1]) {
+
+	CNOT(o1, o2);
+	CNOT(o2, o1);
+	CNOT(o1, o2);
+	
+}
+
+-------------------------------------------------------------------
+
+**************************************************
+*                 Classical Code                 *
+*   Some functions ported from MATLAB code in    *
+*            Appendix B of the GFI               *
+**************************************************
+
+Author:	Seth Vanderwilt
+Date:	May 8, 2012
+
+-------------------------------------------------------------------
+
+// Seth Vanderwilt
+// 2/20/12
+// calcincidentfield.c
+// Function to calculate the electric field amplitude at a
+// global edge index y. Assuming incident field to be a linearly
+// polarized plane wave propagating in direction theta with amplitude E0.
+
+
+#include <stdio.h>
+#include <complex.h>
+#include <stdbool.h>
+
+// output: complex float e (magnitude of electric field on edge y)
+// including complex.h
+complex float calcincidentfield(int y, int nx, int ny, float lx, float ly, float k, float theta, float E0) {
+    int xy[] = {0,0};
+    itoxy(y, nx, ny, xy);
+    int xg = xy[0];
+    int yg = xy[1];
+
+    bool isvertical;
+    if (yg % 2 == 0) {
+        isvertical = 1;
+    }
+    else {
+        isvertical = 0;
+    }
+    float yvalue;
+    float xvalue;
+    complex float e;
+
+    if (isvertical) {
+        // why not just yg (below)?
+        yvalue = 0.5*(yg/2 + yg/2 + 1.0)*ly;
+        xvalue = xg*lx;
+
+        // extra phase at end for numerical purposes (?)
+        e = -cos(theta)*E0*(cos(-k*(xvalue*cos(theta)+yvalue*sin(theta))+0.1337456) + _Complex_I*sin(-k*(xvalue*cos(theta)+yvalue*sin(theta))+0.1337456));
+    }
+    else {
+        yvalue = ly*(yg + 1.0)/2.0;
+        xvalue = lx*(xg + xg + 1.0)/2.0; // Use edge midpoint for x value
+        // simplified using Euler's: e^(ix) = cos(x) + i*sin(x)
+        e = sin(theta)*E0*(cos(-k*(xvalue*cos(theta)+yvalue*sin(theta)) + 0.1337456) + _Complex_I*sin(-k*(xvalue*cos(theta)+yvalue*sin(theta)) + 0.1337456));
+
+    }
+    return e;
+
+}
+
+-------------------------------------------------------------------
+
+// Seth Vanderwilt
+// 2/20/12
+// calcmatrixelement.c
+// calculates a matrix element A (a float)
+// given y1, y2 which are global edge indices
+
+// NOTE: I have copied and pasted my xytoi and itoxy functions from other files
+// because they are required for calcmatrixelement.
+// I would prefer to figure out how to link all these together in a runnable format
+// which we should figure out sometime soon.
+
+#include <stdio.h>
+#include <complex.h>
+
+int xytoi(int xcols, int yrows, int xy[]);
+void itoxy(int i, int xcols, int yrows, int xy[]);
+
+void main() {
+
+}
+
+/*
+Input Arguments:
+int y1 - Global edge index of row index of desired matrix element
+int y2 - Global edge index of column index of desired matrix element
+int nx - Number of vertices left to right
+int ny - Number of vertices top to bottom
+float lx - Length of horizontal edges (distance between vertices in x direction)
+float ly - Length of vertical edges (distance between vertices in y direction)
+float k - Plane wave wavenumber
+
+Output Arguments:
+float A - Matrix element A(y1,y2)
+NOTE that because C can be a complex number that A must be a
+complex float (I think)
+*/
+
+
+
+complex float calcmatrixelement(int y1, int y2, int nx, int ny, float lx, float ly, float k)
+{
+    // req'd for itoxy to work
+    int xy[] = {0,0};
+
+    itoxy(y1, nx, ny, xy);
+    int xg1 = xy[0];
+    int yg1 = xy[1];
+
+    itoxy(y2, nx, ny, xy);
+    int xg2 = xy[0];
+    int yg2 = xy[1];
+    float B;
+
+    // matrix elements B33 and B44 (note: the numbering seems to be 1-based...)
+    if ((y1 == y2) && (yg1 % 2 == 0))
+    {
+        B = ly/lx - k*k*lx*ly/3.0;
+    }
+    // B11 and B22
+    else if ((y1 == y2) && (yg1 % 2 != 0))
+    {
+        B = lx/ly - k*k*lx*ly/3.0;
+    }
+    // B12 and B21
+    else if ((abs(y1 - y2) == 2) && (abs(xg1-xg2) == 0) && (yg1 % 2 != 0))
+    {
+        B = -lx/ly + k*k*lx*ly/12.0;
+    }
+    // B34 and B43
+    else if ((abs(yg1 - yg2) == 0) && (abs(xg1 - xg2) == 1) && (yg1 % 2 == 0))
+    {
+        B = -ly/lx + k*k*lx*ly/12.0;
+    }
+    // B13
+    else if ((yg1 == yg2 + 1) && (xg1 == xg2) && (yg2 % 2 == 0))
+    {
+        B = -1.0;
+    }
+    // B31
+    else if ((yg1 == yg2 - 1) && (xg1 == xg2) && (yg1 % 2 == 0))
+    {
+        B = -1.0;
+    }
+    // B14
+    else if ((yg1 == yg2 + 1) && (xg1 == xg2 - 1) && (yg2 % 2 == 0))
+    {
+        B = 1.0;
+    }
+    // B41
+    else if ((yg1 == yg2 - 1) && (xg1 == xg2 + 1) && (yg1 % 2 == 0))
+    {
+        B = 1.0;
+    }
+    // B42
+    else if ((yg1 == yg2 + 1) && (xg1 == xg2 + 1) && (yg1 % 2 == 0))
+    {
+        B = -1.0;
+    }
+    // B24
+    else if ((yg1 == yg2 - 1) && (xg1 == xg2 - 1) && (yg2 % 2 == 0))
+    {
+        B = -1.0;
+    }
+    // B32
+    else if ((yg1 == yg2 + 1) && (xg1 == xg2) && (yg1 % 2 == 0))
+    {
+        B = 1.0;
+    }
+    // B23
+    else if ((yg1 == yg2 - 1) && (xg1 == xg2) && (yg2 % 2 == 0))
+    {
+        B = 1.0;
+    }
+    else
+    {
+        B = 0;
+        printf("In here. y1 = %d, y2 = %d, xg1 = %d, xg2 = %d, yg1 = %d, yg2 = %d\n",y1,y2,xg1,xg2,yg1,yg2);
+    }
+
+    // initialize C
+    complex float C;
+
+    // Absorbing boundary conditions
+    // C33 and C44
+    if ((y1 == y2) && (yg1 % 2 == 0) && ((xg1 == 1) || (xg1 == nx))) {
+        // multiply by i
+        C = _Complex_I*k*ly;
+    } else if ((y1 == y2) && (yg1 % 2 != 0) && ((yg1 == 1) || (yg1 == ny))) {
+        C = _Complex_I*k*lx;
+    } else {
+        C = 0;
+    }
+
+    // don't think this will work because C seems to be complex
+    complex float A = B + C;
+
+    return A;
+}
+
+// assuming the top left element is [0,0] or i = 0
+// take an edge row index i >= 0 and convert it into x and y edge coordinates
+// in the below matrix, x can be expressed either as [2,1] or i = 6
+// ----
+// --x-
+// ----
+// REQUIRES int xy[2] = {0,0}
+void itoxy(int i, int xcols, int yrows, int xy[])
+{
+    xy[1] = i / xcols; // 1 for the example above
+    xy[0] = i % xcols; // 2 for the example above
+}
+
+// xytoi : int xcols, int yrows, int xy -> int i (the index)
+// converts a given coordinate pair to an edge row index
+// to represent an element of a matrix
+// assumes 0-based indexing for both i.e. top left corner
+// of the matrix is [0,0] or index i = 0
+int xytoi(int xcols, int yrows, int xy[])
+{
+    return xcols * xy[1] + xy[0];
+}
+
+-------------------------------------------------------------------
+
+/*
+Seth Vanderwilt
+2/20/12
+calcrvector.c
+calculates far field scattering vector R, assuming a
+detector polarization equal to the incident field polarization
+
+input argumente and a copy of their photograph to thank them for their time and participation. To take part
+int index - index of desired amplitude and phase
+
+global variables
+int y -global edge index (unmarked y coordinate,
+    the coordinate w/o scattering regions removed)
+int nx - number of vertices left to right
+int ny - number of vertices top to bottom
+float lx - length of horizontal edges
+            (distance between vertices in x direction)
+float ly - length of vertical edges
+            (distance between vertices in y direction)
+float k - plane wave wavenumber
+float theta - direction of incident wave propagation
+float phi - direction of desired far field radiation pattern
+int[N] markededges - array containing indices of edges marked
+                    as scattering regions
+
+output
+complex float[M] r - array containing magnitude of far field
+    radiation in direction phi, with polarization equal to
+    incident field polarization
+*/
+
+#include <stdio.h>
+#include <complex.h>
+// int y; // unnecessary, not sure why this would be a global variable
+int nx; int ny; float lx; float ly; float k; float theta; float phi; int markededges;
+
+complex float* calcrvector(int index) { // I prefer this way even if it's not correct C syntax
+// void calcrvector(int index, complex float r[]) { // the length of r is calculated in calcrvector so we can't really pass one in.
+    // length of marked edges = size of array / size of an int
+    int nedges = (nx - 1)*ny + nx*(ny - 1) - sizeof(markededges)/sizeof(1);
+    complex float r[nedges]; // had to include complex.h
+    // NOTE: the matlab version allows a maximum of
+    // 2*(nx-1) + 2*(ny-1) nonzero elements in r. I'm not sure
+    // how to do this in C.
+
+    // compute surface integrals for horizontal edges
+    int i;
+    for(i = 1; i <= ny-1; i++) {
+        // Left side
+        float xc = lx/2.0 - nx*lx/2.0;
+        float yc = 0.5(2 * i - 1.0)*ly - ny*ly/2.0;
+        int x = 1;
+        int y = 2*i;
+        //edge = xytoi(x,y,nx,ny);
+        int xy[2] = {x,y}; // needed for xytoi
+        edge = xytoi(nx, ny, xy)
+        edge = baseytomarkedy(edge, markededges);
+
+
+        // sinc = sin(x)/x if unnormalized
+        // sinc = sin(pi*x)/(pi*x) if normalized
+        // I'd imagine we're using the normalized version
+        // meaning I can replace the sinc below so that we
+        // don't have to define it
+
+        // TODO: figure out what the deal is with exp
+        // and how to store these values correctly
+        // these are straight from the matlab and won't work
+        complex float I = ly * exp(_Complex_I * k * (xc - lx/2.0) * cos(phi))
+                     * exp(_Complex_I * k * yc * sin(phi))
+                     * sinc(k*ly*sin(phi)/2.0);
+        complex float R = (cos(phi) + _Complex_I*k*lx) * cos(theta - phi)/lx;
+
+        // TODO: include some sort of check to make sure
+        // we aren't putting in more nonzero elements
+        // than allowed (see note at array definition)
+        r[edge] = I * R;
+
+        // Right side
+        xc = nx * lx - lx/2.0 - nx*lx/2.0;
+        yc = 0.5*(2*i - 1.0)*ly - ny*ly/2.0;
+        x = nx;
+        y = 2*i;
+        //edge = xytoi(x,y,nx,ny);
+        xy[0] = x; // xy[] already initialized
+        xy[1] = y;
+        edge = xytoi(nx, ny, xy);
+        edge = baseytomarkedy(edge,markededges);
+
+        // TODO: same storage problem as left side
+        //
+        complex float I = ly*exp(_Complex_I*k*(xc+lx/2.0)*cos(phi))*
+                exp(_Complex_I*k*yc*sin(phi))*
+                sinc(k*ly*sin(phi)/2.0);
+        complex float R = (cos(phi) - _Complex_I*k*lx)*cos(theta-phi)/lx;
+        r[edge] = I*R;
+    }
+
+    // compute surface integrals for vertical edges
+    for(i = 1; i <= nx-1; i++) {
+        // Top side
+        xc = i*lx -lx/2.0 - nx*lx/2.0;
+        yc = ly/2.0 - ny*ly/2.0;
+        x = i;
+        y = 1;
+        // using my xytoi syntax
+        int xy[] = {x,y};
+        edge = xytoi(nx,ny,xy);
+        edge = baseytomarkedy(edge, markededges);
+
+        complex float I = lx*exp(_Complex_I*k*(yc+ly/2.0)*sin(phi))*
+                exp(_Complex_I*k*xc*cos(phi))*
+                sinc(k*lx*cos(phi)/2.0);
+        complex float R = -( sin(phi) - _Complex_I*k*ly )*cos(theta - phi)/ly;
+
+
+        // TODO: Still need some sort of check for maximum
+        // number of nonzero elements
+        r[edge] = I * R;
+
+        // Bottom side
+        xc = i*lx-lx/2.0 - nx*lx/2.0;
+        yc = ny*ly - ly/2.0 - ny*ly/2.0;
+        x = i;
+        y = 2*ny-1;
+        xy[0] = x;
+        xy[1] = y;
+        edge = xytoi(nx,ny,xy);
+        edge = baseytomarkedy(edge,markededges);
+
+        // still needs fix
+        complex float I = lx*exp(_Complex_I*k*(yc-ly/2.0)*sin(phi))*
+                exp(_Complex_I*k*xc*cos(phi))*
+                sinc(k*lx*cos(phi)/2.0);
+        complex float R = -(sin(phi) + _Complex_I*k*ly)*cos(theta - phi)/ly;
+
+        // have to work this out as before
+        r[edge] = I * R;
+    }
+
+    // where do these go (they're not returned!)
+    complex float weight = abs(r[index]); // abs = magnitude?
+    phase = atan2(creal(r[index]), cimag(r[index])); // type?
+
+
+}
+
+
+
+
+
+
+-------------------------------------------------------------------
+
+/*
+Quantum Linear Systems Algorithm
+
+classicalcode.c
+Classical code ported from Appendix B MATLAB code
+
+Seth Vanderwilt <sethv1@uw.edu>
+
+4/27/12
+
+Function list:
+Ported from the GFI:
+	getNodeValues (CURRENTLY UNDER REVIEW)
+	matrixoracle
+	computecolor2
+	calcmatrixelement
+	calcincidentfield
+	getKnownWeights
+	calcRvector
+Called by GFI code but not specified:
+	baseytomarkedy
+	bitget
+	bitor
+	bitset
+	bitshift
+	bitxor
+	itoxy
+	length
+	markedytobasey
+	removemarkededges
+	sort (note that this can probably be removed, but I'm not sure)
+	spalloc (MATLAB function used to create A,b,R in getNodeValues, getKnownWeights, calcRvector)
+	xytoi
+
+*/
+
+#include <stdio.h>
+
+int main() {
+	return 0;
+}
+
+-------------------------------------------------------------------
+
+// Seth Vanderwilt (sethv1@uw.edu)
+// computecolor2.c
+// function to calculate one iteration of the deterministic
+// coin flipping algorithm from Ref. 2 of the GFI
+// ported from MATLAB code from Dave Clader (dave.clader@jhuapl.edu)
+
+// input arguments
+// int currentcolor - color of current vertex
+// int parentcolor - color of parent vertex
+// int nbits - number of bits needed to specify the max number
+//      of potential colors needed
+
+// output arguments
+// int newcolor - new color of child vertex
+// int ischanged - 1 if newcolor != currentcolor, 0 otherwise
+
+#include <stdio.h>
+
+int main() {
+	int output[2];
+	int *ptr = &output;
+	computecolor2(1,3,8,ptr);
+	int newcolor = *ptr;
+	int ischanged = *(ptr+1);
+	printf("newcolor = %d\n", newcolor); // output[0]
+	printf("ischanged = %d\n", ischanged); // output[1]
+	
+	return 0;
+}
+
+void computecolor2(int currentcolor, int parentcolor, int nbits, int *output) {
+    //int output[2] = {0,0};
+    // [newcolor, ischanged]
+
+    if (currentcolor < 0) {
+        output[0] = currentcolor; // newcolor = 0
+        //return output; // [currentcolor,0]
+    }
+    
+    int changebits; // not sure about this
+    if (parentcolor >= 0) {
+        // find bits that are different
+        // matlab: changebits = bitxor(currentcolor, parentcolor);
+        changebits = currentcolor ^ parentcolor; // bitxor operator in C
+    } else {
+        changebits = 0;
+    }
+    int found = 0;
+    int bit = nbits;
+    while (found != 1) {
+        //if (bitget(changebits, bit) == 1) { // uint16(1)
+        if ((changebits >> bit) & 1) {
+            found = 1;
+        } else {
+            bit = bit - 1;
+        }
+    }
+
+    // get value of changed bit
+    int b = (currentcolor >> bit) & 1; // check indexing
+    //int b = bitget(currentcolor, bit);
+    int loc = nbits - bit;
+    //nbits = ceil(log2(2*nbits)); // what?
+
+    // compute new color
+    //int newcolor = bitor(bitshift(b,nbits-),loc);
+    int newcolor = b << (nbits - 1) | loc; // not sure if left shift or right shift
+    //newcolor = b>>nbits-1 | loc; // possible c version, not sure if << or >>
+    output[0] = newcolor;
+
+    if (currentcolor != newcolor) {
+        output[1] = 1; // set ischanged = 1
+    }
+    
+    //return &output;
+
+}
+
+-------------------------------------------------------------------
+
+// Seth Vanderwilt
+// 2/20/12
+// getKnownWeights.c
+// function to calculate b vector of linear system Ax = b
+// input: int index - index of desired amplitude and phase
+// global variables used:
+//  int nx, int ny, int[N] markededges, bool[N] type,
+//  float lx,float ly, float k, float theta, float E0;
+
+#include <stdio.h>
+#include <stdbool.h>
+#include <complex.h>
+
+// output: complex float[M] b - array of known incident field values
+complex float[] getKnownWeights(int index) {
+    // maximum matrix connectivity of each row
+    int MAXCONNECTIVITY = 7;
+
+    //Difference arrays for even and odd y cases (order (y,x))
+    // not sure if I can do this in C (lack of syntax knowledge...)
+    int dodd[][] = {{-1,0}, {-2,0}, {-1,1}; {0,0]}; {1,0}; {2,0}; {1,1}}; // odd y
+    int deven[][] = {{-1,-1}, {-1,0}, {0,-1}, {0,0}, {0,1}, {1,-1}, {1,0}}; // even y
+
+    // number of edges
+    int nedges = (nx - 1)*ny + nx(ny - 1) - sizeof(markededges)/sizeof(int);
+    // external marked edges
+    // does logical(type) means 0 or 1? I can't figure out
+    // what's supposed to be happening
+
+    /*
+        The below code means:
+        make an array (external edges) of the values of marked edges
+        whose indices correspond to indices with true values in type
+        example:
+        markededges = [1,2,3,4,5]
+        type =        [0,1,1,0,1]
+        then the code should output
+        externaledges = [2,3,5],
+        because those correspond to nonzero values in type
+        I haven't implemented the code for this yet but I have some
+        idea as to how it should work. (below text is for
+        brainstorming only and should be treated as gobbledygook)
+        -go through type
+        -swap markededges at the same index if type[n] = 0
+-----        APRIL update, this is really old -------
+    */
+    int externaledges = markededges(logical(type)); // question on matlab code, not implemented yet
+
+    // number of external edges
+    int nexternaledges = sizeof(externaledges)/sizeof(externaledges[0]);
+
+    // initialize vector b as a sparse matrix
+    // maximum connectivity to a boundary edge is 3,
+    // which isn't enforced...yet
+    complex float b[nedges];
+
+    int i;
+    for(i = 0; i < nexternaledges; i++) {
+        int edges[MAXCONNECTIVITY]; // is this ok in C?
+        int y = externaledges[i];
+
+        // convert edge row index into x and y edge coords
+        int xy[2] = {0,0};
+        itoxy(y, nx, ny, xy);
+        int xg = xy[0];
+        int yg = xy[1];
+
+        if (yg % 2 == 0) {
+            int *d = deven; // not sure about pointers
+        }
+        else {
+            int *d = dodd;
+        }
+
+        // calculate edges connected to external boundary edge
+        int i; // index for adding nonzero values to edges[]
+        int j;
+        for (i = 0; j = 0; i <= MAXCONNECTIVITY; j++) {
+            int xy[2] = {xg+d[j][1],yg+d[j][0]};
+            int temp = xytoi(nx,ny,xy);
+            // instead of removing the zeros in edges and then sorting it, I'm choosing to only add non-zero values to it. I still need to sort edges, but the zeros are all at the ends
+            if (temp != 0) {
+                edges[i] = temp;
+                i++; // increment where we put the next non-zero edge
+            }
+        }
+        // commented out this code after talking with Aram
+        // 3/26/12
+        //edges = sort(edges(edges != 0));
+        edges = sort(edges); // requires sort
+        edges = removemarkededges(edges,markededges); // don't know implementation details
+
+        // Calculate tangential field component at external boundary edge
+        E = calcincidentfield(y,nx,ny,lx,ly,k,theta,E0);
+
+        int n;
+        for (n = 0; n < sizeof(edges)/sizeof(edges[0]); n++) {
+            currentedge = baseytomarkedy(edges[n], markededges);
+            b[currentedge] = b[currentedge] +
+                            calcmatrixelement(y,edges[n],nx,ny,lx,ly,k)*E;
+        }
+    }
+
+    // return
+    weight = abs(b[index]);
+    phase = atan2(creal(b[index]), cimag(b[index]));
+
+}
+
+-------------------------------------------------------------------
+
+/* NOTES
+	I'm not sure how to replicate MATLAB's spalloc function in C. It's quite possible that an MxM matrix of floats will be far too large, but that seems to be the best way to do it for now.
+	Should the color triplet be passed as three separate int arguments?
+	matrixoracle should return a struct containing a float and an int
+	When comparing float outputs from matrixoracle, it's important to think about floating point errors
+	zero-based indexing: take this into account
+	bitget and bitset: check MATLAB reference to see which bits we want. Assuming bit 1 is LSB for now
+	The last few lines of the code (127-144 of the MATLAB code) make little sense.
+	value and node are never declared. Perhaps it's supposed to be isvalid and A?
+*/
+
+/********************************************************
+
+getNodeValues.c
+	
+Implements the MATLAB function in Appendix B of the QLSA GFI.
+	
+MATLAB Author: Dave Clader <dave.clader@jhuapl.edu>
+Ported to C by: Seth Vanderwilt <sethv1@uw.edu>
+
+*********************************************************
+	
+getNodeValues(v,(c1,c2,c3),argflag)
+
+Description: Function to calculate the vertex connected to v, with color triplet (c1,c2,c3). If no vertex is connected to v with color triplet (c1,c2,c3) then a null result is returned. Function implements the decomposition outlined in Ref. 1 from the GFI.
+
+Input Arguments
+	int v − Vertex to compute colors of
+	int c1 − First color of edge coloring triplet (c1,c2,c3)
+	int c2 − Second color of edge coloring triplet (c1,c2,c3)
+	int c3 − Third color of edge coloring triplet (c1,c2,c3)
+	int argflag − Flag determining whether to return magnitude or phase
+
+Global Variables
+	int nx - Number of vertices left to right
+	int ny - Number of vertices top to bottom
+	int markededges[] - Array containing indices of edges marked as scattering regions
+	float lx - Length of horizontal edges (distance between horizontal vertices in x direction)
+	float ly - Length of vertical edges (distance between vertical vertices)
+	float k - Plane wave wavenumber
+	
+Output Arguments
+	float[M][M] A - Sparse output matrix with nonzero elements containing a 1 sparse decomposition corresponding to the coloring (c1, c2, c3)
+	logical isvalid - Boolean flag set to 1 if decomposition contains nonzero elements, 0 otherwise
+
+********************************************************/
+
+#include <stdio.h>
+#include <math.h>
+
+// Assuming the global variables exist
+int markededges[]; int nx; int ny; float lx; float ly; float k;
+
+// Since we're returning a matrix and a boolean flag, we need a struct for this to work
+struct retStruct {
+	/* Because the size of our matrix is calculated within the function,
+	we need a pointer to the first element as well as the number of rows and columns */
+	float * A;
+	int * nedges;
+	int isValid;
+};
+
+struct retStruct getNodeValues(int v, int c1, int c2, int c3, int argflag) {
+
+	// Get length of markededges (see 2 lines down)
+	int markededgeslength = sizeof(markededges) / sizeof(0);
+	
+	int nedges = (nx - 1)*ny + nx*(ny - 1) - markededgeslength;
+	
+	// Initialize output arguments
+	float A[nedges][nedges];
+	int isvalid;
+
+	// A chain of 7 is long enough for our purposes
+	int vertexchain[7] = {-1,-1,-1,-1,-1,-1,-1};
+
+	// Get c1-th vertex connected to v with 1 call to the oracle
+	oracleout[] = matrixoracle(v,c1,nx,ny,markededges,lx,ly,k);
+	float Ax = oracleout[0];
+	int x = oracleout[1];
+	
+	// Check if x is a valid vertex, if not exit function
+	if ((Ax == 0) && (x == c1)) {
+		// A and isvalid were initialized to 0
+		return A,isvalid;
+	}
+
+	// Check if x is diagonal element, if so return if c1 == c2 and c3 = 0, else invalid
+	if ((Ax != 0) && (x == v)) {
+		if ((c3 == 0) && (c1 == c2)) {
+			A[x][x] == Ax;
+			isvalid = 1;
+			return A,isvalid;
+		} else {
+			return A, isvalid;
+		}
+	}
+
+	// Get c2-th vertex connected to x with the oracle
+	oracleout[] = matrixoracle(x,c2,nx,ny,markededges,lx,ly,k);
+	float Ay = oracleout[0];
+	int y = oracleout[1];
+
+	// Check if Hamiltonian has an edge colored with (c1, c2). If not, return invalid
+	if ((y != v) || (x < y) || (Ay == 0)) {
+		return;
+	}
+
+	// Determine number of vertices in a chain with edges labeled (c1,c2)
+	// Compute chain up to 6 levels deep (all that's needed to color edge correctly)
+	vertexchain[0] = v;
+	vertexchain[1] = x;
+	
+	int i;
+	for (i = 1; i < 6; i++) {
+		if (vertexchain[i] != -1) {
+			// Get c1-th vertex connected to v using the oracle
+			oracleout = matrixoracle(vertexchain[i], c1, nx, ny, markededges, lx, ly, k);
+			// ans isn't used for anything
+			int ans = oracleout[0];
+			vertexchain[i+1] = oracleout[1];
+
+			// Get c2-th vertex connected to x using the oracle
+			oracleout = matrixoracle(vertexchain[i+1],c2,nx,ny,markededges,lx,ly,k);
+			// Again, ans is unused
+			ans = oracleout[0];
+			// y is reused from outside the for loop
+			y = oracleout[1];
+		}
+
+		// Check if Hamiltonian contains an edge colored with (c1,c2). If not, reset value of chain at [i+1] to 0
+		if ((y != vertexchain[i]) || (vertexchain[i+1] < vertexchain[i])) {
+			// This is inconsistent with the above comment. Should vertexchain[i+1] be set to 0 or -1?
+			vertexchain[i+1] = -1;
+			break;
+		}
+	}
+
+	// Compute color of vertex via deterministic coin flipping algorithm (see nu in Ref. 1)
+	// For the first iteration, vertex colors are labels of the nodes
+	int vertexcolors[8];
+	// Equivalent to vertexcolors[0:6] = vertexchain;
+	int m;
+	for (m = 0; m < 7; m++) {
+		vertexcolors[m] = vertexchain[m];
+	}
+	// Set the last element of vertexcolors to -1
+	vertexcolors[7] = -1; // append -1
+
+	int nbits = ceil(log2(nedges));
+
+	// k loop goes up to 6 times (see Ref. 1)
+	int k;
+	for (k = 0; k < 6; k++) {
+		// Compute new colors, going only as far into the chain as necessary
+		int j;
+		for (j = 0; j < 7 - k; j++) {
+			RESULT = computecolor2(vertexcolors[j], vertexcolors[j+1], nbits); // output = int, bool (1 or 0)
+			vertexcolors[j] = RESULT[0];
+			// Again, ans is garbage. Never used for anything, so why save it at all?
+			int ans = RESULT[1];
+		}
+		// Recompute number of bits needed to specify next round of colors
+		nbits = ceil(log2(2*nbits));
+	}
+
+	// Swap first and last bit of color to ensure colors range 0:5
+	/*******************UNDER CONSTRUCTION*******************
+	int temp = vertexcolors[0] & 1;
+	vertexcolors[0] = bitset(vertexcolor...)
+	
+	*********************************************************/
+
+	// Return the value and node if all calculated colors agree with c1,c2,c3
+	if (vertexcolors[0] == c3) {
+		// Taking ¬argflag to mean not(argflag), so if argflag = 0 we do the if statement
+		if (!argflag) {
+			isvalid = abs(Ax);
+		} else {
+			// Is this supposed to be a boolean flag?
+			isvalid = atan2(real(Ax), imag(Ax));
+		}
+	} else {
+		isvalid = 0;
+		// Not even necessary since A would still be the zero matrix if you got to this point
+		// A = 0;
+	}
+}
+
+-------------------------------------------------------------------
+
+// Seth Vanderwilt
+// 2/5/12
+// itoxy.c
+// converts an edge row index into a coordinate pair
+// both represent an element of a matrix but we need one or the other for different operations
+
+// TODO: Rewrite test cases to reflect changes in numbering scheme
+
+#include <stdio.h>
+
+void printArray(int array[]);
+void itoxy(int i, int xcols, int yrows, int xy[]);
+
+void main() {
+    // used for itoxy
+    int xy[2] = {0,0};
+
+    /* 2 x 2 matrix
+    0 1
+    2 3
+    */
+    itoxy(0, 2, 2, xy); // [0,0]
+    printArray(xy);
+    itoxy(1, 2, 2, xy); // [1,0]
+    printArray(xy);
+    itoxy(2, 2, 2, xy); // [0,1]
+    printArray(xy);
+    itoxy(3, 2, 2, xy); // [1,1]
+    printArray(xy);
+
+    /* 4 x 3 matrix
+    0  1  2  3
+    4  5  6  7
+    8  9  10 11
+    */
+    // test cases
+
+    itoxy(0,4,3, xy); // [0,0]
+    printArray(xy);
+    itoxy(2,4,3, xy); // [2,0]
+    printArray(xy);
+    itoxy(3,4,3, xy); // [3,0]
+    printArray(xy);
+    itoxy(6,4,3, xy); // [2,1]
+    printArray(xy);
+    itoxy(10,4,3, xy); // [2,2]
+    printArray(xy);
+}
+
+// assuming the top left element is [0,0] or i = 0
+// take an edge row index i >= 0 and convert it into x and y edge coordinates
+// in the below matrix, x can be expressed either as [2,1] or i = 6
+// ----
+// --x-
+// ----
+// REQUIRES int xy[2] be passed as a parameter to store our x,y
+void itoxy(int i, int xcols, int yrows, int xy[]) {
+    xy[1] = i / xcols; // 1 for the example above
+    xy[0] = i % xcols; // 2 for the example above
+}
+
+// helper for testing code
+// takes in an array of ints and prints each element
+void printArray(int array[]) {
+    int numElements = sizeof(array) / sizeof(int *);
+    int i = 0;
+    printf("[");
+    for(i; i < numElements; printf("%d ", array[i]), i++);
+    printf("%d", array[i]);
+    printf("]");
+
+}
+
+-------------------------------------------------------------------
+
+/*
+Seth Vanderwilt
+sethv1@uw.edu
+2/28/12
+matrixoracle.c
+
+(Ported from MATLAB code written by Dave Clader -
+Johns Hopkins University Applied Physics Lab
+dave.clader@jhuapl.edu)
+
+Description: Function which implements the functionality of the quantum
+oracle for a matrix A. This function returns the ith
+non-zero component of matrix A, and well as the column number x
+corresponding to the ith non-zero component.
+
+Input Arguments:
+int y - Index corresponding to desired row
+int i - Index corresponding to desired element to be returned from row y
+int nx - Number of vertices left to right
+int ny - Number of vertices top to bottom
+int(N) markededges - Array containing indices of edges marked as scattering regions
+float lx - Length of horizontal edges (distance between vertices in x direction)
+float ly - Length of vertical edges (distance between vertices in y direction)
+float k - Plane wave wavenumber
+
+Output Arguments:
+float H - Value of A(y,x)
+int x - Column index of ith non-zero component of row y
+
+Seth's Notes:
+Not sure what I want to do re: two arguments yet.
+*/
+
+#include <stdio.h>
+
+int main{return 0;}
+
+struct retStruct {
+	float H;
+	int x;
+};
+
+struct retStruct matrixoracle(int y, int i, int nx, int ny, int markededges[], float lx, float ly, float k, float A, int x) {
+    // difference arrays for even and odd cases
+    int dodd[7][2] = {{-1,0}, {-2,0}, {-1,1}, {0,0}, {1,0}, {2,0}, {1,1}}; // odd y
+    int deven[7][2] = {{-1,-1}, {-1,0}, {0,-1}, {0,0}, {0,1}, {1,-1}, {1,0}}; // even y
+
+    // markedytobasey NOT implemented anywhere
+    y = markedytobasey(y, markededges);
+
+    // convert y (index) to x,y coordinates
+    int xy[2] = {0,0}; // store x and y here
+    itoxy(y, nx, ny, xy);
+    // follow MATLAB code better this way
+    int xg = xy[0];
+    int yg = xy[1];
+
+    int d[7][2]; // not sure if legal or...
+    if (yg % 2 == 0) {
+        d = deven;
+    } else {
+        d = dodd;
+    }
+
+    int edges[7];
+    // note that we are reusing xy because it's convenient
+    // for storing coordinates
+    int j;
+    for (j = 0; j < 7; j++) {
+        xy[0] = xg + d[j][1];
+        xy[1] = yg = d[j][0];
+        edges[j] = xytoi(nx, ny, xy);
+    }
+
+    // same problem as getKnownWeights
+    // make sure to update this once getKnownWeights is fixed
+    edges = sort(edges(edges != 0));
+
+    edges = removemarkededges(edges, markededges);
+
+    // relabel from base labeling to marked labeling
+    int edgesm[] = baseytomarkedy(edges,markededges);
+
+	// client must pass A and x
+    //float A;
+    //int x;
+
+    if (i > sizeof(edges) / sizeof(edges[0])) {
+        A = 0;
+        x = i;
+    } else if (i <= 0) {
+        printf("Error in function matrixoracle.c. i must be index between 1 and num edges.");
+    } else {
+        x = edgesm[i]; // problem with 1-based indexing again?
+        int xp = edges[i]; // why bother with this
+        A = calcmatrixelement(y, xp, nx, ny, lx, ly, k);
+    }
+
+	struct retStruct output;
+	output.H = A;
+	output.x = x;
+	
+	return output;
+}
+
+-------------------------------------------------------------------
+
+// Seth Vanderwilt
+// 2/13/12
+// xytoi.c
+// converts a coordinate (x,y) pair to an edge row index (i)
+// both represent an element of a matrix but we need one or the other for different operations
+
+#include <stdio.h>
+
+int xytoi(int xcols, int yrows, int xy[]);
+
+void main() {
+    int i = 0;
+    int xy[] = {0,0};
+    // 0  1  2  3
+    // 4  5  6  7
+    // 8  9  10 11
+    // 12 13 14 15
+    int xcols = 4;
+    int yrows = 4;
+
+    // test first row
+    i = xytoi(xcols, yrows, xy); // 0
+    printf("i = %d\n", i);
+    xy[0] = 1;
+    i = xytoi(xcols, yrows, xy); // 1
+    printf("i = %d\n", i);
+    xy[0] = 2;
+    i = xytoi(xcols, yrows, xy); // 2
+    printf("i = %d\n", i);
+    xy[0] = 3;
+    i = xytoi(xcols, yrows, xy); // 3
+    printf("i = %d\n", i);
+    // next row
+    xy[0] = 0;
+    xy[1] = 1;
+    i = xytoi(xcols, yrows, xy); // 4
+    printf("i = %d\n", i);
+    xy[0] = 1;
+    i = xytoi(xcols, yrows, xy); // 5
+    printf("i = %d\n", i);
+    xy[0] = 2;
+    i = xytoi(xcols, yrows, xy); // 6
+    printf("i = %d\n", i);
+    xy[0] = 3;
+    i = xytoi(xcols, yrows, xy); // 7
+    printf("i = %d\n", i);
+
+    // the above all work, here are some extra cases
+    xy[0] = 2;
+    xy[1] = 3;
+    i = xytoi(xcols, yrows, xy); // 14
+    printf("i = %d\n", i);
+
+    xy[0] = 3;
+    xy[1] = 2;
+    i = xytoi(xcols, yrows, xy); // 11
+    printf("i = %d\n", i);
+
+}
+
+// xytoi : int xcols, int yrows, int xy -> int i (the index)
+// converts a given coordinate pair to an edge row index
+// to represent an element of a matrix
+// assumes 0-based indexing for both i.e. top left corner
+// of the matrix is [0,0] or index i = 0
+int xytoi(int xcols, int yrows, int xy[]) {
+    // NEEDS TO RETURN 0 IF NOT
+    return xcols * xy[1] + xy[0];
+}
+
+-------------------------------------------------------------------
+

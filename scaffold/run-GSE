@@ -1,0 +1,57 @@
+#!/bin/sh
+
+date
+
+echo "Compiling GSE.scaffold..."
+../build/Release+Asserts/bin/clang -cc1 -emit-llvm -I/usr/include -I/usr/include/x86_64-linux-gnu -I/usr/lib/gcc/x86_64-linux-gnu/4.6/include GSE.scaffold -o GSE.ll
+
+echo "Transforming cbits..."
+../build/Release+Asserts/bin/opt -S -load ../build/Release+Asserts/lib/Scaffold.dylib -xform-cbit-stores GSE.ll -o GSE1.ll
+
+echo "O1 optimizations..."
+../build/Release+Asserts/bin/opt -S GSE1.ll -no-aa -tbaa -targetlibinfo -basicaa -o GSE1a.ll
+
+../build/Release+Asserts/bin/opt -S GSE1a.ll -simplifycfg -domtree -o GSE1b.ll
+
+../build/Release+Asserts/bin/opt -S GSE1b.ll -early-cse -lower-expect -o GSE2.ll
+
+../build/Release+Asserts/bin/opt -S GSE2.ll -targetlibinfo -no-aa -tbaa -basicaa -globalopt -ipsccp -o GSE3.ll
+
+../build/Release+Asserts/bin/opt -S GSE3.ll -instcombine -simplifycfg -basiccg -prune-eh -always-inline -functionattrs -domtree -early-cse -lazy-value-info -jump-threading -correlated-propagation -simplifycfg -instcombine -tailcallelim -simplifycfg -reassociate -domtree -loops -loop-simplify -lcssa -loop-rotate -licm -lcssa -loop-unswitch -instcombine -scalar-evolution -loop-simplify -lcssa -iv-users -indvars -loop-idiom -loop-deletion -loop-unroll -memdep -memcpyopt -sccp -instcombine -lazy-value-info -jump-threading -correlated-propagation -domtree -memdep -dse -adce -simplifycfg -instcombine -strip-dead-prototypes -preverify -domtree -verify -o GSE4.ll
+
+echo "Unroll 1..."
+../build/Release+Asserts/bin/opt -S GSE4.ll -mem2reg -loops -loop-simplify -loop-rotate -indvars -lcssa -loop-unswitch -loop-unroll -unroll-threshold=100000000 -sccp -simplifycfg -o GSE6.ll
+ 
+echo "Unroll 2..."
+../build/Release+Asserts/bin/opt -S GSE6.ll -mem2reg -loops -loop-simplify -loop-rotate -lcssa -loop-unroll -unroll-threshold=100000000 -sccp -simplifycfg -o GSE66.ll
+
+echo "Unroll 3..."
+../build/Release+Asserts/bin/opt -S GSE66.ll -mem2reg -loops -loop-simplify -loop-rotate -lcssa -loop-unroll -unroll-threshold=100000000 -sccp -simplifycfg -o GSE666.ll
+
+echo "Unroll 4..."
+../build/Release+Asserts/bin/opt -S GSE666.ll -mem2reg -loops -loop-simplify -loop-rotate -lcssa -loop-unroll -unroll-threshold=100000000 -simplifycfg -o GSE6666.ll
+
+echo "Function Cloning 1..."
+../build/Release+Asserts/bin/opt -S -load ../build/Release+Asserts/lib/Scaffold.dylib -FunctionClone -sccp GSE6666.ll -o GSE7.ll
+
+echo "Unroll 5..."
+../build/Release+Asserts/bin/opt -S GSE7.ll -mem2reg -loops -loop-simplify -loop-rotate -lcssa -loop-unroll -unroll-threshold=100000000 -simplifycfg -o GSE8.ll
+ 
+echo "Function Cloning 2..."
+../build/Release+Asserts/bin/opt -S -load ../build/Release+Asserts/lib/Scaffold.dylib -FunctionClone -sccp GSE8.ll -o GSE9.ll
+
+echo "Internalizing and Removing Unused Functions..."
+../build/Release+Asserts/bin/opt -S GSE9.ll -internalize -globaldce -o GSE10.ll
+
+echo "Gate Decomposition..."
+../build/Release+Asserts/bin/opt -S -load ../build/Release+Asserts/lib/Scaffold.dylib -ToffoliReplace GSE10.ll -o GSE11.ll
+
+echo "Generating GSE_res_count.log..."
+#../build/Release+Asserts/bin/opt -load ../build/Release+Asserts/lib/Scaffold.dylib -ResourceCount GSE11.ll 2> GSE_res_count.log
+
+#echo "Generating GSE_crit_path.log..."
+#../build/Release+Asserts/bin/opt -load ../build/Release+Asserts/lib/Scaffold.dylib -CriticalResourceCount GSE11.ll 2> GSE_crit_path.log
+
+#rm GSE.ll GSE1.ll GSE1a.ll GSE1b.ll GSE2.ll GSE3.ll GSE4.ll GSE5.ll GSE6.ll GSE7.ll
+
+date

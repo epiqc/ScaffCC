@@ -1,0 +1,23 @@
+module
+main_module(
+  qint[50]  b,
+  qint[100] a
+) {
+  int i;
+
+  INSTANTIATE_MODULE
+    for (i = 0; i < 50; i++) {
+      MAP_SIGNAL( %%a[i] /* This is `a' of built-in `a-=b*c'. */,         @b[i]);
+    }
+    for (i = 0; i < 100; i++) {
+      if (i % 2 == 0) {
+        MAP_SIGNAL( %%b[i / 2] /* This is `b' of built-in `a-=b*c'. */,     @a[i]);
+      } else {
+        MAP_SIGNAL( %%c[i / 2] /* This is `c' of built-in `a-=b*c'. */,     @a[i]);
+      }
+    }
+  a__eq__a_plus_b_times_c(
+    LOCATION_INFO, /* Do not mind ``LOCATION_INFO''. */
+    50             /* The value of the first parameter of the callee is 10. */
+  );
+}

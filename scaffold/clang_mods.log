@@ -1,0 +1,103 @@
+This file should be used to keep track of all changes made to the original Clang source code. All modification in the clang source code are preceded by a comment that begins with '// Scaffold'.
+
+Revision 04a3f540 contains the clean Clang R31 sources. All changes should be diffed against it. To see all changes made to clang, use:
+$ git diff 04a3f540 `git diff 04a3f540 --name-only --diff-filter=M clang | grep -Ev "svn"`
+
+DRIVER
+Added by Daniel Kudrow
+Summary: These changes allow us to use the clang driver to compile scaffold code
+Revision:
+Modified files: clang/lib/Driver/Types.cpp
+Detail: add case for ".scaffold" in types::lookupTypeForExtension. For now, scaffold inputs are treated as plain C files.
+
+
+BUILTIN GATES
+Added by Daniel Kudrow
+Summary: This modification allows gates to be defined as built-in language features.
+Revision: 900cdd8b
+Modified files:
+clang/include/clang/Basic/Builtins.def
+clang/lib/AST/ASTContext.cpp
+Detail: In order to define bulitins that take qubits as arguments, a new value needs to be added to the ASTContext.cpp::DecodeTypeFromStr. This method parses the bulitin definitions in Builtins.def. The value 'q' was chosen to represent qubit and qubit array arguments. The following example demonstrates the addition of a new builtin to Builtins.def: BUILTIN(gate_name , "vqq" , "r") The first argument defines the name of the builtin function. The second argument indicates the arguments and return value. In the above example, the gate returns 'void' ("v") and takes two 'qreg' arguments ("qq").  The third argument indicates that this function does not return ("r").  For a more detailed explanation consult the comments in Builtins.def.
+Diff:
+
+QBIT TYPE
+Added by Ali Javadi
+Summary: This modification defines a new 'qbit' type
+Revision: 778fc608
+Modified files:
+clang/include/clang/AST/ASTContext.h
+clang/include/clang/AST/CanonicalType.h
+clang/include/clang/Basic/Specifiers.h
+clang/include/clang/Basic/TargetInfo.h
+clang/include/clang/Basic/TokenKinds.def
+clang/include/clang/Sema/DeclSpec.h
+clang/lib/AST/ASTContext.cpp
+clang/lib/AST/ItaniumMangle.cpp
+clang/lib/AST/MicrosoftMangle.cpp
+clang/lib/AST/NSAPI.cpp
+clang/lib/AST/Type.cpp
+clang/lib/AST/TypeLoc.cpp
+clang/lib/CodeGen/CGDebugInfo.cpp
+clang/lib/CodeGen/CGRTTI.cpp
+clang/lib/CodeGen/CodeGenTypes.cpp
+clang/lib/Parse/ParseDecl.cpp
+clang/lib/Sema/DeclSpec.cpp
+clang/lib/Sema/SemaTemplateVariadic.cpp
+clang/lib/Sema/SemaType.cpp
+clang/tools/libclang/CIndexUSRs.cpp
+Detail:
+1. Added keywords qreg, append, module to line 265 of include/clang/Basic/TokenKinds.def
+2. apparantly TOK(kw_## X) is defined as a macro, therefore all kw_ prefixes are added automatically. I just need to add to the TokenKinds.def database.
+3. in file ParseDecl.cpp added case tok::kw_qreg: to bool Parser::isKnownToBeTypeSpecifier(const Token &Tok) line 3468, bool Parser::isTypeSpecifierQualifier line 3542, bool Parser::isDeclarationSpecifier line 3682, bool Parser::TryAltiVecVectorTokenOutOfLine line 5117, bool Parser::TryAltiVecTokenOutOfLine line 5146, void Parser::ParseDeclarationSpecifiers line 2610 **remember: add DeclSpec::TST_qreg instead of DeclSpec::TST_int**
+4. Added TST_qreg to the TypeSpecifierType enumeration in Specifiers.h line 65
+5. Added static const TST TST_qreg = clang::TST_qreg; to DeclSpec.h line 279 to import the same enumerations as above
+6. Added case TST_qreg: to DeclSpec.cpp line 276 and line 407
+7. Added case TST_qreg: to SemaTemplateVariadic.cpp line 685
+8. Added  case DeclSpec::TST_qreg: Result = Context.QregTy; break; to line 889 of SemaType.cpp for function ConvertDeclSpecToType which returns QualType. It should never return null. The QualType in this case is Context.QregTy, hence the point below.
+9. Added CanQualType QregTy; to line 606 of ASTContext.h
+10. Added a new BuiltinType for qreg --- line 97 of BuiltinTypes.def.
+11. just remember that need to add the qreg support to ASTContext.cpp. Right now it probably won't compile. gonna try
+12. Added case BuiltinType::Qreg to line215 of TypeLoc.cpp
+13. Added case Qreg to line 1486 of Type.cpp
+14. Added case Qreg line 1879 of ItaniumMangle.cpp
+15. Should I add something to lines 252 to 300 of CanonicalType.h ?
+16. In file ASTContext.cpp added new cases of BuiltinType::Qreg to lines 649, 1125, 3774(this one was pretty random)
+17. Previous point (line 1125 of ASTContext.cpp) requires that in file include/clang/Basic/TargetInfo.h I add case for QregWidth and QregAlign in lines 73, 234, 235
+18. To avoid warning due to absence of "default" in switches, added Qreg case to: MicrosoftMangle.cpp, NSAPI.cpp, CGDebugInfo.cpp, CGRTTI.cpp, CodeGenTypes.cpp, CIndexUSRs.cpp (?)
+----------------
+debugger stuff:
+1. every time you call ParseTopLevelDecl(ADecl) ==> first look at Tok.getKind()
+2. if Tok.getKind() == clang::tok::kw_c2qg
+3. Useful: Tokens:: Tok.getKind()/ConsumeToken()/ConsumeAnyToken()/NextToken()/Tok.is()
+
+QSTRUCT/QUNION TYPES
+Added by Ali Javadi
+Summary: This modification defines a new 'qstruct' and 'qunion' types
+Revision: 778fc608
+Modified files:
+clang/include/clang/Basic/Specifiers.h
+clang/include/clang/Basic/TokenKinds.def
+clang/include/clang/Sema/DeclSpec.h
+clang/lib/AST/Type.cpp
+clang/lib/Parse/ParseDecl.cpp
+clang/lib/Sema/SemaTemplateVariadic.cpp
+clang/lib/Sema/SemaType.cpp
+clang/include/clang/AST/Decl.h
+clang/lib/AST/Type.cpp
+clang/lib/Parse/ParseDeclCXX.cpp
+qstruct/qunion:
+1. Added keywords qstruct and qunion to include/clang/Basic/TokenKinds.def
+2. in file ParseDecl.cpp added case tok::kw_qstruct and case tok::kw_qunion: to bool Parser::isKnownToBeTypeSpecifier(const Token &Tok) , bool Parser::isTypeSpecifierQualifier, bool Parser::isDeclarationSpecifier. added void Parser::ParseDeclarationSpecifiers. (TODO: need to modify later: void Parser::ParseStructUnionBody so that struct and qstruct have separate allowed contents.)
+3. Added TST_qstruct/TST_qunion to the TypeSpecifierType enumeration in Specifiers.h
+4. Added case TST_qstruct & TST_qunion: to SemaTemplateVariadic.cpp
+5. in file SemaType.cpp - Added  case DeclSpec::TST_qstruct & case DeclSpec::TST_qunion for function ConvertDeclSpecToType which returns QualType. It should never return null. The QualType in this case is Context.QregTy, hence the point below.
+6. in file Decl.h - modify TagDecl which represents the declaration of struct/union/class/enum:
+7. There is only 2 bits provisioned for TagDeclKind. This was for the 4 above. ***Made it 3 bits to accomodate qstruct and qunion.***
+8. Added bool isQstruct()/isQunion().
+9. in files Type.h and Type.cpp, added new cases of qstruct and qunion to TagTypeKind(TTK) and ElaboratedTypeKind(ETK) and places where they are used.
+10. in ParseDeclCXX.cpp -- function ParseClassSpecifier() -- added TST_qstruct and TST_qunion to two places, for Name determination and Diagnosis of semicolon
+11. Seems like structs in C are handled in the same place as every class/struct/union is handled for c++: ParseDeclCXX.cpp --- Parser::ParseClassSpecifier --- WELL, then when it is figured out that we indeed have struct/union, it pops back to ParseDecl.cpp and uses ParseStructUnionBody. Should I make this process simpler for Qstruct and Qunion? Or is some of the checking in ParseDeclCXX.cpp necessary, like differentiating b/w definition/forward declaration/reference. It's safer to stick with this overall structure, and take out things in the middle.
+12. ***if you want to disallow the possibility of inheritence, trailing-return-type, reference to qstruct, .., you just modify ParseClassSpecifier() in ParseDeclCXX.cpp where the 4 possibilities are explored***
+13. in file ParseDecl.cpp
+14. in file DeclSpec.h added TST_qstruct/TST_qunion to valid isDeclRep(TST T)s.

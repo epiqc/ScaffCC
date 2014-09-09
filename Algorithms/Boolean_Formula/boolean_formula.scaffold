@@ -1,0 +1,693 @@
+/*
+*
+* Quantum Boolean Formula
+* Author: Mohammad Javad Dousti
+* University of Southern California (USC)
+* Code is written based on GFI 1.2
+*
+*/
+
+//Quantum primitive gates
+//#include "gates.h"
+#include <stdio.h>
+#include <math.h>
+
+//Definition of given constants
+#define t 189;			//size of the phase estimation register
+#define m 6;				//size of the direction register (!!!NEED TO UPDATE HEX() IF CHANGING THIS VALUE!!!)
+#define x_max 9;			//size of hex board in x direction
+#define y_max 7;			//size of hex board in y direction
+#define s x_max*y_max;	//# of remaining moves; height of the tree
+#define width (m*s)+2;
+
+//Data structures for maintaining |b> and its subregisters
+qstruct Work_qstruct{
+	qbit leaf[1];
+	qbit paraleaf[1];
+	qbit binary[1];
+	qbit height1[1];
+	qbit r[1];
+	qbit rp[1];
+	qbit rpp[1];
+};
+
+qstruct B_qstruct{
+	qbit pos [width];
+	qstruct Work_qstruct work;
+	qbit dir [m];
+};
+
+
+
+/*-------------------------------------My helper functions-----------------------------------*/
+
+const double PI =3.141592654;
+
+// Swaps 2 qubit states
+module Swap (qbit q1[1], qbit q2[1]){
+    CNOT (q2[0], q1[0]);
+    CNOT (q1[0], q2[0]);
+    CNOT (q2[0], q1[0]);
+}
+
+
+/*------------------Some helper functions borrowed from GSE implementation--------------------------*/
+module controlledRz(qbit target[1], qbit control[1], double theta){
+
+}
+
+module ControlledPhase (qbit target[1], qbit control[1], double theta){
+	Rz(control[0], theta);
+}
+
+module ControlledRotationPiMinus (qbit target[1], qbit control[1], int j){
+    int k;
+    double power =1.0;
+    power=pow(2, j);
+    ControlledPhase (target, control, -PI /(2* power));
+    controlledRz (target, control,-PI/ power);
+}
+
+module inverseQFT (qbit* topregister, int length_topregister){
+    int i,j;
+    for (i =0;i<length_topregister;i++){
+        H(topregister [i]);
+		for (j =1;j <(length_topregister-i);j++){
+        	ControlledRotationPiMinus (&topregister[i+j], &topregister[i],j);
+        }
+    }
+    for(i =0;i <(length_topregister/2);i++){ //forall
+    	Swap (&topregister[i], &topregister[length_topregister-1-i]);
+    }
+}
+
+//Negative control CNOT; This implementation can change to a primitive if the underlying technology supports negative-controlled NOT
+module NCNOT(qbit target[1], qbit ctrl[1]){
+	X(ctrl[0]);
+	CNOT(target[0], ctrl[0]);
+	X(ctrl[0]);
+}
+
+//n-control Toffoli; n>2
+module nToffoli(qbit target[1], qbit* in, int length_in){
+	//This should not lead to a compile error as long as the values are set in compile time.
+	qbit ancilla[length_in-2];
+	int i;
+	
+	Toffoli (ancilla[0], in[0], in[1]);
+	for(i=2; i<length_in-1; i++){ //forall
+		Toffoli (ancilla[i-1], in[i], ancilla[i-2]);
+	}
+	Toffoli (target[0], in[length_in-1], ancilla[length_in-3]);
+	
+	//uncomputing ancilla
+	for(i=length_in-2; i>=0; i--){ //forall
+		Toffoli (ancilla[i-1], in[i], ancilla[i-2]);
+	}
+}
+
+module AND(qbit target[1], qbit* in, int length_in){
+	PrepZ(target[0],0);
+	
+	if (length_in == 1){
+		CNOT(target[0], in[0]);
+	}else if (length_in == 2){
+		Toffoli(target[0], in[0], in[1]);
+	}else{
+		nToffoli(target, in, length_in);
+	}
+}
+
+module NAND(qbit target[1], qbit* in, int length_in){
+	AND (&target[0], in, length_in);
+	X(target[0]);
+}
+
+
+module NOR(qbit target[1], qbit* in, int length_in){
+	int i;
+	
+	for(i=0; i<length_in; i++){ //forall
+		X(in[i]);
+	}
+		
+	AND(&target[1], in, length_in);
+
+	for(i=0; i<length_in; i++){ //forall
+		X(in[i]);
+	}
+}
+
+module OR(qbit target[1], qbit* in, int length_in){
+	NOR(&target[0], in, length_in);
+	X(target[0]);
+}
+
+/*-------------------------------------------------------------------------------------------*/
+/* IARPA - GFI Algorithm 13 */
+/* Progress status: done */
+/* Classical implementation: No */
+module C_TESTPOS(qbit ctrl[1], int pos, qbit bitmap[s], qbit maskmap[s], qbit newmap[s]){
+	//pos is a compile-time constant, so no mux is needed to be implemented explicitly
+	
+	//No need to create a new ancilla each time; garbage collector will take care of "local" ancilla
+	qbit ancilla[1];
+	PrepZ(ancilla[0],1);
+	
+	//ancilla[0] will get the old value of newmap[pos]; since newmap[pos] is a binary qubit, we can assume that it is possible to safely reset it to 0
+	if (maskmap[pos]==1 && bitmap[pos]==1 && ctrl[0]==1){
+		Swap(&newmap[pos], &ancilla[0]);
+	}
+	
+}
+
+/* IARPA - GFI Algorithm 12 */
+/* Classical implementation: No */
+module FLOOD_FILL(qbit bitmap[s], qbit maskmap[s]){
+//-------------Part 1: Initialization---------------
+	qbit stale[1];
+	qbit ancilla[4];
+	qbit newmap[s];
+	qbit ctrl[1];
+	qbit nctrl[1];
+	
+	int index0, index1;
+	for(index0=0; index0<s; index0++){ //forall
+		PrepZ(newmap[index0],0);
+		//Note that the control-swap can be considered as a normal swap here because in case of bitmap[index0]==0, swapping does not change the values of bitmap[index0] and newmap[index0]. All of the swap gates can be done in parallel.
+		Swap(&newmap[index0], &bitmap[index0]);
+	}
+	//stale = 0 if at least one of the values in bitmap (which is already swapped to newmap) is 1, otherwise stale=1
+	NOR(&stale[0], newmap, s);
+//-------------Part 2: While Loop---------------
+	//ancilla[1]
+	PrepZ(ctrl[0],0);
+	for (index1=0; index1<x_max; index1++){
+		PrepZ(ancilla[0],1);
+		NCNOT(&ctrl[0], &stale[0]);
+		Swap(&ancilla[0], stale);
+	//-------------Part 3: For Loop-----------------
+		for (index0=0; index0<s; index0++){
+			//note that since these are binary qubits, ideally, they will not be entangled and can be purified without uncomputation
+			PrepZ(nctrl[0],0);
+			PrepZ(ancilla[1],0);
+			PrepZ(ancilla[2],0);
+			PrepZ(ancilla[3],0);
+			
+			X(ancilla[1]);
+			
+			Toffoli(nctrl[0], newmap[index0], ctrl[0]);
+			Fredkin(ancilla[1], bitmap[index0], nctrl[0]);
+			
+			//The conditions can be evaluated at compile time so they do not need to have multiple-control unitary
+			if (index0+x_max<s){
+				C_TESTPOS(&nctrl[0], index0+x_max, maskmap, bitmap, newmap);
+			}
+			
+			if (index0-x_max>=0){
+				C_TESTPOS(&nctrl[0], index0-x_max, maskmap, bitmap, newmap);			
+			}
+			
+			if (index0 % x_max >0){
+				if (index0 -1 >= 0){
+					C_TESTPOS(&nctrl[0], index0-1, maskmap, bitmap, newmap);
+				}
+				if (index0 + x_max - 1 <s){
+					C_TESTPOS(&nctrl[0], index0+x_max-1, maskmap, bitmap, newmap);
+				}
+			}
+
+			if (index0 % x_max < x_max - 1){
+				if (index0 + 1 <s){
+					C_TESTPOS(&nctrl[0], index0+1, maskmap, bitmap, newmap);
+				}
+				if (index0 - x_max + 1 >= 0){
+					C_TESTPOS(&nctrl[0], index0 - x_max + 1, maskmap, bitmap, newmap);
+				}
+			}
+			
+			Fredkin(ancilla[2], newmap[index0], nctrl[0]);
+			Fredkin(ancilla[3], stale[0], nctrl[0]);
+		}
+		CNOT(ctrl[0], stale[0]);
+	}	
+}
+
+/* IARPA - GFI Algorithm 11 */
+/* Progress status: done */
+/* Classical implementation: No */
+module CHECKWIN_RED(qbit redboard[s], qbit outcome[1]){
+	int index0;
+	qbit blueboard[s];
+	//qbit outcome[1];
+	
+	//initializing blueboard to 0
+	for(index0=0; index0<s; index0++){ //forall
+		PrepZ(blueboard[index0],0);
+	}
+	
+	for(index0=0; index0<x_max; index0++){ //forall
+		//A negative controled CNOT
+		NCNOT(&blueboard[index0], &redboard[index0]);		//note that this implementation does not need any MUX; because this gfor 
+														//sequentially accesses the redboard vector
+	}
+	
+	FLOOD_FILL(blueboard, redboard);
+	
+	//if outcome==1 then red won; otherwise blue won
+	//NOR(outcome[0], blueboard[x_max*(y_max-1)..s]);
+	NOR(&outcome[0], &blueboard[x_max*(y_max-1)], s-(x_max*(y_max-1))+1);
+}
+
+/* IARPA - GFI Algorithm 10 */
+/* Progress status: done */
+/* Classical implementation: No */
+module HEX(qbit pos[width], qbit init_r[s], qbit init_b[s], qbit redState[1]){
+	qbit redboard[s];
+	qbit blueboard[s];
+	qbit player[1];
+	
+    int i;
+    int select;
+	int move;
+	int shift=m*(s-1);
+	qbit address[m];
+	
+	qbit blueState[1];
+	//qbit redState[1];
+	qbit ancilla[3];
+	
+	PrepZ(player[0],0);
+	PrepZ(blueState[0],0);
+	PrepZ(redState[0],0);
+
+    for (i=0; i<m; i++){ //forall
+        PrepZ(address[i],0);
+    }
+	
+	//initialization of redboard & blueboard
+	for(move=0; move<s; move++){ //forall
+		PrepZ(redboard[move],0);
+		PrepZ(blueboard[move],0);
+		CNOT(redboard[move], init_r[move]);
+		CNOT(blueboard[move], init_b[move]);
+	}
+	
+	
+	for (move=0; move<s; move++){ //forall
+		PrepZ(ancilla[0],1);
+		PrepZ(ancilla[1],1);
+		
+		//address can be assigned during the loop unrolling; all the usages of address needs compiler help for adding a MUX; more info is presented in the report
+		//address = (pos>>shift) & (pow(2,m) -1);
+        // Address is a window into the position qbit register; 
+        // we'll just swap the bits we want into the address ancilla bits
+        for (i=0; i<m; i++){ //forall
+            Swap(&address[i], &pos[shift+i]);
+        }
+
+		//CNOT(blueState[0], redboard[address]);
+		//Fredkin (redState[0], blueState[0], redboard[address]);
+		
+		//CNOT(redState[0], blueboard[address]);
+		//Fredkin (redState[0], blueState[0], blueboard[address]);
+		
+		//Fredkin (ancilla[0], blueboard[address], player[0]);
+		//X(player[0]);
+		//Fredkin (ancilla[1], redboard[address], player[0]);
+
+        // Can't address with qbits, but can used boolean controlled gates
+        for (select=0; select<pow(2,m); select++){ //forall
+            if ( (address[0] == (select & 1<<0)) &&
+                 (address[1] == (select & 1<<1)) &&
+                 (address[2] == (select & 1<<2)) &&
+                 (address[3] == (select & 1<<3)) &&
+                 (address[4] == (select & 1<<4)) &&
+                 (address[5] == (select & 1<<5)) ){
+		        CNOT(blueState[0], redboard[select]);
+		        Fredkin (redState[0], blueState[0], redboard[select]);
+		
+		        CNOT(redState[0], blueboard[select]);
+		        Fredkin (redState[0], blueState[0], blueboard[select]);
+		
+		        Fredkin (ancilla[0], blueboard[select], player[0]);
+		        X(player[0]);
+		        Fredkin (ancilla[1], redboard[select], player[0]);
+            }
+        }
+		
+        // Swap back; don't lose your bits!
+        for (i=0; i<m; i++){ //forall
+            Swap(&address[i], &pos[shift+i]);
+        }
+
+		//can be done in compile time
+		shift=shift-m;
+	}
+	
+	//ancilla[2] is a reference only
+	CHECKWIN_RED(redboard, &ancilla[2]);
+	
+	CNOT(blueState[0], ancilla[2]);
+	Fredkin(redState[0], blueState[0], ancilla[2]);
+	X(ancilla[2]);
+	
+	CNOT(redState[0], ancilla[2]);
+	Fredkin(redState[0], blueState[0], ancilla[2]);
+	X(ancilla[2]);
+}
+
+/* Partitioning Algorithm 9 to 2 sub-algorithms: Type -M and Type +M */
+/* IARPA - GFI Algorithm 9; Type -M; */
+/* Progress status: done */
+/* Classical implementation: No */
+module C_SHIFT_MINUS_M(qbit ctrl[1], qbit register1[width], int w){
+	int index0;
+	for(index0=0; index0<w+m; index0++){ //forall
+		Toffoli(register1[index0], register1[index0-m], ctrl[0]);
+		Toffoli(register1[index0-m], register1[index0], ctrl[0]);
+	}
+}
+
+/* IARPA - GFI Algorithm 9; Type +M; */
+/* Progress status: done */
+/* Classical implementation: No */
+module C_SHIFT_PLUS_M(qbit ctrl[1], qbit register1[width], int w){
+	int index0;
+	for(index0=w-1; index0>=m; index0--){ //forall
+		Toffoli(register1[index0], register1[index0-m], ctrl[0]);
+		Toffoli(register1[index0-m], register1[index0], ctrl[0]);
+	}
+}
+
+
+/* IARPA - GFI Algorithm 8 */
+/* Progress status: done */
+module C_TOCHILD(qbit ctrl[1], qbit pos[width], qbit dir[m], int width){
+	C_SHIFT_PLUS_M(&ctrl[0], pos, m);
+	int qubit;
+	for(qubit=0; qubit<m; qubit++){ //forall
+		Toffoli(pos[qubit], dir[qubit], ctrl[0]);
+		Toffoli(dir[qubit], pos[qubit], ctrl[0]);
+		X(dir[qubit]);
+	}
+}
+
+
+/* IARPA - GFI Algorithm 7 */
+/* Progress status: done */
+/* Classical implementation: No */
+module C_TOPARENT(qbit ctrl[1], qbit pos[width], qbit dir[m], int width){
+	int qubit;
+	for(qubit=0; qubit<m; qubit++){ //forall
+		Toffoli(dir[qubit], pos[qubit], ctrl[0]);
+		X(dir[qubit]);
+		Toffoli(pos[qubit], dir[qubit], ctrl[0]);
+	}
+	C_SHIFT_MINUS_M(&ctrl[0], pos, -m);
+}
+
+
+
+/* IARPA - GFI Algorithm 6 */
+/* Progress status: done */
+/* Classical implementation: No */
+//module C_UNDO_ORACLE(qbit ctrl[1], qstruct B_qstruct b, qbit init_r[s], qbit init_b[s]){
+module C_UNDO_ORACLE(qbit ctrl[1], qbit pos[width], qbit leaf[1], qbit paraleaf[1], qbit binary[1], qbit height1[1], qbit r[1], qbit rp[1], qbit rpp[1], qbit dir[m], qbit init_r[s], qbit init_b[s]){
+	int i;
+    qbit redState[1];
+    qbit nToffAnc[1];
+	qbit ancilla[3];
+	qbit pos_temp[s-2];
+
+    HEX(pos, init_r, init_b, redState);
+	//nToffoli(b.work.binary[0], {b.paraleaf, HEX(b.pos, init_r, init_b, redState), ctrl[0]}, 3);
+    Toffoli (paraleaf[0], redState[0], nToffAnc[0]);
+    Toffoli (nToffAnc[0], ctrl[0], binary[0]);
+    // Uncompute
+    Toffoli (paraleaf[0], redState[0], nToffAnc[0]);
+	
+	NAND (&ancilla[0], dir, m);
+	PrepZ(ancilla[1],1);
+	CNOT(ancilla[1], ancilla[0]); //ancilla[1]=X(ancilla[0])
+	//using pos_temp as a reference to pos[sm, (s-1)m, ..., 3m]
+	for (int i=3; i<=s; i++){
+		pos_temp[i-3]=pos[i*m];
+	}
+	NOR(&ancilla[2], pos_temp, s-2);
+	
+	if (ctrl[0]==1){
+		if (pos[width-1]==0 && pos[width-2]==1 && dir[0]==0){
+			X(leaf[0]);
+		}else if (pos[width-1]==1 || (pos[width-1]==0 && pos[width-2]==1 && pos[width-2-m]==1 && ancilla[0]==1)){
+			X(binary[0]);
+			X(paraleaf[0]);
+		}else if (ancilla[2]==1){
+			if (ancilla[1]==1){
+				if (pos[2*m]==1){
+					X(height1[0]);
+				}else if (pos[m]==1){
+					X(r[0]);
+				}else if (pos[1]==1){
+					X(rp[0]);
+					X(binary[0]);
+				}
+			}else if (pos[2*m]==0 && pos[m]==0 && pos[1]==1){
+				X(height1[0]);
+			}else if (pos[2*m]==0 && pos[m]==0 && dir[0]==1){
+				X(rpp[0]);
+			}else if (pos[2*m]==0 && pos[m]==0 && pos[0]==1){
+				X(r[0]);
+			}else if (pos[2*m]==0 && pos[m]==0){
+				X(rp[0]);
+				X(binary[0]);
+			}
+		}
+	}
+}
+
+
+
+/* IARPA - GFI Algorithm 5 */
+/* Progress status: done */
+/* Classical implementation: No */
+//module C_WALK(qbit ctrl[1], qstruct B_qstruct b){
+module C_WALK(qbit ctrl[1], qbit pos[width], qbit leaf[1], qbit paraleaf[1], qbit binary[1], qbit height1[1], qbit r[1], qbit rp[1], qbit rpp[1], qbit dir[m]){
+	int i;
+	qbit ancilla[1];
+	qbit nToffAnc[1];
+	AND (&ancilla[0], dir, m);
+
+	if (leaf[0]==1 || (paraleaf[0]==1 && dir[0]==0)){
+		CNOT(pos[width-1], ctrl[0]);
+	}else if (paraleaf[0]==1 && dir[0]==1){
+		C_TOPARENT(&ctrl[0], pos, dir, width);
+	}else if (rpp[0]==1 || (rp[0]==1 && dir[0]==1)){
+		CNOT(pos[0], ctrl[0]);
+	}else if ((rp[0]==1 && dir[0]==0) || (r[0]==1 && ancilla[0]==1)){
+		CNOT(pos[1], ctrl[0]);
+	}else if (r[0]==1){
+		CNOT(pos[1], ctrl[0]);
+		C_TOCHILD(&ctrl[0], pos, dir , m+1);
+	}else if (height1[0]==1 && ancilla[0] ==1){
+		C_TOPARENT(&ctrl[0], pos, dir, m+1);
+		CNOT(pos[1], ctrl[0]);
+	}else if (height1[0]==1){
+		C_TOCHILD(&ctrl[0], pos, dir , 2*m+1);
+	}else if (ancilla[0]==1){
+		C_TOPARENT(&ctrl[0], pos, dir, width);
+	}else{
+		C_TOCHILD(&ctrl[0], pos, dir, width);
+	}	
+
+	for (i=0; i<m; i++){
+		//X(dir[i]);
+		//nToffoli(b.dir[i], {b.work.rp[0], b.pos[1], ctrl[0]}, 3);
+        Toffoli (rp[0], pos[0], nToffAnc[0]);
+        Toffoli (nToffAnc[0], ctrl[0], dir[0]);
+        // Uncompute
+        Toffoli (rp[0], pos[0], nToffAnc[0]);
+	}
+}
+
+/* IARPA - GFI Algorithm 4 */
+/* Progress status: finished */
+/* Classical implementation: No */
+//module C_DIFFUSE(qbit ctrl[1], qstruct Work_qstruct work, qbit dir[m]){
+module C_DIFFUSE(qbit ctrl[1], qbit leaf[1], qbit paraleaf[1], qbit binary[1], qbit height1[1], qbit r[1], qbit rp[1], qbit rpp[1], qbit dir[m]){
+	int qubit;
+	
+	if (binary[0]==1 && ctrl[0]==1)
+		H(dir[0]);
+	else{
+		for(qubit=0; qubit<m; qubit++){ //forall
+			if (binary[0]==0 && leaf[0] ==0 && rpp[0]==0){
+				H(dir[qubit]);
+			}
+		}
+	}
+}
+
+
+/* IARPA - GFI Algorithm 3 */
+/* Progress status: done */
+/* Classical implementation: No */
+//module C_ORACLE(qbit ctrl[1], qbit pos[width], qstruct Work_qstruct work, qbit init_r[s], qbit init_b[s]){
+module C_ORACLE(qbit ctrl[1], qbit pos[width], qbit leaf[1], qbit paraleaf[1], qbit binary[1], qbit height1[1], qbit r[1], qbit rp[1], qbit rpp[1], qbit init_r[s], qbit init_b[s]){
+	int i;
+	qbit ancilla[1];
+	qbit hex[1];
+	qbit pos_temp[s-1];
+	
+	//using pos_temp as a reference to pos[sm, (s-1)m, ..., 2m]; it should not count as new ancillas
+	for (int i=2; i<=s; i++){
+		pos_temp[i-2]=pos[i*m];
+	}
+	NOR(&ancilla[0], pos_temp, s-1);
+	
+	if (ctrl[0]==1){
+		if (pos[width-1]==1){
+			X(leaf[0]);
+		}else if (pos[width-2]==1){
+			X(paraleaf[0]);
+			HEX(pos, init_r, init_b, hex);
+			CNOT(binary[0], hex[0]);
+		}else if (ancilla[0]==1){
+			if (pos[m]==1){
+				X(height1[0]);
+			}else if (pos[1]==1){
+				X(r[0]);
+			}else if (pos[0]==1){
+				X(rp[0]);
+				X(binary[0]);
+			}else{
+				X(rpp[0]);
+			}			
+		}
+	}
+}
+
+
+
+/* IARPA - GFI Algorithm 2 */
+/* Progress status: done */
+/* Classical implementation: No */
+//module EXP_U(int power, qbit ctrl[1], qstruct B_qstruct b, qbit init_r[s], qbit init_b[s]){
+module EXP_U(int power, qbit ctrl[1], qbit pos[width], qbit leaf[1], qbit paraleaf[1], qbit binary[1], qbit height1[1], qbit r[1], qbit rp[1], qbit rpp[1], qbit dir[m], qbit init_r[s], qbit init_b[s]){
+	//it is assumed that int is 32-bit and power<=6*31; according to GFI, power<=189 is enough.
+	//extra code added to support repetition of 2^189 times; all of these codes will dissappear after compilation
+	
+	int counter[7];
+	int loop[7];
+	
+	
+	
+	int i;
+	for (i=6; i>=0; i--){
+		if (power>i*31){
+			counter[i] = pow(2, power%(i*31));
+			power = power - (power%(i*31));
+		}else{
+			counter[i]=1;
+		}
+	}
+	
+	for(loop[0]=0; loop[0]<counter[0]; loop[0]++){ //forall
+		for(loop[1]=0; loop[1]<counter[1]; loop[1]++){ //forall
+			for(loop[2]=0; loop[2]<counter[2]; loop[2]++){ //forall
+				for (loop[3]=0; loop[3]<counter[3]; loop[3]++){ //forall
+					for (loop[4]=0; loop[4]<counter[4]; loop[4]++){ //forall
+						for (loop[5]=0; loop[5]<counter[5]; loop[5]++){ //forall
+							for (loop[6]=0; loop[6]<counter[6]; loop[6]++){ //forall
+								C_ORACLE(&ctrl[0], pos, leaf, paraleaf, binary, height1, r, rp, rpp, init_r, init_b);
+								C_DIFFUSE(&ctrl[0], leaf, paraleaf, binary, height1, r, rp, rpp, dir);
+								//C_WALK(&ctrl[0], b);
+								C_WALK(&ctrl[0], pos, leaf, paraleaf, binary, height1, r, rp, rpp, dir);
+								//C_UNDO_ORACLE(&ctrl[0], b, init_r, init_b);
+								C_UNDO_ORACLE(&ctrl[0], pos, leaf, paraleaf, binary, height1, r, rp, rpp, dir, init_r, init_b);
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+/* IARPA - GFI Algorithm 1 */
+/* Progress status: done */
+/* Classical implementation: No */
+/* init_r & init_b are runtime inputs of the program */
+//int main (qbit init_r[s], qbit init_b[s]){
+int main (int argc, char** argv){
+	int i;
+	qbit a[t];
+    //qstruct B_qstruct b;
+    qbit pos[width];
+    qbit leaf[1];
+    qbit paraleaf[1];
+    qbit binary[1];
+    qbit height1[1];
+    qbit r[1];
+    qbit rp[1];
+    qbit rpp[1];
+    qbit dir[m];
+    qbit init_r[s];
+    qbit init_b[s];
+	
+	cbit results[t];
+	int final_result=0;
+	int loop_counter;
+
+    if (argc < 2) {
+        printf("Usage: %s <red init> <blue init>\n", argv[0]);
+        printf("   Init strings are %d characters of '0' or '1'\n", s);
+        return -1;
+    }
+	
+    // Init inits
+    for (loop_counter=0; loop_counter<s; loop_counter++){
+        // No error checking, assuming that input is strings of '0' or '1' for s characters
+        PrepZ(init_r[loop_counter], argv[1][loop_counter] - 48); // poor man's atoi ('0' = 48, '1' = 49)
+        PrepZ(init_b[loop_counter], argv[2][loop_counter] - 48);
+    }
+	
+	//|a> =0
+	for (loop_counter=0; loop_counter<t; loop_counter++){ //forall
+		PrepZ(a[loop_counter],0);
+	}
+	
+	//|b> =0
+	//for (loop_counter=0; loop_counter<width+8+m; loop_counter++){ //forall
+	//	PrepZ(b[loop_counter],0);
+	//}
+	for (loop_counter=0; loop_counter<width; loop_counter++){ //forall
+		PrepZ(pos[loop_counter],0);
+	}
+	for (loop_counter=0; loop_counter<m; loop_counter++){ //forall
+		PrepZ(dir[loop_counter],0);
+	}
+	
+	for (loop_counter=0; loop_counter<t; loop_counter++){ //forall
+		H(a[loop_counter]);
+		EXP_U(loop_counter, &a[loop_counter], pos, leaf, paraleaf, binary, height1, r, rp, rpp, dir, init_r, init_b);
+	}
+
+	inverseQFT(a, t);
+
+	for (loop_counter=0; loop_counter<t; loop_counter++){ //forall
+		results[loop_counter] = MeasZ(a[loop_counter]);
+	}
+
+	
+	//This code is written to avoid early return; later we may change it because it is a classical code in nature and early return makes no problem in classical codes
+	for (i=0; i<t; i++){
+		if (results[i]==1)
+			final_result=final_result+1;
+	}
+	
+	if (final_result==0)
+		return 0;
+	else
+		return 1;
+}

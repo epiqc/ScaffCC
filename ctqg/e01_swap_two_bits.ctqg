@@ -1,0 +1,8 @@
+module
+main_module(
+  qbit a, qbit b
+) {
+  $ cnot(a, b);
+  $ cnot(b, a);
+  $ cnot(a, b);
+}

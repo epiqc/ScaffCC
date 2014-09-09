@@ -1,0 +1,18 @@
+module
+i_use_ancilla(
+  qbit x
+) {
+  zero_to_garbage a;
+  one_to_garbage  b[3];
+  zero_to_zero    c[2][2];
+  one_to_one      d;
+}
+
+module
+main_module(
+  qbit x1, qbit x2, qbit x3
+) {
+  $ i_use_ancilla(x1); /* Each of the 3 instantiations of "i_use_ancilla" module grabs    */
+  $ i_use_ancilla(x2); /* 4 garbage ancilla signals and 5 reusable ancilla signals.       */
+  $ i_use_ancilla(x3); /* Reusable ancilla signals are recycled after each instantiation. */
+}                      /* Thus the cirucit has 12 garbage and 5 reusable ancilla signals. */

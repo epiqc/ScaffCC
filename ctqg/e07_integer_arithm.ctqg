@@ -1,0 +1,8 @@
+module
+main_module(
+  qint[32] a, qint[32] b, qint[32] c, qbit r
+) {
+  $ a += b;
+  $ a -= b * c;
+  $ r ^= a < b; /* r = r XOR (a < b) */
+}

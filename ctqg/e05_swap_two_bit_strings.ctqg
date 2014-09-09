@@ -1,0 +1,27 @@
+module 
+swap_two_bits(
+  qbit a[2]
+) {
+  $ cnot(a[0], a[1]);
+  $ cnot(a[1], a[0]);
+  $ cnot(a[0], a[1]);
+}
+
+module <n>
+swap_two_bit_strings(
+  qbit x[n][2]
+) {
+  int i;
+  for (i = 0; i < n; i++) {
+    $ swap_two_bits(x[i]);
+  }
+}
+
+
+
+module
+main_module(
+  qbit bs[100][2]
+) {
+  $ [100] swap_two_bit_strings(bs);
+}

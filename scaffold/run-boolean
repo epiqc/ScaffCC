@@ -1,0 +1,53 @@
+#!/bin/sh
+
+echo "Compiling boolean_formula.scaffold..."
+../build/Release+Asserts/bin/clang -cc1 -emit-llvm -I/usr/include -I/usr/include/x86_64-linux-gnu -I/usr/lib/gcc/x86_64-linux-gnu/4.6/include boolean_formula.scaffold -o boolean_formula.ll
+
+echo "Transforming cbits..."
+../build/Release+Asserts/bin/opt -S -load ../build/Release+Asserts/lib/Scaffold.dylib -xform-cbit-stores boolean_formula.ll -o boolean_formula1.ll
+
+echo "O1 optimizations..."
+../build/Release+Asserts/bin/opt -S boolean_formula1.ll -no-aa -tbaa -targetlibinfo -basicaa -o boolean_formula1a.ll
+
+../build/Release+Asserts/bin/opt -S boolean_formula1a.ll -simplifycfg -domtree -o boolean_formula1b.ll
+
+../build/Release+Asserts/bin/opt -S boolean_formula1b.ll -early-cse -lower-expect -o boolean_formula2.ll
+
+../build/Release+Asserts/bin/opt -S boolean_formula2.ll -targetlibinfo -no-aa -tbaa -basicaa -globalopt -ipsccp -o boolean_formula3.ll
+
+../build/Release+Asserts/bin/opt -S boolean_formula3.ll -instcombine -simplifycfg -basiccg -prune-eh -always-inline -functionattrs -domtree -early-cse -lazy-value-info -jump-threading -correlated-propagation -simplifycfg -instcombine -tailcallelim -simplifycfg -reassociate -domtree -loops -loop-simplify -lcssa -loop-rotate -licm -lcssa -loop-unswitch -instcombine -scalar-evolution -loop-simplify -lcssa -iv-users -indvars -loop-idiom -loop-deletion -loop-unroll -memdep -memcpyopt -sccp -instcombine -lazy-value-info -jump-threading -correlated-propagation -domtree -memdep -dse -adce -simplifycfg -instcombine -strip-dead-prototypes -preverify -domtree -verify -o boolean_formula4.ll
+
+echo "Unroll 1..."
+../build/Release+Asserts/bin/opt -S boolean_formula4.ll -mem2reg -loops -loop-simplify -loop-rotate -lcssa -loop-unroll -unroll-threshold=100000000 -sccp -simplifycfg -o boolean_formula6.ll
+
+echo "Unroll 2..."
+../build/Release+Asserts/bin/opt -S boolean_formula6.ll -mem2reg -loops -loop-simplify -loop-rotate -lcssa -loop-unroll -unroll-threshold=100000000 -sccp -simplifycfg -o boolean_formula66.ll
+
+echo "Unroll 3..."
+../build/Release+Asserts/bin/opt -S boolean_formula66.ll -mem2reg -loops -loop-simplify -loop-rotate -lcssa -loop-unroll -unroll-threshold=100000000 -sccp -simplifycfg -o boolean_formula666.ll
+
+echo "Unroll 4..."
+../build/Release+Asserts/bin/opt -S boolean_formula666.ll -mem2reg -loops -loop-simplify -loop-rotate -lcssa -loop-unroll -unroll-threshold=100000000 -sccp -simplifycfg -o boolean_formula6666.ll
+
+echo "Function Cloning..."
+../build/Release+Asserts/bin/opt -S -load ../build/Release+Asserts/lib/Scaffold.dylib -FunctionClone -sccp boolean_formula6666.ll -o boolean_formula7.ll
+  
+echo "Unroll 5..."
+../build/Release+Asserts/bin/opt -S boolean_formula7.ll -mem2reg -loops -loop-simplify -loop-rotate -lcssa -loop-unroll -unroll-threshold=100000000 -simplifycfg -o boolean_formula8.ll
+
+echo "Internalizing and Removing Unused Functions..."
+../build/Release+Asserts/bin/opt -S boolean_formula8.ll -internalize -globaldce -o boolean_formula9.ll
+#echo "Second Cloning..."
+#../build/Release+Asserts/bin/opt -S -load ../build/Release+Asserts/lib/Scaffold.dylib -FunctionClone -constprop -die boolean_formula8.ll -o boolean_formula9.ll
+
+echo "Gate Decomposition..."
+../build/Release+Asserts/bin/opt -S -load ../build/Release+Asserts/lib/Scaffold.dylib -ToffoliReplace boolean_formula9.ll -o boolean_formula10.ll
+
+echo "Generating boolean_formula_res_count.log..."
+../build/Release+Asserts/bin/opt -load ../build/Release+Asserts/lib/Scaffold.dylib -ResourceCount boolean_formula10.ll 2> boolean_formula_res_count.log
+
+#echo "Generating boolean_formula_crit_path.log..."
+../build/Release+Asserts/bin/opt -load ../build/Release+Asserts/lib/Scaffold.dylib -CriticalResourceCount boolean_formula10.ll 2> boolean_formula_crit_path.log
+
+#rm boolean_formula.ll boolean_formula1.ll boolean_formula1a.ll boolean_formula1b.ll boolean_formula2.ll boolean_formula3.ll boolean_formula4.ll boolean_formula5.ll boolean_formula6.ll boolean_formula7.ll
+

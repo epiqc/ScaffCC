@@ -1,0 +1,8 @@
+add_subdirectory(Utils)
+add_subdirectory(Instrumentation)
+add_subdirectory(InstCombine)
+add_subdirectory(Scalar)
+add_subdirectory(IPO)
+add_subdirectory(Vectorize)
+add_subdirectory(Scaffold)
+add_subdirectory(Hello)

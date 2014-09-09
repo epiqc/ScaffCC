@@ -1,0 +1,19 @@
+module
+main_module(
+  qbit     sort_in_increasing_order,
+  qint[25] a[2]
+) {
+  $if (sort_in_increasing_order)
+
+    $if (a[0] > a[1])
+      $ a[0] <=> a[1];
+    $endif  
+
+  $else
+
+    $if (a[0] < a[1])
+      $ a[0] <=> a[1];
+    $endif  
+
+  $endif
+}

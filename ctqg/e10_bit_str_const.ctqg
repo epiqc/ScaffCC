@@ -1,0 +1,18 @@
+module 
+cnot5(
+  qbit c[5], qbit x[5]
+) {
+  int i;
+  for (i = 0; i < 5; i++) {
+    $ cnot(c[i], x[i]);
+  }
+}
+
+module
+main_module(
+  qbit a[5]
+) {
+  $ cnot5("1010011", a);
+  $ cnot5("10100", a);
+  $ cnot5("101", a);
+}
