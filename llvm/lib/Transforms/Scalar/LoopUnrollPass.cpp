@@ -135,6 +135,8 @@ bool LoopUnroll::runOnLoop(Loop *L, LPPassManager &LPM) {
   ScalarEvolution *SE = &getAnalysis<ScalarEvolution>();
 
   BasicBlock *Header = L->getHeader();
+  //errs() << "Loop Unroll: F[" << Header->getParent()->getName()
+  //      << "] Loop %" << Header->getName() << "\n";
   DEBUG(dbgs() << "Loop Unroll: F[" << Header->getParent()->getName()
         << "] Loop %" << Header->getName() << "\n");
   (void)Header;
@@ -182,6 +184,7 @@ bool LoopUnroll::runOnLoop(Loop *L, LPPassManager &LPM) {
     unsigned NumInlineCandidates;
     unsigned LoopSize = ApproximateLoopSize(L, NumInlineCandidates, TD);
     DEBUG(dbgs() << "  Loop Size = " << LoopSize << "\n");
+    //ajavadia: don't want this feature because it prevents function cloning from functioning correctly.
     if (NumInlineCandidates != 0) {
       DEBUG(dbgs() << "  Not unrolling loop with inlinable calls.\n");
       return false;
@@ -215,7 +218,7 @@ bool LoopUnroll::runOnLoop(Loop *L, LPPassManager &LPM) {
       DEBUG(dbgs() << "  partially unrolling with count: " << Count << "\n");
     }
   }
-
+  
   // Unroll the loop.
   if (!UnrollLoop(L, Count, TripCount, UnrollRuntime, TripMultiple, LI, &LPM))
     return false;

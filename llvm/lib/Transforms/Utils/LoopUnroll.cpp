@@ -267,6 +267,7 @@ bool llvm::UnrollLoop(Loop *L, unsigned Count, unsigned TripCount,
     std::vector<BasicBlock*> NewBlocks;
 
     for (LoopBlocksDFS::RPOIterator BB = BlockBegin; BB != BlockEnd; ++BB) {
+      
       ValueToValueMapTy VMap;
       BasicBlock *New = CloneBasicBlock(*BB, VMap, "." + Twine(It));
       Header->getParent()->getBasicBlockList().push_back(New);
@@ -275,6 +276,7 @@ bool llvm::UnrollLoop(Loop *L, unsigned Count, unsigned TripCount,
       // incoming values from the previous block.
       if (*BB == Header)
         for (unsigned i = 0, e = OrigPHINode.size(); i != e; ++i) {
+          
           PHINode *NewPHI = cast<PHINode>(VMap[OrigPHINode[i]]);
           Value *InVal = NewPHI->getIncomingValueForBlock(LatchBlock);
           if (Instruction *InValI = dyn_cast<Instruction>(InVal))
@@ -283,7 +285,7 @@ bool llvm::UnrollLoop(Loop *L, unsigned Count, unsigned TripCount,
           VMap[OrigPHINode[i]] = InVal;
           New->getInstList().erase(NewPHI);
         }
-
+        
       // Update our running map of newest clones
       LastValueMap[*BB] = New;
       for (ValueToValueMapTy::iterator VI = VMap.begin(), VE = VMap.end();
@@ -313,14 +315,14 @@ bool llvm::UnrollLoop(Loop *L, unsigned Count, unsigned TripCount,
       if (*BB == LatchBlock)
         Latches.push_back(New);
 
-      NewBlocks.push_back(New);
+      NewBlocks.push_back(New); 
     }
 
     // Remap all instructions in the most recent iteration
     for (unsigned i = 0; i < NewBlocks.size(); ++i)
       for (BasicBlock::iterator I = NewBlocks[i]->begin(),
            E = NewBlocks[i]->end(); I != E; ++I)
-        ::RemapInstruction(I, LastValueMap);
+        ::RemapInstruction(I, LastValueMap); 
   }
 
   // Loop over the PHI nodes in the original block, setting incoming values.
@@ -342,6 +344,7 @@ bool llvm::UnrollLoop(Loop *L, unsigned Count, unsigned TripCount,
       PN->addIncoming(InVal, Latches.back());
     }
   }
+  
 
   // Now that all the basic blocks for the unrolled iterations are in place,
   // set up the branches to connect them.
@@ -405,10 +408,15 @@ bool llvm::UnrollLoop(Loop *L, unsigned Count, unsigned TripCount,
     }
   }
 
+
   // FIXME: Reconstruct dom info, because it is not preserved properly.
   // Incrementally updating domtree after loop unrolling would be easy.
-  if (DominatorTree *DT = LPM->getAnalysisIfAvailable<DominatorTree>())
-    DT->runOnFunction(*L->getHeader()->getParent());
+  if (DominatorTree *DT = LPM->getAnalysisIfAvailable<DominatorTree>())  
+  //DT->runOnFunction(*L->getHeader()->getParent());
+  //if (DominatorTreeWrapperPass *DTWP = LPM->getAnalysisIfAvailable<DominatorTreeWrapperPass>()){
+  //   DT = &DTWP->getDomTree();
+  //   DT->recalculate(*L->getHeader()->getParent());
+  //}
 
   // Simplify any new induction variables in the partially unrolled loop.
   if (SE && !CompletelyUnroll) {

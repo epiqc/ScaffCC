@@ -20,12 +20,13 @@ ifeq ($(UNAME_S),Linux)
 SCAFFOLD_LIB=$(ROOT)/build/Release+Asserts/lib/Scaffold.so
 endif
 ifeq ($(UNAME_S),Darwin)
-SCAFFOLD_LIB=$(ROOT)/build/Release+Asserts/lib/Scaffold.dynlib
+SCAFFOLD_LIB=$(ROOT)/build/Release+Asserts/lib/Scaffold.dylib
 endif
 
 CTQG=0
-ROTATIONS=0
-TOFF=0
+ROTATIONS=1
+TOFF=1
+SQCT_LEVELS=1
 
 ################################
 # Resource Count Estimation
@@ -64,7 +65,7 @@ $(FILE)_merged.scaffold: $(FILENAME)
 # Compile Scaffold to LLVM bytecode
 $(FILE).ll: $(FILE)_merged.scaffold
 	@echo "Compiling $(FILE)_merged.scaffold..."
-	@$(CC) -c -emit-llvm -I/usr/include -I/usr/include/x86_64-linux-gnu -I/usr/lib/gcc/x86_64-linux-gnu/4.6/include $(FILE)_merged.scaffold -o $(FILE).ll
+	@$(CC) -cc1 -emit-llvm -I/usr/include -I/usr/include/x86_64-linux-gnu -I/usr/lib/gcc/x86_64-linux-gnu/4.6/include $(FILE)_merged.scaffold -o $(FILE).ll
 
 $(FILE)1.ll: $(FILE).ll
 	@echo "Transforming cbits..."
@@ -77,7 +78,8 @@ $(FILE)4.ll: $(FILE)1.ll
 	@$(OPT) -S $(FILE)1a.ll -simplifycfg -domtree -o $(FILE)1b.ll > /dev/null
 	@$(OPT) -S $(FILE)1b.ll -early-cse -lower-expect -o $(FILE)2.ll > /dev/null
 	@$(OPT) -S $(FILE)2.ll -targetlibinfo -no-aa -tbaa -basicaa -globalopt -ipsccp -o $(FILE)3.ll > /dev/null
-	@$(OPT) -S $(FILE)3.ll -instcombine -simplifycfg -basiccg -prune-eh -always-inline -functionattrs -domtree -early-cse -lazy-value-info -jump-threading -correlated-propagation -simplifycfg -instcombine -tailcallelim -simplifycfg -reassociate -domtree -loops -loop-simplify -lcssa -loop-rotate -licm -lcssa -loop-unswitch -instcombine -scalar-evolution -loop-simplify -lcssa -iv-users -indvars -loop-idiom -loop-deletion -loop-unroll -memdep -memcpyopt -sccp -instcombine -lazy-value-info -jump-threading -correlated-propagation -domtree -memdep -dse -adce -simplifycfg -instcombine -strip-dead-prototypes -preverify -domtree -verify -o $(FILE)4.ll > /dev/null
+	@$(OPT) -S $(FILE)3.ll -instcombine -simplifycfg -basiccg -prune-eh -always-inline -functionattrs -domtree -early-cse -lazy-value-info -jump-threading -correlated-propagation -simplifycfg -instcombine -tailcallelim -simplifycfg -reassociate -domtree -loops -loop-simplify -lcssa -loop-rotate -licm -lcssa -loop-unswitch -instcombine -scalar-evolution -loop-simplify -lcssa -iv-users -indvars -loop-idiom -loop-deletion -loop-unroll -memdep -memcpyopt -sccp -instcombine -lazy-value-info -jump-threading -correlated-propagation -domtree -memdep -dse -adce -simplifycfg -instcombine -strip-dead-prototypes -preverify -domtree -verify -o $(FILE)3a.ll > /dev/null
+	@$(OPT) -S -load $(SCAFFOLD_LIB) -InlineModule -sccp $(FILE)3a.ll -o $(FILE)4.ll > /dev/null
 
 # Perform loop unrolling until completely unrolled
 #
@@ -86,21 +88,24 @@ $(FILE)4.ll: $(FILE)1.ll
 # *4 is used to create *6tmp; *6tmp is copied over *4 for each iteration to retry 'diff'
 # As a weird consquence, we need to first rename *4 to *6tmp and create an empty *4 to diff
 # This screws with the intermediate results, but they are mostly for debugging anyway
-$(FILE)6.ll: $(FILE)4.ll
+$(FILE)5a.ll: $(FILE)4.ll
 	@UCNT=0; \
-	mv $(FILE)4.ll $(FILE)6tmp.ll; \
+	mv $(FILE)4.ll $(FILE)5tmp.ll; \
 	touch $(FILE)4.ll; \
-	while [ -n "$$(diff -q $(FILE)4.ll $(FILE)6tmp.ll)" ]; do \
+	while [ -n "$$(diff -q $(FILE)4.ll $(FILE)5tmp.ll)" ]; do \
 		UCNT=$$(expr $$UCNT + 1); \
 		echo "Unrolling Loops ($$UCNT)..."; \
-		cp $(FILE)6tmp.ll $(FILE)4.ll; \
-		$(OPT) -S $(FILE)4.ll -mem2reg -loops -loop-simplify -loop-rotate -lcssa -loop-unroll -unroll-threshold=100000000 -sccp -simplifycfg -o $(FILE)5.ll > /dev/null && \
+		cp $(FILE)5tmp.ll $(FILE)4.ll; \
+		$(OPT) -S $(FILE)4.ll -mem2reg -loops -loop-simplify -loop-rotate -lcssa -loop-unroll -unroll-threshold=4294967295 -simplifycfg -internalize -globaldce -sccp -time-passes -o $(FILE)5.ll > /dev/null && \
 		echo "Cloning Functions ($$UCNT)..." && \
-		$(OPT) -S -load $(SCAFFOLD_LIB) -FunctionClone -sccp $(FILE)5.ll -o $(FILE)5a.ll > /dev/null && \
-		echo "Dead Argument Elimination ($$UCNT)..." && \
-		$(OPT) -S -deadargelim $(FILE)5a.ll -o $(FILE)6tmp.ll > /dev/null; \
+		$(OPT) -S -load $(SCAFFOLD_LIB) -FunctionClone -internalize -globaldce -sccp -time-passes $(FILE)5.ll -o $(FILE)5tmp.ll > /dev/null;  \
 	done && \
-	mv $(FILE)6tmp.ll $(FILE)6.ll
+	mv $(FILE)5tmp.ll $(FILE)5a.ll
+
+# Remove all unused functions
+$(FILE)6.ll: $(FILE)5a.ll
+	@echo "Dead Argument Elimination..." && \
+	$(OPT) -S -deadargelim -internalize -globaldce -sccp $(FILE)5a.ll -o $(FILE)6.ll > /dev/null
 
 # Perform rotation decomposition if requested and SQCT is built
 $(FILE)7.ll: $(FILE)6.ll
@@ -111,7 +116,7 @@ $(FILE)7.ll: $(FILE)6.ll
 		echo "Decomposing Rotations..."; \
 		if [ ! -e /tmp/epsilon-net.0.bin ]; then echo "Generating decomposition databases; this may take up to an hour"; fi; \
 		export SQCTPATH=$(SQCTPATH); \
-		$(OPT) -S -load $(SCAFFOLD_LIB) -Rotations $(FILE)6.ll -o $(FILE)7.ll > /dev/null; \
+		$(OPT) -S -load $(SCAFFOLD_LIB) -Rotations -sqct-levels $(SQCT_LEVELS) $(FILE)6.ll -o $(FILE)7.ll > /dev/null; \
 	else \
 		cp $(FILE)6.ll $(FILE)7.ll; \
 	fi
@@ -156,7 +161,7 @@ $(FILE).qasm: $(FILE)_qasm
 
 # purge cleans temp files
 purge:
-	@rm -f $(FILE)_merged.scaffold $(FILE)_noctqg.scaffold $(FILE).ll $(FILE)1.ll $(FILE)1a.ll $(FILE)1b.ll $(FILE)2.ll $(FILE)3.ll $(FILE)4.ll $(FILE)5.ll $(FILE)5a.ll $(FILE)6.ll $(FILE)7.ll $(FILE)8.ll $(FILE)9.ll $(FILE)10.ll $(FILE)11.ll $(FILE)tmp.ll $(FILE)_qasm $(FILE)_qasm.scaffold fdecl.out $(CFILE).ctqg $(FILE).scaffold $(CFILE).c $(CFILE).ctqg $(CFILE).qasm $(CFILE).signals $(FILE).tmp sim_$(CFILE) $(FILE).qhf
+	@rm -f $(FILE)_merged.scaffold $(FILE)_noctqg.scaffold $(FILE).ll $(FILE)1.ll $(FILE)1a.ll $(FILE)1b.ll $(FILE)2.ll $(FILE)3.ll $(FILE)3a.ll $(FILE)4.ll $(FILE)5.ll $(FILE)5a.ll $(FILE)6.ll $(FILE)7.ll $(FILE)8.ll $(FILE)9.ll $(FILE)10.ll $(FILE)11.ll $(FILE)tmp.ll $(FILE)_qasm $(FILE)_qasm.scaffold fdecl.out $(CFILE).ctqg $(CFILE).c $(CFILE).ctqg $(CFILE).qasm $(CFILE).signals $(FILE).tmp sim_$(CFILE) $(FILE).qhf
 
 # clean removes all completed files
 clean: purge
