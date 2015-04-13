@@ -13,7 +13,7 @@ SQCTPATH=$(ROOT)/Rotations/sqct
 CC=$(BUILD)/bin/clang
 OPT=$(BUILD)/bin/opt
 
-CC_FLAGS=-c -cc1 -emit-llvm -I/usr/include -I/usr/include/x86_64-linux-gnu -I/usr/lib/gcc/x86_64-linux-gnu/4.6/include
+CC_FLAGS=-c -cc1 -emit-llvm -I$(BUILD)/lib/clang/3.1/include/ -I/usr/include/ -I/usr/local/include
 
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Linux)
@@ -65,7 +65,7 @@ $(FILE)_merged.scaffold: $(FILENAME)
 # Compile Scaffold to LLVM bytecode
 $(FILE).ll: $(FILE)_merged.scaffold
 	@echo "Compiling $(FILE)_merged.scaffold..."
-	@$(CC) -cc1 -emit-llvm -I/usr/include -I/usr/include/x86_64-linux-gnu -I/usr/lib/gcc/x86_64-linux-gnu/4.6/include $(FILE)_merged.scaffold -o $(FILE).ll
+	@$(CC) -cc1 -emit-llvm -I$(BUILD)/lib/clang/3.1/include/ -I/usr/include/ -I/usr/local/include $(FILE)_merged.scaffold -o $(FILE).ll
 
 $(FILE)1.ll: $(FILE).ll
 	@echo "Transforming cbits..."
