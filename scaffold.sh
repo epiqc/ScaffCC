@@ -102,10 +102,10 @@ fi
 
 if [ ${clean} -eq 1 ]; then
 	#echo make -f $ROOT/scaffold/Scaffold.makefile ${dryrun} ROOT=$ROOT FILENAME=${filename} FILE=${file} CFILE=${cfile} clean
-	make -f $ROOT/scaffold/Scaffold.makefile ${dryrun} ROOT=$ROOT FILENAME=${filename} FILE=${file} CFILE=${cfile} clean
+	make -f $ROOT/scaffold/Scaffold.makefile ${dryrun} ROOT=$ROOT DIRNAME=${dir} FILENAME=${filename} FILE=${file} CFILE=${cfile} clean
     exit
 fi
 #echo make -f $ROOT/scaffold/Scaffold.makefile ${dryrun} ROOT=$ROOT FILENAME=${filename} FILE=${file} CFILE=${cfile} TOFF=${toff} CTQG=${ctqg} ${targets}
-make -f $ROOT/scaffold/Scaffold.makefile ${dryrun} ROOT=$ROOT FILENAME=${filename} FILE=${file} CFILE=${cfile} TOFF=${toff} CTQG=${ctqg} ${targets}
+make -f $ROOT/scaffold/Scaffold.makefile ${dryrun} ROOT=$ROOT DIRNAME=${dir} FILENAME=${filename} FILE=${file} CFILE=${cfile} TOFF=${toff} CTQG=${ctqg} ${targets}
 
 exit 0

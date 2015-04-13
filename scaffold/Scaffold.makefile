@@ -3,6 +3,7 @@ PERL=/usr/bin/perl
 PYTHON=/usr/bin/python
 
 ROOT=".."
+DIRNAME=""
 FILENAME=""
 FILE=""
 CFILE=""
@@ -13,7 +14,7 @@ SQCTPATH=$(ROOT)/Rotations/sqct
 CC=$(BUILD)/bin/clang
 OPT=$(BUILD)/bin/opt
 
-CC_FLAGS=-c -cc1 -emit-llvm -I$(BUILD)/lib/clang/3.1/include/ -I/usr/include/ -I/usr/local/include
+CC_FLAGS=-cc1 -emit-llvm -I$(DIRNAME) -I$(BUILD)/lib/clang/3.1/include/ -I/usr/include/ -I/usr/local/include
 
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Linux)
@@ -65,7 +66,7 @@ $(FILE)_merged.scaffold: $(FILENAME)
 # Compile Scaffold to LLVM bytecode
 $(FILE).ll: $(FILE)_merged.scaffold
 	@echo "Compiling $(FILE)_merged.scaffold..."
-	@$(CC) -cc1 -emit-llvm -I$(BUILD)/lib/clang/3.1/include/ -I/usr/include/ -I/usr/local/include $(FILE)_merged.scaffold -o $(FILE).ll
+	@$(CC) $(CC_FLAGS) $(FILE)_merged.scaffold -o $(FILE).ll
 
 $(FILE)1.ll: $(FILE).ll
 	@echo "Transforming cbits..."
@@ -84,9 +85,9 @@ $(FILE)4.ll: $(FILE)1.ll
 # Perform loop unrolling until completely unrolled
 #
 # Gory details:
-# Unroll until the 'diff' of *4 and *6tmp is NULL (i.e., no differences)
-# *4 is used to create *6tmp; *6tmp is copied over *4 for each iteration to retry 'diff'
-# As a weird consquence, we need to first rename *4 to *6tmp and create an empty *4 to diff
+# Unroll until the 'diff' of *4 and *5tmp is NULL (i.e., no differences)
+# *4 is used to create *5tmp; *5tmp is copied over *4 for each iteration to retry 'diff'
+# As a weird consquence, we need to first rename *4 to *5tmp and create an empty *4 to diff
 # This screws with the intermediate results, but they are mostly for debugging anyway
 $(FILE)5a.ll: $(FILE)4.ll
 	@UCNT=0; \
@@ -96,9 +97,9 @@ $(FILE)5a.ll: $(FILE)4.ll
 		UCNT=$$(expr $$UCNT + 1); \
 		echo "Unrolling Loops ($$UCNT)..."; \
 		cp $(FILE)5tmp.ll $(FILE)4.ll; \
-		$(OPT) -S $(FILE)4.ll -mem2reg -loops -loop-simplify -loop-rotate -lcssa -loop-unroll -unroll-threshold=4294967295 -simplifycfg -internalize -globaldce -sccp -time-passes -o $(FILE)5.ll > /dev/null && \
+		$(OPT) -S $(FILE)4.ll -mem2reg -loops -loop-simplify -loop-rotate -lcssa -loop-unroll -unroll-threshold=4000000000 -simplifycfg -o $(FILE)5.ll > /dev/null && \
 		echo "Cloning Functions ($$UCNT)..." && \
-		$(OPT) -S -load $(SCAFFOLD_LIB) -FunctionClone -internalize -globaldce -sccp -time-passes $(FILE)5.ll -o $(FILE)5tmp.ll > /dev/null;  \
+		$(OPT) -S -load $(SCAFFOLD_LIB) -FunctionClone $(FILE)5.ll -o $(FILE)5tmp.ll > /dev/null; \
 	done && \
 	mv $(FILE)5tmp.ll $(FILE)5a.ll
 
@@ -168,3 +169,4 @@ clean: purge
 	@rm -f $(FILE)_res_count.log $(FILE)_qasm.flat $(FILE).qhf $(FILE).qasm
 
 .PHONY: clean purge
+
