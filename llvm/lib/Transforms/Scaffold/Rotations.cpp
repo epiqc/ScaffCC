@@ -19,10 +19,16 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/InstVisitor.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/CommandLine.h"
 
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 
 using namespace llvm;
+
+static cl::opt<unsigned>
+SqctLevels("sqct-levels", cl::init(1), cl::Hidden,
+  cl::desc("The rotation decomposition precision"));
+
 
 namespace {
 	// We need to use a ModulePass in order to create new Functions
@@ -73,12 +79,9 @@ namespace {
 				}
 				// Detemine whether we know the rotation angle
 				if (!isa<ConstantFP>(I.getArgOperand(1))) {
-				  errs() << "Unknown rotation angle: " << I.getArgOperand(1) << "\n";
-				  errs() << "Instruction: " << I << "\n";
-				  errs() << "Function: " << I.getParent()->getParent()->getName() << "\n";
+					errs() << "Unknown rotation angle\n";
 					return;
 				}
-			      
 				// Extract the target qubit from the CallInst
 				// Using CallSite
 				// CallSite CS(&I);
@@ -90,6 +93,12 @@ namespace {
 				double Angle = cast<ConstantFP>(I.getArgOperand(1))
 					->getValueAPF()
 					.convertToDouble();
+				// If the angle is 0, delete the rotation
+				if ( Angle == 0.0 || Angle == -0.0 ) {
+					errs() << "Rotation angle is " << Angle << " for " << Target->getName() << "\n";
+					I.eraseFromParent();
+					return;
+				}
 				// Create a unique function name (for lookup later)
 				std::string buf; raw_string_ostream ss(buf);
 				ss << "DecomposeRotation_" << Angle;
@@ -131,10 +140,20 @@ namespace {
 						errs() << "SQCT not found!\n";
 						return;
 					}
-					ss2 << path << rot_exec << Angle << axis;
-					//errs() << "Calling '" << ss2.str() << "'\n";
+					ss2 << path << rot_exec << Angle << axis << SqctLevels;
+					errs() << "Calling '" << ss2.str() << "'\n";
 					// Capture result
 					std::string circuit = exec(ss2.str().c_str());
+
+					/*
+                    // Stupid debug code for checking the command is correct
+                    FILE *f;
+                    f = fopen("/tmp/rotz.cmd", "a");
+                    fprintf(f, "%s", ss2.str().c_str());
+                    fclose(f);
+					*/
+
+
 					// Dummy circuit until SQCT is integrated
 					// std::string circuit = "HTTtHTTtHTTtHTTt";
 					// For each gate in decomposition:
@@ -149,11 +168,11 @@ namespace {
 								break;
 							case 'P':
 								// TODO: P NOT YET SUPPORTED
-								gate = Intrinsic::getDeclaration(M, Intrinsic::T);
+								gate = Intrinsic::getDeclaration(M, Intrinsic::S);
 								break;
 							case 'p':
 								// TODO: P NOT YET SUPPORTED
-								gate = Intrinsic::getDeclaration(M, Intrinsic::Tdag);
+								gate = Intrinsic::getDeclaration(M, Intrinsic::Sdag);
 								break;
 							case 'H':
 								gate = Intrinsic::getDeclaration(M, Intrinsic::H);
@@ -170,12 +189,12 @@ namespace {
 							default:
 								continue;
 						}
-						CallInst *newCallInst;
-						newCallInst = CallInst::Create(gate, ArrayRef<Value*>(DR->arg_begin()),
+						//CallInst *newCallInst;
+						//newCallInst = CallInst::Create(gate, ArrayRef<Value*>(DR->arg_begin()),
 								// Insert at front
 								// "", BB->front());
 								// Insert at end
-								"", BB);
+								//"", BB);
 						//newCallInst->setTailCall();
 					}
 					ReturnInst::Create(getGlobalContext(), 0, BB);

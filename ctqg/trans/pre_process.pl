@@ -1,9 +1,13 @@
 #!/usr/bin/perl
+use warnings;
+
+use File::Basename;
 
 # Only argument is input scaffold file
 # Output filenames are taken from that
-$scafOut = $ARGV[0];
-$scafOut =~ s#.*/(.*)\.scaffold$#$1\_noctqg.scaffold#g;
+$basename = basename( $ARGV[0], qw(.scaffold) );
+$scafOut = "$basename\_noctqg.scaffold";
+#$scafOut =~ s#.*/(.*)\.scaffold$#$1\_noctqg.scaffold#g;
 open FIN, "<", $ARGV[0] or die "Couldn't open source file $ARGV[0]: $!\n";
 open SCAF, ">", $scafOut or die "Unable to open scaffold output: $!\n";
 
@@ -17,7 +21,7 @@ $last_name='';
 # Any Scaffold module is not added to the CTQG output
 # All global variables need to be #defines for CTQG
 while ($#buffer >= $line) {
-    #print "$line: $buffer[$line]";
+    print "$line: $buffer[$line]";
 
     # Extract CTQG
 	if ( $buffer[$line] =~ /^ctqg\s+(\w+).*{/ ) {
@@ -28,6 +32,7 @@ while ($#buffer >= $line) {
         $last_name = $1;
         push @ctqg, $buffer[$line];
         $buffer[$line] =~ s/module/extern void/;
+        $buffer[$line] =~ s/qint\[(\s*\d*\s*)\]\s+(\w+)/qbit $2\[$1\]/g;
         $buffer[$line] =~ s/{/;/;
 		print SCAF $buffer[$line];
 		$braces = 1;
@@ -81,7 +86,8 @@ close SCAF;
 # Generate CTQG for translation
 # Name file with the module to be replaced in the Scaffold
 $ctqgOut = $ARGV[0];
-$ctqgOut =~ s#.*/(.*)\.scaffold$#$1\.$last_name\.ctqg#g;
+$ctqgOut = "$basename\.$last_name\.ctqg";
+#$ctqgOut =~ s#.*/(.*)\.scaffold$#$1\.$last_name\.ctqg#g;
 open CTQG, ">", $ctqgOut or die "Unable to open ctqg output: $!\n";
 foreach $line (@ctqg) {
     # Replace the last module with 'main_module' for ctqg

@@ -1,13 +1,14 @@
 //===-------------------------- FunctionClone.cpp ------------------------===//
 // This file implements the Scaffold pass of cloning functions with constant 
-// integer arguments.
+// integer or double arguments.
 //
 //        This file was created by Scaffold Compiler Working Group
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "ResourceCount"
+#define DEBUG_TYPE "FunctionClone"
 #include <sstream>
+#include <algorithm>
 #include "llvm/Pass.h"
 #include "llvm/Function.h"
 #include "llvm/Module.h"
@@ -28,8 +29,12 @@
 #include "llvm/Support/CFG.h"
 #include "llvm/ADT/SCCIterator.h"
 
+#define _MAX_FUNCTION_NAME 32
+#define _MAX_INT_PARAMS 4
+#define _MAX_DOUBLE_PARAMS 4
+
 // DEBUG switch
-bool debugCloning = false;
+bool debugCloning = true;
 
 using namespace llvm;
 
@@ -108,7 +113,7 @@ void FunctionClone::insertNewCallSite(CallInst *CI, std::string specializedName,
 bool FunctionClone::runOnModule (Module &M) {
 
   // iterate over all functions, and over all instructions in those functions
-  // find call sites that have constant integer or double values. In Post-Order.
+  // find call sites that have constant integer or double values.
   CallGraphNode* rootNode = getAnalysis<CallGraph>().getRoot();
   
   std::vector<Function*> vectPostOrder;
@@ -117,7 +122,7 @@ bool FunctionClone::runOnModule (Module &M) {
     const std::vector<CallGraphNode*> &nextSCC = *sccIb;
     for (std::vector<CallGraphNode*>::const_iterator nsccI = nextSCC.begin(), E = nextSCC.end(); nsccI != E; ++nsccI) {
       Function *f = (*nsccI)->getFunction();	  
-
+      
       if(f && !f->isDeclaration())
         vectPostOrder.push_back(f);
     }
@@ -158,40 +163,148 @@ bool FunctionClone::runOnModule (Module &M) {
       continue;
     }      
 
-
     for (inst_iterator I = inst_begin(*f), E = inst_end(*f); I != E; ++I) {
-      Instruction *pInst = &*I;          
+      Instruction *pInst = &*I;             
       if(CallInst *CI = dyn_cast<CallInst>(pInst)) {
-        if (!CI->getCalledFunction()->isIntrinsic() && !CI->getCalledFunction()->isDeclaration()) {
-          std::map<unsigned, int> valueOfInt; // map argument index to const int value
-          std::map<unsigned, double> valueOfDouble; // map argument index to const double value          
-          // scan for constant int or double arguments and save them
+        bool isQuantumModuleCall = false;         
+        for(unsigned iop=0;iop < CI->getNumArgOperands(); iop++) {
+          if (CI->getArgOperand(iop)->getType()->isPointerTy())
+            if(CI->getArgOperand(iop)->getType()->getPointerElementType()->isIntegerTy(16))
+              isQuantumModuleCall = true;
+          if (CI->getArgOperand(iop)->getType()->isIntegerTy(16))
+            isQuantumModuleCall = true;
+        }        
+        if (!CI->getCalledFunction()->isIntrinsic() && !CI->getCalledFunction()->isDeclaration() && isQuantumModuleCall) {
+          // first, find the argument positions of all integers and doubles (regardless of being contstant or not)
+          std::vector<unsigned> posOfInt;
+          std::vector<unsigned> posOfDouble;
+          for(unsigned iop=0;iop < CI->getNumArgOperands(); iop++) {
+            if(dyn_cast<ConstantInt>(CI->getArgOperand(iop)) || CI->getArgOperand(iop)->getType() == Type::getInt32Ty(CI->getContext()))
+              posOfInt.push_back(iop);
+            if(dyn_cast<ConstantFP>(CI->getArgOperand(iop)) || CI->getArgOperand(iop)->getType() == Type::getDoubleTy(CI->getContext()))
+              posOfDouble.push_back(iop);
+          }
+
+          // second, scan for constant int or double arguments and save the argument position with the constant value
+          std::map<unsigned, int> valueOfInt; 
+          std::map<unsigned, double> valueOfDouble; 
           for(unsigned iop=0;iop < CI->getNumArgOperands(); iop++) {
             if(ConstantInt *CInt = dyn_cast<ConstantInt>(CI->getArgOperand(iop)))
               valueOfInt[iop] = CInt->getZExtValue();
             if(ConstantFP *CDouble = dyn_cast<ConstantFP>(CI->getArgOperand(iop)))
-              valueOfDouble[iop] = CDouble->getValueAPF().convertToDouble();              
-          }
+              // round to 4 decimanl points
+              valueOfDouble[iop] = floorf(CDouble->getValueAPF().convertToDouble() * 10000 + 0.5)/10000;              
+            }
 
+          // now if there were constant arguments present, clone.
           if (!valueOfInt.empty() || !valueOfDouble.empty()) {
-            // make copy and start cloning/pruning
             Function *F = CI->getCalledFunction();
+            std::string originalName = F->getName().str();    
+            if(debugCloning)
+              errs() << "\n\toriginalName: " << originalName << "\n";
+       
+            // what's the name without all the parameters?
+            std::string::size_type originalCoreEnd;
+            originalCoreEnd = originalName.find(std::string("_IP"));
+            if (originalCoreEnd == std::string::npos) // maybe it's all doubles?
+              originalCoreEnd = originalName.find(std::string("_DP"));        
+            std::string originalCore = originalName.substr(0, originalCoreEnd);
+            if(debugCloning)
+              errs() << "\t\toriginalCore: " << originalCore << "\n";
 
+            // check to see if this function has itself been cloned before as a result of this same pass
+            // if not, pad with "_IPx", _MAX_INT_PARAMS times / "_DPx", _MAX_DOUBLE_PARAMS times.
+            // (it's like a fence to ensure after this point all to-be-cloned modules got IPx_.._IPx_DPx_.._DPX placeholder in their names)              
+            if (originalName == originalCore){
+                std::stringstream padding;
+                for (unsigned j=0; j<_MAX_INT_PARAMS; j++)
+                  padding<<"_IPx";
+                for (unsigned k=0; k<_MAX_DOUBLE_PARAMS; k++) 
+                  padding<<"_DPx";                
+                originalName = originalCore + padding.str();
+            }
+            
+            // read the current value of integers and doubles from the originalName string
+            std::string::size_type found_pos_begin, found_pos_end, found_pos_begin_new;
+            std::vector<std::string> originalInts; 
+            std::vector<std::string> originalDoubles;
 
+            // for IntParams
+            found_pos_begin = originalName.find(std::string("_IP"));
+            while (found_pos_begin != std::string::npos){
+              //because there might be numbers more than 1 digit long, need to find begin and end
+              found_pos_end = originalName.find_first_not_of("012345679-x",found_pos_begin+3);
+              std::string intString = originalName.substr(found_pos_begin+3, found_pos_end-(found_pos_begin+3));
+              //if(intString!=std::string("x"))
+              //  originalInts.push_back(atoi(intString.c_str()));
+              originalInts.push_back(intString);
+              //next one
+              found_pos_begin_new = originalName.find("_IP",found_pos_end);  
+              found_pos_begin = found_pos_begin_new;
+            }
+
+            // for DoubleParams
+            found_pos_begin = originalName.find(std::string("_DP"));
+            while (found_pos_begin != std::string::npos){
+              //because there might be numbers more than 1 digit long, need to find begin and end
+              found_pos_end = originalName.find_first_not_of("0123456789e.-x",found_pos_begin+3);
+              std::string doubleString = originalName.substr(found_pos_begin+3, found_pos_end-(found_pos_begin+3));
+              //if(doubleString!=std::string("x"))              
+              //  originalDoubles.push_back(atof(doubleString.c_str()));
+              originalDoubles.push_back(doubleString);              
+              //next one
+              found_pos_begin_new = originalName.find("_DP",found_pos_end);  
+              found_pos_begin = found_pos_begin_new;
+            }
+
+            /*if (debugCloning)
+              for (std::map<unsigned, int>::iterator i = valueOfInt.begin(), e = valueOfInt.end(); i!=e; ++i)
+                errs()<<"\t\tConstIntPosition: "<<i->first<<", ConstIntValue: "<<i->second<<"\n";            
+            if (debugCloning)
+              for (std::vector<unsigned>::iterator i = posOfInt.begin(), e = posOfInt.end(); i!=e; ++i)
+                errs()<<"\t\tIntPosition: "<<*i<<"\n";                
+            if (debugCloning)
+              for (std::map<unsigned, double>::iterator i = valueOfDouble.begin(), e = valueOfDouble.end(); i!=e; ++i)
+                errs()<<"\t\tConstDoublePosition: "<<i->first<<", ConstDoubleValue: "<<i->second<<"\n";            
+            if (debugCloning)
+              for (std::vector<unsigned>::iterator i = posOfDouble.begin(), e = posOfDouble.end(); i!=e; ++i)
+                errs()<<"\t\tDoublePosition: "<<*i<<"\n"; */
+
+            // Construct the specializedName string. All the above work was done because this has to preserve the same order of arguments.
+            // Check in posOfInt to see where this constant argument lies (0, 1, 2, .., _MAX_NUM_INTS-1). Add current argument in that place.
             std::stringstream ss; 
-            for (std::map<unsigned, int>::iterator i = valueOfInt.begin(), e = valueOfInt.end(); i!=e; ++i)
-              ss << "_" << i->second;
-            for (std::map<unsigned, double>::iterator i = valueOfDouble.begin(), e = valueOfDouble.end(); i!=e; ++i)
-              ss << "_" << i->second;             
-            std::string specializedName = F->getName().str() + ss.str();
+            
+            // fill in the originalInts and originalDoubles with the new constant values of this call site, at the correct position
+            for (std::map<unsigned, int>::iterator i = valueOfInt.begin(), e = valueOfInt.end(); i!=e; ++i) {
+              unsigned pos = std::find(posOfInt.begin(), posOfInt.end(), i->first) - posOfInt.begin();
+              std::stringstream tmp1;
+              tmp1 << i->second;   // in order to convert int to string
+              originalInts[pos] = tmp1.str();
+            }  
+
+            for (std::map<unsigned, double>::iterator i = valueOfDouble.begin(), e = valueOfDouble.end(); i!=e; ++i) {
+              unsigned pos = std::find(posOfDouble.begin(), posOfDouble.end(), i->first) - posOfDouble.begin();
+              std::stringstream tmp2;
+              tmp2 << i->second;
+              originalDoubles[pos] = tmp2.str(); 
+            }           
+
+            for (std::vector<std::string>::iterator i = originalInts.begin(), e = originalInts.end(); i!=e; ++i)
+              ss << "_IP" << *i;
+            for (std::vector<std::string>::iterator j = originalDoubles.begin(), e = originalDoubles.end(); j!=e; ++j)
+              ss << "_DP" << *j;
+            
+            std::string specializedName = originalCore + ss.str();
 
             // process specializedName string to convert dots into underscores (for flat qasm generation purposes)
-            for (unsigned long i = 0; i < specializedName.length(); ++i)
-              if (specializedName[i] == '.' || specializedName[i] == '-')
-                specializedName[i] = '_';
+            //for (unsigned long i = 0; i < specializedName.length(); ++i)
+            //  if (specializedName[i] == '.' || specializedName[i] == '-')
+            //    specializedName[i] = '_';
 
             // don't clone if it has been before
             if (M.getFunction(specializedName)) {
+              if (debugCloning)
+                errs() << "\t\tAlready Cloned: " << specializedName << "\n";
               insertNewCallSite(CI, specializedName, &M);
               instErase.push_back((Instruction*)CI);
               continue;
@@ -202,7 +315,7 @@ bool FunctionClone::runOnModule (Module &M) {
             specializedFunction->setName(specializedName);
 
             if (debugCloning)
-              errs() << "\tCloned Function: " << specializedFunction->getName() << "\n";
+              errs() << "\t\tCloned Function: " << specializedFunction->getName() << "\n";
 
             // Iterate over function arguments to apply constants to VMap
             for (Function::arg_iterator i = F->arg_begin(), ie = F->arg_end(); i!=ie; ++i) {
