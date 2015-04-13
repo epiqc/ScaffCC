@@ -14,27 +14,55 @@ Getting ScaffCC:
 
 Building ScaffCC:
 ==================
+First you need to install the following dependencies. For each one, you can either install by building from source,
+or use the package manager of your system ("yum" on Red Hat or "apt-get" on Ubuntu).  
 
-First you need to install the following:
-1. binutils-dev binutils-gold
+1. Static libraries for libstdc++ and glibc
+  
+    "Ubuntu"
+    Install GNU gold linker
     You can check if you have this now by doing `ld -v' and if it says 'GNU gold' you have it
-    You can get this with `sudo apt-get install binutils-gold'
-1. GCC 4.5 or higher
+    % sudo apt-get install binutils-gold
+
+    "Red Hat"
+    % sudo yum install libstdc++-static 
+    % sudo yum install glibc-static
+
+2. GCC 4.5 or higher
     NOTE: if you need to preserve an older build, consider using `update-alternatives' as system-wide method
     for preserving and maintaining these.
-2. Boost 1.48
+
+3. Boost 1.48
+    
+    "Source Build"
     Boost installation instructions are here: http://www.boost.org/doc/libs/1_48_0/doc/html/bbv2/installation.html
     % wget http://sourceforge.net/projects/boost/files/boost/1.48.0/boost_1_48_0.tar.gz
-    % tar zxf boost_1_48_0.tar.gz
-    % sudo ./bootstrap.sh --layout=tagged --threading=multi
-    % sudo ./b2
-    % sudo ./bjam install --prefix=/usr/local
-3. The GNU Multiple Precision Arithmetic Library (gmp and gmpxx)
+    % tar zxf boost_1_48_0.tar.gz && cd boost_1_48_0/
+    % sudo ./bootstrap.sh
+    % sudo ./b2 install --prefix=/usr/local
+
+
+4. The GNU Multiple Precision Arithmetic Library (gmp and gmpxx)
+    
+    "Ubuntu"
     Use tab-completion to verify the correct packages (e.g. libgmp<tab><tab>)
     % sudo apt-get install libgmp-dev libgmpxx4ldbl
-4. The GNU MPFR Library (mpfr)
+
+    "Source Build"
+    % wget https://ftp.gnu.org/gnu/gmp/gmp-6.0.0a.tar.bz2
+    % sudo ./configure --disable-shared --enable-static --enable-cxx
+    % sudo make && sudo make check && sudo make install
+
+5. The GNU MPFR Library (mpfr)
+    
+    "Ubuntu"
     % sudo apt-get install libmpfr-dev
 
+    "Source Build"
+    % wget http://www.mpfr.org/mpfr-current/mpfr-3.1.2.tar.bz2
+    % sudo ./configure --disable-shared --enable-static
+    % sudo make && sudo make check && sudo make install
+      
 
 Compiling
 ---------
@@ -59,42 +87,3 @@ compile.
 
 Example:
 % ./scaffold.sh Algorithms/Binary Welded Tree/Binary_Welded_Tree.scaffold
-
-Using Git:
-==========
-
-Notes: All of these commands are executed in the Git repo directory (or a 
-subdirectory) on your local machine
-
-Syncing to latest repo resources
-    % git fetch
-    % git merge
-    -- or --
-    % git pull
-
-Committing changes
-    # Stage all modified/deleted files for commit
-    % git add -u
-    % git commit
-    # Push changes to remote repository (make available for everyone)
-    % git push
-
-Creating a branch (use for local or experimental changes)
-    % git checkout -b <new_branch>
-
-Switching between branches
-    % git checkout <existing_branch>
-
-Listing local branches
-    % git branch
-
-Merging to the 'master' branch (main trunk) after committing changes in your 
-local branch
-    % git checkout master
-    % git merge <my_local_branch>
-    % git commit
-    % git push
-
-References:
-http://gitref.org/
-http://jonas.nitro.dk/git/quick-reference.html
