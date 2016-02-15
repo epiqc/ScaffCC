@@ -6,7 +6,6 @@ import argparse
 def genFlattenModules(benchName):
 
     fn = benchName+'.out'
-    print '====Processing',benchName
     f = open(fn,'r')
     r = f.read().split('\n')
     f.close()
@@ -22,7 +21,7 @@ def genFlattenModules(benchName):
     #print vals 
 
     numVals = len(vals)
-    print 'Total Num of Functions = ',numVals
+    print '[flattening_thresh_2M.py] Total Num of Functions = ',numVals
 
     # Change this value to change flattening thresholds. Currently 2M=2000000 ops.
     names = ['2M']

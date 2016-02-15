@@ -6,7 +6,6 @@ import argparse
 def genFlattenModules(benchName):
 
     fn = benchName+'.out'
-    print '====Processing',benchName
     f = open(fn,'r')
     r = f.read().split('\n')
     f.close()
@@ -22,7 +21,7 @@ def genFlattenModules(benchName):
     #print vals 
 
     numVals = len(vals)
-    print 'Total Num of Functions = ',numVals
+    print '[flattening_thresh.py] Total Num of Functions = ',numVals
 
     names = ['001k','005k','010k','050k','100k','150k','1M','2M','8M','20M']
     buckets = [(0,1000),(1000,5000),(5000,10000),(10000,50000),(50000,100000),

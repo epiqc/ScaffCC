@@ -25,17 +25,18 @@ done
 for f in $*; do
     b=$(basename $f .scaffold)  
     echo "[gen-cp.sh] $b"
-    echo -e "\t[gen-cp.sh] Computing module gate counts..."
+    echo -e "\t[gen-cp.sh] Computing module gate counts ..."
     $OPT -S -load $SCAF -ResourceCount2 ${b}.ll > /dev/null 2> ${b}.out
 
+    python flattening_thresh.py ${b}
     for th in ${THRESHOLDS[@]}
     do
-        echo -e "\t[gen-cp.sh] Flattening modules smaller than Th..."
-        python flattening_thresh.py ${b}
+        echo -e "\t[gen-cp.sh] Flattening modules smaller than Threshold = $th ..."
         mv ${b}_inline${th}.txt inline_info.txt
         $OPT -S -load $SCAF -InlineModule -dce -internalize -globaldce ${b}.ll -o ${b}_inline${th}.ll
-        echo -e "\t[gen-cp.sh] Critical Path Calculation..."
-        time $OPT -load $SCAF -GetCriticalPath ${b}_inline${th}.ll >/dev/null 2> ${b}_inline${th}.cp
+        echo -e "\t[gen-cp.sh] Critical path calculation ..."        
+        $OPT -load $SCAF -GetCriticalPath ${b}_inline${th}.ll >/dev/null 2> ${b}_inline${th}.cp
     done
-    rm ${b}.out *txt
+    rm ${b}.out *inline*txt
+    echo -e "\t[gen-cp.sh] Critical path lengths written to ${b}*.cp"
 done
