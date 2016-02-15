@@ -73,11 +73,7 @@ static RegisterPass<InlineModule> X("InlineModule", "Quantum Module Inlining Pas
 bool InlineModule::runOnModule( Module & M ) {
   
   std::vector<std::string> leafNames;
-  //File *file = fopen("inline_info.txt", "r");
-  //if (!file) {
-  //  errs() << "Error: Could not open inline_info file.\n";
-  //  retrun true;
-  //}
+  
   std::string line;
   std::ifstream file ("inline_info.txt");
   if(file.is_open()) {
@@ -87,11 +83,6 @@ bool InlineModule::runOnModule( Module & M ) {
   }
   else
     errs() << "Error: Could not open inline_info file.\n";
-
-  //makeLeaf.push_back(M.getFunction("ORACLE_0"));
-  //makeLeaf.push_back(M.getFunction("ORACLE_1"));
-  //makeLeaf.push_back(M.getFunction("ORACLE_2"));
-  //makeLeaf.push_back(M.getFunction("ORACLE_3"));
 
   for (std::vector<std::string>::iterator i = leafNames.begin(), e = leafNames.end();
       i!=e; ++i) {

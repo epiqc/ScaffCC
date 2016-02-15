@@ -34,7 +34,7 @@
 #define _MAX_DOUBLE_PARAMS 4
 
 // DEBUG switch
-bool debugCloning = true;
+bool debugCloning = false;
 
 using namespace llvm;
 

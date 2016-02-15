@@ -42,15 +42,17 @@ while (<QASM>) {
 	s/cnot (.*)/CNOT ( $1 );/;
 
 	# QASM flattening doesn't support n-input toffolis, so 4-input toffolis need to be handled differently
+  # Assume: toffoli (control1, control2, target), use simple compute/ copy/ uncompute paradigm (Bennet 73)
 	#s/toffoli (.*)/Toffoli ( $1 );/;
 	if (/toffoli ([\w\[\]]+) , ([\w\[\]]+) , ([\w\[\]]+) , ([\w\[\]]+)/) {
 		# 4-input needs to be decomposed
 		$a = $1; $b = $2; $c = $3; $d = $4;
-		$ancilla{'I0to0'} = 1;
-		$_ = "	Toffoli ( $a , I0to0[0] , $d );\n";
-		$_ .= "	Toffoli ( $c , $b , I0to0[0] );\n";
-		$_ .= "	Toffoli ( $a , I0to0[0] , $d );\n";
-		$_ .= "	Toffoli ( $c , $b , I0to0[0] );\n";
+		$ancilla{'I0to0'} = 2;
+		$_ = "	Toffoli ( I0to0[0] , $b , $c );\n";    
+		$_ .= "	Toffoli ( I0to0[1] , I0to0[0] , $d );\n";
+    $_ .= " CNOT ( $a, I0to0[1] );\n";
+		$_ .= "	Toffoli ( I0to0[1] , I0to0[0] , $d );\n";
+		$_ .= "	Toffoli ( I0to0[0] , $b , $c );\n";    
 	}
 	s/toffoli (.*)/Toffoli ( $1 );/;
 

@@ -59,7 +59,7 @@ namespace {
 						// Build Function;
 						// Fetch arguments
 						Function::arg_iterator arg_it = ToffoliImpl->arg_begin();
-						Value *Target = arg_it++;	
+						Value *Target = arg_it++;	            
 						Value *Control1 = arg_it++;
 						Value *Control2 = arg_it;
             
@@ -67,17 +67,22 @@ namespace {
             Control2->setName("control2");
             Target->setName("target");
 
-						std::vector<Value*> C2T; C2T.push_back(Control2); C2T.push_back(Target);
-						std::vector<Value*> C1T; C1T.push_back(Control1); C1T.push_back(Target);
-						std::vector<Value*> C1C2; C1C2.push_back(Control1); C1C2.push_back(Control2);
 						// Fetch gate definitions
 						Function* gate_H = Intrinsic::getDeclaration(M, Intrinsic::H);
 						Function* gate_T = Intrinsic::getDeclaration(M, Intrinsic::T);
 						Function* gate_t = Intrinsic::getDeclaration(M, Intrinsic::Tdag);
 						Function* gate_S = Intrinsic::getDeclaration(M, Intrinsic::S);
 						Function* gate_CNOT = Intrinsic::getDeclaration(M, Intrinsic::CNOT);
+
 						// Create BasicBlock
 						BasicBlock *BB = BasicBlock::Create(getGlobalContext(), "", ToffoliImpl, 0);
+            
+            /*
+            // -- The standard implementation of Toffoli gates (Mike and Ike)
+            // CNOT shorthands
+						std::vector<Value*> C2T; C2T.push_back(Target); C2T.push_back(Control2);
+						std::vector<Value*> C1T; C1T.push_back(Target); C1T.push_back(Control1);
+						std::vector<Value*> C1C2; C1C2.push_back(Control2); C1C2.push_back(Control1);
 						// Construct circuit
 						CallInst::Create(gate_H, ArrayRef<Value*>(Target), "", BB)->setTailCall();
 						CallInst::Create(gate_CNOT, ArrayRef<Value*>(C2T), "", BB)->setTailCall();
@@ -95,6 +100,34 @@ namespace {
 						CallInst::Create(gate_CNOT, ArrayRef<Value*>(C1C2), "", BB)->setTailCall();
 						CallInst::Create(gate_T, ArrayRef<Value*>(Control1), "", BB)->setTailCall();
 						CallInst::Create(gate_S, ArrayRef<Value*>(Control2), "", BB)->setTailCall();
+            */
+
+            // -- Improved T-depth Toffoli gate (Amy et al.)
+            // CNOT shorthands
+						std::vector<Value*> C1C2; C1C2.push_back(Control2); C1C2.push_back(Control1);                        
+						std::vector<Value*> C2T; C2T.push_back(Target); C2T.push_back(Control2);
+						std::vector<Value*> TC1; TC1.push_back(Control1); TC1.push_back(Target);
+						std::vector<Value*> C2C1; C2C1.push_back(Control1); C2C1.push_back(Control2);            
+            
+						// Construct circuit
+						CallInst::Create(gate_H, ArrayRef<Value*>(Target), "", BB)->setTailCall();
+						CallInst::Create(gate_t, ArrayRef<Value*>(Control1), "", BB)->setTailCall();
+						CallInst::Create(gate_T, ArrayRef<Value*>(Control2), "", BB)->setTailCall();
+						CallInst::Create(gate_T, ArrayRef<Value*>(Target), "", BB)->setTailCall();
+						CallInst::Create(gate_CNOT, ArrayRef<Value*>(C1C2), "", BB)->setTailCall();
+						CallInst::Create(gate_CNOT, ArrayRef<Value*>(TC1), "", BB)->setTailCall();
+						CallInst::Create(gate_t, ArrayRef<Value*>(Control1), "", BB)->setTailCall();
+						CallInst::Create(gate_CNOT, ArrayRef<Value*>(C2T), "", BB)->setTailCall();
+						CallInst::Create(gate_CNOT, ArrayRef<Value*>(C2C1), "", BB)->setTailCall();
+						CallInst::Create(gate_t, ArrayRef<Value*>(Control1), "", BB)->setTailCall();
+						CallInst::Create(gate_t, ArrayRef<Value*>(Control2), "", BB)->setTailCall();
+						CallInst::Create(gate_T, ArrayRef<Value*>(Target), "", BB)->setTailCall();
+						CallInst::Create(gate_CNOT, ArrayRef<Value*>(TC1), "", BB)->setTailCall();
+						CallInst::Create(gate_S, ArrayRef<Value*>(Control1), "", BB)->setTailCall();
+						CallInst::Create(gate_CNOT, ArrayRef<Value*>(C2T), "", BB)->setTailCall();
+						CallInst::Create(gate_CNOT, ArrayRef<Value*>(C1C2), "", BB)->setTailCall();
+						CallInst::Create(gate_H, ArrayRef<Value*>(Target), "", BB)->setTailCall();
+
 						ReturnInst::Create(getGlobalContext(), 0, BB);
 					}
 					std::vector<Value*>  Args(3);

@@ -1,9 +1,33 @@
+=================================================================
+                Scaffold Compiler Working Group
+              https://github.com/ajavadia/ScaffCC
+
+                  Software README Document
+=================================================================
+
 Contents:
 =========
 
-Getting Started - How to get access and download the repo
-Running Scaffold - How to compile, install and run Scaffold
-Using Git - A brief guide to the important git commands
+Intro - About this software
+Getting ScaffCC - How to get access and download from the repo
+Building ScaffCC - How to build the compiler
+Running the Compiler - How to compile Scaffold programs
+
+
+Intro:
+======
+
+ScaffCC is a compiler and scheduler for the Scaffold programing language. It is written using the LLVM open-source infrastructure.
+It is for the purpose of writing and analyzing code for quantum computing applications.
+
+Different parts of this software have been published in the following papers:
+http://www.princeton.edu/~ajavadia/ScaffCC.pdf
+http://mrmgroup.cs.princeton.edu/papers/QPE_IISWC13.pdf
+http://www.princeton.edu/~ajavadia/ASPLOS15.pdf
+
+To cite this software, please use the following:
+A. JavadiAbhari et al. "ScaffCC: A Framework for Compilation and Analysis of Quantum Computing Programs," Computing Frontiers, 2014
+
 
 Getting ScaffCC:
 =================
@@ -11,6 +35,7 @@ Getting ScaffCC:
 1. Go to https://github.com/ajavadia/ScaffCC
 2. Download the repository:
    % git clone https://github.com/ajavadia/ScaffCC.git [dir]
+
 
 Building ScaffCC:
 ==================
@@ -64,16 +89,13 @@ or use the package manager of your system ("yum" on Red Hat or "apt-get" on Ubun
     % sudo make && sudo make check && sudo make install
       
 
-Compiling
----------
-
 Once you have all of the required libraries, simply run `make' or `make 
 USE_GCC=1' at the root of the repository. The USE_GCC flag will force the 
 Makefile to use GCC to compile instead, and this has been seen to be faster 
 on some systems.
 
-Running
--------
+Running the Compiler:
+=====================
 
 Prior to the first run, please select the variation of QASM that you want by 
 doing the following:

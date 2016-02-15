@@ -14,7 +14,8 @@ function show_help {
     echo "    -q   Generate QASM"
     echo "    -f   Generate flattened QASM"
     echo "    -R   Disable rotation decomposition"
-	echo "    -l   Levels of recursion to run (default=1)"
+    echo "    -T   Disable Toffoli decomposition"    
+	  echo "    -l   Levels of recursion to run (default=1)"
     echo "    -F   Force running all steps"
     echo "    -c   Clean all files (no other actions)"
     echo "    -p   Purge all intermediate files (preserves specified output,"
@@ -30,6 +31,7 @@ dryrun=""
 force=0
 purge=0
 res=0
+rot=1
 toff=1
 targets=""
 while getopts "h?cdfFpqrRl:" opt; do
@@ -40,7 +42,7 @@ while getopts "h?cdfFpqrRl:" opt; do
         ;;
     c) clean=1
         ;;
-	d) dryrun="--dry-run"
+	  d) dryrun="--dry-run"
 		;;
     F) force=1
         ;;
@@ -52,8 +54,10 @@ while getopts "h?cdfFpqrRl:" opt; do
         ;;
     r) res=1
         ;;
-    R) targets="${targets} ROTATIONS=0"
+    R) targets="${targets} rot=0"
         ;;
+    T) targets="${targets} toff=0"
+        ;;        
     l) targets="${targets} SQCT_LEVELS=${OPTARG}"
         ;;
     esac
@@ -101,11 +105,9 @@ if [ $(egrep '^ctqg.*{\s*' ${filename} | wc -l) -gt 0 ]; then
 fi
 
 if [ ${clean} -eq 1 ]; then
-	#echo make -f $ROOT/scaffold/Scaffold.makefile ${dryrun} ROOT=$ROOT FILENAME=${filename} FILE=${file} CFILE=${cfile} clean
 	make -f $ROOT/scaffold/Scaffold.makefile ${dryrun} ROOT=$ROOT DIRNAME=${dir} FILENAME=${filename} FILE=${file} CFILE=${cfile} clean
     exit
 fi
-#echo make -f $ROOT/scaffold/Scaffold.makefile ${dryrun} ROOT=$ROOT FILENAME=${filename} FILE=${file} CFILE=${cfile} TOFF=${toff} CTQG=${ctqg} ${targets}
-make -f $ROOT/scaffold/Scaffold.makefile ${dryrun} ROOT=$ROOT DIRNAME=${dir} FILENAME=${filename} FILE=${file} CFILE=${cfile} TOFF=${toff} CTQG=${ctqg} ${targets}
+make -f $ROOT/scaffold/Scaffold.makefile ${dryrun} ROOT=$ROOT DIRNAME=${dir} FILENAME=${filename} FILE=${file} CFILE=${cfile} TOFF=${toff} CTQG=${ctqg} ROTATIONS=${rot} ${targets}
 
 exit 0
