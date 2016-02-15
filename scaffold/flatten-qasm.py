@@ -42,7 +42,7 @@ def process_qasm(fname):
     pattern_main = re.compile(r"\s*(\bvoid|module\b)\s+(\bmain\b)\s*\((.*?)\)\s*(\{)*\s*")
     pattern_comment = re.compile(r"\s*//--//--(.*?)--//--//\s*")
 
-    fout_name = re.sub('\.qhf$','_qasm.scaffold',fname)
+    fout_name = re.sub('\.qasmh$','_qasm.scaffold',fname)
     fout = open(fout_name,'w')
 
     fout.write('#include<stdio.h>\n')
@@ -217,15 +217,9 @@ def process_qasm(fname):
         
         b = f.readline()
 
-    print 'Output written to ',fout_name
-
     f.close()
 
     fout.close()
-
-    print 'Qbits:',setQbitDecl
-    print 'Cbits:',setCbitDecl
-
 
     #write qbit and cbit declarations to file
     fdecl = open("fdecl.out",'w')

@@ -36,12 +36,12 @@ resources: $(FILE).resources
 ################################
 # Flat QASM generation
 ################################
-flat: $(FILE).qasm
+flat: $(FILE).qasmf
 
 ################################
 # QASM generation
 ################################
-qasm: $(FILE).qhf
+qasm: $(FILE).qasmh
 
 .PHONY: res_count qasm flat
 
@@ -132,34 +132,37 @@ $(FILE)11.ll: $(FILE)10.ll
 
 # Generate resource counts from final LLVM output
 $(FILE).resources: $(FILE)11.ll
-	@echo "[Scaffold.makefile] Generating $(FILE).resources ..."
+	@echo "[Scaffold.makefile] Generating resource count ..."    
 	@$(OPT) -load $(SCAFFOLD_LIB) -ResourceCount $(FILE)11.ll 2> $(FILE).resources > /dev/null
+	@echo "[Scaffold.makefile] Resources written to $(FILE).resources ..."  
 
 # Generate hierarchical QASM
-$(FILE).qhf: $(FILE)11.ll
-	@echo "[Scaffold.makefile] Generating $(FILE).qhf"
-	@$(OPT) -load $(SCAFFOLD_LIB) -gen-qasm $(FILE)11.ll 2> $(FILE).qhf > /dev/null
+$(FILE).qasmh: $(FILE)11.ll
+	@echo "[Scaffold.makefile] Generating flattened QASM ..."  
+	@$(OPT) -load $(SCAFFOLD_LIB) -gen-qasm $(FILE)11.ll 2> $(FILE).qasmh > /dev/null
+	@echo "[Scaffold.makefile] Hierarchical QASM written to $(FILE).qasmh ..."  
 
 # Translate hierarchical QASM back to C++ for flattening
-$(FILE)_qasm.scaffold: $(FILE).qhf
-	@echo Generating flattened QASM...
-	@$(PYTHON) $(ROOT)/scaffold/flatten-qasm.py $(FILE).qhf
+$(FILE)_qasm.scaffold: $(FILE).qasmh
+	@echo "[Scaffold.makefile] Generating flattened QASM ..."
+	@$(PYTHON) $(ROOT)/scaffold/flatten-qasm.py $(FILE).qasmh
 
 # Compile C++
 $(FILE)_qasm: $(FILE)_qasm.scaffold
 	@$(CC) $(FILE)_qasm.scaffold -o $(FILE)_qasm
 
 # Execute hierchical QASM to flatten it
-$(FILE).qasm: $(FILE)_qasm
+$(FILE).qasmf: $(FILE)_qasm
 	@./$(FILE)_qasm > $(FILE).tmp
-	@cat fdecl.out $(FILE).tmp > $(FILE).qasm
+	@cat fdecl.out $(FILE).tmp > $(FILE).qasmf
+	@echo "[Scaffold.makefile] Flat QASM written to $(FILE).qasmf ..."    
 
 # purge cleans temp files
 purge:
-	@rm -f $(FILE)_merged.scaffold $(FILE)_noctqg.scaffold $(FILE).ll $(FILE)1.ll $(FILE)1a.ll $(FILE)1b.ll $(FILE)2.ll $(FILE)3.ll $(FILE)4.ll $(FILE)5.ll $(FILE)5a.ll $(FILE)6.ll $(FILE)7.ll $(FILE)8.ll $(FILE)9.ll $(FILE)10.ll $(FILE)11.ll $(FILE)tmp.ll $(FILE)_qasm $(FILE)_qasm.scaffold fdecl.out $(CFILE).ctqg $(CFILE).c $(CFILE).ctqg $(CFILE).qasm $(CFILE).signals $(FILE).tmp sim_$(CFILE) $(FILE).qhf
+	@rm -f $(FILE)_merged.scaffold $(FILE)_noctqg.scaffold $(FILE).ll $(FILE)1.ll $(FILE)1a.ll $(FILE)1b.ll $(FILE)2.ll $(FILE)3.ll $(FILE)4.ll $(FILE)5.ll $(FILE)5a.ll $(FILE)6.ll $(FILE)7.ll $(FILE)8.ll $(FILE)9.ll $(FILE)10.ll $(FILE)11.ll $(FILE)tmp.ll $(FILE)_qasm $(FILE)_qasm.scaffold fdecl.out $(CFILE).ctqg $(CFILE).c $(CFILE).ctqg $(CFILE).signals $(FILE).tmp sim_$(CFILE)
 
 # clean removes all completed files
 clean: purge
-	@rm -f $(FILE).resources $(FILE)_qasm.flat $(FILE).qhf $(FILE).qasm
+	@rm -f $(FILE).resources $(FILE).qasmh $(FILE).qasmf
 
 .PHONY: clean purge

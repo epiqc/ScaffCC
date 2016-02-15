@@ -34,7 +34,7 @@ res=0
 rot=1
 toff=1
 targets=""
-while getopts "h?cdfFpqrRl:" opt; do
+while getopts "h?cdfFpqrRTl:" opt; do
     case "$opt" in
     h|\?)
         show_help
@@ -54,9 +54,9 @@ while getopts "h?cdfFpqrRl:" opt; do
         ;;
     r) res=1
         ;;
-    R) targets="${targets} rot=0"
+    R) rot=0
         ;;
-    T) targets="${targets} toff=0"
+    T) toff=0
         ;;        
     l) targets="${targets} SQCT_LEVELS=${OPTARG}"
         ;;
