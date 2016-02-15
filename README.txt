@@ -97,15 +97,15 @@ on some systems.
 Running the Compiler:
 =====================
 
-Prior to the first run, please select the variation of QASM that you want by 
-doing the following:
-
-% cd <repo>/scaffold/
-% cp flatten-qasm-<usc|qcs>.py flatten-qasm.py
-% cd -
-
 Run the 'scaffold.sh' command with the path and name of the scaffold file to
 compile.
 
 Example:
 % ./scaffold.sh Algorithms/Binary Welded Tree/Binary_Welded_Tree.scaffold
+
+Scripts:
+========
+A number of example scripts have been provided in the ./scripts/ directory.
+You can use these to do understand how to do a number of common things with the compiler,
+such as generating intermediary .ll files, finding critical path lengths, and scheduling for architectures.
+The README.txt file in that directory contains further instructions.

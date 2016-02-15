@@ -12,7 +12,7 @@ K=(2)
 for f in $*; do
   b=$(basename $f .scaffold)
   echo "[schedule.sh] $b: Compiling ..."
-  if [ -n ${b}.ll ]; then
+  if [ ! -e ${b}.ll ]; then
     # Generate compiled files
     $ROOT/scaffold.sh -r $f
     mv ${b}11.ll ${b}11.ll.keep_me
@@ -27,7 +27,7 @@ done
 for f in $*; do
   b=$(basename $f .scaffold)
   echo "[schedule.sh] $b: Flattening ..."
-  if [ -n ${b}_inline2M.ll ]; then
+  if [ ! -e ${b}_inline2M.ll ]; then
     $OPT -S -load $SCAF -ResourceCount2 ${b}.ll > /dev/null 2> ${b}.out
     python $DIR/flattening_thresh_2M.py ${b} > /dev/null
     for i in ${b}_inline2M.txt; do

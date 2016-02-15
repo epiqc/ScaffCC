@@ -11,7 +11,7 @@ THRESHOLDS=(005k 010k 2M)
 for f in $*; do
   b=$(basename $f .scaffold)
   echo "[gen-cp.sh] $b: Compiling ..."
-  if [! -e ${b}.ll ]; then
+  if [ ! -e ${b}.ll ]; then
     # Generate compiled files
     $ROOT/scaffold.sh -r $f
     mv ${b}11.ll ${b}11.ll.keep_me

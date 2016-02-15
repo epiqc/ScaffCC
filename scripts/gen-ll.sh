@@ -8,7 +8,7 @@ SCAF=$ROOT/build/Release+Asserts/lib/Scaffold.so
 for f in $*; do
   b=$(basename $f .scaffold)    
   echo "[gen-ll.sh] Compiling $b ..."  
-  if [! -e ${b}.ll ]; then
+  if [ ! -e ${b}.ll ]; then
     # Generate compiled files
     $ROOT/scaffold.sh -r $f
     mv ${b}11.ll ${b}11.ll.keep_me
