@@ -65,5 +65,3 @@ Calls the following scripts:
   $ ./flattening_thresh_2M.py
   ---------------------------
   Divides modules into those larger and those smaller than 2M operations in size.
-
-  
