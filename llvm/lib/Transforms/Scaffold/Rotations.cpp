@@ -145,15 +145,6 @@ namespace {
 					// Capture result
 					std::string circuit = exec(ss2.str().c_str());
 
-					/*
-                    // Stupid debug code for checking the command is correct
-                    FILE *f;
-                    f = fopen("/tmp/rotz.cmd", "a");
-                    fprintf(f, "%s", ss2.str().c_str());
-                    fclose(f);
-					*/
-
-
 					// Dummy circuit until SQCT is integrated
 					// std::string circuit = "HTTtHTTtHTTtHTTt";
 					// For each gate in decomposition:
@@ -189,12 +180,12 @@ namespace {
 							default:
 								continue;
 						}
-						//CallInst *newCallInst;
-						//newCallInst = CallInst::Create(gate, ArrayRef<Value*>(DR->arg_begin()),
+						CallInst *newCallInst;
+						newCallInst = CallInst::Create(gate, ArrayRef<Value*>(DR->arg_begin()),
 								// Insert at front
 								// "", BB->front());
 								// Insert at end
-								//"", BB);
+								"", BB);
 						//newCallInst->setTailCall();
 					}
 					ReturnInst::Create(getGlobalContext(), 0, BB);
