@@ -31,16 +31,16 @@ for f in $*; do
   fi
 done
 
-# Module inlining pass with a 2M-operation threshold
+# Module flattening pass with a 2M-operation threshold
 for f in $*; do
   b=$(basename $f .scaffold)
   echo "[schedule.sh] $b: Flattening ..."
-  if [ ! -e ${b}/${b}_inline2M.ll ]; then
+  if [ ! -e ${b}/${b}_flat2M.ll ]; then
     $OPT -S -load $SCAF -ResourceCount2 ${b}/${b}.ll > /dev/null 2> ${b}.out
     python $DIR/flattening_thresh_2M.py ${b} > /dev/null
-    cp ${b}_inline2M.txt inline_info.txt
-    $OPT -S -load $SCAF -InlineModule -dce -internalize -globaldce ${b}/${b}.ll -o ${b}/${b}_inline2M.ll
-    rm -f *inline*.txt ${b}.out    
+    cp ${b}_flat2M.txt flat_info.txt
+    $OPT -S -load $SCAF -FlattenModule -dce -internalize -globaldce ${b}/${b}.ll -o ${b}/${b}_flat2M.ll
+    rm -f *flat*.txt ${b}.out    
   fi
 done
 
@@ -48,8 +48,8 @@ done
 for f in $*; do
   b=$(basename $f .scaffold)
   echo "[schedule.sh] $b: Resource count ..."
-  if [ -n ${b}/${b}_inline2M.resources ]; then
-    $OPT -S -load $SCAF -ResourceCount ${b}/${b}_inline2M.ll > /dev/null 2> ${b}/${b}_inline2M.resources
+  if [ -n ${b}/${b}_flat2M.resources ]; then
+    $OPT -S -load $SCAF -ResourceCount ${b}/${b}_flat2M.ll > /dev/null 2> ${b}/${b}_flat2M.resources
   fi
 done
 
@@ -59,9 +59,9 @@ for f in $*; do
   for d in ${D[@]}; do
     for k in ${K[@]}; do
       echo "[schedule.sh] $b: Generating SIMD K=$k D=$d leaves ..."
-      if [ ! -e ${b}/${b}_inline2M.simd.${k}.${d}.leaves ]; then
-        $OPT -load $SCAF -GenSIMDSchedule -simd-kconstraint $k -simd-dconstraint $d ${b}/${b}_inline2M.ll > /dev/null 2> ${b}/${b}_inline2M.simd.${k}.${d}
-        ${DIR}/leaves.pl ${b}/${b}_inline2M.simd.${k}.${d} > ${b}/${b}_inline2M.simd.${k}.${d}.leaves
+      if [ ! -e ${b}/${b}_flat2M.simd.${k}.${d}.leaves ]; then
+        $OPT -load $SCAF -GenSIMDSchedule -simd-kconstraint $k -simd-dconstraint $d ${b}/${b}_flat2M.ll > /dev/null 2> ${b}/${b}_flat2M.simd.${k}.${d}
+        ${DIR}/leaves.pl ${b}/${b}_flat2M.simd.${k}.${d} > ${b}/${b}_flat2M.simd.${k}.${d}.leaves
       fi
     done
   done
@@ -97,13 +97,13 @@ for f in $*; do
     x=$(perl -e '$ARGV[0] =~ /.*_(.+)/; print $1' $c)
     echo "[schedule.sh] $b: Coarse-grain schedule ..."
     cp $c comm_aware_schedule.txt
-    if [ ! -e ${b}_inline2M.simd.${k}.${d}.${x}.time ]; then
-      ../$OPT -load ../$SCAF -GenCGSIMDSchedule -simd-kconstraint-cg $k -simd-dconstraint-cg $d ${b}_inline2M.ll > /dev/null 2> ${b}_inline2M.simd.${k}.${d}.${x}.time
+    if [ ! -e ${b}_flat2M.simd.${k}.${d}.${x}.time ]; then
+      ../$OPT -load ../$SCAF -GenCGSIMDSchedule -simd-kconstraint-cg $k -simd-dconstraint-cg $d ${b}_flat2M.ll > /dev/null 2> ${b}_flat2M.simd.${k}.${d}.${x}.time
     fi
 
     # Now do 0-communication cost
-    if [ ! -e ${b}_inline2M.simd.${k}.${d}.w0.${x}.time ]; then
-      ../$OPT -load ../$SCAF -GenCGSIMDSchedule -move-weight-cg 0 -simd-kconstraint-cg $k -simd-dconstraint-cg $d ${b}_inline2M.ll > /dev/null 2> ${b}_inline2M.simd.${k}.${d}.w0.${x}.time
+    if [ ! -e ${b}_flat2M.simd.${k}.${d}.w0.${x}.time ]; then
+      ../$OPT -load ../$SCAF -GenCGSIMDSchedule -move-weight-cg 0 -simd-kconstraint-cg $k -simd-dconstraint-cg $d ${b}_flat2M.ll > /dev/null 2> ${b}_flat2M.simd.${k}.${d}.w0.${x}.time
     fi
   done
   rm comm_aware_schedule.txt

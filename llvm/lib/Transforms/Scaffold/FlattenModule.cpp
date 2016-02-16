@@ -1,13 +1,13 @@
-//===-------------------------- InlineModule.cpp ------------------------===//
-// This file implements the Scaffold pass of inlining modules whose gate 
+//===-------------------------- FlattenModule.cpp ------------------------===//
+// This file implements the Scaffold pass of flattening modules whose gate 
 // counts are below the threshold. These modules' names have been previously 
-// written to the file "inline_info.txt".
+// written to the file "flat_info.txt".
 //
 //        This file was created by Scaffold Compiler Working Group
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "InlineModule"
+#define DEBUG_TYPE "FlattenModule"
 #include <sstream>
 #include <fstream>
 #include <string>
@@ -32,7 +32,7 @@
 #include "llvm/ADT/SCCIterator.h"
 
 // DEBUG switch
-bool debugInlining = true;
+bool debugFlattening = false;
 
 using namespace llvm;
 
@@ -41,12 +41,12 @@ using namespace llvm;
 namespace {
 
   // Derived from ModulePass to work on callgraph
-  struct InlineModule : public ModulePass {
+  struct FlattenModule : public ModulePass {
     static char ID; // Pass identification
-    InlineModule() : ModulePass(ID) {}
+    FlattenModule() : ModulePass(ID) {}
 
-    // what functions to make inlined
-    std::vector <Function*> makeInlined;
+    // what functions to make leaves
+    std::vector <Function*> makeLeaf;
     
     // mark those call sites to be inlined
     std::vector<CallInst*> inlineCallInsts; 
@@ -61,40 +61,42 @@ namespace {
     virtual void getAnalysisUsage(AnalysisUsage &AU) const {
         AU.setPreservesCFG();  
         AU.addRequired<CallGraph>();
-        AU.addRequired<TargetData>(); 
+        AU.addRequired<TargetData>();
     }
 
-  }; // End of struct InlineModule
+  }; // End of struct FlattenModule
 } // End of anonymous namespace
 
 
-char InlineModule::ID = 0;
-static RegisterPass<InlineModule> X("InlineModule", "Quantum Module Inlining Pass", false, false);
+char FlattenModule::ID = 0;
+static RegisterPass<FlattenModule> X("FlattenModule", "Quantum Module Flattening Pass", false, false);
 
-bool InlineModule::runOnModule( Module & M ) {  
-  std::vector<std::string> inlinedNames;
+bool FlattenModule::runOnModule( Module & M ) {
+  
+  std::vector<std::string> leafNames;
+  
   std::string line;
-  std::ifstream file ("inline_info.txt");
+  std::ifstream file ("flat_info.txt");
   if(file.is_open()) {
     while(std::getline(file, line))
-      inlinedNames.push_back(line);
+      leafNames.push_back(line);
     file.close();
   }
   else
-    errs() << "Error: Could not open inline_info file.\n";
+    errs() << "Error: Could not open flat_info file.\n";
 
-  for (std::vector<std::string>::iterator i = inlinedNames.begin(), e = inlinedNames.end();
+  for (std::vector<std::string>::iterator i = leafNames.begin(), e = leafNames.end();
       i!=e; ++i) {
-    if (debugInlining)
-      errs() << "inline_info: " << *i << "\n";
-    makeInlined.push_back(M.getFunction(*i));
+    if (debugFlattening)
+      errs() << "flat_info: " << *i << "\n";
+    makeLeaf.push_back(M.getFunction(*i));
   }
-  
+
   // First, get a pointer to previous analysis results
   CallGraph & CG = getAnalysis<CallGraph>();
 
   CallGraphNode * entry = CG.getRoot();
-  if( entry && entry->getFunction() && debugInlining)
+  if( entry && entry->getFunction() && debugFlattening)
     errs() << "Entry is function: " << entry->getFunction()->getName() << "\n";
 
   // Iterate over all SCCs in the module in bottom-up order
@@ -124,20 +126,20 @@ bool InlineModule::runOnModule( Module & M ) {
     CallInst* CI = *i;
     bool success = InlineFunction(CI, InlineInfo, false);
     if(!success) {
-      if (debugInlining)
+      if (debugFlattening)
         errs() << "Error: Could not inline callee function " << CI->getCalledFunction()->getName()
                  << " into caller function " << "\n";
       continue;
     }
-    if (debugInlining)    
+    if (debugFlattening)    
       errs() << "Successfully inlined callee function " << CI->getCalledFunction()->getName()
-                 << " into caller function " << "\n";
+                 << "into caller function " << "\n";
   }  
   
   return false;
 }
 
-bool InlineModule::runOnSCC( const std::vector<CallGraphNode *> &scc ) {
+bool FlattenModule::runOnSCC( const std::vector<CallGraphNode *> &scc ) {
   for( std::vector<CallGraphNode *>::const_iterator
    i = scc.begin(), e = scc.end(); i != e; ++i ) {
     if( *i && (*i)->getFunction() ) {
@@ -149,16 +151,20 @@ bool InlineModule::runOnSCC( const std::vector<CallGraphNode *> &scc ) {
   return false;
 }
 
-bool InlineModule::runOnFunction( Function & F ) {
-  if (debugInlining)  
+bool FlattenModule::runOnFunction( Function & F ) {
+  if (debugFlattening)  
     errs() << "run on function: " << F.getName() << "\n";
+  // only continue if this function is part of makeLeaf
+  if (std::find(makeLeaf.begin(), makeLeaf.end(), &F) == makeLeaf.end())
+    return false;
+  if (debugFlattening)  
+    errs() << "makeLeaf: " << F.getName() << "\n";
   
   for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E; ++I) {
     Instruction *pInst = &*I;          
     if(CallInst *CI = dyn_cast<CallInst>(pInst)) {
-      if (std::find(makeInlined.begin(), makeInlined.end(), CI->getCalledFunction()) != makeInlined.end()) {  
-        if (debugInlining)  
-          errs() << "makeInlined: " << CI->getCalledFunction()->getName() << "\n";
+      if (!CI->getCalledFunction()->isIntrinsic() && !CI->getCalledFunction()->isDeclaration()) {
+        makeLeaf.push_back(CI->getCalledFunction());
         inlineCallInsts.push_back(CI);
       }
     }

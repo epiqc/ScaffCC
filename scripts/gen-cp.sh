@@ -5,7 +5,7 @@ ROOT=$DIR/..
 OPT=$ROOT/build/Release+Asserts/bin/opt
 SCAF=$ROOT/build/Release+Asserts/lib/Scaffold.so
 
-THRESHOLDS=(005k 010k 2M)
+THRESHOLDS=(001k 010k 2M)
 
 # Generate .ll file if not done already
 for f in $*; do
@@ -25,18 +25,18 @@ done
 for f in $*; do
     b=$(basename $f .scaffold)  
     echo "[gen-cp.sh] $b"
-    echo -e "\t[gen-cp.sh] Computing module gate counts ..."
+    echo "[gen-cp.sh] Computing module gate counts ..."
     $OPT -S -load $SCAF -ResourceCount2 ${b}.ll > /dev/null 2> ${b}.out
 
     python flattening_thresh.py ${b}
     for th in ${THRESHOLDS[@]}
     do
-        echo -e "\t[gen-cp.sh] Flattening modules smaller than Threshold = $th ..."
-        mv ${b}_inline${th}.txt inline_info.txt
-        $OPT -S -load $SCAF -InlineModule -dce -internalize -globaldce ${b}.ll -o ${b}_inline${th}.ll
-        echo -e "\t[gen-cp.sh] Critical path calculation ..."        
-        $OPT -load $SCAF -GetCriticalPath ${b}_inline${th}.ll >/dev/null 2> ${b}_inline${th}.cp
+        echo "[gen-cp.sh] Flattening modules smaller than Threshold = $th ..."
+        cp ${b}_flat${th}.txt flat_info.txt
+        $OPT -S -load $SCAF -FlattenModule -dce -internalize -globaldce ${b}.ll -o ${b}_flat${th}.ll
+        echo "[gen-cp.sh] Critical path calculation ..."        
+        $OPT -load $SCAF -GetCriticalPath ${b}_flat${th}.ll >/dev/null 2> ${b}_flat${th}.cp
     done
-    rm ${b}.out *inline*txt
-    echo -e "\t[gen-cp.sh] Critical path lengths written to ${b}*.cp"
+    rm ${b}.out *flat*txt
+    echo "[gen-cp.sh] Critical path lengths written to ${b}*.cp"
 done

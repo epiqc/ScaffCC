@@ -32,8 +32,8 @@ $ ./gen-cp.sh
 -------------
 Finds critical path information for several different flattening thresholds by doing the following:
 1- Finding module sizes using the ResourceCount2 pass.
-2- Inlining modules based on the found module sizes and the requested threshold.
-   flattening_thresh.py: divides modules into different buckets based on their size, to be used for inlining decision purposes.
+2- Flattening modules based on the found module sizes and the requested threshold.
+   flattening_thresh.py: divides modules into different buckets based on their size, to be used for flattening decision purposes.
 3- Finds length of critical path, in terms of number of operations on it. Look for the number in front of "main" in the output. 
 
 
