@@ -1401,9 +1401,9 @@ bool GenSIMDSched::runOnModule (Module &M) {
       Function *F = (*nsccI)->getFunction();      
             
       if(F && !F->isDeclaration()){
-        errs() << "SIMD_K " << RES_CONSTRAINT << ", SIMD_D " << DATA_CONSTRAINT << "\n";      
-        errs() << "\n#Function " << F->getName() << "\n";      
-        errs() << "#Timestep GateName Operand1 Operand2 \n";
+        //errs() << "SIMD_K " << RES_CONSTRAINT << ", SIMD_D " << DATA_CONSTRAINT << "\n";      
+        errs() << "#Function " << F->getName() << "\n";      
+        //errs() << "#Timestep GateName Operand1 Operand2 \n";
         
         funcQbits.clear();
         funcArgs.clear();

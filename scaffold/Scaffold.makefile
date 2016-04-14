@@ -79,7 +79,7 @@ $(FILE)4.ll: $(FILE)1.ll
 	@$(OPT) -S $(FILE)2.ll -targetlibinfo -no-aa -tbaa -basicaa -globalopt -ipsccp -o $(FILE)3.ll > /dev/null
 	@$(OPT) -S $(FILE)3.ll -instcombine -simplifycfg -basiccg -prune-eh -always-inline -functionattrs -domtree -early-cse -lazy-value-info -jump-threading -correlated-propagation -simplifycfg -instcombine -tailcallelim -simplifycfg -reassociate -domtree -loops -loop-simplify -lcssa -loop-rotate -licm -lcssa -loop-unswitch -instcombine -scalar-evolution -loop-simplify -lcssa -iv-users -indvars -loop-idiom -loop-deletion -loop-unroll -memdep -memcpyopt -sccp -instcombine -lazy-value-info -jump-threading -correlated-propagation -domtree -memdep -dse -adce -simplifycfg -instcombine -strip-dead-prototypes -preverify -domtree -verify -o $(FILE)4.ll > /dev/null
 
-# Perform loop unrolling until completely unrolled
+# Perform loop unrolling until completely unrolled, then remove dead code
 #
 # Gory details:
 # Unroll until the 'diff' of *4 and *6tmp is NULL (i.e., no differences)
@@ -100,9 +100,10 @@ $(FILE)6.ll: $(FILE)4.ll
 		echo "[Scaffold.makefile] Dead Argument Elimination ($$UCNT) ..." && \
 		$(OPT) -S -deadargelim $(FILE)5a.ll -o $(FILE)6tmp.ll > /dev/null; \
 	done && \
-	mv $(FILE)6tmp.ll $(FILE)6.ll
+	$(OPT) -S $(FILE)6tmp.ll -internalize -globaldce -deadargelim -o $(FILE)6.ll > /dev/null  
+	
 
-# Perform rotation decomposition if requested and SQCT is built
+# Perform Rotation decomposition if requested and SQCT is built
 $(FILE)7.ll: $(FILE)6.ll
 	@if [ ! -e $(SQCTPATH)/rotZ ]; then \
 		echo "[Scaffold.makefile] SQCT not built, skipping rotation decomposition ..."; \
@@ -121,7 +122,7 @@ $(FILE)10.ll: $(FILE)7.ll
 	@echo "[Scaffold.makefile] Internalizing and Removing Unused Functions ..."
 	@$(OPT) -S $(FILE)7.ll -internalize -globaldce -deadargelim -o $(FILE)10.ll > /dev/null
 
-# Perform gate decomposition if TOFF is 1
+# Perform Toffoli decomposition if TOFF is 1
 $(FILE)11.ll: $(FILE)10.ll
 	@if [ $(TOFF) -eq 1 ]; then \
     echo "[Scaffold.makefile] Toffoli Decomposition ..."; \

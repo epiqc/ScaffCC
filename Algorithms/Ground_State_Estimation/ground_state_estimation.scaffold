@@ -17,7 +17,6 @@
 
 #include <math.h>
 
-
 #define M 6 //number of bottom register qubits
 #define b 3 //number of top register qubits
 #define n 2 //precision
@@ -9043,7 +9042,6 @@ double const hmol2[SZ2][SZ2][SZ2][SZ2] =
 	}
 };
 
-
 // Swaps 2 qubit states
 // Takes as input the 2 qubits
 module Swap(qbit q1,qbit q2)
@@ -9052,7 +9050,6 @@ module Swap(qbit q1,qbit q2)
 	CNOT(q1,q2);
 	CNOT(q2,q1);
 }
-
 
 // Implements a controlled rotation
 // inputs are the target qubit, control qubit and the rotation angle
@@ -9063,8 +9060,6 @@ module ControlledRotation(qbit target, qbit control, double theta)
 	Rz(target, -1.0 * theta / 2.0);
 	CNOT(target, control);
 }
-
-
 
 // Implement the Y gate defined in the GFIs Y=Rx(-PI/2), we'll name it Y_Rx
 module Y_Rx(qbit target)  
@@ -9077,7 +9072,6 @@ module Y_Rx(qbit target)
 	Z(target);
 }
 
-
 // Implement the dagger of the Y gate = Rx(PI/2)
 module Y_Rx_Dagger(qbit target)
 {
@@ -9087,7 +9081,6 @@ module Y_Rx_Dagger(qbit target)
 	H(target);
 }
 
-
 // Controlled Phase gate
 // controlled-[e^(i*theta)  0;0  e^(i*theta)] is equivalent to the phase shift gate [1 0; 0 e^(i*theta)] on the control qubit
 // can be written as a product of G(theta/2) and Rz(theta); G is physically unobservable so it can be neglected
@@ -9095,7 +9088,6 @@ module ControlledPhase(qbit target, qbit control, double theta)
 {
 	Rz(control, theta);
 }
-
 
 // Controlled version of gate [1 0; 0 e^(-i*PI/2^k)] - the R gate appearing in the inverse quantum Fourier transform
 // parameters are the target qubit, control qubit and the integer k from 2^k

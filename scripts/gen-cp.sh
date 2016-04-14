@@ -32,11 +32,11 @@ for f in $*; do
     for th in ${THRESHOLDS[@]}
     do
         echo "[gen-cp.sh] Flattening modules smaller than Threshold = $th ..."
-        cp ${b}_flat${th}.txt flat_info.txt
+        mv ${b}_flat${th}.txt flat_info.txt
         $OPT -S -load $SCAF -FlattenModule -dce -internalize -globaldce ${b}.ll -o ${b}_flat${th}.ll
         echo "[gen-cp.sh] Critical path calculation ..."        
         $OPT -load $SCAF -GetCriticalPath ${b}_flat${th}.ll >/dev/null 2> ${b}_flat${th}.cp
     done
-    rm ${b}.out *flat*txt
+    rm -f ${b}.out *flat*txt
     echo "[gen-cp.sh] Critical path lengths written to ${b}*.cp"
 done
