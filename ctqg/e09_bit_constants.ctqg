@@ -1,7 +1,0 @@
-module
-main_module(
-  qbit a, qbit b
-) {
-  $ cnot('0', a);
-  $ cnot('1', b);
-}

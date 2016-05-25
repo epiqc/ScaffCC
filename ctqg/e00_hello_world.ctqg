@@ -1,8 +1,0 @@
-module
-main_module(
-  qbit a, qbit b, qbit c
-) {
-  $ not(c);
-  $ cnot(b, c);
-  $ toffoli(a, b, c);
-}
