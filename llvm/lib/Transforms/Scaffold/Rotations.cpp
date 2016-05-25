@@ -5,6 +5,7 @@
 
 #include <cstdlib>
 #include <cstdio>
+#include <sstream>
 
 #include "llvm/ADT/ArrayRef.h"
 
@@ -61,7 +62,6 @@ namespace {
 				Function *CF = I.getCalledFunction();
 				// Is this an intrinsic?
 				if (!CF->isIntrinsic()) return;
-				std::string rot_exec = std::string("/rotZ ");
 				// If it is a rotation, what is the axis?
 				std::string axis;
 				switch (CF->getIntrinsicID()) {
@@ -133,22 +133,33 @@ namespace {
 					// Create a BasicBlock and insert it at the end of the Function
 					BasicBlock *BB = BasicBlock::Create(getGlobalContext(), "", DR, 0);
 					// Populate the BasicBlock
-					// Build SQCT command
-					std::string buf; raw_string_ostream ss2(buf);
-					char *path = getenv("SQCTPATH");
+					// Build rotation decomposition command
+					std::string buf; std::ostringstream ss2;
+					char *path = getenv("ROTATIONPATH");
 					if (!path) {
-						errs() << "SQCT not found!\n";
+						errs() << "Rotation decomposer not found!\n";
 						return;
 					}
-					ss2 << path << rot_exec << Angle << axis << SqctLevels;
-					errs() << "Calling '" << ss2.str() << "'\n";
+          if (std::string(path).find("gridsynth") != std::string::npos) {
+    			  ss2 << path << " \"(" << std::fixed << Angle << ")\"";          
+          }
+          else if (std::string(path).find("sqct") != std::string::npos) {
+            ss2 << path << " " << Angle << axis << SqctLevels;
+          }
+          else {
+            errs() << "Invalid rotation decomposer!\n";
+            return;
+          }
+          
+          buf = ss2.str();
+          raw_string_ostream ss3(buf);          
+					errs() << "Calling '" << ss3.str() << "'\n";
 					// Capture result
-					std::string circuit = exec(ss2.str().c_str());
+					std::string circuit = exec(ss3.str().c_str());
 
-					// Dummy circuit until SQCT is integrated
-					// std::string circuit = "HTTtHTTtHTTtHTTt";
 					// For each gate in decomposition:
-					for (int i=0, e=circuit.length(); i<e; i++) {
+          // (the decomposed string is given in the reverse order that ops must be applied)
+					for (int i=circuit.length()-1, e=0; i>=e; i--) {
 						Function *gate = NULL;
 						switch(circuit[i]) {
 							case 'T':

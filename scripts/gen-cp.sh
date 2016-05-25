@@ -5,38 +5,49 @@ ROOT=$DIR/..
 OPT=$ROOT/build/Release+Asserts/bin/opt
 SCAF=$ROOT/build/Release+Asserts/lib/Scaffold.so
 
-THRESHOLDS=(001k 010k 2M)
+# Module flattening threshold
+# note: thresholds must be picked from the set in scripts/flattening_thresh.py
+THRESHOLDS=(005k 010k 050k 100k 150k 2M)
+
+# Create directory to put all byproduct and output files in
+for f in $*; do
+  b=$(basename $f .scaffold)  
+  echo "[gen-cp.sh] $b: Creating output directory ..."
+  mkdir -p "$b"
+  #mv ./*${b}* ${b} 2>/dev/null
+done
 
 # Generate .ll file if not done already
 for f in $*; do
   b=$(basename $f .scaffold)
   echo "[gen-cp.sh] $b: Compiling ..."
-  if [ ! -e ${b}.ll ]; then
+  if [ ! -e ${b}/${b}.ll ]; then
     # Generate compiled files
     $ROOT/scaffold.sh -r $f
     mv ${b}11.ll ${b}11.ll.keep_me
     # clean intermediary compilation files (comment out for speed)
     $ROOT/scaffold.sh -c $f
     # Keep the final output for the compilation
-    mv ${b}11.ll.keep_me ${b}.ll
+    mv ${b}11.ll.keep_me ${b}/${b}.ll
   fi
 done
 
+# Module flattening pass with different thresholds
 for f in $*; do
-    b=$(basename $f .scaffold)  
-    echo "[gen-cp.sh] $b"
-    echo "[gen-cp.sh] Computing module gate counts ..."
-    $OPT -S -load $SCAF -ResourceCount2 ${b}.ll > /dev/null 2> ${b}.out
-
-    python flattening_thresh.py ${b}
-    for th in ${THRESHOLDS[@]}
-    do
-        echo "[gen-cp.sh] Flattening modules smaller than Threshold = $th ..."
-        mv ${b}_flat${th}.txt flat_info.txt
-        $OPT -S -load $SCAF -FlattenModule -dce -internalize -globaldce ${b}.ll -o ${b}_flat${th}.ll
-        echo "[gen-cp.sh] Critical path calculation ..."        
-        $OPT -load $SCAF -GetCriticalPath ${b}_flat${th}.ll >/dev/null 2> ${b}_flat${th}.cp
-    done
-    rm -f ${b}.out *flat*txt
-    echo "[gen-cp.sh] Critical path lengths written to ${b}*.cp"
+  b=$(basename $f .scaffold)  
+  echo "[gen-cp.sh] $b: Flattening"
+  echo "[gen-cp.sh] Computing module gate counts ..."
+  $OPT -S -load $SCAF -ResourceCount2 ${b}/${b}.ll > /dev/null 2> ${b}.out
+  python $DIR/flattening_thresh.py ${b}
+  for th in ${THRESHOLDS[@]}; do    
+    if [ ! -e ${b}/${b}_flat${th}.cp ]; then      
+      echo "[gen-cp.sh] Flattening modules smaller than Threshold = $th ..."
+      mv ${b}_flat${th}.txt flat_info.txt
+      /usr/bin/time -v $OPT -S -load $SCAF -FlattenModule -dce -internalize -globaldce ${b}/${b}.ll -o ${b}/${b}_flat${th}.ll 2> ${b}/${b}_flat${th}.time
+      echo "[gen-cp.sh] Critical path calculation ..."        
+      /usr/bin/time -v $OPT -load $SCAF -GetCriticalPath ${b}/${b}_flat${th}.ll >/dev/null 2> ${b}/${b}_flat${th}.cp
+    fi
+  done
+  rm -f *flat*txt ${b}.out
+  echo "[gen-cp.sh] Critical path lengths written to ${b}*.cp"
 done

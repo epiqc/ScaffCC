@@ -42,16 +42,16 @@ for f in $*; do
   echo "[gen-freq-estimate.sh] Linking frequency-estimation-hybrid.bc and ${b}/${b}_rolled.ll" >&2
   $LLVM_LINK frequency-estimation-hybrid.bc ${b}/${b}_rolled.ll -S -o=${b}/${b}_linked.ll
 
-  echo "[gen-freq-estimate.sh] Instrumenting ${b}/${b}_res_linked.ll" >&2
+  echo "[gen-freq-estimate.sh] Instrumenting ${b}/${b}_linked.ll" >&2
   $OPT -S -load $SCAF -runtime-frequency-estimation-hybrid ${b}/${b}_linked.ll -o ${b}/${b}_instr.ll
 
   $OPT -S -dce -dse -dce ${b}/${b}_instr.ll -o ${b}/${b}_instr2.ll
 
   $OPT -S -O1 ${b}/${b}_instr2.ll -o ${b}/${b}_instr.ll
 
-  echo "[gen-freq-estimate.sh] Executing with lli" >&2
+  echo "[gen-freq-estimate.sh] Executing ${b}/${b}_instr.ll with lli" >&2
   $LLI ${b}/${b}_instr.ll > ${b}/${b}.freq_estimate
 
   echo "[gen-freq-estimate.sh] Critical path lengths written to ${b}.freq_estimate"
-  rm frequency-estimation-hybrid.bc ${b}/${b}_dynamic.ll ${b}/${b}_marked.ll ${b}/${b}_rolled.ll ${b}/${b}_linked.ll ${b}/${b}_instr.ll ${b}/${b}_instr2.ll
+  #rm frequency-estimation-hybrid.bc ${b}/${b}_dynamic.ll ${b}/${b}_marked.ll ${b}/${b}_rolled.ll ${b}/${b}_linked.ll ${b}/${b}_instr.ll ${b}/${b}_instr2.ll
 done

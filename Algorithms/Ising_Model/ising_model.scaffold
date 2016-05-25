@@ -36,7 +36,7 @@ void ZcrossZ(qbit q1, qbit q2, double phi) {
 }
 
 
-void IsingModel() {
+int main() {
     qbit reg[N];
 
     // Initialize all qubits to |+> state
@@ -81,13 +81,15 @@ void IsingModel() {
     for (n = 0; n < N; n++) {
         MeasZ(reg[0]);
     }
+
+    return 0;
 }
 
-
+/*
 int main() {
     // make sure to define these as const:
 
-    /*
+    
     FILE *fp;
     fp = fopen("input.txt", "r");
     int N = 0;
@@ -103,8 +105,9 @@ int main() {
     for (i = 0; i < N-1; i++) {
         fscanf(fp, "%lf", &J[i]);
     }
-    */
+    
     
     IsingModel();
     return 0;
 }
+*/

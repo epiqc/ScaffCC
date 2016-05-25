@@ -6,21 +6,25 @@ ROOT=".."
 FILENAME=""
 FILE=""
 CFILE=""
+DIRNAME=""
 
 BUILD=$(ROOT)/build/Release+Asserts
-SQCTPATH=$(ROOT)/Rotations/sqct
+
+SQCTPATH=$(ROOT)/Rotations/sqct/rotZ
+GRIDSYNTHPATH=$(ROOT)/Rotations/gridsynth/gridsynth
+ROTATIONPATH=$(GRIDSYNTHPATH) # select rotation decomposition tool
 
 CC=$(BUILD)/bin/clang
 OPT=$(BUILD)/bin/opt
 
-CC_FLAGS=-c -cc1 -emit-llvm -I/usr/include -I/usr/include/x86_64-linux-gnu -I/usr/lib/gcc/x86_64-linux-gnu/4.6/include
+CC_FLAGS=-c -emit-llvm -I/usr/include -I/usr/include/x86_64-linux-gnu -I/usr/lib/gcc/x86_64-linux-gnu/4.8/include
 
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Linux)
 SCAFFOLD_LIB=$(ROOT)/build/Release+Asserts/lib/Scaffold.so
 endif
 ifeq ($(UNAME_S),Darwin)
-SCAFFOLD_LIB=$(ROOT)/build/Release+Asserts/lib/Scaffold.dynlib
+SCAFFOLD_LIB=$(ROOT)/build/Release+Asserts/lib/Scaffold.dylib
 endif
 
 CTQG=0
@@ -56,6 +60,8 @@ $(FILE)_merged.scaffold: $(FILENAME)
 		echo "[Scaffold.makefile] Compiling CTQG ..."; \
 		$(ROOT)/ctqg/CTQG/ctqg $(CFILE).ctqg; \
 		echo "[Scaffold.makefile] Merging CTQG output back into Scaffold ..."; \
+    $(PERL) $(ROOT)/ctqg/trans/trans.pl $(CFILE).qasm > trans.qasm; \
+    mv trans.qasm $(CFILE).qasm; \
 		$(PERL) $(ROOT)/ctqg/trans/merge.pl $(CFILE).qasm; \
 	else \
 		cp $(FILENAME) $(FILE)_merged.scaffold; \
@@ -64,7 +70,7 @@ $(FILE)_merged.scaffold: $(FILENAME)
 # Compile Scaffold to LLVM bytecode
 $(FILE).ll: $(FILE)_merged.scaffold
 	@echo "[Scaffold.makefile] Compiling $(FILE)_merged.scaffold ..."
-	@$(CC) -c -emit-llvm -I/usr/include -I/usr/include/x86_64-linux-gnu -I/usr/lib/gcc/x86_64-linux-gnu/4.6/include $(FILE)_merged.scaffold -o $(FILE).ll
+	@$(CC) $(CC_FLAGS) -I$(DIRNAME) $(FILE)_merged.scaffold -o $(FILE).ll
 
 $(FILE)1.ll: $(FILE).ll
 	@echo "[Scaffold.makefile] Transforming cbits ..."
@@ -103,15 +109,15 @@ $(FILE)6.ll: $(FILE)4.ll
 	$(OPT) -S $(FILE)6tmp.ll -internalize -globaldce -deadargelim -o $(FILE)6.ll > /dev/null  
 	
 
-# Perform Rotation decomposition if requested and SQCT is built
+# Perform Rotation decomposition if requested and rotation decomp tool is built
 $(FILE)7.ll: $(FILE)6.ll
-	@if [ ! -e $(SQCTPATH)/rotZ ]; then \
-		echo "[Scaffold.makefile] SQCT not built, skipping rotation decomposition ..."; \
+	@if [ ! -e $(ROTATIONPATH) ]; then \
+		echo "[Scaffold.makefile] Rotation tool not built, skipping rotation decomposition ..."; \
 		cp $(FILE)6.ll $(FILE)7.ll; \
 	elif [ $(ROTATIONS) -eq 1 ]; then \
 		echo "[Scaffold.makefile] Decomposing Rotations ..."; \
 		if [ ! -e /tmp/epsilon-net.0.bin ]; then echo "Generating decomposition databases; this may take up to an hour"; fi; \
-		export SQCTPATH=$(SQCTPATH); \
+		export ROTATIONPATH=$(ROTATIONPATH); \
 		$(OPT) -S -load $(SCAFFOLD_LIB) -Rotations $(FILE)6.ll -o $(FILE)7.ll > /dev/null; \
 	else \
 		cp $(FILE)6.ll $(FILE)7.ll; \
@@ -160,7 +166,7 @@ $(FILE).qasmf: $(FILE)_qasm
 
 # purge cleans temp files
 purge:
-	@rm -f $(FILE)_merged.scaffold $(FILE)_noctqg.scaffold $(FILE).ll $(FILE)1.ll $(FILE)1a.ll $(FILE)1b.ll $(FILE)2.ll $(FILE)3.ll $(FILE)4.ll $(FILE)5.ll $(FILE)5a.ll $(FILE)6.ll $(FILE)7.ll $(FILE)8.ll $(FILE)9.ll $(FILE)10.ll $(FILE)11.ll $(FILE)tmp.ll $(FILE)_qasm $(FILE)_qasm.scaffold fdecl.out $(CFILE).ctqg $(CFILE).c $(CFILE).ctqg $(CFILE).signals $(FILE).tmp sim_$(CFILE)
+	@rm -f $(FILE)_merged.scaffold $(FILE)_noctqg.scaffold $(FILE).ll $(FILE)1.ll $(FILE)1a.ll $(FILE)1b.ll $(FILE)2.ll $(FILE)3.ll $(FILE)4.ll $(FILE)5.ll $(FILE)5a.ll $(FILE)6.ll $(FILE)6tmp.ll $(FILE)7.ll $(FILE)8.ll $(FILE)9.ll $(FILE)10.ll $(FILE)11.ll $(FILE)tmp.ll $(FILE)_qasm $(FILE)_qasm.scaffold fdecl.out $(CFILE).ctqg $(CFILE).c $(CFILE).signals $(FILE).tmp sim_$(CFILE)
 
 # clean removes all completed files
 clean: purge
