@@ -101,7 +101,7 @@ cfile="${file}.*"
 if [ $(egrep '^ctqg.*{\s*' ${filename} | wc -l) -gt 0 ]; then
 	ctqg=1
 	toff=1
-	dir=""
+	#dir=""
 fi
 
 if [ ${clean} -eq 1 ]; then

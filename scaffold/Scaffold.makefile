@@ -17,7 +17,7 @@ ROTATIONPATH=$(GRIDSYNTHPATH) # select rotation decomposition tool
 CC=$(BUILD)/bin/clang
 OPT=$(BUILD)/bin/opt
 
-CC_FLAGS=-c -emit-llvm -I/usr/include -I/usr/include/x86_64-linux-gnu -I/usr/lib/gcc/x86_64-linux-gnu/4.8/include
+CC_FLAGS=-c -emit-llvm -I/usr/include -I/usr/include/x86_64-linux-gnu -I/usr/lib/gcc/x86_64-linux-gnu/4.8/include -I$(DIRNAME)
 
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Linux)
@@ -70,7 +70,7 @@ $(FILE)_merged.scaffold: $(FILENAME)
 # Compile Scaffold to LLVM bytecode
 $(FILE).ll: $(FILE)_merged.scaffold
 	@echo "[Scaffold.makefile] Compiling $(FILE)_merged.scaffold ..."
-	@$(CC) $(CC_FLAGS) -I$(DIRNAME) $(FILE)_merged.scaffold -o $(FILE).ll
+	@$(CC) $(FILE)_merged.scaffold $(CC_FLAGS) -o $(FILE).ll
 
 $(FILE)1.ll: $(FILE).ll
 	@echo "[Scaffold.makefile] Transforming cbits ..."
@@ -106,7 +106,7 @@ $(FILE)6.ll: $(FILE)4.ll
 		echo "[Scaffold.makefile] Dead Argument Elimination ($$UCNT) ..." && \
 		$(OPT) -S -deadargelim $(FILE)5a.ll -o $(FILE)6tmp.ll > /dev/null; \
 	done && \
-	$(OPT) -S $(FILE)6tmp.ll -internalize -globaldce -deadargelim -o $(FILE)6.ll > /dev/null  
+	$(OPT) -S $(FILE)6tmp.ll -internalize -globaldce -adce -o $(FILE)6.ll > /dev/null  
 	
 
 # Perform Rotation decomposition if requested and rotation decomp tool is built
@@ -166,7 +166,7 @@ $(FILE).qasmf: $(FILE)_qasm
 
 # purge cleans temp files
 purge:
-	@rm -f $(FILE)_merged.scaffold $(FILE)_noctqg.scaffold $(FILE).ll $(FILE)1.ll $(FILE)1a.ll $(FILE)1b.ll $(FILE)2.ll $(FILE)3.ll $(FILE)4.ll $(FILE)5.ll $(FILE)5a.ll $(FILE)6.ll $(FILE)6tmp.ll $(FILE)7.ll $(FILE)8.ll $(FILE)9.ll $(FILE)10.ll $(FILE)11.ll $(FILE)tmp.ll $(FILE)_qasm $(FILE)_qasm.scaffold fdecl.out $(CFILE).ctqg $(CFILE).c $(CFILE).signals $(FILE).tmp sim_$(CFILE)
+	@rm -f $(FILE)_merged.scaffold $(FILE)_noctqg.scaffold $(FILE).ll $(FILE)1.ll $(FILE)1a.ll $(FILE)1b.ll $(FILE)2.ll $(FILE)3.ll $(FILE)4.ll $(FILE)5.ll $(FILE)5a.ll $(FILE)6.ll $(FILE)6tmp.ll $(FILE)7.ll $(FILE)8.ll $(FILE)9.ll $(FILE)10.ll $(FILE)11.ll $(FILE)tmp.ll $(FILE)_qasm $(FILE)_qasm.scaffold fdecl.out $(CFILE).ctqg $(CFILE).c $(CFILE).signals $(FILE).tmp sim_$(CFILE) $(FILE).*.qasm
 
 # clean removes all completed files
 clean: purge

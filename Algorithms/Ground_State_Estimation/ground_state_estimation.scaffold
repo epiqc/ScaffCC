@@ -17,20 +17,20 @@
 
 #include <math.h>
 
-#define M 6 //number of bottom register qubits
+#define M 10 //number of bottom register qubits
 #define b 3 //number of top register qubits
-#define n 2 //precision
+#define n 3 //precision
 #define PI 3.14159
-#define N 84 //number of qubits tp be flipped to initialize ground state
+#define N 3 //number of qubits tp be flipped to initialize ground state
 #define Emax 2.2 //dummy value for now - we don't know it, not in the GFIs
 #define DeltaE 0.0184
 
 /*
-#define M 6 //number of bottom register qubits
-#define b 3 //number of top register qubits
-#define n 2 //precision
+#define M 208 //number of bottom register qubits
+#define b 12 //number of top register qubits
+#define n 6 //precision
 #define PI 3.14159
-#define N 3 //number of qubits tp be flipped to initialize ground state
+#define N 84 //number of qubits tp be flipped to initialize ground state
 #define Emax 2.2 //dummy value for now - we don't know it, not in the GFIs
 #define DeltaE 0.0184
 */

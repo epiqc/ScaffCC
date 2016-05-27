@@ -11,7 +11,7 @@ D=(1024)
 K=(2)
 # Module flattening threshold
 # note: thresholds must be picked from the set in scripts/flattening_thresh.py
-THRESHOLDS=(2M 12M)
+THRESHOLDS=(002M 12M)
 
 # Create directory to put all byproduct and output files in
 for f in $*; do

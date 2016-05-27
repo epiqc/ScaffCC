@@ -46,9 +46,9 @@ module controlledRz(qbit target[1], qbit control[1], double theta){
 module ctrlH(qbit *target, qbit *ctrl) {
     S(*ctrl);
     Rz(*target,pi);
-    Ry(*target,-pi/4);
+    Rz(*target,-pi/4);
     CNOT(*target, *ctrl);
-    Ry(*target,pi/4);
+    Rz(*target,pi/4);
     Rz(*target,-pi/2);
     CNOT(*target, *ctrl);
     Rz(*target,-pi/2);
@@ -9448,18 +9448,18 @@ module C_DIFFUSE(qbit ctrl[1], qbit leaf[1], qbit paraleaf[1], qbit binary[1], q
     }
 
     with: */
-    qbit bin1ctrl1;
-    qbit bin0leaf0rpp0;
-    qbit tof_anc;
+    qbit bin1ctrl1[1];
+    qbit bin0leaf0rpp0[1];
+    qbit tof_anc[1];
 
-    PrepZ( bin1ctrl1, 0 );
-    PrepZ( bin0leaf0rpp0, 0 );
-    PrepZ( tof_anc, 0 );
+    PrepZ( bin1ctrl1[0], 0 );
+    PrepZ( bin0leaf0rpp0[0], 0 );
+    PrepZ( tof_anc[0], 0 );
 
     // Generate control for H
-    Toffoli( binary[0], ctrl[0], bin1ctrl1 );
-    ctrlH( &dir[0], &bin1ctrl1 );
-    Toffoli( binary[0], ctrl[0], bin1ctrl1 ); // Uncompute
+    Toffoli( binary[0], ctrl[0], bin1ctrl1[0] );
+    ctrlH( &dir[0], &bin1ctrl1[0] );
+    Toffoli( binary[0], ctrl[0], bin1ctrl1[0] ); // Uncompute
 
     // Invert sense of all inputs
     X( binary[0] );
@@ -9467,21 +9467,21 @@ module C_DIFFUSE(qbit ctrl[1], qbit leaf[1], qbit paraleaf[1], qbit binary[1], q
     X( rpp[0] );
 
     // 3-ctrl Toffoli to generate control signal
-    Toffoli( binary[0], tof_anc, bin0leaf0rpp0 );
-    Toffoli( leaf[0], rpp[0], tof_anc );
-    Toffoli( binary[0], tof_anc, bin0leaf0rpp0 );
-    Toffoli( leaf[0], rpp[0], tof_anc );
+    Toffoli( binary[0], tof_anc[0], bin0leaf0rpp0[0] );
+    Toffoli( leaf[0], rpp[0], tof_anc[0] );
+    Toffoli( binary[0], tof_anc[0], bin0leaf0rpp0[0] );
+    Toffoli( leaf[0], rpp[0], tof_anc[0] );
 
     // Apply ctrlH's
     for(qubit=0; qubit<m; qubit++){ //forall
-        ctrlH( &dir[qubit], &bin0leaf0rpp0 );
+        ctrlH( &dir[qubit], &bin0leaf0rpp0[0] );
     }
 
     // Uncompute tof_ancilla
-    Toffoli( leaf[0], rpp[0], tof_anc );
-    Toffoli( binary[0], tof_anc, bin0leaf0rpp0 );
-    Toffoli( leaf[0], rpp[0], tof_anc );
-    Toffoli( binary[0], tof_anc, bin0leaf0rpp0 );
+    Toffoli( leaf[0], rpp[0], tof_anc[0] );
+    Toffoli( binary[0], tof_anc[0], bin0leaf0rpp0[0] );
+    Toffoli( leaf[0], rpp[0], tof_anc[0] );
+    Toffoli( binary[0], tof_anc[0], bin0leaf0rpp0[0] );
 
     // Restore the original values
     X( rpp[0] );

@@ -198,14 +198,16 @@ module RegTest(qbit input[], qbit dum[], int k, int flg)
 		Toffoli(dum[j], dum[j-1], input[j+1]);
 	}
 
-	Toffoli(dum[k-2], dum[k-3], input[k-1]);
+  if (k>=3)
+	  Toffoli(dum[k-2], dum[k-3], input[k-1]);
 }
 
 module InvRegTest(qbit input[], qbit dum[], int k, int flg)
 {
 	int j = 0;
 
-	Toffoli(dum[k-2], dum[k-3], input[k-1]);
+  if (k>=3)
+	  Toffoli(dum[k-2], dum[k-3], input[k-1]);
 
 	for(j = k-3; j > 0; j--)
 	{

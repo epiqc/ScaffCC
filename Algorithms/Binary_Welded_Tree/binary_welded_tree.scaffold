@@ -1,0 +1,453 @@
+/*****************************************************************************
+ *
+ *
+ * BWT Algorithm
+ *
+ * Amlan Chakrabarti, Princeton University
+ *
+ *Implements the QCS GFI for the Binary Welded Tree Algorithm (Classical ORACLE case)
+ *
+ *June 2012
+ *
+ ********************************************************************************/
+
+#include <math.h>
+
+//Global constants
+
+const double PI=3.14159;
+
+const double dt=57.295;          /* Delta_t as per GFI ver 1.2  */
+  
+//const unsigned int s_=336960;  /* Time Parameter as per  GFI ver 1.2 */
+const unsigned int s_=3000;
+
+//#define n 300 /* height of the treee as per GFI 1.2 */
+#define n 300
+
+
+// Definition of the CZ gate
+module CZ(qbit target[1], qbit control[1])
+{
+  H(target[0]);
+  CNOT(target[0], control[0]);
+  H(target[0]);
+}
+
+//Definition of the controlled_expZ gate
+
+module controlled_expZ (qbit target[1], qbit control[1])  
+{ Rz(target[0], -2*dt); //t substituted
+  CNOT(target[0], control[0]);
+  Rz(target[0], 2*dt);
+}
+
+//Algorithm 7 of the GFI
+module PARSENODEROOT(qbit a[n+1],qbit root[1],qbit even[1]) // 301 changed to n+1 though it is a better coding but earlier case was not an error
+{
+  qbit scratch[n+1]; 
+  int index;
+  int i;
+
+  // forall(i=0;i<=n;i++)  /* for changed to forall as per latest Scaffold standard */
+  for(i=0;i<=n;i++)  /* for changed to forall as per latest Scaffold standard */
+    {PrepZ(scratch[i],0);
+    }
+
+
+  for(index=n;index>=1;index--) //p changed to n
+    {X(scratch[index]);
+      Toffoli(scratch[index-1],scratch[index],a[index]);
+      X(scratch[index]);
+      CNOT(scratch[index-1],scratch[index]);
+    }
+  X(scratch[0]);
+  CNOT(root[0],scratch[0]);
+  CNOT(even[0],scratch[0]);
+  X(scratch[0]);
+  for(index=1;index<=n;index++) // p changed to n
+    {CNOT(scratch[index-1],scratch[index]);
+      X(scratch[index]);
+      Toffoli(scratch[index-1],scratch[index],a[index]);
+      X(scratch[index]);
+    }
+}
+
+//Algorithm 8 of the GFI
+module PARSENODEEVEN(qbit a[n+1],qbit even[1])
+{qbit  scratch[n+1];
+  //Dropped ancl[0] dropped
+  int index, i;
+
+
+  // forall(i=0;i<=n;i++)  /* for changed to forall as per latest Scaffold standard */
+  for(i=0;i<=n;i++)  /* for changed to forall as per latest Scaffold standard */
+    {PrepZ(scratch[i],0);
+    }
+
+  for(index=n;index>1;index--)
+    { X(scratch[n]);
+      Toffoli(scratch[index-1],scratch[n],a[index]);
+    
+      if(index%2==0)
+	{ Toffoli(even[0],scratch[n],a[index]); /* Missed this Toffoli in the earlier version of the code */
+	}
+      X(scratch[n]);
+      CNOT(scratch[n],scratch[index-1]);          
+    }
+    
+  for( index=1;index<=n;index++)
+    { CNOT(scratch[n],scratch[index-1]);
+      X(scratch[n]);
+      Toffoli(scratch[index-1],scratch[n],a[index]);
+      X(scratch[n]);
+    }
+    
+}
+
+//Algorithm 9 of the GFI
+module  TESTISPARENT(qbit a[n+2],qbit root [1], qbit even[1], qbit isparent[1], qbit ismatch[1], int color, int really) 
+{
+
+  if (really==0)
+    {X(root[0]);
+      Toffoli(isparent[0],root[0],ismatch[0]);
+      X(root[0]);
+    }
+  // Corrected for all the color values
+  if(color==3)
+    {Toffoli(ismatch[0],even[0],a[0]);
+    }
+
+  else if (color==2)
+    {X(a[0]);
+      Toffoli(ismatch[0],even[0],a[0]);
+      X(a[0]);
+    }   
+  
+  if(color==1)
+    {X(even[0]);
+      Toffoli(isparent[0],even[0],a[0]);
+      X(even[0]);
+    }
+  
+  else if(color==0)
+    {X(even[0]);
+      X(a[0]);
+      Toffoli(isparent[0],even[0],a[0]);
+      X(a[0]);
+      X(even[0]);
+    }
+  
+  X(root[0]);
+  Toffoli(isparent[0],root[0],ismatch[0]);
+  X(root[0]);
+}
+
+
+//Algorithm 10 of the GFI
+module  TESTISCHILD(qbit even[1],qbit ischild[1],qbit direction[1], int color)
+{// Dropped ancl[0]
+  
+  
+  if(color==3|| color==2) 
+    {X(even[0]); 
+      CNOT(ischild[0],even[0]);
+      X(even[0]);
+    }
+  else if (color==1||color==0)
+    {CNOT(ischild[0],even[0]);
+    }
+    
+ 
+  if (color==1||color==3)
+    X(direction[0]);  /*CNOT replaced by NOT */
+   
+}
+
+
+//Algorithm 11 of the GFI
+module  SETPARENT(qbit a[n+2],qbit b[n+2],qbit isparent[1])
+{ int index;
+ 
+  for  (index=0;index<=n-1;index++)
+    {Toffoli(b[index],isparent[0],a[index+1]);
+    }
+
+  Toffoli(b[n + 1],isparent[0],a[n+1]);
+   
+}
+
+//Algorithm 18 of the GFI
+//Corrected as per the suggestion, no mask register assuming integer indexing for the classical bit array possible
+module CADDNUMCLEAR(qbit control[1], qbit scratch[n], qbit a[n+2])
+{
+  int i, m, index;
+   
+  for (index=n-1;index>=1;index--)
+
+    {              
+      Toffoli(scratch[index],a[index],scratch[index-1]);        
+    }
+                       
+}
+
+
+
+//Algorithm 17 of the GFI
+//Corrected as per the suggestion, no mask register assuming integer indexing for the classical bit array possible
+module CADDNUM(qbit addsub[1],qbit b[n+2],qbit a[n+2])
+  
+{qbit scratch[n];
+  
+  int index,i;
+  
+  // forall(i=0;i<=n-1;i++)  // for changed to forall as per latest Scaffold standard 
+  for(i=0;i<=n-1;i++)  // for changed to forall as per latest Scaffold standard 
+    {
+      PrepZ(scratch[i],0);
+    }
+  
+  Toffoli(b[0],a[0],addsub[0]);
+    
+  for(index=1; index<=n-1; index++)
+    {    
+      
+      Toffoli(b[index],a[index],addsub[0]);
+      Toffoli(b[index],scratch[index-1],addsub[0]);
+      Toffoli(scratch[index],scratch[index-1],a[index]);
+    }
+  CADDNUMCLEAR(addsub,scratch,a);
+}
+
+
+  
+//Algorithm 20 of the GFI
+//Corrected as per the suggestion, no mask register assuming integer indexing for the classical bit array possible
+module CSUBNUMCLEAR(qbit addsub[1],qbit scratch[n],qbit a[n+2])
+{
+  qbit ancland;
+  qbit anclswap;
+  int i, m, index;
+  
+  for (index=n-1;index>=1;index--)
+  {
+      X(a[index]);        
+      Toffoli(scratch[index],a[index],scratch[index-1]);
+      X(a[index]);        
+      
+    }
+}
+
+
+
+//Algorithm 19 of the GFI
+//Corrected as per the suggestion, no mask register assuming integer indexing for the classical bit array possible
+module CSUBNUM(qbit addsub[1],qbit b[n+2],qbit a[n+2])
+{qbit scratch[n];
+  
+  
+  int index,i;
+  
+  // for (i=0;i<=n-1;i++)   /* for changed to forall as per latest Scaffold standard */
+  for(i=0;i<=n-1;i++)   /* for changed to forall as per latest Scaffold standard */
+    {
+      PrepZ(scratch[i],0);
+    }
+  
+  Toffoli(b[0],a[0],addsub[0]);
+  
+  for(index=1; index<=n-1; index++)
+    {
+      Toffoli(b[index],a[index],addsub[0]);
+      Toffoli(b[index],scratch[index-1],addsub[0]);
+      
+      X(a[index]);
+      Toffoli(scratch[index],scratch[index-1],a[index]);
+      X(a[index]);
+    }
+  CSUBNUMCLEAR(addsub,scratch,a);
+}
+
+
+//Algorithm 16 of the GFI
+module DOWELD1(qbit a[n+2],qbit b[n+2],qbit weldctrl[1],qbit g[n])
+{ int index;
+  qbit ancl[1]; /*qubit changed to qbit */
+  PrepZ (ancl[0],0);  /* closing parenthesis changed from"]" to ")" */
+  for(index=0;index<=n-1;index++)
+    {Toffoli(ancl[0],weldctrl[0],g[index]);/*Error for a[index] corrected */
+      Toffoli(b[index],ancl[0],a[index]);   /* Extra Toffoli gate added for matching the GFI specification */
+    }
+  Toffoli(b[n],a[n],weldctrl[0]);
+}
+
+//Algorithm 15 of the GFI
+module DOWELD0(qbit a[n+2],qbit b[n+2],qbit weldctrl[1])
+{ qbit addsub[1];
+  X(a[n+1]);
+  Toffoli(addsub[0],weldctrl[0],a[n+1]);
+  X(a[n+1]);
+  CADDNUM(addsub,b,a);
+  CNOT(addsub[0],weldctrl[0]);
+  CSUBNUM(addsub,b,a);  /* parameter n is dropped as it is already declared as a macro definition */
+  Toffoli(addsub[0],weldctrl[0],a[n+1]); 
+}
+
+//Algorithm 14 of the GFI
+module SETWELD(qbit a[n+2], qbit b[n+2], qbit childctrl[1], qbit direction[1], qbit g[n])
+{ qbit weldctrl[1];
+  X(direction[0]);
+  Toffoli(weldctrl[0], direction[0],childctrl[0]);
+  X(direction[0]); /* direction is undone so that it can be used in subsequent steps */
+  DOWELD0(a,b,weldctrl);    /*DWELD0 and DOWELD1 is switched properly */
+  
+  CNOT(weldctrl[0],childctrl[0]);
+  DOWELD1(a,b,weldctrl,g);  /* n dropped from the parameter  */
+  
+  Toffoli(weldctrl[0], direction[0],childctrl[0]);
+  Toffoli(b[n+1],a[n+1],childctrl[0]);
+  CNOT(b[n],childctrl[0]);
+  CNOT(b[n+1],childctrl[0]);
+}
+
+
+//Algorithm 13 of the GFI
+module SETCHILDINTREE(qbit a[n+2], qbit b[n+2], qbit childctrl[1], qbit direction[1]) /* name set to "SETCHILDINTREE" as per GFI */
+{int index;
+  Toffoli(b[0],childctrl[0],direction[0]); 
+  for (index=1; index<=n; index++) 
+    {Toffoli(b[index],childctrl[0], a[index-1]);
+    }
+  
+  Toffoli(b[n+1], childctrl[0], a[n+1]);
+}
+
+//Algorithm 12 of the GFI
+module SETCHILD(qbit a[n+2], qbit b[n+2], qbit ischild[1], qbit direction[1], qbit g[n])
+{ qbit childctrl[1];
+  
+  Toffoli(childctrl[0], ischild[0],a[n]);
+  SETWELD(a,b,childctrl,direction,g);
+  CNOT(childctrl[0],ischild[0]);
+  SETCHILDINTREE(a,b,childctrl,direction);   /* name set to "SETCHILDINTREE" as per GFI */
+  X(a[n]);
+  Toffoli(childctrl[0], ischild[0], a[n]);
+  X(a[n]);
+}
+
+// Module for W gate  modified and expressed only in terms of S,T,H,X and CNOT gate
+module W (qbit q1, qbit q2)   
+{ CNOT(q1, q2);
+  X (q2);
+  Sdag(q2);
+  H(q2);
+  Tdag(q2);
+  CNOT(q2,q1);
+  T(q2);
+  H(q2);
+  S(q2);
+  X (q2);
+  CNOT(q1, q2);
+}
+
+// module for TIMESTEP operation
+module TIMESTEP(qbit a[n+2], qbit b[n+2], qbit r[1]) /*Algorithm 3 of the GFI */
+{ qbit h[1];
+  
+  int i,j;
+  PrepZ(h[0],0);  /* h[1] corrected to h[0] */
+  
+  for(i=0;i<=n+1;i++)                 /* W gate */
+    {W(a[i],b[i]);
+    }
+  for(j=0;j<=n+1;j++)
+    {X(b[j]);  /* NOT(b[j]) applied as a correction to GFI */
+      Toffoli(h[0],a[j],b[j]);
+      X(b[j]);
+    }
+  X(r[0]);  /* NOT r[0] added as a correction to GFI */
+  controlled_expZ(h,r); /* controlled-exponentialZ operation */ // dt substituted to constant
+  /* i dropped from the time argument dt */
+  X(r[0]);   /* r[0] is undone */
+  for(j=n+1;j>=0;j--)             /* corrected to '>=0' it will be '<=n+1' as we ar starting from the highest index of a and b */
+    {X(b[j]);           /* NOT operated on b[j] */
+      Toffoli(h[0],a[j],b[j]); /* Order of arguments for Toffoli corrected */
+     X(b[j]);           /* Undoing b[j]  */
+    }
+  
+  // dagger W and W is the same gate 
+  for(i=0;i<=n+1;i++)
+    { W(a[i],b[i]);    /* corrected W gate is self inverting */
+    }
+}
+  
+//Module implementing classical ORACLE function
+module ORACLE ( qbit a[n+2],qbit b[n+2],qbit r[1], int color)   /* b[302] changed to b[n+2] */
+  
+{ qbit root[1], even[1], isparent[1], ischild[1], ismatch[1], direction[1],g[n]; /*g[n] declared as qbit, diversion from GFI where*/ 
+  /*it is declared as a bit array */
+  cbit f[n];
+  PARSENODEROOT(a,root,even);
+  PARSENODEEVEN(a,even);
+  TESTISPARENT(a,root,even,isparent,ismatch,color,1);
+  TESTISCHILD(even,ischild,direction,color);
+  SETPARENT(a,b,isparent);
+  SETCHILD(a,b,ischild,direction,g);
+  
+  X(isparent[0]);
+  X(ischild[0]);
+  Toffoli(r[0],isparent[0],ischild[0]);
+  X(ischild[0]);
+  X(isparent[0]);
+  
+  TESTISCHILD(even,ischild,direction,color);
+  TESTISPARENT(a,root,even,isparent,ismatch,color,0);
+  PARSENODEEVEN(a,even);  /* n+2 changed to n */
+  PARSENODEROOT(a,root,even);  /* n+2 changed to n */
+}
+
+
+// main module
+int main()   
+{ qbit a[n+2];
+  qbit b[n+2];
+  qbit r[1];
+  cbit EXIT[n+2];
+  int j,i;
+  int color;
+  
+  
+  PrepZ(r[0],0);   /* Initializing r with "0" */
+  PrepZ(a[0],1); /*Initializing least significan qubit  of a with "1" for ENTRANCE */
+  PrepZ(b[0],0);  /*Initializing least significan qubit  of b with "0" for ENTRANCE */
+  
+  // forall(j=1;j<=n+1;j++)  /* for changed to forall as per latest Scaffold standard */
+  for(j=1;j<=n+1;j++)  /* for changed to forall as per latest Scaffold standard */
+    {PrepZ(a[j],0); /*Initializing other qubits of a with all zeros*/
+      PrepZ(b[j],0); /* Initilizing b with with all zeros */
+    }
+  
+  
+  
+  for(i=1;i<=s_;i++)         /* Time parameter s= 336960 */
+    {
+      for(color=0;color<=3;color++)  /* loop run for 4 color values */
+	{ORACLE(a,b,r,color);  /* 1st ORACLE CALL */ 
+	  
+	  TIMESTEP(a,b,r);  /* TIMESTEP CALL */
+          
+	  ORACLE(a,b,r,color);    /* 2nd ORACLE CALL */
+	}
+    }
+  
+  // Measuring for EXIT node with value "1000......01"
+  
+  // forall(j=0;j<=n+1;j++)   /* for changed to forall as per latest Scaffold standard */
+  for(j=0;j<=n+1;j++)   /* for changed to forall as per latest Scaffold standard */
+    {EXIT[j]=MeasZ(a[j]); /*zmeasure operation is corrected */
+    }
+
+  return 0;
+  
+}
