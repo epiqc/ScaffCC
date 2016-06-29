@@ -10,7 +10,7 @@
 
 #include <math.h>
 
-#define n 30 // problem size (log of database size)
+#define n 10 // problem size (log of database size)
 
 #define pi 3.141592653589793238462643383279502884197
 

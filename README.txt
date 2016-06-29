@@ -32,9 +32,9 @@ A. JavadiAbhari et al. "ScaffCC: A Framework for Compilation and Analysis of Qua
 Getting ScaffCC:
 =================
 
-1. Go to https://github.com/ajavadia/ScaffCC
+1. Go to https://github.com/epiqc/ScaffCC
 2. Download the repository:
-   % git clone https://github.com/ajavadia/ScaffCC.git [dir]
+   % git clone https://github.com/epiqc/ScaffCC.git [dir]
 
 
 Building ScaffCC:
