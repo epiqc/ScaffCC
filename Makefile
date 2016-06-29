@@ -111,11 +111,9 @@ CFLAGS=-L ../build/Debug+Asserts/lib \
 		-I ../build/include \
 		-I ../build/tools/clang/include
 
-EXECUTABLES=ParserTest LexerTest
 SCAFFOLD=scaffold
 
 all: Sqct Clang
-#all: Sqct Clang $(EXECUTABLES) Scaffold
 
 Clang: llvm build
 	@cd llvm/tools && /bin/rm -f clang && /bin/ln -s ../../clang;
@@ -140,16 +138,11 @@ llvm:
 Scaffold:
 	@cd scaffold && make;
 
-$(EXECUTABLES):
-	@echo "Compiling $@"
-	@cd Tests && $(CLANG) $@.cpp -o $@ $(LDFLAGS) $(CFLAGS) $(CLANGFLAGS)
-
 Sqct:
 	@cd Rotations/sqct && make
 
 clean:
 	@cd Rotations/sqct && make clean
-	#cd Tests && rm -f $(EXECUTABLES)
 	#cd scaffold && make clean
 	@if [ -d build ]; then cd build && make clean; fi
 

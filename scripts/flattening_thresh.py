@@ -21,10 +21,10 @@ def genFlattenModules(benchName):
     #print vals 
 
     numVals = len(vals)
-    print '[flattening_thresh.py] Total Num of Functions = ',numVals
+    print '\t[flattening_thresh.py] Total Num of Functions = ',numVals
 
-    names = ['001k','010k','100k','2M','25M']
-    buckets = [(0,1000),(1000,10000),(10000,100000),(100000,2000000),(2000000,25000000)]
+    names = ['000k','001k','010k','100k','2M','25M']
+    buckets = [(0,0),(0,1000),(1000,10000),(10000,100000),(100000,2000000),(2000000,25000000)]
 
     numBuckets = len(buckets)
     
@@ -36,15 +36,15 @@ def genFlattenModules(benchName):
 
     sumFunc = 0
     for i in range(numBuckets):
-        print buckets[i][0],'-',buckets[i][1],' : ',histVals[i]
+        print '\t',buckets[i][0],'-',buckets[i][1],' : ',histVals[i]
         sumFunc = sumFunc+histVals[i]
 
-    print '>',buckets[-1][1] ,': ', numVals - sumFunc
+    print '\t>',buckets[-1][1] ,': ', numVals - sumFunc
 
     for i in range(numBuckets):
         can1k = filter(lambda x: (int(x[1])>=0) and (int(x[1])<buckets[i][1]), m)
         n1k = map(lambda x: x[0], can1k)
-        fn = benchName+'_flat'+names[i]+'.txt'
+        fn = benchName+'.flat'+names[i]+'.txt'
     
         fout = open(fn,'w')
     

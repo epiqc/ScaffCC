@@ -10,7 +10,7 @@
 #include "uthash.h"    /* HASH_ADD  */
 #include <math.h>      /* floorf    */
 
-#define _MAX_FUNCTION_NAME 32
+#define _MAX_FUNCTION_NAME 60
 #define _MAX_INT_PARAMS 4
 #define _MAX_DOUBLE_PARAMS 4
 #define _MAX_CALL_DEPTH 16
@@ -200,7 +200,7 @@ void delete_memo (hash_entry_t *memos, hash_entry_t *memo) {
   free(memo);
 }
 
-void delete_all_memos() {
+/*void delete_all_memos() {
   hash_entry_t *memo, *tmp;
 
   // deletion-safe iteration
@@ -208,7 +208,7 @@ void delete_all_memos() {
     HASH_DEL(memos, memo);  
     free(memo);            
   }
-}
+}*/
 
 /*****************************
 * Functions to be instrumented
@@ -342,7 +342,8 @@ void qasm_resource_summary ()
   stackDestroy();
 
   // free allocated memory for the "memos" table
-  delete_all_memos();
+  //delete_all_memos();
+  HASH_CLEAR(hh,memos);
 }
 
 /*

@@ -23,7 +23,7 @@
 using namespace llvm;
 using namespace std;
 
-#define _MAX_FUNCTION_NAME 32
+#define _MAX_FUNCTION_NAME 60
 #define _MAX_INT_PARAMS 4
 #define _MAX_DOUBLE_PARAMS 4
 
@@ -134,8 +134,6 @@ namespace {
         // insert memoize call before this function call
         // int memoize ( char *function_name, int *int_params, unsigned num_ints, double *double_params, unsigned num_doubles, unsigned repeat)          
         
-        // === inlining ===
-    
         vector <Value*> vectCallArgs;
         
         std::stringstream ss;
@@ -215,8 +213,6 @@ namespace {
         ArrayRef<Value*> call_args(vectCallArgs);  
         
         CallInst::Create(memoize, call_args, "", (Instruction*)CI);      
-        // === inlining ===                
-
 
         //CallInst::Create(memoize, getMemoizeArgs(CI, strAlloc, intArrAlloc, doubleArrAlloc), "", (Instruction*)CI);
         

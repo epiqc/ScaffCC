@@ -1,0 +1,99 @@
+
+#include <math.h>
+
+#define pi 3.141592653589793238462643383279502884197
+
+module PhasePi8 ( qbit bit ) {
+    /* PhasePi8 matrix:
+       [ [ 1 0    ]
+         [ 0 e^i*pi/8 ] ]
+
+	Notes: Can be decomposed as Rz(-pi/8)*[ [e^i*pi/16 0] 
+											[0 e^i*pi/16] ]
+
+	 */
+
+	 Rz(bit, -1*pi/8);
+}
+
+module cT ( qbit ctrl, qbit target ) {
+    /* cT identity matrix:
+       [ [ 1 0 0     0    ]
+         [ 0 1 0     0    ]
+         [ 0 0 1     0    ]
+         [ 0 0 0 e^i*pi/4 ] ]
+    */
+
+	PhasePi8(ctrl);
+	Rz(target,pi/8);
+	CNOT(target,ctrl);
+	Rz(target,-1*pi/8);
+	CNOT(target,ctrl);	
+	
+}
+
+module cS ( qbit ctrl, qbit target ) {
+    /* cS identity matrix:
+       [ [ 1 0 0 0 ]
+         [ 0 1 0 0 ]
+         [ 0 0 1 0 ]
+         [ 0 0 0 i ] ]
+    */
+	
+	T(ctrl);
+	Rz(target,pi/4);
+	CNOT(target,ctrl);
+	Rz(target,-1*pi/4);
+	CNOT(target,ctrl);
+	
+}
+
+module cRz ( qbit ctrl, qbit target, const double angle ) {
+    /* cRz identity matrix:
+       [ [ 1 0 0     			0     ]
+         [ 0 1 0     			0     ]
+         [ 0 0 e^(-i*angle/2)   0     ]
+         [ 0 0 0 				e^(i*angle/2) ] ]
+    */
+
+	Rz(target,-1*angle/2);
+	CNOT(target,ctrl);
+	Rz(target,angle/2);
+	CNOT(target,ctrl);
+	
+}
+
+
+module qft5 ( qbit bit[5] ) {
+    H   ( bit[0] );
+    cS  ( bit[0], bit[1] );
+    H   ( bit[1] );
+    cT  ( bit[0], bit[2] );
+    cS  ( bit[1], bit[2] );
+    H   ( bit[2] );
+    cRz ( bit[0], bit[3], pi/8 );
+    cT  ( bit[1], bit[3] );
+    cS  ( bit[2], bit[3] );
+    H   ( bit[3] );
+    cRz ( bit[0], bit[4], pi/16 );
+    cRz ( bit[1], bit[4], pi/8 );
+    cT  ( bit[2], bit[4] );
+    cS  ( bit[3], bit[4] );
+    H   ( bit[4] );
+}
+
+int main () {
+    qbit reg[5];
+    cbit out[5];
+    int i, qft;
+
+    for ( i = 0; i < 5; i++ ) {
+        PrepZ( reg[i],0 );
+    }
+    qft5( reg );
+    for ( i = 0; i < 5; i++ ) {
+        out[i] = MeasX( reg[i] );
+    }
+    return 0;
+}
+

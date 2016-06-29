@@ -1,0 +1,1894 @@
+/****************************************************************************************
+* File: TriangleFindingProblem.quantum
+*
+* Author: Chen-Fu Chiang @ USherbrooke
+*
+* Implementation of the triangle finding algorithm specified in the
+* Quantum Computer Science Program @ Government Furnished Information document
+*
+* GFI Document date: June 20, 2011
+* GFI Document Version: 1.0.0
+* GFI Document Reversion number: 188
+* Recent Update: Based on https://qcs.ornl.gov/trac/qcs-scaffold/ticket/3
+*****************************************************************************************/
+
+
+
+
+
+/**********************************************************
+* external files to include
+* gates.h includes commonly used gates, including Toffoli
+**********************************************************/
+//#include "gates.h"
+#include "math.h"
+//#include "TFP_Oracle.scaffold"
+
+
+
+
+/**********************************************
+* Global variables
+**********************************************/
+/*
+#define n  15
+#define N  32768	// N = 2 ^ n
+#define r  9  		// r = (3/5)n
+#define R  512		// R = 2 ^ r
+#define RR1 130816	// RR1 = R(R-1)/2
+#define rbar  6		// rbar = (2/5)n
+#define Rbar  64	// Rbar = 2^rbar
+#define CTR  11		// CRT = 2*rbar - 1
+#define tm 64 		// Quantum walk iterations (floor of N/R)
+#define tw 22		// Quantum walk step iterations (floor of sqrt(R))
+#define tg  142 	// Grover iteration (pi/4)* (Sqrt(N))
+#define tbarm 8		// R/Rbar
+#define tbarw 8		// GFI originally had sqrt(R) but now changed to sqrt(Rbar)
+#define cn 31		// cn = 2*n + 1
+*/
+
+/**********************************************
+* Reduced Problem Size
+**********************************************/
+/*
+#define n  10
+#define N  1024	// N = 2 ^ n
+#define r  6  		// r = (3/5)n
+#define R  64		// R = 2 ^ r
+#define RR1 504	// RR1 = R(R-1)/2
+#define rbar  4		// rbar = (2/5)n
+#define Rbar  16	// Rbar = 2^rbar
+#define CTR  7		// CRT = 2*rbar - 1
+#define tm 16 		// Quantum walk iterations (floor of N/R)
+#define tw 8		// Quantum walk step iterations (floor of sqrt(R))
+#define tg  24 	// Grover iteration (pi/4)* (Sqrt(N))
+#define tbarm 4		// R/Rbar
+#define tbarw 4		// GFI originally had sqrt(R) but now changed to sqrt(Rbar)
+#define cn 21		// cn = 2*n + 1
+*/
+
+/**********************************************
+* Further Reduced Problem Size
+**********************************************/
+
+#define n  5
+#define N  32	// N = 2 ^ n
+#define r  3  		// r = (3/5)n
+#define R  8		// R = 2 ^ r
+#define RR1 28	// RR1 = R(R-1)/2
+#define rbar  2		// rbar = (2/5)n
+#define Rbar  4	// Rbar = 2^rbar
+#define CTR  3		// CRT = 2*rbar - 1
+#define tm 4 		// Quantum walk iterations (floor of N/R)
+#define tw 2		// Quantum walk step iterations (floor of sqrt(R))
+#define tg  4 	// Grover iteration (pi/4)* (Sqrt(N))
+#define tbarm 2		// R/Rbar
+#define tbarw 2		// GFI originally had sqrt(R) but now changed to sqrt(Rbar)
+#define cn 11		// cn = 2*n + 1
+
+
+
+// Define globals first to propagate
+#include "TFP_Oracle.scaffold"
+
+
+
+/**************************************************************
+*	Data Structures : used in the Main Program
+**************************************************************/
+/*
+qstruct quNode
+{ qbit reg[n];
+};
+*/
+
+
+/*
+qstruct quIntr
+{ qbit reg[r];
+};
+*/
+
+/*
+qstruct GCQWRegs
+{
+	qbit  tau[r][Rbar];
+	qbit  sigma[r];
+	qbit  iota[rbar];
+	qbit  Ew[Rbar];
+	qbit  cTri[2*rbar-1];
+	//qubit holding test results for the triangle in T
+	qbit  triTestT[1];
+	//qubit holding test results for the triangle in T and w
+	qbit  triTestTw[1];
+};
+*/
+
+
+
+/**************************************************************
+* External module : the Oracle
+***************************************************************/
+extern module EdgeORACLE(qbit node1[], int node1offset, qbit node2[], int node2offset, qbit result);
+
+
+
+/******************************************************************
+* Determine if a Node is a |00...0> and store the result in qubit
+* Inverse of it must be run (after getting the final evaluation)
+* to transform the input bits back
+*******************************************************************/
+module ZeroNodeTest(qbit w[n], qbit dum[n-1])
+{
+	int j = 0;
+	for(j = 0; j< n; j++)
+	{
+		X(w[j]);
+	}
+
+	Toffoli(dum[0], w[1], w[0]);
+	for(j = 1; j < n-2; j++)
+	{
+		Toffoli(dum[j], dum[j-1], w[j+1]);
+	}
+
+	Toffoli(dum[n-2], dum[n-3], w[n-1]);
+}
+
+module InvZeroNodeTest(qbit w[n], qbit dum[n-1])
+{
+	int j = 0;
+	Toffoli(dum[n-2], dum[n-3], w[n-1]);
+
+	for(j = n-3; j > 0; j--)
+	{
+		Toffoli(dum[j], dum[j-1], w[j+1]);
+	}
+
+	Toffoli(dum[0], w[1], w[0]);
+
+	for(j = 0; j< n; j++)
+	{
+		X(w[j]);
+	}
+}
+
+/******************************************************************************
+*  Here we reuse the ancillae ctrbit[14] to see if input is an all 1s
+*  or all 0 Register. If all-0 test, the flg bit would be 0; if all-1, flg = 1
+*  We could have used length(input) to determine the "possible" value of k
+*  However, since we reuse ctrbit2 a lot as input, which is of size n-1, that
+*  is always greater than the value k (normally r or rbar).
+*******************************************************************************/
+module RegTest(qbit input[], qbit dum[], int k, int flg)
+{
+	int j = 0;
+
+	if(flg == 0)
+	{
+		for(j = 0; j< k; j++)
+		{
+			X(input[j]);
+		}
+	}
+
+	Toffoli(dum[0], input[1], input[0]);
+	for(j = 1; j < k-2; j++)
+	{
+		Toffoli(dum[j], dum[j-1], input[j+1]);
+	}
+
+  if (k>=3)
+	  Toffoli(dum[k-2], dum[k-3], input[k-1]);
+}
+
+module InvRegTest(qbit input[], qbit dum[], int k, int flg)
+{
+	int j = 0;
+
+  if (k>=3)
+	  Toffoli(dum[k-2], dum[k-3], input[k-1]);
+
+	for(j = k-3; j > 0; j--)
+	{
+		Toffoli(dum[j], dum[j-1], input[j+1]);
+	}
+
+	Toffoli(dum[0], input[1], input[0]);
+
+	if(flg == 0)
+	{
+		for(j = 0; j< k; j++)
+		{
+			X(input[j]);
+		}
+	}
+}
+
+
+
+/***********************************************************
+* CompareIndex
+* See if two indices are the same (could be r or rbar in size)
+* Para: ireg and treg are the two indices we are comparing
+*		dum is the global ctrbit2[14] we can reuse
+*		each bit comparison is written to dum array
+***********************************************************/
+module CompareIndex(qbit ireg[], int iregOffset, qbit treg[], int tregOffset, qbit dum[], int j)
+{
+	int i = 0;
+
+	for (i = 0; i < j; i++)
+	{
+		CNOT(treg[tregOffset+i], ireg[iregOffset+i]);
+		CNOT(dum[i], treg[tregOffset+i]);
+		X(dum[i]);
+	}
+}
+
+/***********************************************************
+* InvCompareIndex
+* Inverse of CompareIndex
+* Para: ireg and treg are the two indices we are comparing
+*		dum is the global ctrbit2[14] we can reuse and it
+*		records the bit-wise comparison
+***********************************************************/
+module InvCompareIndex(qbit ireg[], int iregOffset, qbit treg[], int tregOffset, qbit dum[], int j)
+{
+
+	int i = 0;
+
+	for (i = j-1; i > -1; i--)
+	{
+		X(dum[i]);
+	 	CNOT(dum[i], treg[tregOffset+i]);
+		CNOT(treg[tregOffset+i], ireg[iregOffset+i]);
+	}
+}
+
+/***********************************************************
+* CompareIJ
+* Para: quantum integer ireg, array index idxIJ (note here
+* the idxIJ is an element of type quIntr, not an array of quIntr)
+* Calls CompareIndex to get the bitwise comparision of indices
+* Calls RegTest to see if the bitwise comparison is all 1
+* Because of this module is called by many elementary comparison
+* operations, such as FetchT, FetchE, and etc. Hence,
+* we need to pass those parameters (idxIJ, ctrbit2, ctrbit)
+* to many modules, even these parameters are not specified in the
+* GFI document
+***********************************************************/
+module CompareIJ(qbit ireg[], int iregOffset, qbit idxIJ[], int idxOffset, qbit ctrbit2[], qbit ctrbit[], int len)
+{
+	CompareIndex(ireg, iregOffset, idxIJ, idxOffset, ctrbit2, len);
+	RegTest(ctrbit2, ctrbit, len, 1);
+}
+
+module InvCompareIJ(qbit ireg[], int iregOffset, qbit idxIJ[r], int idxOffset, qbit ctrbit2[], qbit ctrbit[], int len)
+{
+ 	InvRegTest(ctrbit2, ctrbit, len, 1);
+ 	InvCompareIndex(ireg, iregOffset, idxIJ, idxOffset, ctrbit2, len);
+}
+
+
+/***********************************************************
+* ctrCTRincr
+* Increment the cTri by 1; considering element at
+* location 0 is the least significant bit. So we are
+* starting from the most significant bit  The reverse of
+* this operation would be a decrement.
+* Assuming that overflow case will not occur
+***********************************************************/
+module ctrCTRincr(qbit cTri[], qbit ctrQ, qbit ctrbit2[], int k)
+{
+	int i = 0;
+	int j = 0;
+
+	/***************************************************************************
+	* the value of if the first t elements (0 till t-1) in cTri are all 1s is stored at
+	* ctrbit2[t] where t should be greater than 1
+	*****************************************************************************/
+
+	CNOT(ctrbit2[0], ctrQ);
+
+	for(i = 1; i < k; i++)
+	{
+		Toffoli(ctrbit2[i], ctrbit2[i-1], cTri[i-1]);
+	}
+
+	for(i = k-1; i > 0; i--)
+	{
+		CNOT(cTri[i], ctrbit2[i]);
+		// uncompute ctrbit2 array
+		Toffoli(ctrbit2[i], ctrbit2[i-1], cTri[i-1]);
+	}
+
+	CNOT(cTri[0], ctrbit2[0]);
+
+	// uncompute
+	CNOT(ctrbit2[0], ctrQ);
+}
+
+
+/***********************************************************
+* ctrCTRdecr
+* decrement the cTri by 1; similar to increment case but
+* we have to test the all 0s case, instead of all 1s case.
+* Assuming that overflow case will not occur
+***********************************************************/
+module ctrCTRdecr(qbit cTri[], qbit ctrQ, qbit ctrbit2[], int k)
+{
+	int i = 0;
+	int j = 0;
+
+	for(i = 0; i < k-1; i++)
+	{
+		/************************************************************************
+		* have to do so because we want to do an all zero test by using Toffoli
+		* the most significant bit does not need to be included
+		**************************************************************************/
+		X(cTri[i]);
+	}
+
+	/***************************************************************************
+	* the value of if the first t elements (0 till t-1) in cTri are all 0s is stored at
+	* ctrbit2[t] where t should be greater than 1
+	*****************************************************************************/
+	CNOT(ctrbit2[0], ctrQ);
+
+	for(i = 1; i < k; i++)
+	{
+		Toffoli(ctrbit2[i], ctrbit2[i-1], cTri[i-1]);
+	}
+
+
+	for(i = k-1; i > 0; i--)
+	{
+		CNOT(cTri[i], ctrbit2[i]);
+
+		// correctly undo X operation on cTri (restore)
+		X(cTri[i-1]);
+
+		// uncompute ctrbit2 array
+		Toffoli(ctrbit2[i], ctrbit2[i-1], cTri[i-1]);
+	}
+
+	// restoring element at location 0
+	X(cTri[0]);
+
+
+	CNOT(cTri[0], ctrbit2[0]);
+
+	// uncompute
+	CNOT(ctrbit2[0], ctrQ);
+}
+
+/***********************************************************
+* Controlled Toffoli (for 4 control bits)
+************************************************************/
+module ctrEvaluate16(qbit target, qbit ctr3, qbit ctr2, qbit ctr1)
+{
+	qbit tmp[1];
+	Toffoli(tmp[0], ctr2, ctr1);
+	Toffoli(target, ctr3, tmp[0]);
+
+	// uncompute
+	Toffoli(tmp[0], ctr2, ctr1);
+}
+
+/***********************************************
+* Measure a node
+************************************************/
+module nodeMeasure(qbit w[n], cbit ret[n])
+{
+	int i;
+
+	for(i = 0; i < n ; i++)
+	{
+		ret[i] = MeasX(w[i]);
+	}
+}
+
+
+/***********************************************
+* Measure array of nodes and store the value
+************************************************/
+module TMeasure(qbit T[R*n], cbit res[R*n])
+{
+	int i;
+	int j;
+
+	for(i = 0; i < R ; i++)
+	{
+		for(j = 0; j< n; j++)
+		{
+			res[i*n+j] = MeasX(T[i*n+j]);
+		}
+	}
+}
+
+
+/*****************************************************
+* Measure array of edge connection and store the value
+******************************************************/
+module EMeasure(qbit E[RR1], cbit fin[RR1])
+{
+	int i;
+
+	for(i = 0; i < RR1 ; i++)
+	{
+			fin[i] = MeasX(E[i]);
+	}
+}
+
+
+
+
+
+
+
+
+/*************************************************************************
+* Algorithms 2 - 20 that are summoned by Algorithm 1 (QWTFP).
+* I reordered where the algorithms appear to avoid compilation haphazard.
+* Hence, they do not appear in their numerical (2-20) order.
+* Here is the order 2-5, 7-14, 6, 16-17, 19-20, 18, 15, 1.
+* QWTFP (algorithm 1) is moved to the botoom of this program.
+*************************************************************************/
+/**************************************************************
+* 	Algorithm 2: ZERO
+*	Initializes the qubits in a register to 0
+*	Para: qbit reg[] of size n
+***************************************************************/
+module ZERO(qbit reg)
+{
+	PrepZ(reg,0);
+}
+
+
+/***********************************************************************
+* 	Algorithm 3: INITIALIZE
+*	Sets each qubit in the n-qubit register reg to 0 and
+*	then calls the Hadamard gate to place reg into superpostion
+*	Para: qbit reg[] of size 1
+*	Comment: Along with a loop, we can use this module for
+*	to perform INITIALIZE work on input register of size greater than 1.
+***********************************************************************/
+
+ module INITIALIZE(qbit reg)
+{
+	PrepZ(reg,0);
+	H(reg);
+}
+
+
+/**************************************************************
+* 	Algorithm 4: HADAMARD
+*	Applies the Hadamard primitive to each qubit in the register
+*	Para: qbit reg[] of size n
+* 	Comment: This modules applies the Hadamard primitive to each
+* 	qubit in the register, that is a combination of for loop
+*	of size n and n uses of Hadamard primitive. Whenever we
+*	encounter the invocation of this module, we directly
+*	use a combination of for loop along with the Hadamard
+* 	primitive (H) to perform such a task.
+***************************************************************/
+
+
+
+/**************************************************************
+* 	Algorithm 5: SETUP
+*	Para: E a (R(R-1)/2)-qubit reg
+*         T a quNode[R]register:
+*	      T[j] a quNote for j = 0,1,..., R-1
+***************************************************************/
+module SETUP(qbit E[RR1], qbit T[R*n])
+{
+	int j = 0;
+	int k = 0;
+	int jk = 0;
+	int l = 0;
+	
+	for(l = 0; l < RR1; l++)
+	{
+		PrepZ(E[l],0);
+	}
+
+
+	//Comment: This step seems redundant since previous step already ZERO all elements
+	for(j = 0; j < R-1; j++)
+	{
+		for(k=j+1; k < R; k++)
+		{
+			jk = ((k*(k-1))/2) + j;
+			PrepZ(E[jk],0);
+
+			// Note: In Oracle implementation, the oracle takes 3 parameters;
+			// hence, we have 3 parameters here.
+			//EdgeORACLE(T[j], T[k], E[jk]);
+			EdgeORACLE(T, j*n, T, k*n , E[jk]);
+		}
+	}
+}
+
+/**************************************************************
+* 	Algorithm 7
+*	Para: w a quNode
+*		  qbit ctrbit
+***************************************************************/
+module DIFFUSENode(qbit w[n], qbit ctrbit[])
+{
+	int j = 0;
+	qbit tmpphase[1];
+
+	// To generate the (|0>-|1>)/sqrt(2) state for recording phase later
+	PrepZ(tmpphase[0],0);
+	X(tmpphase[0]);
+	H(tmpphase[0]);
+
+	for(j = 0; j < n; j++)
+	{
+		H(w[j]);
+	}
+		// get a minus sign for the state
+		X(tmpphase[0]);
+
+		//now need to reset the minus sign if the stat is |000...0>
+		ZeroNodeTest(w, ctrbit);
+		CNOT(tmpphase[0], ctrbit[n-2]);
+		InvZeroNodeTest(w, ctrbit);
+
+	// uncompute tmpphase
+	H(tmpphase[0]);
+	X(tmpphase[0]);
+
+	for(j = 0; j < n; j++)
+	{
+		H(w[j]);
+	}
+}
+
+
+/**************************************************************
+* 	Algorithm 7-1
+*	Para: alpha: quNode of size n
+*		  beta: quantum registers of size r
+*		  qbit ctrbit2
+*		  qbit ctrbit
+***************************************************************/
+// perform Diffuse on two registers of size n (this is quNode) and r, respectively
+module DIFFUSEVI(qbit alpha[n], qbit beta[r], qbit ctrbit2[], qbit ctrbit[])
+{
+	// a, b are always n - 1
+	int j = 0;
+	int i = 0;
+	qbit tmpphase[1];
+
+	// To generate the (|0>-|1>)/sqrt(2) state for recording phase later
+	PrepZ(tmpphase[0],0);
+	X(tmpphase[0]);
+	H(tmpphase[0]);
+
+	// since quNode is always of size n
+	for(j = 0; j < n; j++)
+	{
+		H(alpha[j]);
+	}
+
+	for(i = 0; i < r; i++)
+	{
+			H(beta[i]);
+	}
+
+	X(tmpphase[0]);
+
+
+	ZeroNodeTest(alpha, ctrbit);
+	// ctrbit2 is also of size n-1, hence, we have extra n-r = 6 bits left after Zero RegTest
+	RegTest(beta, ctrbit2, r, 0);
+	Toffoli(ctrbit2[r-1], ctrbit2[r-2], ctrbit[n-2]);
+	CNOT(tmpphase[0], ctrbit2[r-1]);
+
+	//uncompute
+	Toffoli(ctrbit2[r-1], ctrbit2[r-2], ctrbit[n-2]);
+	InvRegTest(beta, ctrbit2, r, 0);
+	InvZeroNodeTest(alpha, ctrbit);
+
+
+	// uncompute tmpphase
+	H(tmpphase[0]);
+	X(tmpphase[0]);
+
+	for(j = 0; j < n; j++)
+	{
+		H(alpha[j]);
+	}
+
+	for(i = 0; i < r; i++)
+	{
+		H(beta[i]);
+	}
+}
+
+
+/********************************************************************
+* 	Algorithm 7-2
+*	Para: ta, ma:  are quantum registers(iota and sigma) of GCQWRegs
+*		  qbit ctrbit2
+*		  qbit ctrbit
+*********************************************************************/
+// perform Diffuse on two registers of size rbar and r, respectively
+module DIFFUSEGC(qbit ta[rbar], qbit ma[r],  qbit ctrbit2[], qbit ctrbit[])
+{
+	int i  = 0;
+	int j = 0;
+	qbit tmpphase[1];
+
+	// To generate the (|0>-|1>)/sqrt(2) state for recording phase later
+	PrepZ(tmpphase[0],0);
+	X(tmpphase[0]);
+	H(tmpphase[0]);
+
+	for(i = 0; i < rbar; i++)
+	{
+		H(ta[i]);
+	}
+
+	for(j = 0; j < r; j++)
+	{
+		H(ma[j]);
+	}
+
+	// get minus sign for all states
+	X(tmpphase[0]);
+
+	// remove minus sign for |00..0>
+	RegTest(ta, ctrbit, rbar, 0);
+	// ctrbit2 is also of size n-1, hence, we have extra n-r = 6 bits left after RegTest
+	RegTest(ma, ctrbit2, r, 0);
+	Toffoli(ctrbit2[r-1], ctrbit2[r-2], ctrbit[rbar-2]);
+	CNOT(tmpphase[0], ctrbit2[r-1]);
+
+	//uncompute
+	Toffoli(ctrbit2[r-1], ctrbit2[r-2], ctrbit[rbar-2]);
+	InvRegTest(ma, ctrbit2, r, 0);
+	InvRegTest(ta, ctrbit, rbar,0);
+
+	// uncompute tmpphase
+	H(tmpphase[0]);
+	X(tmpphase[0]);
+
+	for(i = 0; i < rbar; i++)
+	{
+		H(ta[i]);
+	}
+
+	for(j = 0; j < r; j++)
+	{
+		H(ma[j]);
+	}
+}
+
+
+/**************************************************************
+* 	Algorithm 8
+*	Para: I	quIntr
+*	      T an array of R quNodes
+*	      Td a quNode register (that is n qubits)
+*		  qbit idxIJ[r][R]
+*		  qbit ctrbit2[n-1]
+*		  qbit ctrbit[n-1]
+***************************************************************/
+module FetchT(qbit I[], int Ioffset, qbit T[R*n], qbit Td[n], qbit idxIJ[R*r], qbit ctrbit2[n-1], qbit ctrbit[n-1])
+{
+	int j = 0;
+	int k = 0;
+
+
+	for(j = 0; j < R; j++)
+	{
+		CompareIJ(I, Ioffset, idxIJ, j*r, ctrbit2, ctrbit, r);
+
+		    for(k = 0; k < n; k++)
+			{
+				Toffoli(Td[k], T[j*n+k], ctrbit[r-2]);
+			}
+		InvCompareIJ(I, Ioffset, idxIJ, j*r, ctrbit2, ctrbit, r);
+
+	}
+}
+
+/**************************************************************
+* 	Algorithm 8-1
+*	Para: I	an arry of r qubits
+*	      T an array of R qubits
+*	      Td an array of Rbar qubits
+*         b integer (in this case it is 1)
+*		  qbit idxIJ[r][R]
+*		  qbit ctrbit2[n-1]
+*		  qbit ctrbit[n-1]
+***************************************************************/
+module FetchTr1(qbit I[], int Ioffset, qbit T[R], qbit Td, int b, qbit idxIJ[R*r], qbit ctrbit2[n-1], qbit ctrbit[n-1])
+{
+	int j = 0;
+	int k = 0;
+
+	for(j = 0; j < R; j++)
+	{
+		CompareIJ(I, Ioffset, idxIJ, j*r, ctrbit2, ctrbit, r);
+		for(k = 0; k < b; k++)
+			{
+				// in this case, k is always 0
+				Toffoli(Td, T[j], ctrbit[r-2]);
+			}
+		InvCompareIJ(I, Ioffset, idxIJ, j*r, ctrbit2, ctrbit, r);
+
+	}
+}
+
+
+/**************************************************************
+* 	Algorithm 8-2
+*	Para: iota	an arry of rbar qubits
+*	      tau an array of R qubits
+*	      Td an array of Rbar qubits
+*		  qbit idxIJ[r][R]
+*		  qbit ctrbit2[n-1]
+*		  qbit ctrbit[n-1]
+***************************************************************/
+module FetchTrbarr(qbit iota[rbar], qbit tau[Rbar*r], qbit Td[r], qbit idxIJ[R*r], qbit ctrbit2[n-1], qbit ctrbit[n-1])
+{
+	int j = 0;
+	int k = 0;
+
+	for(j = 0; j < Rbar; j++)
+	{
+		CompareIJ(iota, 0, idxIJ, j*r, ctrbit2, ctrbit, r);
+			for(k = 0; k < r; k++)
+			{
+				Toffoli(Td[k], tau[j*r+k], ctrbit[rbar-2]);
+			}
+		InvCompareIJ(iota, 0, idxIJ, j*r, ctrbit2, ctrbit, r);
+	}
+}
+
+
+
+/**************************************************************
+* 	Algorithm 9
+*	Para: i	an array of r qubits
+*	      T an array of R quNodes
+*	      Td a quNode register (that is n qubits)
+*		  qbit idxIJ[r][R]
+*		  qbit ctrbit2[n-1]
+*		  qbit ctrbit[n-1]
+***************************************************************/
+module StoreT(qbit I[r], qbit T[R*n], qbit Td[n], qbit idxIJ[R*r],qbit ctrbit2[n-1], qbit ctrbit[n-1])
+{
+	int j = 0;
+	int k = 0;
+
+	for(j = 0; j < R; j++)
+	{
+		CompareIJ(I, 0, idxIJ, j*r, ctrbit2, ctrbit, r);
+			for(k = 0; k < n; k++)
+			{
+				Toffoli(T[j*n+k], Td[k], ctrbit[r-2]);
+			}
+		InvCompareIJ(I, 0, idxIJ, j*r, ctrbit2, ctrbit, r);
+
+	}
+}
+
+/**************************************************************
+* 	Algorithm 9-1
+*	Para: i	an array of rbar qubits
+*	      T an array of Rbar quIntr
+*	      Td  r qubits
+*		  qbit idxIJ[r][R]
+*		  qbit ctrbit2[n-1]
+*		  qbit ctrbit[n-1]
+***************************************************************/
+module StoreTrbarr(qbit I[rbar], qbit T[Rbar*r], qbit Td[r], qbit idxIJ[R*r],qbit ctrbit2[n-1], qbit ctrbit[n-1])
+{
+	int j = 0;
+	int k = 0;
+
+
+	for(j = 0; j < Rbar; j++)
+	{
+		CompareIJ(I, 0, idxIJ, j*r, ctrbit2, ctrbit, r);
+			for(k = 0; k < r; k++)
+			{
+				Toffoli(T[j*r+k], Td[k], ctrbit[rbar-2]);
+			}
+		InvCompareIJ(I, 0, idxIJ, j*r, ctrbit2, ctrbit, r);
+	}
+}
+
+
+/**************************************************************
+* 	Algorithm 10
+*	Para: i	an array of rbar qubits
+*	      T an array of R quNodes
+*	      Td a quNode register (that is n qubits)
+*	      b integer	(given) [cannot use the global variable n]
+*		  qbit idxIJ[r][R]
+*		  qbit ctrbit2[n-1]
+*		  qbit ctrbit[n-1]
+*	Comment: As seen in later function calls, the parameter b
+*	could be of values other than n or r.
+***************************************************************/
+module FetchStoreT(qbit I[rbar], qbit T[Rbar], qbit Td, int b,  qbit idxIJ[R*r],qbit ctrbit2[n-1], qbit ctrbit[n-1])
+{
+	int j = 0;
+	int k = 0;
+
+
+	for(j = 0; j < Rbar; j++)
+	{
+		CompareIJ(I, 0, idxIJ, j*r, ctrbit2, ctrbit, r);
+			for(k = 0; k < b; k++)
+			{
+				// Here it is only one bit, hence, do not use SWAP but Swap
+				// Throughout the whole program, when this module is summoned, the parameter b is always 1
+				// Since b is always 1, k is always 0
+				ctrSwap(T[j], Td, ctrbit[rbar-2]);
+			}
+		InvCompareIJ(I, 0, idxIJ, j*r, ctrbit2, ctrbit, r);
+	}
+}
+
+
+/**************************************************************
+* 	Algorithm 11
+*	Para: i	an array of r qubits
+*	      E qbit[] of size (R(R-1)/2)
+*	      Ed qbit[] of size R
+*		  qbit idxIJ[r][R]
+*		  qbit ctrbit2[n-1]
+*		  qbit ctrbit[n-1]
+***************************************************************/
+module FetchE(qbit I[], int Ioffset, qbit E[RR1], qbit Ed[R], qbit idxIJ[R*r], qbit ctrbit2[n-1], qbit ctrbit[n-1])
+{
+	int j = 0;
+
+	int k = 0;
+	int kj = 0;
+	int jk = 0;
+
+	for(j = 0; j < R; j++)
+	{
+		CompareIJ(I, Ioffset, idxIJ, j*r, ctrbit2, ctrbit, r);
+			for(k = 0; k < j; k++)
+			{
+				kj = ((j*(j-1))/2) + k;
+				Toffoli(Ed[k], E[kj], ctrbit[r-2]);
+			}
+
+			for(k = j+1; k < R ; k++)
+			{
+				jk = ((k*(k-1))/2) + j;
+				Toffoli(Ed[k], E[jk], ctrbit[r-2]);
+			}
+		InvCompareIJ(I, Ioffset, idxIJ, j*r, ctrbit2, ctrbit, r);
+	}
+}
+
+
+
+/**************************************************************
+* 	Algorithm 12
+*	Para: I qubit array of size r
+*	      E qbit[] of size (R(R-1)/2)
+*	      Ed qbit[] of size R
+*		  qbit idxIJ[r][R]
+*		  qbit ctrbit2[n-1]
+*		  qbit ctrbit[n-1]
+***************************************************************/
+module FetchStoreE(qbit I[], qbit E[RR1], qbit Ed[R], qbit idxIJ[R*r], qbit ctrbit2[n-1], qbit ctrbit[n-1])
+{
+	int j = 0;
+	int k = 0;
+	int kj = 0;
+	int jk = 0;
+
+	for(j = 0; j < R; j++)
+	{
+		CompareIJ(I, 0, idxIJ, j*r, ctrbit2, ctrbit, r);
+			for(k = 0; k < j; k++)
+			{
+				kj = ((j*(j-1))/2) + k;
+				//Note: only 1 bit change, should be Swap, not SWAP(given in GFI document)
+				// depreciated; because of ctrNode; Swap(E[kj], Ed[k]);
+				ctrSwap(E[kj], Ed[k], ctrbit[r-2]);
+			}
+
+			for(k = j+1; k < R ; k++)
+			{
+				// Maybe we can reuse the variable kj without using variable jk
+				jk = ((k*(k-1))/2) + j;
+				//Note: only 1 bit change, should be Swap, not SWAP(given in GFI document)
+				// depreciated; because of ctrNode; Swap(E[jk], Ed[k]);
+				ctrSwap(E[jk], Ed[k], ctrbit[r-2]);
+			}
+		InvCompareIJ(I, 0, idxIJ, j*r, ctrbit2, ctrbit, r);
+	}
+}
+
+
+
+/**************************************************************
+* 	Algorithm 13
+*	Para: T quNode[R] register
+*	      Td a quNode: qbit[] of size n
+*	      Ed qbit[] of size R
+***************************************************************/
+module UPDATE(qbit T[R*n], qbit Td[n], qbit Ed[R])
+{
+	int j = 0;
+
+	for(j = 0; j < R; j++)
+	{
+		EdgeORACLE(T, j*n, Td, 0, Ed[j]);
+	}
+}
+
+
+/**************************************************************
+* 	Algorithm 14
+*	Para: Td a quNode: qbit[] of size n
+*	      v a quNode: qbit[] of size n
+***************************************************************/
+module SWAP(qbit Td[n], qbit v[n] )
+{
+	int j = 0;
+	for(j = 0; j < n-1; j++)
+	{
+		// three CNOT is a simple bit-wise Swap
+		CNOT(Td[j], v[j]);
+		CNOT(v[j], Td[j]);
+		CNOT(Td[j], v[j]);
+	}
+}
+
+/**************************************************************
+* 	Algorithm 6
+*	Para: T an array of quNodes
+*	      i a register of size r
+*	      v a quNode register (that is n qubits)
+*	      E a (R(R-1)/2)-qubit register
+*		  qbit idxIJ[r][R]
+*		  qbit ctrbit2[n-1]
+*		  qbit ctrbit[n-1]
+***************************************************************/
+module QWSH(qbit T[R*n], qbit i[r], qbit v[n], qbit E[RR1], qbit idxIJ[R*r],qbit ctrbit2[n-1], qbit ctrbit[n-1])
+{
+	qbit Td[n];
+	qbit Ed[R];
+	int j;
+
+	for(j = 0; j< n; j++)
+	{
+		PrepZ(Td[j],0);
+		PrepZ(Ed[j],0);
+	}
+
+	//Diffuse on i and v registers
+
+	DIFFUSEVI(v, i, ctrbit2, ctrbit);
+
+	FetchT(i, 0, T, Td, idxIJ, ctrbit2, ctrbit);
+
+	FetchStoreE(i, E, Ed, idxIJ, ctrbit2, ctrbit);
+
+	UPDATE(T, Td, Ed);
+
+	StoreT(i, T, Td, idxIJ, ctrbit2, ctrbit);
+
+	SWAP(Td, v);
+
+	StoreT(i, T, Td, idxIJ, ctrbit2, ctrbit);
+
+	UPDATE(T, Td, Ed);
+
+	FetchStoreE(i, E, Ed, idxIJ, ctrbit2, ctrbit);
+
+	FetchT(i, 0, T, Td, idxIJ, ctrbit2, ctrbit);
+}
+
+
+/*****************************************************************************************************
+* ASK: For Alg 16-17, we dunno know if test[0] would be 0 or 1 when it is passed in
+* the OR function is not reversible. If test[0] is always 0 when passed in,
+* then we can simply follow the suggestion. I assume it is always a 0 when passed in
+******************************************************************************************************/
+
+/**************************************************************
+* 	Algorithm 16
+*	Para: E: qbit[(R(R-1))/2]
+*		  test: qbit[1]
+***************************************************************/
+module TriangleTestT(qbit E[RR1], qbit test)
+{
+	int i = 0;
+	int j = 0;
+	int k = 0;
+	int ij = 0;
+	int ik = 0;
+	int jk = 0;
+	qbit dum[1];
+	qbit triCnt[3*r];
+	qbit lctrbit[3*r];
+
+	for(i=0; i < R; i ++)
+	{
+		for (j = i+1; j < R; j++)
+		{
+			ij = i + (j*(j-1))/2;
+				for (k = j+1; k < R; k++)
+				{
+					ik = i + (k*(k-1))/2;
+					jk = j + (k*(k-1))/2;
+
+					ctrEvaluate16(dum[0], E[jk], E[ij], E[ik]);
+
+					// increment triCnt based on the value of dum[0]
+					ctrCTRincr(triCnt, dum[0], lctrbit, 3*r);
+
+					// uncompute dum[0]
+					ctrEvaluate16(dum[0], E[jk], E[ij], E[ik]);
+			    }
+		}
+	}
+
+
+	// if triCnt is all 0, then we do not need to set test[0] to 1
+	RegTest(triCnt, lctrbit, 3*r, 0);
+	CNOT(test, lctrbit[3*r-2]);
+	X(test);
+	InvRegTest(triCnt, lctrbit, 3*r, 0);
+
+	// uncompute triCnt
+	for(i=0; i < R; i ++)
+	{
+		for (j = i+1; j < R; j++)
+		{
+			ij = i + (j*(j-1))/2;
+				for (k = j+1; k < R; k++)
+				{
+					ik = i + (k*(k-1))/2;
+					jk = j + (k*(k-1))/2;
+
+					ctrEvaluate16(dum[0], E[jk], E[ij], E[ik]);
+
+					// deccrement triCnt based on the value of dum[0]
+					ctrCTRdecr(triCnt, dum[0], lctrbit, 3*r);
+
+					// uncompute dum[0]
+					ctrEvaluate16(dum[0], E[jk], E[ij], E[ik]);
+			    }
+		}
+	}
+
+}
+
+/**************************************************************
+* 	Algorithm 17
+*	Para: T: a quNode[R] register
+*		  E: qbit[(R(R-1))/2]
+*		  w: a quNode: qbit[] of size n
+*		  test: qbit[1]
+***************************************************************/
+module TriangleTestTw(qbit T[R*n], qbit E[RR1], qbit w[n], qbit test)
+{
+	qbit Ed[R];
+	int i = 0;
+	int j = 0;
+	int ij = 0;
+	qbit dum[1];
+	qbit triCnt[3*r];
+	qbit lctrbit[3*r];
+
+	PrepZ(test,0);
+
+	for(i = 0; i < R; i++)
+	{
+		// Store value into Ed register
+		EdgeORACLE(T,  i*n, w, 0, Ed[i]);
+	}
+
+	for(i = 0; i < R; i++)
+	{
+		for (j = i+1; j < R; j++)
+		{
+			ij = i + (j*(j+1))/2;
+
+            ctrEvaluate16(dum[0], E[ij], E[i], E[j]);
+
+            // increment triCnt based on the value of dum[0]
+            ctrCTRincr(triCnt, dum[0], lctrbit, 3*r);
+
+            // uncompute dum[0]
+            ctrEvaluate16(dum[0], E[ij], E[i], E[j]);
+		}
+	}
+
+	// if triCnt is all 0, then we do not need to set test[0] to 1
+	RegTest(triCnt, lctrbit, 3*r, 0);
+	CNOT(test, lctrbit[3*r-2]);
+	X(test);
+	InvRegTest(triCnt, lctrbit, 3*r, 0);
+
+	for(i = 0; i < R; i++)
+	{
+		for (j = i+1; j < R; j++)
+		{
+			ij = i + (j*(j+1))/2;
+
+            ctrEvaluate16(dum[0], E[ij], E[i], E[j]);
+
+            // increment triCnt based on the value of dum[0]
+            ctrCTRdecr(triCnt, dum[0], lctrbit, 3*r);
+
+            // uncompute dum[0]
+            ctrEvaluate16(dum[0], E[ij], E[i], E[j]);
+		}
+	}
+
+	for(i = 0; i < R; i++)
+	{
+		// Uncompute Ed register
+	   EdgeORACLE(T, i*n, w, 0, Ed[i]);
+	}
+}
+
+/**************************************************************
+* 	Algorithm 20
+*	Para: T: a quNode[R] register
+*		  E: qbit[(R(R-1))/2]
+*		  w: a quNode: qbit[] of size n
+*		  GCQWRegs (Graph Collision Workspace Registers)
+* 		  Td: quNode (that is qbit[n])
+*		  Ed: qbit[R]
+*		  taud: qbit[r]
+*		  Ewd: 	qbit
+* 		  Edd:  qbit[Rbar]
+*		  qbit idxIJ[r][R]
+*		  qbit ctrbit2[n-1]
+*		  qbit ctrbit[n-1]
+***************************************************************/
+
+module GCQWalkStep(qbit T[R*n], qbit E[RR1], qbit w[n], /*GCQWRegs GC,*/ qbit Td[n], qbit Ed[R],
+				  qbit taud[r], qbit Ewd, qbit Edd[Rbar], qbit idxIJ[R*r],qbit ctrbit2[n-1], qbit ctrbit[n-1],
+                  qbit tau[Rbar*r], qbit sigma[r], qbit iota[rbar], qbit Ew[Rbar], qbit cTri[2*rbar-1], qbit triTestT,
+                  qbit triTestTw)
+{
+	int j;
+
+	//Perform the Diffuse function on iota and sigma
+	DIFFUSEGC(iota , sigma, ctrbit2, ctrbit);
+
+	/*****************************************
+	* Prepare data register for SWAP and Update
+	* Computing taud
+	*****************************************/
+	FetchTrbarr(iota, tau, taud, idxIJ, ctrbit2, ctrbit);
+
+	//Computig Td
+	FetchT(taud, 0, T, Td, idxIJ, ctrbit2, ctrbit);
+
+
+	FetchStoreT(iota, Ew, Ewd, 1, idxIJ, ctrbit2, ctrbit);
+
+	//Computing Ed
+	FetchE(taud, 0, E, Ed, idxIJ, ctrbit2, ctrbit);
+
+	// Fetching and computing Edd
+	for(j = 0; j < Rbar; j++)
+	{
+		FetchTr1(tau, j*r, Ed, Edd[j], 1, idxIJ, ctrbit2, ctrbit);
+	}
+
+
+	// Update cTri using current edge values in Ewd
+	for(j = 0; j < Rbar; j++)
+	{
+		Toffoli(ctrbit[0], Ewd, Ew[j]);
+		Toffoli(ctrbit[1], ctrbit[0], Edd[j]);
+
+		ctrCTRdecr(cTri, ctrbit[1], ctrbit2, 2*rbar-1);
+
+		//uncompute
+		Toffoli(ctrbit[1], ctrbit[0], Edd[j]);
+		Toffoli(ctrbit[0], Ewd, Ew[j]);
+	}
+
+
+	// Erase current edge values in Ewd
+	EdgeORACLE(Td, 0, w, 0, Ewd);
+
+	// Prepare data register for SWAP
+	for(j = 0; j < Rbar; j++)
+	{	// Uncompute Edd
+		FetchTr1(tau, j*r, Ed, Edd[j], 1, idxIJ, ctrbit2, ctrbit);
+	}
+
+	FetchE(taud, 0, E, Ed, idxIJ, ctrbit2, ctrbit); 					// Uncompute Ed
+
+	FetchT(taud, 0, T, Td, idxIJ, ctrbit2, ctrbit); 					// Uncompute Td
+
+	StoreTrbarr(iota, tau, taud, idxIJ, ctrbit2, ctrbit);
+
+
+	for(j = 0; j < r; j++)
+	{
+		Swap(taud[j], sigma[j]);
+	}
+
+	// Uncompute data registers after SWAP operation
+	StoreTrbarr(iota, tau, taud, idxIJ, ctrbit2, ctrbit);
+
+	FetchT(taud, 0, T, Td, idxIJ, ctrbit2, ctrbit);
+
+	FetchE(taud, 0, E, Ed, idxIJ, ctrbit2, ctrbit);
+
+	for(j = 0; j < Rbar; j++)
+	{
+		FetchTr1(tau, j*r, Ed, Edd[j], 1, idxIJ, ctrbit2, ctrbit);
+	}
+
+	// Compute new edge info in Ewd
+	EdgeORACLE(Td, 0, w, 0, Ewd);
+
+	// Update Ewd and cTri using  any new triangles involving Ewd
+	for(j = 0; j < Rbar; j++)
+	{
+		Toffoli(ctrbit[0], Ewd, Ew[j]);
+		Toffoli(ctrbit[1], ctrbit[0], Edd[j]);
+
+		ctrCTRdecr(cTri, ctrbit[1], ctrbit2, 2*rbar-1);
+
+		//uncompute
+		Toffoli(ctrbit[1], ctrbit[0], Edd[j]);
+		Toffoli(ctrbit[0], Ewd, Ew[j]);
+	}
+
+	// Restore data and data registers to initial state
+	for(j  = 0; j < Rbar; j++)
+	{
+		FetchTr1(tau, j*r, Ed, Edd[j], 1, idxIJ, ctrbit2, ctrbit);
+	}
+
+
+	FetchE(taud, 0, E, Ed, idxIJ, ctrbit2, ctrbit);
+	FetchStoreT(iota, Ew, Ewd, 1, idxIJ, ctrbit2, ctrbit);
+
+	FetchT(taud, 0, T, Td, idxIJ, ctrbit2, ctrbit);
+
+	FetchTrbarr(iota, tau, taud, idxIJ, ctrbit2, ctrbit);
+}
+
+/**************************************************************
+* 	Algorithm 19
+*	Para: T: a quNode[R] register
+*		  E: qbit[(R(R-1))/2]
+*		  w: a quNode: qbit[] of size n
+*		  GCQWRegs (Graph Collision Workspace Registers)
+*		  qbit idxIJ[r][R]
+*		  qbit ctrbit2[n-1]
+*		  qbit ctrbit[n-1]
+***************************************************************/
+module GCQWalk(qbit T[R*n], qbit E[RR1], qbit w[n], /*GCQWRegs GC,*/  qbit idxIJ[R*r],qbit ctrbit2[n-1], qbit ctrbit[n-1],
+        qbit tau[Rbar*r], qbit sigma[r], qbit iota[rbar], qbit Ew[Rbar], qbit cTri[2*rbar-1], qbit triTestT, qbit triTestTw)
+{
+	qbit Td[n];
+	qbit Ed[R];
+	qbit taud[r];
+	qbit Ewd[1];
+	qbit Edd[Rbar];
+	qbit tmpphase[1];
+
+	int j = 0;
+	int k = 0;
+
+	// To generate the (|0>-|1>)/sqrt(2) state for recording phase later
+	PrepZ(tmpphase[0],0);
+	X(tmpphase[0]);
+	H(tmpphase[0]);
+
+	for(j = 0; j < Rbar ; j++)
+	{
+		for(k = 0; k < r; k++)
+		{
+			H(tau[j*r+k]);
+		}
+	}
+
+	//Apply Hadamard to Walk Registers
+	for(j = 0; j < rbar ; j++)
+	{
+		H(iota[j]);
+	}
+
+	for(j = 0; j < r ; j++)
+	{
+		H(sigma[j]);
+	}
+
+
+	// Zero the workspace registers
+	for(j = 0; j < n; j++)
+	{PrepZ(Td[j],0); }
+
+	for(j = 0; j < R; j++)
+	{PrepZ(Ed[j],0); }
+
+	/*********************************************************
+	* In GFI, it comments that Ew and cTri should be 0
+	* and those two operations are not included in the pesudocode
+	* ASK: to be included?
+    * CUT HERE
+	**********************************************************/
+	for(j = 0; j < Rbar; j++)
+	{PrepZ(Ew[j],0); }
+
+	for(j = 0; j < 2*rbar-1; j++)
+	{PrepZ(cTri[j],0); }
+	/*********************************************************
+    * CUT HERE
+	**********************************************************/
+	for(j = 0; j < r; j++)
+	{ PrepZ(taud[0],0); }
+
+	PrepZ(Ewd[0],0);
+
+	for(j = 0; j <Rbar; j++)
+	{ PrepZ(Edd[j],0); }
+
+
+	//Set up the walk state
+	for(j = 0; j < Rbar; j++)
+	{
+		FetchT(tau, j*r, T, Td, idxIJ, ctrbit2, ctrbit);
+
+		// can directly write result into Ew since it is initialized in 0
+		EdgeORACLE(Td, 0, w, 0, Ew[j]);
+		FetchT(tau, j*r, T, Td, idxIJ, ctrbit2, ctrbit);
+	}
+
+	for(j=0; j < Rbar; j++)
+	{
+		FetchE(tau, j*r, E, Ed, idxIJ, ctrbit2, ctrbit);
+		for(k = j+1; k < Rbar; k++)
+		{
+			FetchTr1(tau, k*r, Ed, Edd[k], 1, idxIJ, ctrbit2, ctrbit);
+
+			Toffoli(ctrbit[0], Ew[j], Ew[k]);
+			Toffoli(ctrbit[1], ctrbit[0], Edd[k]);
+
+			ctrCTRincr(cTri, ctrbit[1], ctrbit2, 2*rbar-1);
+
+			// uncompute
+			Toffoli(ctrbit[1], ctrbit[0], Edd[k]);
+			Toffoli(ctrbit[0], Ew[j], Ew[k]);
+
+			FetchTr1(tau, k*r, Ed, Edd[k], 1, idxIJ, ctrbit2, ctrbit);
+		}
+		FetchE(tau, j*r, E, Ed, idxIJ, ctrbit2, ctrbit);
+	}
+
+	//Execute the Graph Collision Random Walk
+	for(j = 0; j < tbarm; j++)
+	{
+		RegTest(cTri, ctrbit, CTR,0);
+		X(ctrbit[CTR-2]);
+		X(triTestT);
+		Toffoli(ctrbit[CTR-1], ctrbit[CTR-2], triTestT);
+
+		//phase flip
+		CNOT(tmpphase[0], ctrbit[CTR-1]);
+
+		//uncompute
+		Toffoli(ctrbit[CTR-1], ctrbit[CTR-2], triTestT);
+		X(triTestT);
+		X(ctrbit[CTR-2]);
+		InvRegTest(cTri, ctrbit, CTR,0);
+
+		// uncompute tmpphase
+		H(tmpphase[0]);
+		X(tmpphase[0]);
+
+		for(k = 0; k<tbarw; k++)
+		{
+			GCQWalkStep(T, E, w, /*GC,*/ Td, Ed, taud, Ewd[0], Edd, idxIJ, ctrbit2, ctrbit, tau, sigma, iota, Ew, cTri, triTestT, triTestTw);
+		}
+	}
+}
+
+
+/**************************************************************
+* 	Algorithm 19i
+*	Para: T: a quNode[R] register
+*		  E: qbit[(R(R-1))/2]
+*		  w: a quNode: qbit[] of size n
+*		  GCQWRegs (Graph Collision Workspace Registers)
+*		  qbit idxIJ[r][R]
+*		  qbit ctrbit2[n-1]
+*		  qbit ctrbit[n-1]
+***************************************************************/
+module InvGCQWalk(qbit T[R*n], qbit E[RR1], qbit w[n], /*GCQWRegs GC,*/  qbit idxIJ[R*r],qbit ctrbit2[n-1], qbit ctrbit[n-1],
+        qbit tau[Rbar*r], qbit sigma[r], qbit iota[rbar], qbit Ew[Rbar], qbit cTri[2*rbar-1], qbit triTestT, qbit
+        triTestTw)
+{
+	qbit Td[n];
+	qbit Ed[R];
+	qbit taud[r];
+	qbit Ewd[1];
+	qbit Edd[Rbar];
+	qbit tmpphase[1];
+
+	int j = 0;
+	int k = 0;
+
+	// To generate the (|0>-|1>)/sqrt(2) state for recording phase later
+	PrepZ(tmpphase[0],0);
+	X(tmpphase[0]);
+	H(tmpphase[0]);
+
+	for(j = 0; j < Rbar ; j++)
+	{
+		for(k = 0; k < r; k++)
+		{
+			H(tau[j*r+k]);
+		}
+	}
+
+	//Apply Hadamard to Walk Registers
+	for(j = 0; j < rbar ; j++)
+	{
+		H(iota[j]);
+	}
+
+	for(j = 0; j < r ; j++)
+	{
+		H(sigma[j]);
+	}
+
+
+	// Zero the workspace registers
+	for(j = 0; j < n; j++)
+	{PrepZ(Td[j],0); }
+
+	for(j = 0; j < R; j++)
+	{PrepZ(Ed[j],0); }
+
+	/*********************************************************
+	* In GFI, it comments that Ew and cTri should be 0
+	* and those two operations are not included in the pesudocode
+	* ASK: to be included?
+    * CUT HERE
+	**********************************************************/
+	for(j = 0; j < Rbar; j++)
+	{PrepZ(Ew[j],0); }
+
+	for(j = 0; j < 2*rbar-1; j++)
+	{PrepZ(cTri[j],0); }
+	/*********************************************************
+    * CUT HERE
+	**********************************************************/
+	for(j = 0; j < r; j++)
+	{ PrepZ(taud[0],0); }
+
+	PrepZ(Ewd[0],0);
+
+	for(j = 0; j <Rbar; j++)
+	{ PrepZ(Edd[j],0); }
+
+
+	//Execute the Graph Collision Random Walk
+	for(j = tbarm-1; j >= 0; j--)
+	{
+		for(k = tbarw-1; k>=0; k--)
+		{
+			GCQWalkStep(T, E, w, /*GC,*/ Td, Ed, taud, Ewd[0], Edd, idxIJ, ctrbit2, ctrbit, tau, sigma, iota, Ew, cTri, triTestT, triTestTw);
+		}
+
+		// uncompute tmpphase
+		X(tmpphase[0]);
+		H(tmpphase[0]);
+
+		//uncompute
+		InvRegTest(cTri, ctrbit, CTR,0);
+		X(ctrbit[CTR-2]);
+		X(triTestT);
+		Toffoli(ctrbit[CTR-1], ctrbit[CTR-2], triTestT);
+
+		//phase flip
+		CNOT(tmpphase[0], ctrbit[CTR-1]);
+
+		Toffoli(ctrbit[CTR-1], ctrbit[CTR-2], triTestT);
+		X(triTestT);
+		X(ctrbit[CTR-2]);
+		RegTest(cTri, ctrbit, CTR,0);
+	}
+
+	for(j=Rbar-1; j >= 0; j--)
+	{
+		FetchE(tau, j*r, E, Ed, idxIJ, ctrbit2, ctrbit);
+		for(k = Rbar-1; k >= j+1; k--)
+		{
+			FetchTr1(tau, k*r, Ed, Edd[k], 1, idxIJ, ctrbit2, ctrbit);
+
+			Toffoli(ctrbit[0], Ew[j], Ew[k]);
+			Toffoli(ctrbit[1], ctrbit[0], Edd[k]);
+
+			ctrCTRincr(cTri, ctrbit[1], ctrbit2, 2*rbar-1);
+
+			// uncompute
+			Toffoli(ctrbit[1], ctrbit[0], Edd[k]);
+			Toffoli(ctrbit[0], Ew[j], Ew[k]);
+
+			FetchTr1(tau, k*r, Ed, Edd[k], 1, idxIJ, ctrbit2, ctrbit);
+		}
+		FetchE(tau, j*r, E, Ed, idxIJ, ctrbit2, ctrbit);
+	}
+
+	//Set up the walk state
+	for(j = Rbar-1; j >= 0; j--)
+	{
+		FetchT(tau, j*r, T, Td, idxIJ, ctrbit2, ctrbit);
+
+		// can directly write result into Ew since it is initialized in 0
+		EdgeORACLE(Td, 0, w, 0, Ew[j]);
+		FetchT(tau, j*r, T, Td, idxIJ, ctrbit2, ctrbit);
+	}
+}
+
+
+/**************************************************************
+* 	Algorithm 18
+*	Para: T: a quNode[R] register
+*		  E: qbit[(R(R-1))/2]
+*		  w: a quNode: qbit[] of size n
+*		  GCQWRegs (Graph Collision Workspace Registers)
+*		  qbit idxIJ[r][R]
+*		  qbit ctrbit2[n-1]
+*		  qbit ctrbit[n-1]
+***************************************************************/
+module TriangleEdgeSearch(qbit T[R*n], qbit E[RR1], qbit w[n], /*GCQWRegs GC,*/ qbit idxIJ[R*r],qbit ctrbit2[n-1], qbit ctrbit[n-1],
+        qbit tau[Rbar*r], qbit sigma[r], qbit iota[rbar], qbit Ew[Rbar], qbit cTri[2*rbar-1], qbit triTestT, qbit
+        triTestTw)
+{
+	int i = 0;
+	qbit tmpphase[1];
+
+	// To generate the (|0>-|1>)/sqrt(2) state for recording phase later
+	PrepZ(tmpphase[0],0);
+	X(tmpphase[0]);
+	H(tmpphase[0]);
+
+	// Grover Search on w using graph collision to T, w
+	for(i = 0; i < n; i++)
+	{
+		H(w[i]);
+	}
+
+	for(i = 0; i < tg; i++)
+	{
+		GCQWalk(T,E, w, idxIJ, ctrbit2, ctrbit, tau, sigma, iota, Ew, cTri, triTestT, triTestTw);
+
+		RegTest(cTri, ctrbit, CTR, 0);
+		X(ctrbit[CTR-2]);
+		Toffoli(ctrbit[CTR-1], ctrbit[CTR-2], triTestT);
+		// phase kickback
+		CNOT(tmpphase[0], ctrbit[CTR-1]);
+
+		// uncompute
+		Toffoli(ctrbit[CTR-1], ctrbit[CTR-2], triTestT);
+		X(ctrbit[CTR-2]);
+		InvRegTest(cTri, ctrbit, CTR, 0);
+
+		//TODO: Assume the inverse function will be present when provided the original circuit
+		InvGCQWalk(T,E, w, /*GC,*/ idxIJ, ctrbit2, ctrbit, tau, sigma, iota, Ew, cTri, triTestT, triTestTw);
+
+		// Diffuse on the node
+		DIFFUSENode(w, ctrbit);
+
+	}
+
+	// uncompute tmpphase
+	H(tmpphase[0]);
+	X(tmpphase[0]);
+}
+
+
+/****************************************************************************************
+* 	Algorithm 15
+*	Para: T: a quNode[R] register
+*		  E: qbit[(R(R-1))/2]
+*		  w: a quNode: qbit[] of size n
+*		  GCQWRegs (Graph Collision Workspace Registers)
+*		  qbit idxIJ[r][R]
+*		  qbit ctrbit2[n-1]
+*		  qbit ctrbit[n-1]
+*	Comment: triTestT set to 1 is T contains the triangle from G
+*			 triTestTw set to 1 when w is a node of the triangle with the other edge in T
+*****************************************************************************************/
+module TestTriangleEdges(qbit T[R*n], qbit E[RR1], qbit w[n], /*GCQWRegs GC,*/ qbit idxIJ[R*r],qbit ctrbit2[n-1], qbit ctrbit[n-1],
+        qbit tau[Rbar*r], qbit sigma[r], qbit iota[rbar], qbit Ew[Rbar], qbit cTri[2*rbar-1], qbit triTestT, qbit
+        triTestTw)
+{
+	/**********************************************
+	* set triTestT to 1 if T contains the triangle
+	***********************************************/
+	TriangleTestT(E, triTestT);
+
+
+	/************************************************************************
+	* Grover with Graph collision
+	* Mistake in the GFI document; TriangleEdgeSearch function does not need
+	* triTestT parameter as it is embeded in GC register; here I removed that
+	* parameter from the code
+	*************************************************************************/
+	TriangleEdgeSearch(T,E,w, /*GC,*/ idxIJ, ctrbit2, ctrbit, tau, sigma, iota, Ew, cTri, triTestT, triTestTw);
+
+
+ 	/****************************************************************************************
+ 	* Marking T, w and copy that value
+	* The data structure of GCQWRegs misses the field "iota" in statement of algorithm 15
+	******************************************************************************************/
+ 	TriangleTestTw(T,E,w, triTestTw);
+}
+
+
+
+/****************************************************************************************
+* 	Algorithm 15i
+*	Para: T: a quNode[R] register
+*		  E: qbit[(R(R-1))/2]
+*		  w: a quNode: qbit[] of size n
+*		  GCQWRegs (Graph Collision Workspace Registers)
+*		  qbit idxIJ[r][R]
+*		  qbit ctrbit2[n-1]
+*		  qbit ctrbit[n-1]
+*	Comment: Inverts the TestTriangleEdges function for additional processing
+*****************************************************************************************/
+module InvTestTriangleEdges(qbit T[R*n], qbit E[RR1], qbit w[n], /*GCQWRegs GC,*/ qbit idxIJ[R*r],qbit ctrbit2[n-1], qbit ctrbit[n-1],
+        qbit tau[Rbar*r], qbit sigma[r], qbit iota[rbar], qbit Ew[Rbar], qbit cTri[2*rbar-1], qbit triTestT, qbit triTestTw)
+{
+ 	TriangleTestTw(T,E,w, triTestTw);
+	TriangleEdgeSearch(T,E,w, /*GC,*/ idxIJ, ctrbit2, ctrbit, tau, sigma, iota, Ew, cTri, triTestT, triTestTw);
+	TriangleTestT(E, triTestT);
+}
+
+
+
+
+/********************************************************************
+*	Algorithm 1: QWTFP (the core module that summons other modules)
+*	Return:  Yes/No if the graph has a triangle
+********************************************************************/
+//module QWTFP(int ret[n], int res[R][n], int fin[RR1], int *testTMeasure)
+int main ()
+{
+	cbit testTMeasure[1];
+	cbit ret[n];
+	cbit res[R*n];
+	cbit fin[RR1];
+
+	int j = 0;
+	int k = 0;
+	int l = 0;
+
+	// Required quantum registers (the initial circuit input)
+	// Suppose n = 15 then
+	// T: 512 * 15 ; v:15; E:130816; w:15 (1 extra bit for phase);
+	// testTEdge: 1; test: 1; GC: 678
+	// Hence, the total initial quantum circuit input is approx 145000
+
+	qbit T[R*n];
+	qbit i[r];
+	qbit v[n];
+	qbit E[RR1];
+	qbit w[n];
+	qbit testTEdge[1];
+	qbit test[1];
+	qbit TEPhase[1];
+
+	// now we declare with size 14. It should be sufficient for cases where n is not greater than 15
+	qbit ctrbit[14];
+	qbit ctrbit2[14];
+
+	/*******************************************************************
+	* used for index matching
+	* each element inside idxIJ (let say idxIJ[k]) is physically wired
+	* close to the quNode T[k] such that when and index i is given,
+	* we compare i and idxIJ[k] for k = 0 ... 511 until we find a match
+	* Once match is found, we continue with the corresponding T[k] to
+	* proceed with corresonding operation.
+	* The initialization of this index, in physical implementation, is not
+	* needed because we can just hardwire the NOT gates (to turn 0 to 1)
+	* to let idxIJ[k] to represent the number k (in binary presentation).
+	* However, in simulation, we need to do the initialization.
+	***********************************************************************/
+	qbit idxIJ[R*r];
+
+	// used for initializing idxIJ from 0 to 511
+	int bin[r];
+
+	// the quotient
+	int quo = 0;
+
+	// Graph Collision Register
+	/*GCQWRegs GC;*/
+	qbit  tau[Rbar*r];
+	qbit  sigma[r];
+	qbit  iota[rbar];
+	qbit  Ew[Rbar];
+	qbit  cTri[2*rbar-1];
+	//qubit holding test results for the triangle in T
+	qbit  triTestT[1];
+	//qubit holding test results for the triangle in T and w
+	qbit  triTestTw[1];
+
+	PrepZ(test[0],0);
+	PrepZ(testTEdge[0],0);
+
+
+	for( j = 0; j < R; j++)
+	{
+		for(l = 0; l < r; l++)
+			bin[l] = 0;
+
+
+		for(k = 0; k < n; k++)
+		{
+			INITIALIZE(T[j*n+k]);
+		}
+
+
+		// get the binary presentation of the number j
+		//quo = j;
+
+		//for(l = 0; l < r; l++)
+		//{
+		//	bin[l] = quo%2;
+		//	quo = quo/2;
+		//	if(quo==0)
+		//	{break;}
+		//}
+
+		/**************************************************************************
+		* Initialize idxIJ[j]; this loop could have been merged with previous loop
+		*  used for the binary presentation but for readability, we separate them.
+		***************************************************************************/
+		for(l = 0; l < r; l++) 
+		{
+			if( (j & (int)pow(2,l)) == 1)
+				X(idxIJ[j*r+l]);
+		}
+	}
+
+	for(j=0; j<r; j++)
+	{
+		INITIALIZE(i[j]);
+	}
+
+	for(j = 0; j<n; j++)
+	{
+		INITIALIZE(v[j]);
+	}
+
+
+	for(j = 0; j < n; j++)
+	{
+		PrepZ(w[j],0);
+	}
+
+
+	for(j = 0; j < Rbar; j++)
+	{
+		for(k = 0; k < r; k++)
+		{
+			PrepZ(tau[j*r+k],0);
+		}
+	} 
+
+
+	for(j = 0; j < rbar; j++)
+	{ PrepZ(iota[j],0);}
+
+	for(j = 0; j < r; j++)
+	{ PrepZ(sigma[j],0);}
+
+
+	for(j = 0; j< Rbar; j++)
+	{PrepZ(Ew[j],0);}
+
+	for(j = 0; j < 2*rbar-1; j++)
+		{PrepZ(cTri[j],0);}
+
+	PrepZ(triTestT[0],0);
+	PrepZ(triTestTw[0],0);
+
+	// Set up E with the edget information for T
+	SETUP(E,T);
+
+	// To generate the (|0>-|1>)/sqrt(2) state for recording phase later
+	X(TEPhase[0]);
+	H(TEPhase[0]);
+
+	// Quantum Walk on the Hamming Graph
+	for(j = 0; j < tm; j++)
+	{
+		// Test T for triangle edges
+		TestTriangleEdges(T,E,w, /*GC,*/ idxIJ, ctrbit2, ctrbit, tau, sigma, iota, Ew, cTri, triTestT[0], triTestTw[0]);
+
+		/***************************************************
+		* Phase flip for TE
+		* and undo the X operation during the EvaluateOR
+		***************************************************/
+		EvaluateOR(TEPhase[0], triTestT[0], triTestTw[0]);
+		X(triTestT[0]);
+		X(triTestTw[0]);
+
+		//TODO: Assume the inverse function will be present when provided the original circuit
+		InvTestTriangleEdges(T,E,w, /*GC,*/  idxIJ, ctrbit2, ctrbit, tau, sigma, iota, Ew, cTri, triTestT[0], triTestTw[0]);
+
+		// Quantum Walk on H(V,R)
+		for(k = 0; k < tw; k++)
+		{
+			QWSH(T, i, v, E, idxIJ, ctrbit2, ctrbit);
+		}
+	}
+
+
+	// Final Check for triangle edges in T
+	TestTriangleEdges(T,E,w, /*GC,*/ idxIJ, ctrbit2, ctrbit, tau, sigma, iota, Ew, cTri, triTestT[0], triTestTw[0]);
+
+
+	// if triTestTw is 1, then testTMeasure should be set to 1
+	// Because EvaluateOR applies X on the control bits and normally we need to uncompute
+	// But here we are close to the end of the program and we do not need triTestT, triTestTw anymore.
+	// Hence, we can skip the step of finding a dummy qubit to do InvEvaluateOR
+	EvaluateOR(testTEdge[0], triTestT[0], triTestTw[0]);
+	testTMeasure[0] = MeasX(testTEdge[0]);
+
+	// Get the triangle information if the testTMeasure is 1 (there is a triangle)
+
+/*
+  // removed condition on cbit -- perform measurements anyway, but results are only valid
+  // if a triangle is present (testTMeasure ==1)
+	//if(*testTMeasure==1)
+	//{
+		//meansure T, E and w
+		nodeMeasure(w, ret);
+		TMeasure(T, res);
+		EMeasure(E, fin);
+	//}
+*/
+}
+
+
+

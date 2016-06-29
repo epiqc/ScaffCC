@@ -1,0 +1,208 @@
+/*****************************************************************************
+ *
+ * Grover's Search Algorithm
+ *
+ * Implements Grover's Search algorithm in the Scaffold programming language
+ *
+ * February 2013
+ *
+ *****************************************************************************/
+
+#include <math.h>
+
+#define n 30 // problem size (log of database size)
+
+#define pi 3.141592653589793238462643383279502884197
+
+// Module prototypes
+void diffuse(qbit q[n]);
+void Sqr(qbit a[n], qbit b[n]);
+void EQxMark(qbit b[n], qbit t[1], int tF);
+
+
+/***************************
+ Diffusion Module
+***************************/
+void diffuse(qbit q[n]) {
+  int j;
+  // local qbit x[n-1];  // scratch register
+  // No local registers yet
+  qbit x[n-1];  // scratch register
+
+  // Hadamard applied to q
+  // No forall yet
+  // forall(j=0; j<n; j++) { H(q[j]); }
+  for(j=0; j<n; j++) { H(q[j]); }
+
+  // Want to phase flip on q = 00...0
+  // So invert q to compute q[0] and q[1] and ... and q[n-1]
+  for(j = 0; j < n; j++) 
+    X(q[j]);  
+
+  // Compute x[n-2] = q[0] and q[1] and ... and q[n-1]
+  // No forall yet
+  // forall(j=0; j<n-1; j++) PrepZ(x[j]);
+  for(j=0; j<n-1; j++) PrepZ(x[j],0);
+  Toffoli(x[0], q[1], q[0]); 
+  for(j = 1; j < n-1; j++)
+    Toffoli(x[j], x[j-1], q[j+1]);
+  
+  // Phase flip conditioned on x[n-2]
+  Z(x[n-2]);  // Phase Flip==Z if q=00...0, i.e. x[n-2]==1
+
+  // Undo the local registers
+  for(j = n-2; j > 0; j--)
+    Toffoli(x[j], x[j-1], q[j+1]);
+  Toffoli(x[0], q[1], q[0]); 
+   
+  // Restore q
+  for(j = 0; j < n; j++) 
+    X(q[j]);
+        
+  // Complete the diffusion
+  // No forall yet
+  // forall(j=0; j<n; j++) { H(q[j]); }
+  for(j=0; j<n; j++) { H(q[j]); }
+}
+
+/***********************************************
+ Test if the input polynomial
+   b(x) = b0 + b1*x + ... + b_(n-1)*x^(n-1) == x
+ over the ring GF(2)[x] mod (x^n + x + 1).
+
+
+ if(tF!=0) set return result in qubit t[0] else Z
+************************************************/
+void EQxMark(qbit b[n], qbit t[1], int tF) {
+  int j;
+  // No local registers yet
+  // local qbit x[n-1];  // scratch register
+  qbit x[n-1];  // scratch register
+
+  // Change b to reflect testing for the polynomial x
+  for(j = 0; j < n; j++) 
+    if(j!=1) X(b[j]);         
+
+  // Compute x[n-2] = b[0] and b[1] and ... and b[n-1]
+  // No forall yet
+  // forall(j=0; j<n-1; j++) PrepZ(x[j]);
+  for(j=0; j<n-1; j++) PrepZ(x[j],0);
+  Toffoli(x[0], b[1], b[0]); 
+  for(j = 1; j < n-1; j++)
+      Toffoli(x[j], x[j-1], b[j+1]);
+  
+  // Either return result in t or Phase flip conditioned on x[n-2]
+  if(tF!=0) {
+    CNOT(t[0], x[n-2]); // Returns result in t
+  }
+  else {
+    Z(x[n-2]);  // Phase Flip==Z if b=01...0 == 'x', i.e. x[n-2]==1
+  }
+
+  // Undo the local registers
+  for(j = n-2; j > 0; j--)
+    Toffoli(x[j], x[j-1], b[j+1]);
+  Toffoli(x[0], b[1], b[0]); 
+   
+  // Restore b
+  for(j = 0; j < n; j++) 
+    if(j!=1) X(b[j]);       
+} 
+
+/***********************************************
+ Squaring a(x) = a0 + a1*x + ... + a_(n-1)*x^(n-1)
+ over the ring GF(2)[x] mod (x^n + x + 1).
+
+ Result placed in the n-qubit register b
+************************************************/
+void Sqr(qbit a[n], qbit b[n]) {
+
+  int i;
+  int k;
+  
+  // Using forall indicates the CNOT's are independent
+  // So these instructions can be done in parallel
+  // No forall yet
+  // forall(i=0; i<=(n-1)/2; i++) {
+  for(i=0; i<=(n-1)/2; i++) {
+    k = 2*i;
+    CNOT(b[k], a[i]); 
+  }
+
+  // Would it make a difference to split this into two loops?
+  // Maybe since deleaving would be two forall loops!
+  // Or perhaps it is okay to just replace the for with a forall.
+  for(i=(n+1)/2; i<n; i++) {
+    k = (2*i)-n;
+    CNOT(b[k],   a[i]); 
+    CNOT(b[k+1], a[i]); 
+  }
+}
+
+/***************************************************
+ Program to compute the sqrt(x) in the polynomial ring
+
+     GF(2)[x] / (x^n+x+1)
+
+ Elements of the ring are represented as polynomials
+ of maximum degree n-1:
+
+   a(x) = a[0] + a[1]*x + ... + a[n-1]*x^(n-1)
+
+ Use grover search.
+
+****************************************************/
+int main() { 
+
+  // Quantum registers
+  qbit a[n];  // Polynomials to search
+  qbit b[n];  // b(x) = a(x)*a(x) mod (x^n + x + 1)
+  qbit t[1];  // Test result if b(x) == x
+
+  // Grover parameters and step index
+  int N= pow(2,n);
+  int nstep = floor((pi/4)*sqrt(N));
+  int istep;
+
+  // Holds final measurement values
+  cbit mt[1]; // measure t
+  cbit ma[n]; // measure a  This holds the square root
+  cbit mb[n]; // measure b  No need to measure since b(x) should be x
+  int i;
+
+  // Initialize a[0..n-1] into uniform superposition
+  // No forall yet
+  // forall(i=0; i<n; i++) H(a[i]);
+  for(i=0; i<n; i++) H(a[i]);
+
+  // Grover iteration: Mark then diffuse
+  for(istep=1; istep<=nstep; istep++) {
+    
+    Sqr(a, b);         // Sets b(x) = a(x) * a(x)
+    EQxMark(b, t, 0);  // Tests if b(x) == x and if so Phase Flips
+    Sqr(a, b);         // Note: Sqr is it's own inverse
+      
+    // Diffuse
+    diffuse(a);
+  }
+  
+  // For the final measurement, compute causal state
+  Sqr(a, b);
+  EQxMark(b, t, 1);   // Note; 1 implies test result b(x)==x is returned in t
+
+  // Now measure and report
+  mt[0] = MeasZ(t[0]);  // If mt[0]==1 then success
+  // measure a to recover the square root
+  for(i=0; i<n; i++) ma[i] = MeasZ(a[i]);
+
+    return 0;
+}
+
+// Problem instances
+//main(2);
+//main(3);
+//main(5);
+//main(8);
+//main(13);
+//main(19);
+

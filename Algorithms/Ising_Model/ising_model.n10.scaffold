@@ -1,0 +1,113 @@
+/*
+Input format:
+N
+Bx
+Bz_0
+Bz_1
+...
+Bz_N
+J_{0,1}
+J_{1,2}
+...
+J{n-2,n-1}
+*/
+
+#include <stdio.h>
+
+
+const int N = 10;
+const double Bx = 2;
+const double Bz[] = {.3, -.9, -1.2, 1.1, 1.5, .6, -1.6, .3, -1.3, 1.9};
+const double J[] = {-1.5, 1.3, -1.8, -1.3, -.6, 1.9, 1.1, -1.3, .4};
+
+void CZ(qbit q1, qbit q2, double phi) {
+    // printf("performing Controlled -2phi Z rotation\n");
+    Rz(q2, -2.0*phi);
+    CNOT(q1, q2);
+    Rz(q2, phi);
+    CNOT(q1, q2);
+}
+
+void ZcrossZ(qbit q1, qbit q2, double phi) {
+    // printf("performing sigma_z cross sigma_z Hamiltonian\n");
+    Rz(q1, phi);
+    Rz(q2, -phi);
+    CZ(q1, q2, -2.0*phi);
+}
+
+
+int main() {
+    qbit reg[N];
+
+    // Initialize all qubits to |+> state
+    int n;
+    for(n=0; n < N; n++) {
+        PrepZ(reg[n], 0);
+        H(reg[n]);
+    }
+
+    double T = 3;  // total duration of adiabatic evolution
+    int M = 5;  // number of Trotter steps
+    double dt = M / T;  // time per Trotter step
+
+    int m;
+    for(m = 1; m <= M; m++) {
+
+        // Z-Z hamiltonian, executed in parallel
+        for (n = 0; n < N-1; n += 2) {  // red pairs
+            double phi = J[n] * (2.0*m - 1) / M;
+            ZcrossZ(reg[n], reg[n + 1], phi);
+        }
+        for (n = 1; n < N-1; n += 2) {  // black pairs
+            double phi = J[n] * (2.0*m - 1) / M;
+            ZcrossZ(reg[n], reg[n + 1], phi);
+        }
+
+        double theta1 = (1.0 - (2.0*m-1)/M) * -2 * Bx * T / M;
+        for (n = 0; n < N; n++) {
+            H(reg[n]);
+            Rz(reg[n], theta1);
+            H(reg[n]);
+        }
+
+        // Bz hamiltonian
+        for (n = 0; n < N; n++) {
+            double theta2 = (1.0 - (2.0*m-1)/M) * -2 * Bz[n] * T / M;
+            Rz(reg[n], theta2);
+        }
+    }
+
+
+    for (n = 0; n < N; n++) {
+        MeasZ(reg[0]);
+    }
+
+    return 0;
+}
+
+/*
+int main() {
+    // make sure to define these as const:
+
+    
+    FILE *fp;
+    fp = fopen("input.txt", "r");
+    int N = 0;
+    double Bx = 0;
+    fscanf(fp, "%d", &N);
+    fscanf(fp, "%lf", &Bx);
+    double Bz[N];
+    int i;
+    for (i = 0; i < N; i++) {
+        fscanf(fp, "%lf", &Bz[i]);
+    }
+    double J[N-1];
+    for (i = 0; i < N-1; i++) {
+        fscanf(fp, "%lf", &J[i]);
+    }
+    
+    
+    IsingModel();
+    return 0;
+}
+*/

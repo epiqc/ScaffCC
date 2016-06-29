@@ -7,8 +7,8 @@ SCAF=$ROOT/build/Release+Asserts/lib/Scaffold.so
 
 for f in $*; do
     b=$(basename $f)
-    k=$(perl -e '($n,$s,$k,$d,$x) = split /\./, $ARGV[0]; print $k' ${b})
-    d=$(perl -e '($n,$s,$k,$d,$x) = split /\./, $ARGV[0]; print $d' ${b})
+    k=$(perl -e '($n,$size,$th,$simd,$k,$d,$x) = split /\./, $ARGV[0]; print $k' ${b})
+    d=$(perl -e '($n,$size,$th,$simd,$k,$d,$x) = split /\./, $ARGV[0]; print $d' ${b})
     echo "[regress.sh] $f: Running sched.pl ..."
     if [ ! -e ${b}.ss ]; then
         /usr/bin/time -f "\t%E real,\t%U user,\t%S sys:\t%C" ${DIR}/sched.pl -n ss -k $k -d $d $f -m > ${b}.ss

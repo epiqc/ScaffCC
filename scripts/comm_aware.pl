@@ -4,15 +4,16 @@
 @keys = qw(Function SIMDs ts ots mts moves tgates mlist);
 
 foreach $file ( @ARGV ) {
-    $algo = '';
-    $cfg = '';
+    $name = '';
+    $size = '';
+    $th = '';
     $ext = '';
     $k = 0;
     $d = 0;
-    if ( $file =~ /([a-zA-Z0-9]+)_(\w+)\.simd\.(\d)\.(\d+)\.leaves\.(.*)/ ) {
-        $algo = $1; $cfg = $2; $k = $3; $d = $4; $ext = $5;
-        $comm = "comm_aware_schedule.txt.$algo\_$cfg\_K$k\_D$d\_$ext";
-        print "[comm_aware.pl] $file -> $comm\n";
+    if ( $file =~ /([a-zA-Z0-9_]+)\.(\w+)\.(\w+)\.simd\.(\d)\.(\d+)\.leaves\.(.*)/ ) {
+        $name = $1; $size = $2; $th = $3; $k = $4; $d = $5; $ext = $6;
+        $comm = "comm_aware_schedule.txt.$name\.$size\.$th\_K$k\_D$d\_$ext";
+        print "\t[comm_aware.pl] $file -> $comm\n";
         open COM, ">$comm"  or die "Unable to open $comm: $!\n";
         open RES, $file or die "Unable to open $file: $!\n";
         $last{Function} = "";

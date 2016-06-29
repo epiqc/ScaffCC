@@ -9,9 +9,10 @@ SCAF=$ROOT/build/Release+Asserts/lib/Scaffold.so
 D=(1024)
 # Number of SIMD regions
 K=(2)
-# Module flattening threshold
-# note: thresholds must be picked from the set in scripts/flattening_thresh.py
-THRESHOLDS=(010k 2M)
+# Module flattening threshold: must be picked from the set in scripts/flattening_thresh.py
+THRESHOLDS=(2M)
+# Full schedule? otherwise only generates metrics (faster)
+FULL_SCHED=true
 
 # Create directory to put all byproduct and output files in
 for f in $*; do
@@ -40,13 +41,14 @@ done
 for f in $*; do
   b=$(basename $f .scaffold)
   echo "[gen-scheds.sh] $b: Flattening ..."
+  echo "[gen-scheds.sh] Computing module gate counts ..."  
   $OPT -S -load $SCAF -ResourceCount2 ${b}/${b}.ll > /dev/null 2> ${b}.out  
   python $DIR/flattening_thresh.py ${b}  
   for th in ${THRESHOLDS[@]}; do      
-    if [ ! -e ${b}/${b}_flat${th}.ll ]; then
+    if [ ! -e ${b}/${b}.flat${th}.ll ]; then
       echo "[gen-scheds.sh] Flattening modules smaller than Threshold = $th ..."    
-      mv ${b}_flat${th}.txt flat_info.txt
-      $OPT -S -load $SCAF -FlattenModule -dce -internalize -globaldce ${b}/${b}.ll -o ${b}/${b}_flat${th}.ll
+      mv ${b}.flat${th}.txt flat_info.txt
+      $OPT -S -load $SCAF -FlattenModule -dce -internalize -globaldce ${b}/${b}.ll -o ${b}/${b}.flat${th}.ll
     fi
   done
   rm -f *flat*.txt ${b}.out     
@@ -57,9 +59,9 @@ for f in $*; do
   b=$(basename $f .scaffold)
   echo "[gen-scheds.sh] $b: Resource count ..."
   for th in ${THRESHOLDS[@]}; do      
-    if [ -n ${b}/${b}_flat${th}.resources ]; then
+    if [ -n ${b}/${b}.flat${th}.resources ]; then
       echo "[gen-scheds.sh] Resource count for Threshold = $th flattening ..."
-      $OPT -S -load $SCAF -ResourceCount ${b}/${b}_flat${th}.ll > /dev/null 2> ${b}/${b}_flat${th}.resources
+      $OPT -S -load $SCAF -ResourceCount ${b}/${b}.flat${th}.ll > /dev/null 2> ${b}/${b}.flat${th}.resources
     fi
   done
 done
@@ -71,10 +73,10 @@ for f in $*; do
     for k in ${K[@]}; do
       echo "[gen-scheds.sh] $b: Generating SIMD K=$k D=$d leaves ..."
       for th in ${THRESHOLDS[@]}; do
-        if [ ! -e ${b}/${b}_flat${th}.simd.${k}.${d}.leaves ]; then
+        if [ ! -e ${b}/${b}.flat${th}.simd.${k}.${d}.leaves ]; then
           echo "[gen-scheds.sh] GenSIMD for Threshold = $th flattening ..."
-          $OPT -load $SCAF -GenSIMDSchedule -simd-kconstraint $k -simd-dconstraint $d ${b}/${b}_flat${th}.ll > /dev/null 2> ${b}/${b}_flat${th}.simd.${k}.${d}
-          ${DIR}/leaves.pl ${b}/${b}_flat${th}.simd.${k}.${d} > ${b}/${b}_flat${th}.simd.${k}.${d}.leaves
+          $OPT -load $SCAF -GenSIMDSchedule -simd-kconstraint $k -simd-dconstraint $d ${b}/${b}.flat${th}.ll > /dev/null 2> ${b}/${b}.flat${th}.simd.${k}.${d}
+          ${DIR}/leaves.pl ${b}/${b}.flat${th}.simd.${k}.${d} > ${b}/${b}.flat${th}.simd.${k}.${d}.leaves
         fi
       done
     done
@@ -86,9 +88,11 @@ for f in $*; do
   b=$(basename $f .scaffold)
   echo "[gen-scheds.sh] $b: Generating LPFS, RCP, SS leaves ..."
   cd ${b}
-  ../${DIR}/full_sched_regress.sh ${b}*.leaves
-  # Only generate metrics, not full schedule. Use this for speed.
-  #../${DIR}/regress.sh ${b}*.leaves  
+  if [ "$FULL_SCHED" = true ]; then
+    ../${DIR}/full_sched_regress.sh ${b}*.leaves
+  else
+    ../${DIR}/regress.sh ${b}*.leaves  
+  fi
   cd ..
 done
 
@@ -109,16 +113,16 @@ for f in $*; do
     k=$(perl -e '$ARGV[0] =~ /_K(\d+)/; print $1' $c)
     d=$(perl -e '$ARGV[0] =~ /_D(\d+)/; print $1' $c)
     x=$(perl -e '$ARGV[0] =~ /.*_(.+)/; print $1' $c)
-    th=$(perl -e '$ARGV[0] =~ /_flat(\d+[a-zA-Z])/; print $1' $c)    
+    th=$(perl -e '$ARGV[0] =~ /.flat(\d+[a-zA-Z])/; print $1' $c)    
     echo "[gen-scheds.sh] $b: Coarse-grain schedule ..."
     mv $c comm_aware_schedule.txt
-    if [ ! -e ${b}_flat${th}.simd.${k}.${d}.${x}.time ]; then
-      ../$OPT -load ../$SCAF -GenCGSIMDSchedule -simd-kconstraint-cg $k -simd-dconstraint-cg $d ${b}_flat${th}.ll > /dev/null 2> ${b}_flat${th}.simd.${k}.${d}.${x}.time
+    if [ ! -e ${b}.flat${th}.simd.${k}.${d}.${x}.time ]; then
+      ../$OPT -load ../$SCAF -GenCGSIMDSchedule -simd-kconstraint-cg $k -simd-dconstraint-cg $d ${b}.flat${th}.ll > /dev/null 2> ${b}.flat${th}.simd.${k}.${d}.${x}.cg
     fi
 
     # Now do 0-communication cost
-    #if [ ! -e ${b}_flat${th}.simd.${k}.${d}.w0.${x}.time ]; then
-    #  ../$OPT -load ../$SCAF -GenCGSIMDSchedule -move-weight-cg 0 -simd-kconstraint-cg $k -simd-dconstraint-cg $d ${b}_flat${th}.ll > /dev/null 2> ${b}_flat${th}.simd.${k}.${d}.w0.${x}.time
+    #if [ ! -e ${b}.flat${th}.simd.${k}.${d}.w0.${x}.time ]; then
+    #  ../$OPT -load ../$SCAF -GenCGSIMDSchedule -move-weight-cg 0 -simd-kconstraint-cg $k -simd-dconstraint-cg $d ${b}.flat${th}.ll > /dev/null 2> ${b}.flat${th}.simd.${k}.${d}.w0.${x}.time
     #fi
   done
   rm -f comm_aware_schedule.txt

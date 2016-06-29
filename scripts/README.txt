@@ -62,8 +62,4 @@ Calls the following scripts:
   -----------------
   Applies the communication penalty to timesteps.
 
-  $ ./flattening_thresh_2M.py
-  ---------------------------
-  Divides modules into those larger and those smaller than 2M operations in size.
-
 All output files are placed in a new directory to avoid cluttering.

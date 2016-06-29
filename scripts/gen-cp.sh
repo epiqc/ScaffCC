@@ -32,7 +32,7 @@ for f in $*; do
   fi
 done
 
-# Module flattening pass with different thresholds
+# Module flattening pass with different thresholds, then critical path calculation.
 for f in $*; do
   b=$(basename $f .scaffold)  
   echo "[gen-cp.sh] $b: Flattening"
@@ -40,14 +40,14 @@ for f in $*; do
   $OPT -S -load $SCAF -ResourceCount2 ${b}/${b}.ll > /dev/null 2> ${b}.out
   python $DIR/flattening_thresh.py ${b}
   for th in ${THRESHOLDS[@]}; do    
-    if [ ! -e ${b}/${b}_flat${th}.ll ]; then      
+    if [ ! -e ${b}/${b}.flat${th}.ll ]; then      
       echo "[gen-cp.sh] Flattening modules smaller than Threshold = $th ..."
-      mv ${b}_flat${th}.txt flat_info.txt
-      $OPT -S -load $SCAF -FlattenModule -dce -internalize -globaldce ${b}/${b}.ll -o ${b}/${b}_flat${th}.ll
+      mv ${b}.flat${th}.txt flat_info.txt
+      $OPT -S -load $SCAF -FlattenModule -dce -internalize -globaldce ${b}/${b}.ll -o ${b}/${b}.flat${th}.ll
     fi
-    if [ ! -e ${b}/${b}_flat${th}.cp ]; then
+    if [ ! -e ${b}/${b}.flat${th}.cp ]; then
       echo "[gen-cp.sh] Critical path calculation ..."        
-      /usr/bin/time -v $OPT -load $SCAF -GetCriticalPath ${b}/${b}_flat${th}.ll >/dev/null 2> ${b}/${b}_flat${th}.cp
+      /usr/bin/time -v $OPT -load $SCAF -GetCriticalPath ${b}/${b}.flat${th}.ll >/dev/null 2> ${b}/${b}.flat${th}.cp
     fi
   done
   rm -f *flat*txt ${b}.out
