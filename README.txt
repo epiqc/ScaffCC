@@ -84,7 +84,7 @@ or use the package manager of your system ("yum" on Red Hat or "apt-get" on Ubun
     % sudo apt-get install libmpfr-dev
 
     "Source Build"
-    % wget http://www.mpfr.org/mpfr-current/mpfr-3.1.2.tar.bz2
+    % wget http://www.mpfr.org/mpfr-current/mpfr-3.1.4.tar.bz2
     % sudo ./configure --disable-shared --enable-static
     % sudo make && sudo make check && sudo make install
       
