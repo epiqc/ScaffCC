@@ -137,17 +137,22 @@ $(FILE)11.ll: $(FILE)10.ll
 		cp $(FILE)10.ll $(FILE)11.ll; \
 	fi
 
+# Insert reverse functions if REVERSE is 1
+$(FILE)12.ll: $(FILE)11.ll
+	@echo "[Scaffold.makefile] Inserting Reverse Functions..."
+	@$(OPT) -S -load $(SCAFFOLD_LIB) -FunctionReverse $(FILE)11.ll -o $(FILE)12.ll > /dev/null
+
 # Generate resource counts from final LLVM output
-$(FILE).resources: $(FILE)11.ll
+$(FILE).resources: $(FILE)12.ll
 	@echo "[Scaffold.makefile] Generating resource count ..."    
-	@$(OPT) -load $(SCAFFOLD_LIB) -ResourceCount $(FILE)11.ll 2> $(FILE).resources > /dev/null
+	@$(OPT) -load $(SCAFFOLD_LIB) -ResourceCount $(FILE)12.ll 2> $(FILE).resources > /dev/null
 	@echo "[Scaffold.makefile] Resources written to $(FILE).resources ..."  
 
-# Generate hierarchical QASM
-$(FILE).qasmh: $(FILE)11.ll
+$(FILE).qasmh: $(FILE)12.ll
 	@echo "[Scaffold.makefile] Generating hierarchical QASM ..."  
-	@$(OPT) -load $(SCAFFOLD_LIB) -gen-qasm $(FILE)11.ll 2> $(FILE).qasmh > /dev/null
+	@$(OPT) -load $(SCAFFOLD_LIB) -gen-qasm $(FILE)12.ll 2> $(FILE).qasmh > /dev/null
 	@echo "[Scaffold.makefile] Hierarchical QASM written to $(FILE).qasmh ..."  
+
 
 # Translate hierarchical QASM back to C++ for flattening
 $(FILE)_qasm.scaffold: $(FILE).qasmh
@@ -166,7 +171,7 @@ $(FILE).qasmf: $(FILE)_qasm
 
 # purge cleans temp files
 purge:
-	@rm -f $(FILE)_merged.scaffold $(FILE)_noctqg.scaffold $(FILE).ll $(FILE)1.ll $(FILE)1a.ll $(FILE)1b.ll $(FILE)2.ll $(FILE)3.ll $(FILE)4.ll $(FILE)5.ll $(FILE)5a.ll $(FILE)6.ll $(FILE)6tmp.ll $(FILE)7.ll $(FILE)8.ll $(FILE)9.ll $(FILE)10.ll $(FILE)11.ll $(FILE)tmp.ll $(FILE)_qasm $(FILE)_qasm.scaffold fdecl.out $(CFILE).ctqg $(CFILE).c $(CFILE).signals $(FILE).tmp sim_$(CFILE) $(FILE).*.qasm
+	@rm -f $(FILE)_merged.scaffold $(FILE)_noctqg.scaffold $(FILE).ll $(FILE)1.ll $(FILE)1a.ll $(FILE)1b.ll $(FILE)2.ll $(FILE)3.ll $(FILE)4.ll $(FILE)5.ll $(FILE)5a.ll $(FILE)6.ll $(FILE)6tmp.ll $(FILE)7.ll $(FILE)8.ll $(FILE)9.ll $(FILE)10.ll $(FILE)11.ll $(FILE)12.ll $(FILE)tmp.ll $(FILE)_qasm $(FILE)_qasm.scaffold fdecl.out $(CFILE).ctqg $(CFILE).c $(CFILE).signals $(FILE).tmp sim_$(CFILE) $(FILE).*.qasm
 
 # clean removes all completed files
 clean: purge
