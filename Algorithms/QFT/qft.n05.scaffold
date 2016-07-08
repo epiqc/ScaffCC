@@ -3,7 +3,7 @@
 
 #define pi 3.141592653589793238462643383279502884197
 
-module PhasePi8 ( qbit bit ) {
+module PhasePi8 ( qbit bit[1] ) {
     /* PhasePi8 matrix:
        [ [ 1 0    ]
          [ 0 e^i*pi/8 ] ]
@@ -13,10 +13,10 @@ module PhasePi8 ( qbit bit ) {
 
 	 */
 
-	 Rz(bit, -1*pi/8);
+	 Rz(bit[0], -1*pi/8);
 }
 
-module cT ( qbit ctrl, qbit target ) {
+module cT ( qbit ctrl[1], qbit target[1] ) {
     /* cT identity matrix:
        [ [ 1 0 0     0    ]
          [ 0 1 0     0    ]
@@ -24,15 +24,15 @@ module cT ( qbit ctrl, qbit target ) {
          [ 0 0 0 e^i*pi/4 ] ]
     */
 
-	PhasePi8(ctrl);
-	Rz(target,pi/8);
-	CNOT(target,ctrl);
-	Rz(target,-1*pi/8);
-	CNOT(target,ctrl);	
+	PhasePi8(ctrl[0]);
+	Rz(target[0],pi/8);
+	CNOT(target[0],ctrl[0]);
+	Rz(target[0],-1*pi/8);
+	CNOT(target[0],ctrl[0]);	
 	
 }
 
-module cS ( qbit ctrl, qbit target ) {
+module cS ( qbit ctrl[1], qbit target[1] ) {
     /* cS identity matrix:
        [ [ 1 0 0 0 ]
          [ 0 1 0 0 ]
@@ -40,15 +40,15 @@ module cS ( qbit ctrl, qbit target ) {
          [ 0 0 0 i ] ]
     */
 	
-	T(ctrl);
-	Rz(target,pi/4);
-	CNOT(target,ctrl);
-	Rz(target,-1*pi/4);
-	CNOT(target,ctrl);
+	T(ctrl[0]);
+	Rz(target[0],pi/4);
+	CNOT(target[0],ctrl[0]);
+	Rz(target[0],-1*pi/4);
+	CNOT(target[0],ctrl[0]);
 	
 }
 
-module cRz ( qbit ctrl, qbit target, const double angle ) {
+module cRz ( qbit ctrl[1], qbit target[1], const double angle ) {
     /* cRz identity matrix:
        [ [ 1 0 0     			0     ]
          [ 0 1 0     			0     ]
@@ -56,10 +56,10 @@ module cRz ( qbit ctrl, qbit target, const double angle ) {
          [ 0 0 0 				e^(i*angle/2) ] ]
     */
 
-	Rz(target,-1*angle/2);
-	CNOT(target,ctrl);
-	Rz(target,angle/2);
-	CNOT(target,ctrl);
+	Rz(target[0],-1*angle/2);
+	CNOT(target[0],ctrl[0]);
+	Rz(target[0],angle/2);
+	CNOT(target[0],ctrl[0]);
 	
 }
 

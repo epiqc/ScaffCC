@@ -145,7 +145,7 @@ $(FILE).resources: $(FILE)11.ll
 
 # Generate hierarchical QASM
 $(FILE).qasmh: $(FILE)11.ll
-	@echo "[Scaffold.makefile] Generating flattened QASM ..."  
+	@echo "[Scaffold.makefile] Generating hierarchical QASM ..."  
 	@$(OPT) -load $(SCAFFOLD_LIB) -gen-qasm $(FILE)11.ll 2> $(FILE).qasmh > /dev/null
 	@echo "[Scaffold.makefile] Hierarchical QASM written to $(FILE).qasmh ..."  
 
