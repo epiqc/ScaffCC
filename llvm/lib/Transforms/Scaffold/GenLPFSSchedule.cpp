@@ -42,12 +42,12 @@ using namespace llvm;
 using namespace std;
 
 static cl::opt<unsigned>
-RES_CONSTRAINT("simd-kconstraint-lpfs", cl::init(10), cl::Hidden,
+RES_CONSTRAINT("simd-kconstraint-lpfs", cl::init(8), cl::Hidden,
   cl::desc("k in SIMD-k Resource Constrained Scheduling"));
 
 static cl::opt<unsigned>
 DATA_CONSTRAINT("simd-dconstraint-lpfs", cl::init(1024), cl::Hidden,
-  cl::desc("k in SIMD-k Resource Constrained Scheduling"));
+  cl::desc("d in SIMD-d Resource Constrained Scheduling"));
 
 static cl::opt<unsigned>
 SIMD_L("simd_l", cl::init(1), cl::Hidden,
@@ -70,8 +70,26 @@ LOCAL_Q("local_Q", cl::init(INT_MAX), cl::Hidden,
   cl::desc("Q parameter for local memory depth"));
 
 static cl::opt<unsigned>
-LOCAL_WINDOW("local_W", cl::init(INT_MAX), cl::Hidden,
+LOCAL_WINDOW("local_W", cl::init(10), cl::Hidden,
   cl::desc("Look-ahead window parameter for local mem"));
+
+static cl::opt<unsigned>
+METRICS("metrics", cl::init(0), cl::Hidden,
+  cl::desc("Print Metrics"));
+
+static cl::opt<unsigned>
+FULL_SCHED("full_sched", cl::init(0), cl::Hidden,
+  cl::desc("Print Full Schedules"));
+
+static cl::opt<unsigned>
+MOVES_SCHED("moves_sched", cl::init(0), cl::Hidden,
+  cl::desc("Print Schedule of Move Instructions"));
+
+static cl::opt<unsigned>
+LOCAL_MOVES_SCHED("local_moves_sched", cl::init(0), cl::Hidden,
+  cl::desc("Print Schedule of Local Move Instructions"));
+
+
 
 #define MAX_RES_CONSTRAINT 2000 
 #define SSCHED_THRESH 10000000
@@ -249,6 +267,7 @@ struct move{
     
     // Get arguments from operation
     bool backtraceOperand(Value* opd, int opOrIndex);
+    bool analyzeIntrinsicCallInst(Function* F, Instruction* pinst);
     // 
     void analyzeAllocInst(Function* F,Instruction* pinst);
     void analyzeCallInst(Function* F,Instruction* pinst);
@@ -357,6 +376,8 @@ struct move{
       return (mf->second.length);
     }
 
+    bool DetermineLeafFunction (Function *F);
+
     void CountCriticalFunctionResources (Function *F);
     
     bool runOnModule (Module &M);    
@@ -381,23 +402,17 @@ vector<Instruction*> longestPathList;
 void GenLPFSSched::lpfs(Function* F, int ts, int simd_l, int refill_simd, int opp_simd){
   //----------------Build Dependency Tree--------------------//
     int op_count = priorityVector.size();
-    int sched_ops = 1;
+    int sched_ops = 0;
     int moves = 0;
-
-//	for(vector<Instruction*>::iterator fp1 = callList.begin(); fp1 != callList.end(); ++fp1){  
-//        errs() << "CallList Entry: " << (*fp1) << " : ";
-//        map<Instruction*, op>::iterator set1 = mapCalls.find(*fp1);
-//        if( set1 != mapCalls.end() ) op_count++;
-//        errs() << "Current op count = " << op_count << "\n";
-//        print_qgate((*mapCalls.find(*fp1)).second.name);
-//    }
-
     int id_to_apply = 0;
     int qbit_id = 0;
+
+    //Building Dependency Graph
+    
 	for(vector<Instruction*>::iterator fp1 = callList.begin(); fp1 != callList.end(); ++fp1){      //All function instructs
-//        errs() << "checking op " << (*fp1) << "\n";
         bool found_one = false;
         map<Instruction*, op>::iterator mp1 = mapCalls.find(*fp1);
+//        errs() << "checking op " << (*mp1).second.name.qFunc->getName() << "\n";
         (*mp1).second.id = id_to_apply++;
         for(int i=0; i < (*mp1).second.name.numArgs; ++i){                                              //All function args
             vector<Instruction*>::iterator fp2 = fp1;
@@ -440,7 +455,7 @@ void GenLPFSSched::lpfs(Function* F, int ts, int simd_l, int refill_simd, int op
 		}
 	}
 
-   errs() << "Finished Building Dependency Graph" << "\n";
+//   errs() << "Finished Building Dependency Graph" << "\n";
 
     //-----Find the longest paths required for the simd_l constraint-----//
     longestPathList.clear();
@@ -448,10 +463,10 @@ void GenLPFSSched::lpfs(Function* F, int ts, int simd_l, int refill_simd, int op
         find_lp(F,i);
         longestPathList[i] = longPath;
         longPath.clear();
-        //errs() << "found long path" << "\n";
+//        errs() << "found long path" << "\n";
     } 
 
-    errs() << "Finished Finding Longest Path(s)" << "\n";    
+//    errs() << "Finished Finding Longest Path(s)" << "\n";    
 
     //-------Assign the longest paths-------//
         for(map<int, vector<Instruction*> >::iterator pathNumber = longestPathList.begin(); pathNumber != longestPathList.end(); pathNumber++){
@@ -463,12 +478,13 @@ void GenLPFSSched::lpfs(Function* F, int ts, int simd_l, int refill_simd, int op
             }   
         }
         ts = 0;
+//        errs() << "sched op = " << sched_ops << " op count = " << op_count << "\n";
         while(sched_ops < op_count){ 
 //            errs() << "sched op = " << sched_ops << " op count = " << op_count << "\n";
             for(vector<InstPri>::reverse_iterator vit = priorityVector.rbegin(); vit!=priorityVector.rend(); ++vit){
                 Instruction* myInst = (*vit).first;
                 op myOp = (*mapCalls.find(myInst)).second;
-                //errs() << "scheduling op " << myOp.name.qFunc->getName() << "\n";
+//                errs() << "scheduling op " << myOp.name.qFunc->getName() << "\n";
                 bool scheduled = false;
 //                errs() << "ts = " << ts << " Checking op: " << myOp.id << " ";
 //                print_qgate(myOp.name);
@@ -527,11 +543,10 @@ void GenLPFSSched::lpfs(Function* F, int ts, int simd_l, int refill_simd, int op
             }
         }
         while(schedule[1].count(ts)){
-            update_moves(moves, ts++);
+            update_moves(moves, ts++);   
         }
         ots = ts;
     
-        errs() << "Finished Assigning" << "\n";
 }
 
 void GenLPFSSched::update_moves(int moves, int ts ){
@@ -578,26 +593,7 @@ void GenLPFSSched::update_moves(int moves, int ts ){
             }
         }
     }
-/*
-    errs() << "Current qubits BeFORE DELetion: " << current.size() << "\n";
-    for(vector<qArgInfo>::iterator mit = current.begin(); mit != current.end(); mit++){
-        stringstream ss;
-        ss << (*mit).index;
-        string name = (*mit).name + ss.str();
-        errs() << (*mit).name << (*mit).index << " DEST: " << (*mit).simd << " SRC: " << (*qubitMap.find(name)).second.loc << "ID: " << (*mit).id << "\n";
-    }
 
-    errs() << "Active qubits: " << active_qubits.size() << "\n";
-    for(int j = 0; j < (int) active_qubits.size(); j++){
-        errs() << active_qubits[j].name << active_qubits[j].index << " ID: " << active_qubits[j].id << "\n";
-    }
-
-    errs() << "qubit map: \n";
-    for(map<string, qArgInfo>::iterator mit = qubitMap.begin(); mit != qubitMap.end(); mit++){
-        errs() << (*mit).first << " LOC: " << (*mit).second.loc << " SIMD: " << (*mit).second.simd << "\n";
-    }
-
-*/
 //    errs() << "# AT TIMESTEP: " << ts << "\n";
     for(vector<qArgInfo>::iterator mapit = active_qubits.begin(); mapit != active_qubits.end(); mapit++){
 //        errs() << "Currently examining: " << (*mapit).name << (*mapit).index << "\n";
@@ -720,7 +716,7 @@ void GenLPFSSched::update_moves(int moves, int ts ){
             }
         }
     }
-   
+ 
    
  /*  
    errs() << "Current qubits after deletion: " << current.size() << "TIME: " << ts <<  "\n";
@@ -729,7 +725,7 @@ void GenLPFSSched::update_moves(int moves, int ts ){
     }
 */
 
-    
+  
     for(vector<qArgInfo>::iterator mapit = current.begin(); mapit != current.end(); mapit++){
         stringstream ss;
         ss << (*mapit).index;
@@ -760,15 +756,9 @@ void GenLPFSSched::update_moves(int moves, int ts ){
         }
     }
     active_qubits = next;
-/*
-    errs() << "Local Mem Sizes: \n";
-    for(map<int,int>::iterator mit = localMemSizeMap.begin(); mit != localMemSizeMap.end(); mit++){
-        errs() << (*mit).first << " | " << (*mit).second << "\n";  
-    }
-*/
 
 
-//    if(added_move) mts++;
+
 }
 
 
@@ -862,30 +852,6 @@ void GenLPFSSched::take_path(Instruction* CI, int path){
     currentOp.followed = 1;
     mapCalls[CI] = currentOp; 
 }
-
-
-
-
-
- 
-
-
-void update_data_moves(){}
-void update_ready(){}
-
-void get_ready_children(){}
-void add_dependency(qubit current, op operation){
-  current.ops.push_back(operation); 
-}
-void get_dependency(qubit current){}
-//Initialization
-
-vector<op> lpfs_initialize(){ 
-  vector<op> answer;
-  return answer;
-}
-
-
 
 
 void GenLPFSSched::getFunctionArguments(Function* F)
@@ -1070,7 +1036,6 @@ void GenLPFSSched::analyzeAllocInst(Function* F, Instruction* pInst){
     
     if(ArrayType *arrayType = dyn_cast<ArrayType>(allocatedType)) {      
       qGateArg tmpQArg;
-      
       Type *elementType = arrayType->getElementType();
       uint64_t arraySize = arrayType->getNumElements();
       if (elementType->isIntegerTy(16)){
@@ -1083,10 +1048,7 @@ void GenLPFSSched::analyzeAllocInst(Function* F, Instruction* pInst){
         tmpMap[-1] = 0; //entry for entire array ops
         tmpMap[-2] = 0; //entry for max
         funcQbits[AI->getName()]=tmpMap;
-
-
       }
-      
       if (elementType->isIntegerTy(1)){
         vectQbit.push_back(AI); //Cbit added here
         tmpQArg.isCbit = true;
@@ -1599,7 +1561,7 @@ void GenLPFSSched::print_longPath(){
 
 void GenLPFSSched::print_schedule(Function* F, int op_count){
     int ts = 0;
-    while(ts < op_count-1){
+    while(ts < op_count){
         multimap<int, move>::iterator moveOper = move_schedule.find(ts); 
         multimap<int, move>::iterator bmoveOper = local_move_schedule.find(ts); 
         while((moveOper != move_schedule.end()) && ((*moveOper).first == ts)){
@@ -1616,7 +1578,8 @@ void GenLPFSSched::print_schedule(Function* F, int op_count){
                 while(oper != (*pit).second.end() && (*oper).first == ts){
                     errs() << (*oper).first << "," << (*oper).second.simd << " ";
                     string tmpName = (*oper).second.name.qFunc->getName();
-                    errs() << tmpName.substr(5);
+                    if( tmpName.find("llvm.") != string::npos) errs() << tmpName.substr(5);
+                    else errs() << tmpName;
                     for(int i = 0; i<(*oper).second.name.numArgs; i++){
                         errs() << " " << (*oper).second.name.args[i].name;
                         if((*oper).second.name.args[i].index != -1) errs() << (*oper).second.name.args[i].index;
@@ -1668,7 +1631,6 @@ void GenLPFSSched::print_schedule_metrics(Function* F, int op_count){
     errs() << "ops = " << op_count << "\n";
     errs() << "tmoves = " << moves_count << "\n";
     errs() << "bmoves = " << bmoves_count << "\n";
-    errs() << "total = " << op_count + moves_count << "\n";
     errs() << "ots = " << ots << "\n";
     errs() << "mts = " << mts << "\n";
     errs() << "ts = " << (ots - mts) + (mts * 5) << "\n";
@@ -1961,6 +1923,7 @@ void GenLPFSSched::analyzeCallInst(Function* F, Instruction* pInst){
           //exit(1);
         }
         
+//        errs() << "Checking Inst Types \n";
         Type* argType = CI->getArgOperand(iop)->getType();
         if(argType->isPointerTy()){
           tmpQGateArg.isPtr = true;
@@ -2025,7 +1988,7 @@ void GenLPFSSched::analyzeCallInst(Function* F, Instruction* pInst){
         bool thisFuncIsIntrinsic = checkIfIntrinsic(CI->getCalledFunction());
         if(!thisFuncIsIntrinsic) {
             hasPrimitivesOnly = false;
-            string gname = CI->getCalledFunction()->getName();
+//            string gname = CI->getCalledFunction()->getName();
 //            errs() << "Non-Instric Func is: " << gname << "\n";
         }
           
@@ -2041,28 +2004,26 @@ void GenLPFSSched::analyzeCallInst(Function* F, Instruction* pInst){
               //errs() << allDepQbit[vb].argPtr->getName() <<" Index: ";
               //errs() << allDepQbit[vb].valOrIndex <<"\n";
                 qGateArg param =  allDepQbit[vb];       
-                //errs() << "1\n";
                 thisGate.args[thisGate.numArgs].name = param.argPtr->getName();
-                //errs() << "2\n";
                 if(!param.isPtr)
                   thisGate.args[thisGate.numArgs].index = param.valOrIndex;
-                //errs() << "3\n";
                 thisGate.numArgs++;
-                //errs() << "4\n";
             }
        }
-       //errs() << "5\n";
 
-
+//       errs() << "Calc Crit Times\n";
        uint64_t thisTS = calc_critical_time_unbounded(F,thisGate);       
        //update priorityVector
        priorityVector.push_back(make_pair(pInst,thisTS));
 
+
        //add to mapInstSet
        mapCalls[pInst].name = thisGate;
+
        op newOp;
        newOp.name = thisGate;
-       funcList.push_back(make_pair(pInst,newOp));
+       //funcList.push_back(make_pair(pInst,newOp));
+
 
       }    
       allDepQbit.erase(allDepQbit.begin(),allDepQbit.end());
@@ -2072,7 +2033,6 @@ void GenLPFSSched::analyzeCallInst(Function* F, Instruction* pInst){
 
 void GenLPFSSched::saveTableFuncQbits(Function* F){
   map<unsigned int, map<int, uint64_t> > tmpFuncQbitsMap;
-
   for(map<string, map<int, uint64_t> >::iterator mapIt = funcQbits.begin(); mapIt!=funcQbits.end(); ++mapIt){
     map<string, unsigned int>::iterator argIt = funcArgs.find((*mapIt).first);
     if(argIt!=funcArgs.end()){
@@ -2081,6 +2041,42 @@ void GenLPFSSched::saveTableFuncQbits(Function* F){
     }
   }
   tableFuncQbits[F] = tmpFuncQbitsMap;
+}
+
+
+bool GenLPFSSched::analyzeIntrinsicCallInst(Function *F, Instruction *Inst){
+    if(CallInst *CI = dyn_cast<CallInst>(Inst)){
+        bool thisFuncIsIntrinsic = checkIfIntrinsic(CI->getCalledFunction());
+        if(!thisFuncIsIntrinsic) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool GenLPFSSched::DetermineLeafFunction (Function *F) {
+    bool isALeaf = false;
+    vector<Instruction*> InstList;
+    for (inst_iterator I = inst_begin(*F), E = inst_end(*F); I != E; ++I) {
+        Instruction *Inst = &*I;
+        if(CallInst *CI = dyn_cast<CallInst>(Inst)){
+            op newOp;
+            string called_func_name = CI->getCalledFunction()->getName();
+            InstList.push_back(Inst);
+        }
+    } 
+    for(vector<Instruction*>::reverse_iterator rit = InstList.rbegin(); rit!=InstList.rend(); ++rit){
+        isALeaf = analyzeIntrinsicCallInst(F,(*rit));  
+        if (!isALeaf) {
+            if( dyn_cast<CallInst>((*rit))->getCalledFunction()->getName() != "store_cbit" )
+                return false;
+        }
+  }
+  if(isALeaf) {
+    isLeaf.push_back(F);
+    return true;
+  }
+  return false;
 }
 
 
@@ -2097,39 +2093,32 @@ void GenLPFSSched::CountCriticalFunctionResources (Function *F) {
       break;
   }
 
-  //errs() << "Finding priorities--- \n";
+//  errs() << "Finding priorities--- \n";
   //find priorities for instructions
   for (inst_iterator I = inst_begin(*F), E = inst_end(*F); I != E; ++I) {
     Instruction *Inst = &*I;
     if(CallInst *CI = dyn_cast<CallInst>(Inst)){
       op newOp;
- 
- //     map<Instruction*, qgate>::iterator mist = mapInstSet.find((Inst));
- //     newOp.name = (*mist).second;
- //     if(CallInst *CI = dyn_cast<CallInst>(Inst)){	
-//        newOp.name.qFunc = CI->getCalledFunction();
-
-        string called_func_name = CI->getCalledFunction()->getName();
-//        if (called_func_name.find("llvm.")!=string::npos){
-            mapCalls.insert(make_pair(Inst, newOp));
-            callList.push_back(Inst);
-            if(F->getName() == "measure") {
-//                errs() << "Added Inst " << called_func_name << " : " << Inst << " to call list for measure \n";
-            }
-//        }
-//      }
+      string called_func_name = CI->getCalledFunction()->getName();
+      mapCalls.insert(make_pair(Inst, newOp));
+      callList.push_back(Inst);
+//      errs() << "Added instruction: " << Inst << ": " << called_func_name << "\n";
+      if(F->getName() == "measure") {
+//          errs() << "Added Inst " << called_func_name << " : " << Inst << " to call list for measure \n";
+      }
     }
   } 
 
   //traverse in reverse sequence
 //  errs() << "Beginning analysis" << "\n";
-    for(vector<Instruction*>::reverse_iterator rit = callList.rbegin(); rit!=callList.rend(); ++rit){
-//        errs() << "Analyzing: " << "\n";
+  for(vector<Instruction*>::reverse_iterator rit = callList.rbegin(); rit!=callList.rend(); ++rit){
+//        errs() << "Analyzing: " << mapCalls.find(*rit)->second.name.qFunc->getName() << "\n";
+//        errs() << "Analyzing: " << dyn_cast<CallInst>(*rit)->getCalledFunction()->getName() << "\n";
         analyzeCallInst(F,(*rit));  
   }
 //  errs() << "Finished Analyzing" << "\n";
   //is function leaf or not?
-  if(hasPrimitivesOnly) isLeaf.push_back(F);
+//  if(hasPrimitivesOnly) isLeaf.push_back(F);
 
   //sort vector
   sort(priorityVector.begin(), priorityVector.end(), CompareInstPriByValue());
@@ -2144,24 +2133,21 @@ void GenLPFSSched::CountCriticalFunctionResources (Function *F) {
 //    errs() << "priority scheduling..." << "\n";
     map<Instruction*, op>::iterator mit = mapCalls.find((*vit).first);
     assert(mit!=mapCalls.end() && "Instruction Not Found in MapInstSet.");
+    
+
 
     qGate thisGate = (*mit).second.name;
-    if(!(F->getName() == "main")) { 
-      if(hasPrimitivesOnly)
-        calc_critical_time(F,thisGate,true);
-      else
-        calc_critical_time(F,thisGate,false);
-    }
+//    if(!(F->getName() == "main")) { 
+//        errs() << "CHECK: " << thisGate.qFunc->getName() << "\n";
+//      if(hasPrimitivesOnly)
+//        calc_critical_time(F,thisGate,true);
+//      else
+//        calc_critical_time(F,thisGate,false);
+//    }
   }
 
 
-  saveTableFuncQbits(F);  
-  save_blackbox_info(F);
 
-//  errs() << "Finished Resources..." << "\n";
-
-  //print_ArrParGates();
-  //print_tableFuncQbits();
 
 }
 
@@ -2184,6 +2170,7 @@ bool GenLPFSSched::runOnModule (Module &M) {
   init_gate_names();
   init_gates_as_functions();
   int timeStep = 0; 
+  errs() << "M: $::SIMD_K=" << RES_CONSTRAINT <<"; $::SIMD_D=" << DATA_CONSTRAINT << "; $::SIMD_L=" << SIMD_L << "\n"; 
  
   
   // iterate over all functions, and over all instructions in those functions
@@ -2194,28 +2181,7 @@ bool GenLPFSSched::runOnModule (Module &M) {
     for (std::vector<CallGraphNode*>::const_iterator nsccI = nextSCC.begin(), E = nextSCC.end(); nsccI != E; ++nsccI) {
       Function *F = (*nsccI)->getFunction();      
       if(F && !F->isDeclaration()){
-//        errs() << "SIMD_K " << RES_CONSTRAINT << ", SIMD_D " << DATA_CONSTRAINT << "\n";    
-//         print_priorityVector(); 
 
-//	if(!(F->getName() == "main")){
-//	  print_mapCalls(); 
-//      print_mapCallsEdges();
-//          //print_ArrParGates(F);
-//        print_priorityVector(); 
-//          errs() << "\nLPFS:\n";
-//          errs() << "Function: " << F->getName() << " (sched: lpfs, k: " << RES_CONSTRAINT << ", d: " << DATA_CONSTRAINT << " l: " << SIMD_L << ", opp: " << OPP_SIMD << ", refill: " << REFILL << ") \n"; 
-//          errs() << "==================================================================\n";
-//          //errs() << "\n#Num of critical time steps for function main : " << getNumCritSteps(F) << "\n";
-//        }
-//    else{  
-//	  print_ready_queue();
-//	  print_funcList();
-//        print_vectQbit(); 
-//        print_priorityVector(); 
-
-//	}
-
-        
         funcQbits.clear();
         funcArgs.clear();
         mapCalls.clear();
@@ -2231,7 +2197,7 @@ bool GenLPFSSched::runOnModule (Module &M) {
         ots = 0;    
         simds = 0; 
         tgates_cnt = 0;   
-    
+
         getFunctionArguments(F);
 
         for(int k = 1; k <= (int) RES_CONSTRAINT; k++){
@@ -2240,61 +2206,45 @@ bool GenLPFSSched::runOnModule (Module &M) {
         }
 
         // count the critical resources for this function
-        CountCriticalFunctionResources(F);
-        
-//        errs() << "About to start scheduling ... .. .. . " << "\n";
+       if (DetermineLeafFunction(F)){
+          CountCriticalFunctionResources(F);
+        }
+
 
        vector<Function*>::iterator vit = find(isLeaf.begin(), isLeaf.end(), F);
-       if(/*!(F->getName() == "main") && */vit != isLeaf.end()){
+       if(vit != isLeaf.end()){
             errs() << "\nLPFS:\n";
             errs() << "Function: " << F->getName() << " (sched: lpfs, k: " << RES_CONSTRAINT << ", d: " << DATA_CONSTRAINT << " l: " << SIMD_L << ", opp: " << OPP_SIMD << ", refill: " << REFILL << ") \n"; 
             errs() << "==================================================================\n";
             lpfs(F, timeStep, SIMD_L, REFILL, OPP_SIMD);
         }
-//        errs() << "Scheduling Complete" << "\n";
 
-//        if(!(F->getName() == "main") && vit != isLeaf.end()){
-//       	    lpfs(F,timeStep, SIMD_L,REFILL,OPP_SIMD);
-//        }
 
-//        if(F->getName() == "main"){
-//              print_ArrParGates(F);
-//              errs() << "\n#Num of critical time steps for function main : " << getNumCritSteps(F) << "\n";           
-//        }
-
-        //print_critical_info();
-//        if(!(F->getName() == "main")){
             int op_count = callList.size();
             if(!(schedule.empty())) {
-//                print_schedule_metrics(F,op_count);
-                print_schedule(F,op_count);
-//                print_moves_schedule(F,op_count);
-//                print_local_moves_schedule(F, op_count);
+                if(METRICS)
+                    print_schedule_metrics(F,op_count);
+                 if(FULL_SCHED)
+                    print_schedule(F,op_count);
+                 if(MOVES_SCHED)
+                    print_moves_schedule(F,op_count);
+                 if(LOCAL_MOVES_SCHED)
+                    print_local_moves_schedule(F, op_count);
             }
             schedule.clear();
             move_schedule.clear();
             local_move_schedule.clear();
             active_qubits.clear();
-//         }
 
-        cleanupCurrArrParGates();
-
-
-	
-
-
-
+            cleanupCurrArrParGates();
  
       }
-      else{
+      else  {
             if(debugGenLPFSSched)
               errs() << "WARNING: Ignoring external node or dummy function.\n";
-          }
+      }
     }
   }
-  //print_tableFuncQbits();
-  //print_parallelism();
-
 
   return false;
 } // End runOnModule
