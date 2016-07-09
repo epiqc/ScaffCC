@@ -1,0 +1,184 @@
+\section{Declaration of Circuits}
+
+The construction of RKQC is designed to be as similar as possible to C++ programs which contain a number of functions. To this end, circuits are specifiable through a main function, as well as through various submodules that are declared exactly as common C++ functions. Exactly one module must be named "int main", however this module, as well as any module, can call any other module at any time.
+
+\section{Signal Types}
+
+There is one major type of signal in RKQC, the \textbf{qint}. This type forms the basis for the five other types of signals that are derived from this main class:
+
+\begin{itemize}
+    \item qbit
+    \item zero\_to\_garbage ancilla
+    \item zero\_to\_zero ancilla
+    \item one\_to\_garbage ancilla
+    \item one\_to\_one ancilla
+\end{itemize}
+
+All of the above signals can be declared and used in the specification of gates and circuit descriptions. The primary differences are that the "\_to\_garbage" ancilla are ancilla signals that are not guaranteed to maintain their original state during computation, while the two other ancilla types do make this guarantee.
+
+As will be explained later on, all of these signals are of a base type \textbf{qint}, which allows for circuit description flexibility when creating and passing parameters to submodules.
+
+\section{Creating and Using Modules}
+
+At the circuit level, both user defined modules as well as built in modules can be instantiated in the same fashion. 
+
+In the example circuit "e008\_swap.cpp", the built in function "cnot" is called, creating CNOT gates on the qubits passed in as parameters:
+
+\begin{lstlisting}
+    int main( int argc, char ** argv )
+    {
+        qbit a;
+        qbit b;
+
+        cnot(a, b);
+        cnot(b, a);
+        cnot(a, b);
+
+        return 0;
+    }
+\end{lstlisting}
+
+In exactly the same fashion, a circuit designer can create a submodule, and instantiate it within the main function, as in file "e009\_swap\_triples.cpp":
+
+\begin{lstlisting}
+    void swap_bits( qint x, qint y){
+        cnot(x, y);
+        cnot(x, y);
+        cnot(x, y);
+    }
+
+    int main( int argc, char ** argv ){
+        qbit a0;
+        qbit a1;
+        qbit a2;
+
+        qbit b0;
+        qbit b1;
+        qbit b2;
+
+        swap_bits(a0, b0);
+        swap_bits(a1, b1);
+        swap_bits(a2, b2);
+
+        return 0;
+    }
+\end{lstlisting}
+
+\section{Arrays}
+
+RKQC also allows for multi-dimensional arrays of signals to be declared and used in circuits. To demonstrate this, file "e010\_swap\_triples\_2.cpp" replicates the functionality of "e009\_swap\_triples.cpp" with arrays:
+
+\begin{lstlisting}
+    void swap_bits( qint x, qint y){
+        cnot(x, y);
+        cnot(x, y);
+        cnot(x, y);
+    }
+
+    int main( int argc, char ** argv ){
+        qbit a(3);
+        qbit b(3);
+
+        swap_bits( a[0], b[0] );
+        swap_bits( a[1], b[1] );
+        swap_bits( a[2], b[2] );
+
+        return 0;
+    }
+\end{lstlisting}
+
+\section{Signals and Gates}
+
+Gates are built in modules that can be instantiated in a variety of methods, with a variety of signal types. Specifically, 
+\begin{itemize}
+    \item single qint signals,
+    \item qint arrays,
+    \item single qbit signals,
+    \item qbit arrays,
+    \item single ancilla signals, and
+    \item ancilla arrays
+\end{itemize}
+all are capable of being passed through as parameters to built in gates. For an example of this, file "e002\_signals\_and\_gates.cpp" calls all of the intrinsic built in gates with all of the different signal types: 
+\begin{lstlisting}
+    int main( int argc, char ** argv )
+    {
+    
+        qbit a;
+        qbit b;
+        qbit c;
+        qbit d(10);
+    	qbit e(10);
+    	qbit f(10);
+    /*------------ Gates Called By Qubit --------------*/
+        NOT(a);
+        cnot(a,b);
+        toffoli(a, b, c);	
+    /*------------ Gates Called By Register Index -----*/ 
+        NOT(d[0]);
+        cnot(d[1], d[9]);
+        toffoli(d[0], e[0], c[0]);
+    /*------------ Gates Called By Mixed Register Index & Qbits -----*/ 
+        cnot(a, d[0]);
+        cnot(e[0], b);
+    	toffoli(d[0], a, b);
+    	toffoli(a, d[0], b);
+    	toffoli(a, b, d[0]); 
+    	toffoli(d[0], e[0], a);
+    	toffoli(d[0], a, e[0]);
+    	toffoli(a, d[0], e[0]);
+    /*------------ Gates Called By Full Qbit Reg ------*/ 
+    	NOT(d);
+    	cnot(d, e);
+    	toffoli(d, e, f);
+    
+        return 0;
+    }
+\end{lstlisting}
+
+\section{Assign Value}
+
+A commonly used function of assigning value of one signal to another is built into RKQC in the form of a function:
+\begin{lstlisting}
+    assign_value_of_b_to_a();
+\end{lstlisting}
+
+This function can be instantiated a number of different ways, with integer constants or with two \textbf{qint} signals. These instantiation methods are detailed in file "e004\_assign\_value.cpp":
+\begin{lstlisting}
+    int main( int argc, char ** argv )
+    {
+        qbit a;
+        assign_value_of_b_to_a(a, "0", 1);
+    
+        qbit b(8);
+        assign_value_of_b_to_a(b, "1", 8);
+    
+        qbit c(8);
+        assign_value_of_b_to_a(c, b, 8);
+    
+        return 0;
+    }
+\end{lstlisting}
+
+\section{Integer Arithmetic Modules}
+
+RKQC comes with implementations of quantum adders and multipliers developed in recent theoretical work. For instance, the quantum ripple-carry adder implemented in the function: 
+
+\begin{lstlisting}
+    a_eq_a_plus_b();
+\end{lstlisting}
+
+is derived from work by Wang et. al \cite{adder}, and an example of usage is contained in file "e005\_adder.cpp": 
+
+\begin{lstlisting}
+    int main( int argc, char ** argv )
+    {
+        qbit a(32);
+        qbit b(32);
+    
+        a_eq_a_plus_b(a,b,32);
+    
+        return 0;
+    }
+\end{lstlisting}
+
+Alternatively, an implementation of an ancilla-free addition circuit is also contained within RKQC, derived from earlier work by Cuccaro \cite{Cuccaro}. 

@@ -1,0 +1,48 @@
+\chapter{Built-in Quantum Applications}\label{ch:apps}
+
+This section describes the apps provided with this software, in the `Algorithms/' directory.
+
+\begin{enumerate}
+
+\item Cat-State Preparation: Prepares an $n$-bit quantum register in the maximally entangled Cat-State. 
+  The app is parameterized by $n$.
+
+\item Quantum Fourier Transform (QFT): Performs quantum Fourier transform on an $n$-bit
+  number. The app is parameterized by $n$.
+
+\item Square Root: Uses a quantum concept
+  called \emph{amplitude amplification} to find the square root of an $n$-bit number
+  with the Grover's search technique\cite{Grover}. The app is parameterized by $n$.
+
+\item Binary Welded Tree: Uses quantum random walk algorithm to
+  find a path between an entry and exit node of a binary welded tree
+  \cite{ref:bwt}. The app is parameterized by the height of the tree ($n$) and
+  a time parameter ($s$) within which to find the solution.
+
+\item Ground State Estimation: Uses quantum phase estimation algorithm to
+  estimate the ground state energy of a molecule \cite{ref:gse}. The app
+  is parameterized by the size of the molecule in terms of its molecular
+  weight (M).
+
+\item Triangle Finding Problem: Finds a triangle within a dense,
+  undirected graph \cite{ref:tfp}. The app is parameterized by the
+  number of nodes $n$ in the graph.
+
+\item Boolean Formula: Uses the quantum algorithm described
+  in~\cite{ref:boolean_formula}, to compute a winning strategy for the game of
+  Hex. The app is parameterized by size of the Hex board $(x,y)$.
+
+\item Class Number: A problem from computational algebraic number theory,
+  to compute the class group of a real quadratic number field
+  \cite{DBLP:conf/stoc/Hallgren05}. The app is parameterized by $p$, the
+  number of digits after the radix point for floating point numbers used in
+  computation.
+
+\item Secure Hash Algorithm 1: An implementation of the reverse cryptographic hash function \cite{ref:sha1}. The message is decrypted by using the SHA-1 function as the oracle in a Grovers search algorithm. The app is parameterized by the size of the message in bits ($n$).
+
+\item Shor's Factoring Algorithm: Performs factorization using the Quantum
+  Fourier Transform \cite{Shor}. The app is parameterized by $n$, the
+  size in bits of the number to factor.
+
+\end{enumerate}
+

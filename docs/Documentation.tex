@@ -1,0 +1,88 @@
+%\documentclass[pageno]{jpaper}
+\documentclass[12pt]{report}
+
+\usepackage[normalem]{ulem}
+\usepackage{graphicx}
+\usepackage{caption}
+%\usepackage{subcaption}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{color}
+\usepackage{listings}
+\usepackage{booktabs}
+\usepackage{geometry}
+\usepackage{fixltx2e}
+\usepackage{hyperref}
+\graphicspath{ {figures/} }
+\geometry{margin=0.75in}
+%\lstset{basicstyle=\footnotesize,frame=single}
+
+\definecolor{dkgreen}{rgb}{0,0.6,0}
+\definecolor{gray}{rgb}{0.5,0.5,0.5}
+\definecolor{mauve}{rgb}{0.58,0,0.82}
+
+\lstset{frame=none,
+  language=bash,
+  aboveskip=3mm,
+  belowskip=3mm,
+  showstringspaces=false,
+  columns=flexible,
+  basicstyle={\small\ttfamily},
+  numbers=none,
+  numberstyle=\tiny\color{gray},
+  keywordstyle=\color{blue},
+  commentstyle=\color{dkgreen},
+  stringstyle=\color{mauve},
+  breaklines=true,
+  breakatwhitespace=true,
+  tabsize=3
+}
+
+
+
+\newenvironment{blockquote}{%
+	\par%
+	\medskip
+	\leftskip=2em\rightskip=2em%
+	\ignorespaces}{%
+	\par\medskip}
+ 
+\begin{document}
+
+\title{
+    {ScaffCC: Scaffold Compiler Collection}\\
+    {\large User Manual}\\
+}
+
+
+\author{Ali JavadiAbhari, Adam Holmes, Shruti Patil, Jeff Heckey, Daniel Kudrow,\\ Pranav Gokhale, David Noursi, Lee Ehudin}
+
+\date{June 2016}
+
+
+
+\maketitle
+
+\chapter*{Abstract}
+~\\
+
+ScaffCC~\cite{scaffcc} is a compiler and scheduler for the Scaffold programing language~\cite{Scaffold}. It is written using the LLVM~\cite{LLVM} open-source infrastructure. It is for the purpose of writing and analyzing code for quantum computing applications.\\
+
+ScaffCC enables researchers to compile quantum applications written in Scaffold to a low-level quantum assembly format (QASM), apply error correction, and generate time and area metrics. It is written to be scalable up to problem sizes in which quantum algorithms outperform classical ones, and as such provide valuable insight into the overheads involved and possible optimizations for a realistic implementation on a future device technology.\\
+
+If you use ScaffCC in your publications, please cite this work as follows:\\
+
+Ali JavadiAbhari, Shruti Patil, Daniel Kudrow, Jeff Heckey, Alexey Lvov, Frederic Chong and Margaret Martonosi, {\em``ScaffCC: A Framework for Compilation and Analysis of Quantum Computing Programs,"} ACM International Conference on Computing Frontiers (CF 2014), Cagliari, Italy, May 2014
+
+\tableofcontents
+
+\include{ch-inst/chapter-inst}
+\include{ch-usage/chapter-usage}
+\include{ch-apps/chapter-apps}
+\include{ch-rkqc/chapter-rkqc}
+\include{ch-expand/chapter-expand}
+
+\bibliography{references}
+\bibliographystyle{IEEEtranS}
+
+\end{document}

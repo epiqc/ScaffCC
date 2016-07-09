@@ -1,0 +1,68 @@
+\section{Installation}
+
+\subsection{Obtain}
+
+The first step in installation is to obtain RKQC from the public repository. It can be cloned through the Git tool by:
+\begin{lstlisting}
+    mkdir rkqc 
+    git clone https://github.com/ah744/RKQC.git rkqc/
+\end{lstlisting}
+
+\subsection{Build and Compile}
+
+There are two steps to building and compiling RKQC. The first is to build and obtain the dependencies, and the second is to compile the system. These are both combined in the script "build.sh", and invoking this script from the main directory will build and compile the system. 
+
+\begin{lstlisting}
+    ./build.sh
+\end{lstlisting}
+
+RKQC is now built and compiled on your system.
+
+
+\section{First Example}
+
+The example circuits are located in: 
+\begin{lstlisting} 
+    src/examples 
+\end{lstlisting}
+
+In order to compile and run any of these examples, the "revkit" script may be invoked, located in the main directory of RKQC. 
+
+The example circuit "e001\_hello\_world.cpp": 
+
+\begin{lstlisting}
+	using namespace revkit;
+	int main( int argc, char ** argv )
+	{
+	   qbit a;
+	   qbit b;
+	   qbit c;
+	
+		NOT(a);
+		cnot(b, c);
+		toffoli(a, b, c);
+	
+	   return 0;
+	}
+
+\end{lstlisting}
+
+can be compiled with RKQC by invoking the revkit script and the example circuit name, without the file extension, from the main directory of RKQC. This circuit has three input and output signals, and three reversible logic gates.  
+
+\begin{lstlisting}
+	./revkit e001\_hello\_world
+\end{lstlisting}
+
+The compiler then creates the output ".qasm" file, containing the quantum assembly language instructions generated for this circuit. For "e001", the file "e001\_hello\_world.qasm" contains:
+
+\begin{lstlisting}
+    qubit w0
+    qubit w1
+    qubit w2
+    X w0
+    cnot w1, w2
+    toffoli w0,w1,w2
+\end{lstlisting}
+
+
+

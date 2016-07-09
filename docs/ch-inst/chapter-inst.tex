@@ -1,0 +1,97 @@
+\chapter{Installation}\label{ch:inst}
+
+\section{Getting ScaffCC}
+\begin{enumerate}
+  \item Go to https://github.com/epiqc/ScaffCC
+  \item Download the repository:
+\begin{lstlisting}
+   git clone https://github.com/epiqc/ScaffCC.git [dir]
+\end{lstlisting}
+\end{enumerate}
+
+
+\section{Building ScaffCC}
+First you need to install the following dependencies. For each one, you can either install by building from source,
+or use the package manager of your system (``yum" on Red Hat or ``apt-get" on Ubuntu).  
+
+\begin{enumerate}
+  \item Static libraries for libstdc++ and glibc
+
+  \begin{itemize}
+    \item ``Ubuntu" \\
+    Install GNU gold linker \\
+    You can check if you have this now by doing `ld -v' and if it says `GNU gold' you have it
+    \begin{lstlisting}
+    sudo apt-get install binutils-gold
+    \end{lstlisting}
+
+    \item ``Red Hat"
+    \begin{lstlisting}
+    sudo yum install libstdc++-static 
+    sudo yum install glibc-static
+    \end{lstlisting}
+  \end{itemize}
+  
+  \item GCC 4.5 or higher
+  NOTE: if you need to preserve an older build, consider using `update-alternatives' as system-wide method for preserving and maintaining these.
+
+  \item Boost 1.48
+  \begin{itemize}
+    \item ``Source Build" \\
+    Boost installation instructions are here: \\
+    \url{http://www.boost.org/doc/libs/1_48_0/doc/html/bbv2/installation.html}
+    \begin{lstlisting}
+    wget http://sourceforge.net/projects/boost/files/boost/1.48.0/boost_1_48_0.tar.gz
+    tar zxf boost_1_48_0.tar.gz && cd boost_1_48_0/
+    sudo ./bootstrap.sh
+    sudo ./b2 install --prefix=/usr/local
+    \end{lstlisting}
+  \end{itemize}
+
+  \item The GNU Multiple Precision Arithmetic Library (gmp and gmpxx)    
+  \begin{itemize}
+    \item ``Ubuntu"
+    Use tab-completion to verify the correct packages (e.g. libgmp<tab><tab>)
+    \begin{lstlisting}
+    sudo apt-get install libgmp-dev libgmpxx4ldbl
+    \end{lstlisting}
+
+    \item ``Source Build"
+    \begin{lstlisting}
+    wget https://ftp.gnu.org/gnu/gmp/gmp-6.0.0a.tar.bz2
+    sudo ./configure --disable-shared --enable-static --enable-cxx
+    sudo make && sudo make check && sudo make install
+    \end{lstlisting}
+  \end{itemize}
+
+  \item The GNU MPFR Library (mpfr)
+  \begin{itemize}    
+    \item ``Ubuntu"
+    \begin{lstlisting}
+    sudo apt-get install libmpfr-dev
+    \end{lstlisting}
+
+    \item ``Source Build"
+    \begin{lstlisting}
+    wget http://www.mpfr.org/mpfr-current/mpfr-3.1.4.tar.bz2
+    sudo ./configure --disable-shared --enable-static
+    sudo make && sudo make check && sudo make install
+    \end{lstlisting}
+  \end{itemize}
+
+  \item Python 2.7 (or later)
+
+\end{enumerate}
+
+Once you have all of the required libraries, simply run 
+\begin{lstlisting}
+make
+\end{lstlisting} 
+or 
+\begin{lstlisting}
+make USE_GCC=1
+\end{lstlisting} 
+at the root of the repository. The $USE\_GCC$ flag will force the 
+Makefile to use GCC to compile instead, and this has been seen to be faster 
+on some systems.
+

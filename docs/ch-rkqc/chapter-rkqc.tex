@@ -1,0 +1,11 @@
+\chapter{RKQC:RevKit For Quantum Computation}\label{ch:rkqc}
+
+    RKQC is a compiler for reversible logic circuitry. The framework has been developed to compile high level circuit descriptions down to assembly language instructions, primarily for quantum computing machines. Specifically, input files to the RKQC compiler contain descriptions of reversible circuits, and the output files are the assembly instructions for the circuit, in the ".qasm" format.\\
+
+    In many important quantum computing algorithms, a large portion of the modules use only classical reversible logic operations that can be decomposed into the universal set of NOT, CNOT, and Toffoli gates. Often these are referred to as "classical oracles." These oracles can also be simulated on a conventional computer.\\ 
+
+    RKQC is used by the Scaffold quantum circuits compiler as a subroutine for the compilation of purely classical reversible logic modules, or oracles. It has also been designed to operate as a stand alone tool, and can be used in this fashion. It was also developed as a full conversion of the RevKit platform \cite{rev}.
+
+\input{ch-rkqc/installation}
+\input{ch-rkqc/examples}
+\input{ch-rkqc/libraries}

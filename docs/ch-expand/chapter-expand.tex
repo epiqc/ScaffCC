@@ -1,0 +1,27 @@
+\chapter{Expanding ScaffCC}\label{ch:expand}
+
+ScaffCC is completely open-source and may be expanded to accomodate future needs of quantum circuit analysis and optimization.
+
+
+At the core of ScaffCC are the LLVM compiler passes, which operate on LLVM IR (.ll) code. All LLVM passes are stored in:
+\begin{lstlisting}
+llvm/lib/Transforms/
+\end{lstlisting}
+
+Passes specific to ScaffCC are stored in:
+\begin{lstlisting}
+llvm/lib/Transforms/Scaffold
+\end{lstlisting}
+
+In general, to run a pass in LLVM, you invoke the opt program as follows:
+\begin{lstlisting}
+build/Release+Asserts/bin/opt -S -load build/Release+Asserts/lib/Scaffold.so {pass_name} {input_ll_file} > {output_ll_file} 2> {log_file}
+\end{lstlisting}
+
+Note that ${pass\_name}$ referes to the unique name of the pass by which it is registered in the LLVM system, by invoking the following in the implementation of the pass:
+\begin{lstlisting}
+static RegisterPass<{pass_name}> X({pass_name}, {description_of_functionality});
+\end{lstlisting}
+
+To write a new pass, start by looking at the previously implemented examples in this directory, and consulting the LLVM Documentation:
+\url{http://llvm.org/docs/WritingAnLLVMPass.html}

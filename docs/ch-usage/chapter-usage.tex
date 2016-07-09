@@ -1,0 +1,89 @@
+\chapter{Using ScaffCC}\label{ch:usage}
+
+\section{Running the Compiler}
+To run the compiler, simply use the `scaffold.sh' script in the main directory, with the name of the program and optional compiler flags.
+
+\subsection{Basic Example:}
+
+The command below runs the compiler with default options on the Binary Welded Tree algorithm, with n=100 and s=100 as problem sizes.
+The default compiler option is to generate resource estimations (number of qubits and gates).
+
+\begin{lstlisting}
+./scaffold.sh Algorithms/Binary Welded Tree/Binary_Welded_Tree_n100s100.scaffold
+\end{lstlisting}
+
+
+\section{Compiler Options}
+To see a list of compiler options which can be passed as flags, run:
+
+\begin{lstlisting}
+./scaffold.sh -h
+
+Usage: ./scaffold.sh [-h] [-rqfRFcpd] [-L #] <filename>.scaffold
+    -r   Generate resource estimate (default)
+    -q   Generate QASM
+    -f   Generate flattened QASM
+    -R   Disable rotation decomposition
+    -T   Disable Toffoli decomposition
+    -l   Levels of recursion to run (default=1)
+    -F   Force running all steps
+    -c   Clean all files (no other actions)
+    -p   Purge all intermediate files (preserves specified output,
+         but requires recompilation for any new output)
+    -d   Dry-run; show all commands to be run, but do not execute
+\end{lstlisting}
+
+
+
+\section{Sample Scripts}
+This section describes some of the example scripts contained in the `scripts/' directory. They are written to test the various functionalities 
+of ScaffCC, as detailed below.
+
+Each of them automates the process of running multiple compiler passes on an input file to perform the required analysis or optimization.
+
+
+\subsection{Generating LLVM Intermediate Format: ./gen-ll.sh}
+
+Lowers .scaffold source file to .ll file (intermediary LLVM format). Creates <algorithm>.ll
+The .ll file is the main file in LLVM on which all transformations, optimizations and analysis are performed.
+
+
+\subsection{Critical Path Estimation: ./gen-cp.sh}
+
+Finds critical path information for several different flattening thresholds by doing the following:
+\begin{enumerate}
+\item Finding module sizes using the ResourceCount2 pass.
+\item Flattening modules based on the found module sizes and the requested threshold.
+\item Finds length of critical path, in terms of number of operations on it. Look for the number in front of "main" in the output. 
+\end{enumerate}
+
+\subsubsection{flattening\_thresh.py} 
+Divides modules into different buckets based on their size, to be used for flattening decision purposes.
+
+
+\subsection{Module Call Frequency Estimation: ./gen-freq-estimate.sh}
+Generates an estimate of how many times each module is called, which can guide flattening decisions.
+
+
+\subsection{Generate Longest-Path-First-Schedule (LPFS): ./gen-lpfs.sh}
+Generates LPFS schedules with different options as specified below.
+
+Options in the script: 
+  K=number of SIMD regions / D=capacity of each region / th=flattening thresholds
+
+Calls the following scripts:
+  
+  \subsubsection{./regress.sh}
+  
+  Runs the 3 different communication-aware schedulers, LPFS, RCP, SS, with different scheduler configurations.
+  Look in ./sched.pl for configuration options. For example using -m gives metrics only, while -s outputs entire schedule.
+
+  \subsubsection{./sched.pl}
+  The main scheduler code for LPFS and RCP.
+
+  \subsubsection{./comm\_aware.pl}
+  Applies the communication penalty to timesteps.
+
+All output files are placed in a new directory to avoid cluttering.
+
+
