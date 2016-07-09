@@ -1,0 +1,373 @@
+#!/usr/bin/perl
+
+use Switch;
+
+sub usage {
+    print "usage: $0 name\n";
+    exit;
+}
+
+sub get_var {
+    ($prompt, $default) = @_;
+    $default =~ s/^\s*|\s*$//g;
+    $prompt = "$prompt [$default]" if $default;
+    print "$prompt: ";
+    $var = <STDIN>;
+    $var =~ s/^\s*|\s*$//g;
+    $var = $default if !$var;
+    return $var;
+}
+
+usage if ( scalar @ARGV != 1 );
+
+$name = shift @ARGV;
+
+# Category
+do {
+    print "Please specify a type of the algorithm:\n";
+    print "  1: Truth Table Based Synthesis\n";
+    print "  2: PLA/BLIF Based Synthesis\n";
+    print "  3: Embedding\n";
+    print "  4: Decomposition\n";
+    print "  5: Simulation\n";
+    print "  6: Optimization\n";
+    print "  0: Custom\n";
+
+    $category = get_var "Your choice [0-6]";
+    $category += 0; # make int
+} while ( $category < 0 || $category > 6 );
+
+$functor = ( "truth_table_synthesis", "pla_blif_synthesis", "decomposition", "embedding", "simulation", "optimization" )[$category - 1]."_func" if ( $category > 0 );
+$create_gui_item = 1;
+
+switch ( $category )
+{
+    case 0
+    {
+        $category_name = lc( get_var "Please specify a category name (e.g. synthesis, simulation, optimzation, ...)" );
+        $functor = lc( get_var "Please specify a functor name" );
+        $create_gui_item = 0;
+    }
+    case 1
+    {
+        $category_name = "synthesis";
+        $to_create = "circuit& circ, ";
+        @parameters = ( "const binary_truth_table& spec" );
+        $gui_requires = '"Truth Table"';
+        $gui_provides = '"Circuit"';
+    }
+    case 2
+    {
+        $category_name = "synthesis";
+        $to_create = "circuit& circ, ";
+        @parameters = ( "const std::string& filename" );
+        $gui_requires = '"PLA"';
+        $gui_provides = '"Circuit"';
+    }
+    case 3
+    {
+        $category_name = "synthesis";
+        $to_create = "binary_truth_table& spec, ";
+        $gui_requires = '"Truth Table"';
+        $gui_provides = '"Truth Table"';
+    }
+    case 4
+    {
+        $category_name = "synthesis";
+        $to_create = "circuit& circ, ";
+        @parameters = ( "const circuit& base" );
+        $gui_requires = '"Circuit"';
+        $gui_provides = '"Circuit"';
+    }
+    case 5
+    {
+        $category_name = "simulation";
+        $to_create = "boost::dynamic_bitset<>& output, ";
+        @parameters = ( "const circuit& circ", "const boost::dynamic_bitset<>& input" );
+        $create_gui_item = 0;
+    }
+    case 6
+    {
+        $category_name = "optimization";
+        $to_create = "circuit& circ, ";
+        @parameters = ( "const circuit& base" );
+        $gui_requires = '"Circuit"';
+        $gui_provides = '"Circuit"';
+    }
+}
+
+sub briefize
+{
+	my $s = shift;
+	join(' ', map{ ucfirst $_ } split(/(?<=[A-Za-z])_(?=[A-Za-z])|\b/, $s));
+}
+
+$author = get_var "Author for documentation", `whoami`;
+$brief  = get_var "Name for algorithm", briefize( $name );
+$long   = get_var "Documentation for algorithm";
+
+push @settings_vars, $var while $var = get_var "Settings variable (empty string to stop)";
+
+if ( $category == 0 )
+{
+    $to_create = get_var "Variable to be created by algorithm";
+    $to_create .= ", " if $to_create;
+    push @parameters, $var while $var = get_var "Mandatory parameter (empty string to stop)";
+}
+
+system( "mkdir -p unstable/$category_name" );
+
+$header = uc( $name );
+$parameters_list = join ", ", @parameters;
+$parameters_list .= ", " if $parameters_list;
+
+# bind vars for functor, make _x for creation and parameters
+$bindvars = join( ", ", map( "_$_", ( 1..( scalar( @parameters ) + 1 ) ) ) );
+
+open HEADER, "> unstable/$category_name/$name.hpp";
+print HEADER <<END;
+/**
+ * \@file $name.hpp
+ *
+ * \@brief $brief
+ */
+
+#ifndef ${header}_HPP
+#define ${header}_HPP
+
+#include <core/circuit.hpp>
+#include <core/properties.hpp>
+#include <core/truth_table.hpp>
+
+#include <algorithms/$category_name/$category_name.hpp>
+
+namespace revkit
+{
+
+namespace unstable
+{
+
+  /**
+   * \@brief $brief
+   *
+   * $long
+   *
+   * \@author $author
+   * \@since  1.3
+   */
+  bool ${name}( ${to_create}${parameters_list}properties::ptr settings = properties::ptr(), properties::ptr statistics = properties::ptr() );
+
+  /**
+   * \@brief Functor for the ${name} algorithm
+   *
+   * \@param settings Settings (see ${name})
+   * \@param statistics Statistics (see ${name})
+   *
+   * \@return A functor which complies with the $functor interface
+   *
+   * \@author $author
+   * \@since  1.3
+   */
+  $functor ${name}_func( properties::ptr settings = properties::ptr( new properties() ), properties::ptr statistics = properties::ptr( new properties() ) );
+
+}
+
+}
+
+#endif /* ${header}_HPP */
+END
+close HEADER;
+
+print "\n\nHeader file unstable/$category_name/$name.hpp created.\n";
+
+# Parse Settings for additional includes
+my @additional_includes = ();
+foreach (@settings_vars)
+{
+    if ( /^([^ ]+) ([^=]+)=(.*)$/ )
+    {
+        ($type, $pname, $default) = ($1, $2, $3);
+        $type    =~ s/^\s*|\s*$//g;
+        $default =~ s/^\s*|\s*$//g;
+
+        if ( $type eq "cost_function" ) {
+            push @additional_includes, "core/utils/costs";
+        } elsif ( $type eq "simulation_func" ) {
+            push @additional_includes, "algorithms/simulation/simulation";
+        } elsif ( $type eq "truth_table_synthesis_func" ) {
+            push @additional_includes, "algorithms/synthesis/synthesis";
+        }
+
+        if ( $default eq "simple_simulation_func()" ) {
+            push @additional_includes, "algorithms/simulation/simple_simulation";
+        } elsif ( $default eq "transformation_based_synthesis_func()" ) {
+            push @additional_includes, "algorithms/synthesis/transformation_based_synthesis";
+        }
+    }
+}
+
+open SOURCE, "> unstable/$category_name/$name.cpp";
+print SOURCE <<END;
+#include "${name}.hpp"
+
+#include <boost/bind.hpp>
+
+#include <core/functor.hpp>
+#include <core/utils/timer.hpp>
+
+END
+
+foreach (@additional_includes)
+{
+    print SOURCE "#include <${_}.hpp>\n"
+}
+
+print SOURCE <<END;
+
+namespace revkit
+{
+
+namespace unstable
+{
+
+  bool ${name}( ${to_create}${parameters_list}properties::ptr settings, properties::ptr statistics )
+  {
+
+    // Settings parsing
+END
+
+foreach (@settings_vars)
+{
+    if ( /^([^ ]+) ([^=]+)=(.*)$/ )
+    {
+        ($type, $pname, $default) = ($1, $2, $3);
+        $type    =~ s/^\s*|\s*$//g;
+        $pname   =~ s/^\s*|\s*$//g;
+        $default =~ s/^\s*|\s*$//g;
+
+        print SOURCE "    $type $pname = get<$type>( settings, \"$pname\", $default );\n"
+    }
+}
+
+print SOURCE <<END;
+
+    // Run-time measuring
+    timer<properties_timer> t;
+
+    if ( statistics )
+    {
+      properties_timer rt( statistics );
+      t.start( rt );
+    }
+
+    // TODO insert your code here...
+
+    // TODO change to true, to indicate that algorithm succeeded
+    return false;
+  }
+
+  $functor ${name}_func( properties::ptr settings, properties::ptr statistics )
+  {
+    $functor f = boost::bind( $name, $bindvars, settings, statistics );
+    f.init( settings, statistics );
+    return f;
+  }
+
+}
+
+}
+END
+close SOURCE;
+
+print "Source file unstable/$category_name/$name.hpp created.\n";
+
+# Integrate into bindings
+open FILEIN, "bindings/unstable.cpp" or die "Unable to open file";
+@lines = <FILEIN>;
+close FILEIN;
+
+# Insert include
+my $p = scalar( @parameters ) + 1;
+my $p2 = $p + 2;
+
+my ($pos) = grep { $lines[$_] eq "using namespace boost::python;\n" } 0..$#lines;
+splice @lines, $pos, 0, "#include <unstable/$category_name/${name}.hpp>\n\n";
+
+my ($pos) = grep { $lines[$_] eq "void export_unstable()\n" } 0..$#lines;
+splice @lines, $pos, 0, "BOOST_PYTHON_FUNCTION_OVERLOADS( unstable_${name}_overloads, revkit::unstable::${name}, $p, $p2 )\nBOOST_PYTHON_FUNCTION_OVERLOADS( unstable_${name}_func_overloads, revkit::unstable::${name}_func, 0, 2 )\n\n";
+
+# Insert def
+my ($pos) = grep { $lines[$_] eq "}\n" } 0..$#lines;
+splice @lines, $pos, 0, "  def( \"py_${name}\", revkit::unstable::${name}, unstable_${name}_overloads() );\n  def( \"py_${name}_func\", revkit::unstable::${name}_func, unstable_${name}_func_overloads() );\n";
+
+open FILEOUT, ">bindings/unstable.cpp" or die "Unable to open file";
+print FILEOUT $_ foreach (@lines);
+close FILEOUT;
+
+print "Integrated into bindings/unstable.cpp.\n";
+
+# Integrate into revkitunstable.py
+my $params = join ", ",  map { [split / /, $_]->[-1] } split /, /, $to_create.$parameters_list;
+open PY, ">>bindings/revkitunstable.py" or die "Unable to open file";
+print PY <<END;
+
+def ${name}( $params ):
+    """$brief"""
+    settings = properties()
+    statistics = properties()
+
+    if py_${name}( $params, settings, statistics ):
+        return dict( runtime = statistics.get_double( "runtime" ) )
+    else:
+        return error_msg( statistics )
+END
+close PY;
+
+print "Integrated into bindings/revkitunstable.py.\n";
+
+# Integrate into gui.py
+sub camelize
+{
+	my $s = shift;
+	join('', map{ ucfirst $_ } split(/(?<=[A-Za-z])_(?=[A-Za-z])|\b/, $s));
+}
+
+if ( $create_gui_item ) {
+    my $ccname = camelize( $name );
+    $to_create =~ /[^\w]/;
+    my $gui_class = substr( $to_create, 0, $-[0] );
+    open GUIITEM, ">tools/gui/items/unstable/${ccname}.py" or die "Unable to open file";
+print GUIITEM <<END;
+
+from revkit import *
+import revkitunstable
+
+from core.BaseItem import *
+from helpers.RevKitHelper import *
+
+\@item( "${brief}",
+        requires = $gui_requires, provides = $gui_provides )
+class ${ccname}( BaseItem ):
+    """${long}"""
+    def onCreate( self ):
+        self.setText( "${brief}" )
+        self.setState( self.CONFIGURED )
+
+    def executeEvent( self, inputs ):
+        v = ${gui_class}()
+        res = revkitunstable.${name}( v, inputs[0] )
+        if type( res ) == dict:
+            circuit_add_runtime( v, res['runtime'] )
+        else:
+            return res
+        return [v]
+END
+    close GUIITEM;
+
+    print "Integrated into tools/gui/unstable/${ccname}.py.\n";
+}
+
+print "\nAll files have been created.\nContinue with editing unstable/$category_name/$name.cpp\nand then run `make -C build'.\n";
+
+# make sure to build the new files
+system( "touch unstable/CMakeLists.txt" );

@@ -1,0 +1,67 @@
+#required installed Programs
+
+requiredPrograms="
+make
+cmake
+wget
+python2
+"
+
+#REQUIRES: defines the Libraries including the Versions which should be installed
+
+requires(){
+REQUIRES="
+$BOOST
+cudd-2.5.0  
+puma-2.23
+"
+}
+
+fmi="$ROOT_DIR/scripts/fmi"
+if [ -f $fmi ]; then
+    source $fmi  #requires ROOT_DIR
+else
+    echo "$fmi not found" 2>&1 
+    exit 1
+fi
+
+SPECIAL_REQUIRES="
+$FMI_FILE
+"
+
+#BOOST: BOOST is a special part of the REQUIRES-variable because it's possible to use a boost version installed on the system instead of downloading and installing it especially for revkit 
+
+BOOST=boost-1_51_0
+
+#if an installed boost version should be used, we define usual paths here
+
+boost_version_file=/usr/include/boost/version.hpp
+boost_include_dir=$(dirname $boost_version_file)
+boost_lib_dir=/usr/lib
+
+#CMAKE etc: defines the cmake command and version. also if and how cmake should be build 
+
+CMAKE=cmake
+CMAKE_VERSION=2_8_0
+BUILD_CMAKE="no"
+CMAKE_PACKAGE=cmake-2.8.4
+CMAKE_ARGS=""
+
+BUILDTOOL="make.py"
+
+
+#DEPENDENCIES_DIR defines the working directory for the requirements. It includes the destination for cloning the git repository (GIT_REPO) defined as INSTALLER_DIR and also directories for the build binaries.
+
+DEPENDENCIES_DIR=$ROOT_DIR/dependencies
+DEPS=$(mk_and_abs_dir $DEPENDENCIES_DIR) 
+GIT_REPO="git://github.com/msoeken/dependencies.git"
+GIT_OPT="-b revkit"
+INSTALLER_DIR=installer
+
+#BUILD_DIR is the directory for the binaries when building sources
+
+BUILD_DIR=$ROOT_DIR/build
+BUILD_DIR=$(mk_and_abs_dir $BUILD_DIR)
+
+#name of the tools directory
+TOOLS="tools"

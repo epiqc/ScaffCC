@@ -1,0 +1,109 @@
+#!/bin/bash
+
+ROOT_DIR=$( cd $(dirname $(dirname $0)) && pwd)
+BUILD_DIR=$ROOT_DIR/build
+SRC_DIR=$ROOT_DIR/src
+
+commons="$ROOT_DIR/scripts/commons"
+if [ -f $commons ]; then
+    source $commons  #requires ROOT_DIR
+else
+    echo "$commons not found" 2>&1 
+    exit 1
+fi
+
+
+usage() { 
+  cat << EOF
+usage: $0
+  --help                show this help
+  |-h
+
+  --bindings            build with bindings
+  |-DBUILD_BINDINGS=ON
+  |-b 
+
+  --no-bindings 	build without bindings
+  |-DBUILD_BINDINGS=OFF
+  |-nb
+
+  --unstable            build the unstable sources also
+  |-DBUILD_UNSTABLE=ON
+  |-u                   
+
+  --no-unstable		dont build the unstable sources
+  |-DBUILD_UNSTABLE=OFF
+  |-nu
+
+  --examples            build the example sources also
+  |-DBUILD_EXAMPLES=ON
+  |-e                   
+
+  --no-examples		dont build the example sources
+  |-DBUILD_EXAMPLES=OFF
+  |-ne
+EOF
+  exit 1
+}
+
+
+function call_make(){
+	cd $BUILD_DIR &&
+	cmake $@ $SRC_DIR &&
+	make -j3 &&
+	cd $ROOT_DIR
+}
+
+function create_symlink(){
+	ln -f -s $@ &&
+	file $@ 
+}
+#setting the parameters from the arguments given to the script
+#posibilities are unstable, bindings, examples and setting the boost path
+#building unstable is required so its set by default
+
+PARAM=""
+bindings="-DBUILD_BINDINGS=ON" 
+unstable="-DBUILD_UNSTABLE=ON"
+examples=""
+
+while [[ "$@" ]]; do
+  case $1 in
+    --help|-h)    usage;;
+    --bindings|-DBUILD_BINDINGS=ON|-b) 		bindings="-DBUILD_BINDINGS=ON";;
+    --no-bindings|-DBUILD_BINDINGS=OFF|-nb) 	bindings="-DBUILD_BINDINGS=OFF";;
+    --unstable|-DBUILD_UNSTABLE=ON|-u) 		unstable="-DBUILD_UNSTABLE=ON";;
+    --no-unstable|-DBUILD_UNSTABLE=OFF|-nu) 	unstable="-DBUILD_UNSTABLE=OFF";;
+    --examples|-DBUILD_EXAMPLES=ON|-e) 		examples="-DBUILD_EXAMPLES=ON";;
+    --no-examples|-DBUILD_EXAMPLES=OFF|-ne) 	examples="-DBUILD_EXAMPLES=OFF";;
+      *BOOST_PATH*) PARAM="$PARAM $1";; 
+  esac
+  shift;
+done
+PARAM="$PARAM $bindings $unstable $examples"
+echo $PARAM &&
+
+cd $ROOT_DIR &&
+if [ -d $BUILD_DIR ]; then
+    call_make $PARAM
+else
+    echo "you should run bootstrap.sh first. Run it now? y/n"
+    read answer
+    if [[ $answer == "y" ]]; then
+	source bootstrap.sh
+    else
+	echo "build without bootstrap? y/n"
+    	read answer
+        if [[ $answer == "y" ]]; then
+    	   call_make $PARAM
+	fi
+    fi
+fi
+
+rm revkit.py
+rm revkit_python.so
+rm revkitmath.py
+rm revkitui.py
+
+
+#quote_error

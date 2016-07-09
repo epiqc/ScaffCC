@@ -1,0 +1,189 @@
+#!/usr/bin/perl
+
+sub usage {
+    print "usage: $0 name\n";
+    exit;
+}
+
+sub get_var {
+    ($prompt, $default) = @_;
+    $default =~ s/^\s*|\s*$//g;
+    $prompt = "$prompt [$default]" if $default;
+    print "$prompt: ";
+    $var = <STDIN>;
+    $var =~ s/^\s*|\s*$//g;
+    $var = $default if !$var;
+    return $var;
+}
+
+usage if ( scalar @ARGV != 1 );
+
+$name = shift @ARGV;
+
+if ( -e "examples/$name.cpp" )
+{
+    print "Testcase or example $name exists already.\n";
+    exit;
+}
+
+$po = get_var "Use program options for parsing arguments?", "y";
+
+push @includes, "#include <core/utils/program_options.hpp>" if ( $po eq "y" );
+
+my @params;
+
+while ( $po eq "y" )
+{
+    print "What parameter should be added? (Option [1] and [2] cannot be used together)\n".
+          " [u] User defined parameter\n".
+          " [1] RevLib *.real (circuit realization) file-name to parse from\n".
+          " [2] RevLib *.spec (specification) file-name to parse from\n".
+          " [3] RevLib *.real (circuit realization) file-name to write to\n".
+          " [4] Cost-function\n".
+          " [e] No more paremeter\n";
+    print "Your choice [e]: ";
+    $choice = <STDIN>;
+    $choice =~ s/^\s*|\s*$//g;
+    $choice = "e" if !$choice;
+
+    if ( $choice eq "u" )
+    {
+        print " User defined parameter:\n";
+        $param  = get_var "  Parameter/Variable Name";
+        $type   = get_var "  Type", "std::string";
+        $defval = get_var "  Default Value (empty if no default value)";
+        $desc   = get_var "  Description";
+
+        push @params, [ $param, $type, $defval, $desc ];
+
+        $userdef_param = "1";
+    }
+    elsif ( $choice eq "1" )
+    {
+        push @params, [ "read_realization" ];
+        push @includes, "#include <core/circuit.hpp>";
+        push @includes, "#include <core/io/read_realization.hpp>";
+        $read_realization = "1";
+    }
+    elsif ( $choice eq "2" )
+    {
+        push @params, [ "read_specification" ];
+        push @includes, "#include <core/truth_table.hpp>";
+        push @includes, "#include <core/io/read_specification.hpp>";
+        $read_specification = "1";
+    }
+    elsif ( $choice eq "3" )
+    {
+        push @params, [ "write_realization" ];
+        push @includes, "#include <core/circuit.hpp>";
+        push @includes, "#include <core/io/write_realization.hpp>";
+        $write_realization = "1";
+    }
+    elsif ( $choice eq "4" )
+    {
+        push @params, [ "costs" ];
+        push @includes, "#include <core/circuit.hpp>";
+        push @includes, "#include <core/utils/costs.hpp>";
+    }
+
+    last if $choice eq "e";
+}
+
+open SOURCE, "> examples/$name.cpp";
+print SOURCE "#include <iostream>\n\n";
+
+%seen = ();
+foreach (@includes) {
+    push @uniq, $_ unless $seen{$_}++;
+}
+
+print SOURCE join( "\n", sort @uniq );
+print SOURCE "\n\n";
+print SOURCE "using namespace revkit;";
+print SOURCE "\n\n";
+
+print SOURCE "int main( int argc, char ** argv )\n";
+print SOURCE "{\n";
+if ( $po eq "y" )
+{
+
+    foreach (@params)
+    {
+        next if ( scalar( @$_ ) != 4 );
+        print SOURCE "  $$_[1] $$_[0]";
+        print SOURCE " = $$_[2]" if ( $$_[2] );
+        print SOURCE ";\n";
+    }
+
+    print SOURCE "\n";
+
+    print SOURCE "  program_options opts;\n";
+
+    foreach (@params)
+    {
+        print SOURCE "  opts.add_$$_[0]_option();\n" if ( scalar( @$_ ) == 1 );
+    }
+
+    if ( $userdef_param )
+    {
+        print SOURCE "  opts.add_options()\n";
+        foreach ( @params )
+        {
+            next if ( scalar( @$_ ) != 4 );
+
+            $quote = $def = "";
+
+            $quote = "\"" if $$_[1] eq "std::string";
+            $def = "->default_value( $quote$$_[2]$quote )" if ( $$_[2] );
+            print SOURCE "    ( \"$$_[0]\", boost::program_options::value<$$_[1]>( &$$_[0] )$def, \"$$_[3]\" )\n";
+        }
+        print SOURCE "  ;\n";
+    }
+
+    print SOURCE "  opts.parse( argc, argv );\n\n";
+    print SOURCE "  if ( !opts.good() )\n";
+    print SOURCE "  {\n";
+    print SOURCE "    std::cout << opts << std::endl;\n";
+    print SOURCE "    return 1;\n";
+    print SOURCE "  }\n\n";
+}
+
+if ( $read_realization )
+{
+    print SOURCE "  // reads a circuit from the value of option --filename\n";
+    print SOURCE "  circuit circ;\n";
+    print SOURCE "  read_realization( circ, opts.read_realization_filename() );\n\n";
+}
+
+print SOURCE "  // TODO insert your code here...\n\n";
+
+if ( $read_specification )
+{
+    print SOURCE "  // reads a truth table from the value of option --filename\n";
+    print SOURCE "  binary_truth_table spec;\n";
+    print SOURCE "  read_specification( spec, opts.read_specification_filename() );\n\n";
+}
+
+if ( $write_realization )
+{
+    print SOURCE "  // writes a circuit to the value of option --realname\n";
+    print SOURCE "  if ( opts.is_write_realization_filename_set() )\n";
+    print SOURCE "  {\n";
+    print SOURCE "    // TODO remove this circuit declaration and replace it with the circuit to write\n";
+    print SOURCE "    circuit todo;\n";
+    print SOURCE "    write_realization( todo, opts.write_realization_filename() );\n";
+    print SOURCE "  }\n\n";
+}
+
+print SOURCE "  return 0;\n}\n";
+
+print "\n\nSource file examples/$name.cpp created.\n";
+
+close SOURCE;
+
+# Integrate to build
+open BUILD, ">> examples/CMakeLists.txt";
+print BUILD "add_test( $name revkit_unstable revkit_algorithms revkit_core boost_system.a boost_filesystem.a boost_program_options.a boost_regex.a boost_signals.a cudd dddmp epd mtr st util _puma fmi minisat-fmi )\n";
+close BUILD;
+print "Added compile command to examples/CMakeLists.txt.\n";
+

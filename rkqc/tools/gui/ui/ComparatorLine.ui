@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>ComparatorLine</class>
+ <widget class="QWidget" name="ComparatorLine">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>288</width>
+    <height>25</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string/>
+  </property>
+  <layout class="QHBoxLayout" name="horizontalLayout">
+   <property name="margin">
+    <number>0</number>
+   </property>
+   <item>
+    <widget class="QLabel" name="label">
+     <property name="minimumSize">
+      <size>
+       <width>41</width>
+       <height>0</height>
+      </size>
+     </property>
+     <property name="text">
+      <string>Has</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QComboBox" name="compare">
+     <property name="minimumSize">
+      <size>
+       <width>78</width>
+       <height>0</height>
+      </size>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>78</width>
+       <height>16777215</height>
+      </size>
+     </property>
+     <item>
+      <property name="text">
+       <string>Lowest</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>Highest</string>
+      </property>
+     </item>
+    </widget>
+   </item>
+   <item>
+    <widget class="QComboBox" name="what">
+     <item>
+      <property name="text">
+       <string>Circuit Lines</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>Gate Count</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>Quantum Costs</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>Transistor Costs</string>
+      </property>
+     </item>
+    </widget>
+   </item>
+   <item>
+    <widget class="QToolButton" name="button">
+     <property name="text">
+      <string/>
+     </property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

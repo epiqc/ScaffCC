@@ -1,0 +1,120 @@
+##functions to the bootstrap shell script
+
+#Building dependencies
+function building_dependencies(){
+
+    LIBS=$(mk_and_abs_dir $ROOT_DIR/libs) &&
+    
+    echo "Building dependencies" &&
+#build cmake
+    if [ "$BUILD_CMAKE" = "yes" ]; then
+	./build "$DEPS" $CMAKE_PACKAGE &&
+	CMAKE=$DEPS/$CMAKE_PACKAGE/bin/cmake
+    fi &&
+#build requires
+    ./build "$DEPS" $REQUIRES &&
+#build fmi
+       build_fmi
+
+}
+
+
+function copy_dependencies(){
+#copy the required sources and libraries into the "libs"-directory
+
+    cd $DEPS &&
+    req="$REQUIRES $SPECIAL_REQUIRES"
+    for lib in $req
+    do 
+	for f in $lib/*; do
+	    cp -R $f $LIBS || 
+	    (echoerr "Error: establishing libs failed" && exit 1)
+	done 
+    done
+#if a boost version was found, copy the libs and sources
+    if [ -z "$BOOST" -a -z "$BOOST_PATH" ]; then 
+	cp -r $boost_lib_dir/libboost*.so $(mk_and_abs_dir $LIBS/lib)
+	cp -r $boost_include_dir/ $(mk_and_abs_dir $LIBS/include/boost)
+    fi
+    
+    ln -f -s $LIBS $ROOT_DIR/src/$(basename $LIBS)
+    
+    
+#preparing build directory 
+    
+# PREFIX_PATH=$(echo $REQUIRES| sed "s@[ ^] *@;$DEPS/@g")
+#  -DCMAKE_PREFIX_PATH="$PREFIX_PATH" \
+#  -DBOOST_ROOT="$DEPS/$BOOST"
+}
+
+
+function prepare_build_dir(){
+    echo "preparing build directory" && 
+    cd $BUILD_DIR &&
+    $CMAKE \
+	$ROOT_DIR/src \
+	-DCMAKE_INSTALL_PREFIX=$BUILD_DIR \
+	$CMAKE_ARGS 
+}
+
+function python_settings(){
+    link_name=python
+    
+    echo "creating python link"
+    dest=$(which python) &&
+    if (( $(env python -c "import sys; print(sys.version_info[0])") > 2 )); then 
+        if (( $(env python2 -c "import sys; print(sys.version_info[0])") == 2 )); then 
+	    dest=$(which python2)
+        fi
+    fi &&
+    cd $ROOT_DIR &&
+    if [ -L $link_name ]; then
+	rm -f $link_name
+    fi &&
+    ln -s $dest $link_name &&
+    echo file $link_name &&
+    
+    echo "setting path in python scripts" &&
+    path_to_python_symlink=$ROOT_DIR &&
+    path_to_python_scripts="$TOOLS $TOOLS/gui" &&
+    
+    for dir in $path_to_python_scripts; do
+	for script in $(find $dir -maxdepth 1  -name "*.py" ); do
+		echo "processing $script" &&
+		modify_python_script $script
+	done
+    done
+}
+
+#modify python script function writes infront of the executed python scripts a shebang and the location of our python symlink
+function modify_python_script(){
+    scriptname=$@
+    (echo -n '#!' && 
+	echo $path_to_python_symlink/$link_name && 
+	cat $scriptname) > $scriptname.new &&
+    mv $scriptname{.new,} && 
+    chmod +x $scriptname
+	#chmod +x $scriptname.new
+}
+
+function finalize(){
+#if [ $? -eq 0 ]; then
+    if [ -n "$BOOST_PATH" ]; then
+	call_build_sh $BOOST_PATH
+    else
+	echo "Finished $0." 
+	echo "For building the Revkit sources use the build script."
+	echo "e.g. $BUILDTOOL build"
+#	echo "Run it now? y/n"
+#	read answer
+#	if [[ $answer == "y" ]]; then
+#	   call_build_sh 
+#	fi
+    fi
+#fi
+}
+
+#function call_build_sh(){
+#    cd $ROOT_DIR &&
+#    $ROOT_DIR/$BUILDTOOL build $@
+#}

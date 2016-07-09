@@ -1,0 +1,140 @@
+/**
+ * @page enhance_core Enhancing Functionality
+ * @section sec_enhance Enhancing Core Functionality
+ * On this page, some techniques to enhance the functionality of the toolkit are described.
+ * First, the <b>target tags</b> concept is outlined, which is needed in order to add new gate types.
+ * Afterwards, the use of cost functions is described.
+ * <hr>
+ * @subsection sub_target_tags Target Tags
+ *
+ * A revkit::gate is a data structure, which handles the organization of control lines,
+ * target lines, and target tags. This means, there are no further specializations
+ * of different gate types, e.g. a Toffoli gate. Gate types are assigned by so called \b tags.
+ * Some tags for common gate types are predefined, but using the tags, it is very easy
+ * to define new gate types, e.g. for quantum computing.
+ *
+ * Tags are implemented as empty C++ \em struct datatypes, but there are many functions which
+ * encapsulate the manual usage of the revkit::gate class.
+ *
+ * As an example, the following code demonstrates how to add a Toffoli gate to an existing revkit::circuit \p circ. (\b Note: This examples show how to do this manually. This is not the
+ * recommended way to do this, but illustrates the concept.)
+ *
+ * @code
+ * #include <core/circuit.hpp>
+ * #include <core/gate.hpp>
+ * #include <core/target_tags.hpp>
+ * 
+ * revkit::circuit circ;
+ *
+ * revkit::gate g;
+ * g.add_control( 0 );
+ * g.add_control( 1 );
+ * g.add_target( 2 );
+ * g.set_type( revkit::toffoli_tag() );
+ *
+ * circ.append_gate( g );
+ * @endcode
+ *
+ * Using the functions in add_gates.hpp, adding a Toffoli can be done using one function.
+ *
+ * @code
+ * #include <core/circuit.hpp>
+ * #include <core/add_gates.hpp>
+ *
+ * revkit::circuit circ;
+ * revkit::append_toffoli( circ )( 0, 1 )( 2 );
+ * @endcode
+ *
+ * To check whether a gate is of a certain type, the functions revkit::is_toffoli, revkit::is_fredkin, revkit::is_peres, 
+ * revkit::is_v, and revkit::is_vplus can be used, respectively. The following code snippet checks, whether the first gate
+ * of a revkit::circuit \p circ is a Toffoli gate.
+ *
+ * @code
+ * if ( revkit::is_toffoli( circ[0] ) ) { ... }
+ * @endcode
+ *
+ * @subsubsection subsub_create_tags Adding Own Target Tags
+ *
+ * To create own gates (e.g. a Hadamard gate), one C++ \em struct and two functions have to be implemented. The following file
+ * is called \p hadamard.hpp:
+ *
+ * @code
+ * // hadamard.hpp
+ * #ifndef HADAMARD_HPP
+ * #define HADAMARD_HPP
+ *
+ * #include <core/gate.hpp>
+ * #include <core/target_tags.hpp>
+ *
+ * namespace revkit
+ * {
+ *
+ *   struct hadamard_tag {};
+ *
+ *   bool is_hadamard( const gate& g )
+ *   {
+ *     return is_type<hadamard_tag>( g.type() );
+ *   }
+ * 
+ * }
+ *
+ * #endif
+ * @endcode
+ *
+ * Having this new gate tag, affected functions (e.g. simulation) have to be accordingly extended with the respective functionality. 
+ *
+ * <hr>
+ * @subsection sub_cost_functions Cost Functions
+ *
+ * A generic cost function is implemented in the function \ref revkit::costs.
+ * As parameters it gets a circuit, for which the costs should be measured and a reference to a \ref revkit::cost_function "cost_function" instance.
+ * RevKit distinguishes thereby between a \ref revkit::costs_by_circuit_func "costs_by_circuit_func" instance, where costs are measured globally on the base of the whole circuit,
+ * and a \ref revkit::costs_by_gate_func "costs_by_gate_func" instance, where costs are measured locally for each gate and then added.
+ * Several cost functions are already available in the core library, namely
+ * - \ref revkit::gate_costs "gate_costs", which returns the number of gates,
+ * - \ref revkit::line_costs "line_costs", which returns the number of lines,
+ * - \ref revkit::quantum_costs "quantum_costs", which returns the number of quantum costs (considering some optimizations), and
+ * - \ref revkit::transistor_costs "transistor_costs", which returns the number of transistor costs.
+ *
+ * <hr>
+ * @subsection sub_functors Functors
+ * To decouple the algorithms from each other, functors are used.
+ * As a motivation, the SWOP synthesis algorithm is given.
+ * SWOP uses an arbitrary synthesis function and permutes the outputs of the specification in order to determine a cheaper circuit realization.
+ *
+ * Thus, as a parameter for the SWOP algorithm a generic synthesis method has to be specified. This represents all synthesis algorithms and has to be concretized not before the execution  of the program.
+ * Furthermore, the SWOP algorithm also compiles even if there is no synthesis algorithm available. This make the RevKit toolkit quite modular and easy extenable.
+ * As parameter a functor is used, in this case \ref revkit::truth_table_synthesis_func "truth_table_synthesis_func".
+ * This functor is defined in algorithms/synthesis/synthesis.hpp.
+ * All corresponding synthesis algorithms provide a function <i>algorithm</i>_func where <i>algorithm</i> is the name of the algorithm.
+ * In the following example, a synthesis functor is assigned with the revkit::transformation_based_synthesis "transformation_based_synthesis" algorithm.
+ * In order to provide completeness, the functor is checked to be specified first (in this case the check evaluates always to true).
+ *
+ * @code
+ * #include <core/circuit.hpp>
+ * #include <core/truth_table.hpp>
+ * #include <algorithms/synthesis/synthesis.hpp>
+ * #include <algorithms/synthesis/transformation_based_synthesis.hpp>
+ *
+ * using namespace revkit;
+ *
+ * int main( int argc, char ** argv )
+ * {
+ *   circuit circ;
+ *   binary_truth_table spec;
+ *
+ *   // obtain spec
+ *
+ *   truth_table_synthesis_func func = transformation_based_synthesis_func();
+ *   if ( func )
+ *   {
+ *     func( circ, spec );
+ *   }
+ *
+ *   return 0;
+ * }
+ * @endcode
+ *
+ * The use of functors is especially useful in algorithm settings structs.
+ * A detailed example is given in the Window Optimization Tutorial. 
+ */

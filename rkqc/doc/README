@@ -1,0 +1,126 @@
+RevKit: A Toolkit for Reversible Circuit Design
+Copyright (C) 2009-2013  The RevKit Developers
+www.revkit.org
+revkit@informatik.uni-bremen.de
+
+CONTENTS
+  * Requirements
+  * SE Linux Enforcing Setting (for Fedora users only)
+  * Build
+  * Start
+  * Documentation
+
+REQUIREMENTS
+  You need the following packages (by distribution):
+
+  Ubuntu, Mint Linux: (for the Python Interface Ubuntu 9.10 or higher is required)
+  $ sudo apt-get install build-essential cmake python-dev ipython python-qt4 python-numpy
+
+  openSUSE:
+  $ sudo zypper install gcc-c++ cmake python-devel IPython python-qt4 python-numpy
+
+  Fedora:
+  $ sudo yum install wget gcc-c++ cmake python-devel ipython PyQt4 numpy
+
+  Further packages which are not available in the
+  distrubition's package manager (as e.g. CUDD or PUMA)
+  are downloaded and installed automatically from the bootstrap script.
+  Boost is also required and will be downloaded and installed by default.
+  If you prefer using the distributions boost version, please have a look at the RevKit users manual.
+
+SE LINUX ENFORCING SETTING (for Fedora users only)
+  You need to disable SE Linux enforcing to run RevKit in
+  a python shell. There are two ways to do this, temporarily
+  or permanently.
+
+  Temporarily:
+  $ sudo /usr/sbin/setenforce 0
+
+  Permanently:
+  Change "enforcing" to "disabled" in "/etc/selinux/config" and reboot.
+
+BUILD
+
+  The build process is divided into two scripts.
+  First the RevKit environment is created using the bootstrap script.
+  Afterwards the RevKit algorithms are built using the build script.
+  This has the benefit of running the second script only if changes
+  have been made on the algorithms but not on the environment.
+  The bootstrap script should only be called once at the beginning.
+
+  Do the following steps to build the RevKit environment
+
+  $ ./make.py bootstrap
+
+  This will download and compile all dependencies.
+  In that process, compiling boost takes some time.
+  If you already have installed boost using the distribution's
+  package manager, the option -DBOOST_PATH can be used to
+  specify its path, e.g. -DBOOST_PATH=/usr.
+  Alternatively you can specify the boost include and libs path separately by using --boost, --boost-include-dir and --boost-lib-dir as arguements.
+
+  After bootstraping the environment you are asked to run the build script.
+
+  To run it manually just call
+
+  $ ./make.py build
+
+  This will build the whole RevKit suite including the core,
+  algorithms, examples, and the Python bindings.
+  The Python bindings enable the CLI to use RevKit
+  like a shell. If the system cannot build the Python
+  bindings or if they are not needed, they can be deactivated
+  by calling
+
+  $ ./make.py build -DBUILD_BINDINGS=OFF
+
+  instead.
+
+  The build script must be called at least once.
+  You can use it for compiling the sources after changes have been made, but it is not necessary if your settings are unchanged: Alternatively just call
+
+  $ make
+
+  in the build directory.
+
+START
+
+  To start the RevKit GUI just run
+
+  $ ./tools/gui/gui.py
+
+  from the RevKit directory. This will open a GUI supporting all implemented algorithms.
+
+  If you prefer starting RevKit via python, call
+
+  $ ipython
+
+  and enter
+
+  In [1]: from revkit import *
+
+  If you don't have ipython installed, python will also work.
+
+  A couple of ready-to-use tools (in terms of Python scripts)
+  are already available at ./tools.
+
+
+DOCUMENTATION
+  A user manual is available at doc/users/revkit_user_manual.pdf.
+
+  All C++ documentation including
+      - installation,
+      - usage, and
+      - full code documentation
+  is available in the Doxygen documentation. The main page
+  for the documentation is doc/devs/html/index.html. You can open the documentation
+  e.g. by calling
+
+  $ firefox doc/devs/html/index.html
+
+  For generating the documentation on your own, call
+
+  $ cd doc/devs
+  $ ./doxygen.pl
+
+Have Fun!

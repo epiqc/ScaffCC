@@ -1,0 +1,20 @@
+#fmi
+FMI="fmi"
+FMI_VERSION="0.3"
+FMI_FILE="$FMI-$FMI_VERSION"
+FMI_URL="http://www.informatik.uni-bremen.de/revkit/files/$FMI_FILE.tar.gz"
+
+function build_fmi(){
+    cd $DEPS/build &&
+    if [ -d $FMI_FILE ]; then
+	echo "skipping $FMI_FILE" 
+    else
+	echo "wget $FMI_URL" &&
+	wget -c -O $FMI_FILE.tar.gz $FMI_URL &&
+	tar xfz $FMI_FILE.tar.gz && 
+	ln -s -f $DEPS/$BOOST include &&
+	cd $FMI_FILE/$FMI && 
+	cmake -DCMAKE_INSTALL_PREFIX=$DEPS/$FMI_FILE && 
+	make install 
+    fi
+}

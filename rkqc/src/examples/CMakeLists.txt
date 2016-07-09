@@ -1,0 +1,6 @@
+macro(add_test ARG1)
+    add_executable( ${ARG1} ${ARG1}.cpp )
+    target_link_libraries( ${ARG1} ${ARGN} )
+    install( TARGETS ${ARG1} DESTINATION ${CMAKE_INSTALL_PREFIX} )
+endmacro(add_test)
+add_test( e001_hello_world revkit_core boost_system boost_filesystem boost_regex boost_signals )

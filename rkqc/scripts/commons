@@ -1,0 +1,41 @@
+echo "$(date) $0 param: $@" 
+
+
+
+#first arg input file
+#second arg output file
+function filter(){
+   #remove all lines containing %. which is only in downloadprocesses
+   sed /%/d $1 >> $2
+}
+
+echoerr() { echo "$@" 1>&2; }
+
+
+#function quote_error(){
+#    echo Summery:
+#    if [ -s $ERRFILE ]; then
+#	echo "Some error occured.  The log is located at $ERRFILE"
+#	return 1
+#   else
+#	echo "no errors occured."
+#   	rm -f $ERRFILE 
+#    fi
+#
+#    if [ -s $WARNFILE ]; then
+#	echo "Some warning occured.  The log is located at $WARNFILE"
+#    else
+#	echo "no warnings occured."
+#   	rm -f $WARNFILE 
+#    fi
+#
+#    return 0
+#}
+
+mk_and_abs_dir() {
+    mkdir -p $1 &&
+    cd $1 &>/dev/null &&
+    pwd
+}
+
+

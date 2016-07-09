@@ -1,0 +1,44 @@
+#!/bin/bash
+
+#remove the #! revkit python entries at the beginning of the python scripts
+
+#loading common functions
+ROOT_DIR=$( cd $(dirname $(dirname $0)) && pwd)
+commons="$ROOT_DIR/scripts/commons"
+if [ -f $commons ]; then
+    source $commons  #requires ROOT_DIR
+else
+    echo "$commons not found" 2>&1 
+    exit 1
+fi
+#loading configuration
+config="$ROOT_DIR/scripts/config"
+if [ -f $config ]; then
+    source $config  #requires ROOT_DIR
+else
+    echo "$config not found" 2>&1 
+    exit 1
+fi
+
+
+#modify python script function writes infront of the executed python scripts a shebang and the location of our python symlink
+function modify_python_script(){
+    scriptname=$@
+    
+    sed '/#!/d' $scriptname > $scriptname.new
+    (echo "#!/usr/bin/python" && 
+	cat $scriptname.new) > $scriptname &&
+    rm $scriptname.new
+#chmod +x $scriptname
+}
+
+echo "setting path in python scripts" &&
+path_to_python_symlink=$ROOT_DIR &&
+path_to_python_scripts="$TOOLS $TOOLS/gui" &&
+
+for dir in $path_to_python_scripts; do
+    for script in $(find $dir -maxdepth 1  -name "*.py" ); do
+	echo "processing $script" &&
+	modify_python_script $script
+    done
+done

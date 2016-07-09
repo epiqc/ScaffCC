@@ -1,0 +1,78 @@
+RevKit 1.3
+* [C++]     The RM Spectra synthesis algorithm introduced in [MDM:07] has been added.
+* [C++]     Verification/Simulation: Recursive simulation of modules has been added.
+* [C++]     Synthesis: A function transposition_to_circuit has been added which creates a circuit realizing a certain transposition.
+* [C++]     Synthesis: A synthesis approach has been added based on consecutive applications of transposition_to_circuit.
+* [C++]     New options in write_blif to distinguish state signals and to keep name of constant lines have been added.
+* [Helpers] The helpers scripts are now integrating new algorithms into the Python bindings.
+* [Python]  GUI Changes: Snap Items to Items have been added.
+* [Build]   The installing and compilation process has been re-organized and unitized (see README for details).
+* [Build]   New scripts have been added allowing for the individual compilation of the entire toolkit and its individual algorithms/implementations.
+* [Build]   New clean scripts have been added.
+* [Build]   A symbol link for "python" has been added which is used by all Python-scripts.
+* [Build]   RevKit is now compatible with the recent boost-library, i.e. compilation errors with (new) Linux distributions have been fixed.
+* [C++]     BUGFIX: Equivalence checking is now compatible with new gcc-compilers.
+* [C++]     BUGFIX: The order of targets in a Peres gate is now respected.
+* [C++]     BUGFIX: The underflow in embed_truth_table with functions that have more outputs than inputs has been fixed.
+* [C++]     BUGFIX: Small bugfixes in core/circuit have been performed.
+* [C++]     BUGFIX: Several further bugs have been fixed.
+* [Python]  BUGFIX: Wrong function name in embed_truth_table tool has been fixed.
+
+RevKit 1.2.2
+* [C++]     BUGFIX: Make .variables optional when parsing *.spec files
+* [C++]     BUGFIX: Use generic Python library for building Python bindings
+
+RevKit 1.2.1
+* [Python]  BUGFIX: GUI crash on Ubuntu versions older than 11.04 has been fixed.
+
+RevKit 1.2
+* [Python]  The RevKit Graphical User Interface has been added (see User Documentation, Section 3.1 or the tutorial videos at www.revkit.org).
+* [C++]     An algorithm for the simulation of sequential circuits has been added.
+* [C++]		  RevLib 2.0: Support of simulation files.
+* [Python]  Extended zooming capabilities have been added (see the status bar of the RevKit Viewer).
+* [Python]  The module 'revkitmath' for matrix manipulation has been added.
+* [C++]     Support of buses and BlifMV in write_blif.
+* [C++]     Bus information can be copied in copy_metadata.
+* [C++]     Settings for copy_metadata have been added enabling to select which data should be copied.
+* [C++]     Copying of hierarchical information is now configurable in flatten_circuit.
+* [C++]     BUGFIX: The properties class (used for algorithms) has been re-implemented (without changing the interface).
+* [C++]     BUGFIX: A problem with constant inputs and garbage outputs in the equivalence checker has been fixed.
+* [C++]     BUGFIX: The costs calculation for hierarchical circuits has been fixed.
+* [C++]     BUGFIX: The problem of too many items in read_pla when there were more than one space between columns has been fixed.
+
+RevKit 1.1.1
+* [Python]  BUGFIX: The costs calculation for hierarchical circuits in the RevKit Viewer has been fixed.
+* [C++]     BUGFIX: A missing case for Fredkin gate synthesis has been added in write_verilog.
+* [Python]  BUGFIX: It is now possible to select a synthesis method in the line_reduction tool script.
+* [C++]     BUGFIX: A wrong pathname for testcase has been fixed in the tutorial of the developer's documentation.
+* [C++]     BUGFIX: The timeout for the line_reduction synthesis algorithms has been fixed.
+* [C++]     BUGFIX: A wrong return value in target_lines and control_lines has been fixed.
+* [C++]     BUGFIX: Wrong output names and number of output signals in write_blif have been fixed.
+* [Python]  In KFDD-based synthesis, sifting instead of exact ordering is used as default.
+* [C++]     BUGFIX: A wrong variable name in testcase script has been fixed.
+* [C++]     BUGFIX: A missing variable reference in bus_collection has been fixed.
+* [C++]     BUGFIX: A wrong reference type in python binding for circuit::circuit_name has been fixed.
+
+RevKit 1.1
+* [C++]     The adding lines optimization method introduced in [MWD:2010] has been added (see User Documentation, Section D.3).
+* [C++]     The visualization of circuits has been improved (see User Documentation, Section 3.2).
+* [C++]     RevLib 2.0: Support of hierarchical circuitry (i.e. modules, flatten_circuit).
+* [C++]     RevLib 2.0: Support of input and output buses and state signals.
+* [C++]     RevLib 2.0: Support of annotations.
+* [C++]     RevLib 2.0: Support of quotes in input and output names.
+* [C++]     A new IO-function "write_verilog" has been added which generates a Verilog-Code from a given circuit.
+* [C++]     An offset calculation of quantum_costs has been added which can be applied to determine hypothetical costs
+* [C++]     An active control concept has been introduced in circuit class.
+* [C++]     Gates can be accessed by the index in circuit class.
+* [C++]     A return value has been added for the "add_line_to_circuit"-function.
+* [C++]     Timer: It is now possible to use system time instead of user time.
+* [Python]  A "size()"-method has been added in the bitset class.
+* [C++]     BUGFIX: A bug in the quantum cost calculation of Fredkin gates has been fixed.
+* [C++]     BUGFIX: Fixed write_realization and write_specification to compile in Mac OS.
+* [C++]     BUGFIX: Fixed warnings to compile in Mac OS.
+* [Helpers] BUGFIX: Fixed functor name.
+
+RevKit 1.0.1
+* [Build]   BUGFIX: Installing python bindings is now possible on 64-bit machines.
+* [C++]     BUGFIX: Bug in quantum decomposition fixed (thanks to Gerhard W. Dueck for reporting this error).
+

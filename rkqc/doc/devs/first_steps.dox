@@ -1,0 +1,177 @@
+/**
+ * @page first_steps First Steps
+ *
+ * @section sec_first_steps First Steps
+ * In this section, a couple of <i>Hello World</i>-like examples are provided to guide a start into the usage of RevKit.
+ * They give an idea of how to use the elementary data structures and functions of the framework.
+ * For further use and a detailed explanation of all classes, methods, and functions the reference documentation should be used.
+ *
+ * The examples are structured as follows. First an abstract explanation is given, what the example is doing.
+ * Afterwards, the single steps are described in more detail before the code is displayed.
+ * Finally, related tasks and the respective reference is given.
+ * <hr>
+ * @subsection create_exe Creating an Executable
+ * In order to create an executable, call
+ * @code
+ * helpers/testcase my_example
+ * @endcode
+ * The script is interactive and will ask for parameter that should given to the program,
+ * a circuit that should be read. Futher information about creating executables is given
+ * in \ref sub_executable.
+ *
+ * <hr>
+ * @subsection sub_creating Creating a Circuit
+ * In this example, how to create a circuit composed of <i>multiple control Toffoli</i> gates (MCT gates) is described.
+ * Therefore
+ *  -# The necessary header files are included (all files have the file extension <i>.hpp</i> and are separated into single header files categorized into directories),
+ *  -# the \p revkit namespace is explicitly used,
+ *  -# a circuit with 3 lines is initialized,
+ *  -# Toffoli gates are added to the circuit, whereby the indices in the second brackets are determining the control lines (0 is the top line) and the index in the last bracket is the Toffoli line, and
+ *  -# the circuit is printed out in ASCII format to the standard output.
+ *
+ * @code
+ * #include <iostream>
+ *
+ * #include <core/circuit.hpp>
+ * #include <core/functions/add_gates.hpp>
+ * #include <core/io/print_circuit.hpp>
+ *
+ * using namespace revkit;
+ *
+ * int main( int argc, char ** argv )
+ * {
+ *
+ *   circuit circ( 3 );
+ *
+ *   append_toffoli( circ )( 2 )( 1 );
+ *   append_toffoli( circ )( 0, 1 )( 2 );
+ *   append_toffoli( circ )( 1, 2 )( 0 );
+ *   append_toffoli( circ )( 0, 1 )( 2 );
+ *   append_toffoli( circ )( 2 )( 1 );
+ *
+ *   std::cout << circ << std::endl;
+ *
+ *   return 0;
+ * }
+ * @endcode
+ *
+ * Further reading on this example:
+ * - Add other gate types: \ref add_gates.hpp
+ * - Change the ASCII output of the circuit: \ref print_circuit.hpp
+ *
+ * <hr>
+ * @subsection sub_reading Reading and Writing a Circuit from a File
+ * The following example demonstrates how to read a realization from
+ * a file, how to modify the realization, and how to write it back to another file. Therefore,
+ * -# an empty circuit is created (no argument as in the previous example),
+ * -# the RevLib realization file with file-name <i>"circuit.real"</i> is parsed,
+ * -# the circuit is reversed,
+ * -# the circuit is written to another file with file-name <i>"circuit-copy.real"</i>.
+ *
+ * @code
+ * #include <iostream>
+ *
+ * #include <core/circuit.hpp>
+ * #include <core/functions/reverse_circuit.hpp>
+ * #include <core/io/read_realization.hpp>
+ * #include <core/io/write_realization.hpp>
+ *
+ * using namespace revkit;
+ *
+ * int main( int argc, char ** argv )
+ * {
+ *   circuit circ;
+ *   read_realization( circ, "circuit.real" );
+ *   reverse_circuit( circ );
+ *   write_realization( circ, "circuit-copy.real" );
+ *
+ *   return 0;
+ * }
+ * @endcode
+ *
+ * Further reading on this example:
+ * - Check for errors in the parsing process and fetch error messages if available: \ref revkit::read_realization(circuit&, const std::string&, std::string*) "read_realization"
+ * - Add a header to a RevLib realization file when writing to a file-name: \ref revkit::write_realization_settings::header "write_realization_settings"
+ *
+ * <hr>
+ * @subsection sub_iterate_gates Iterating through the Gates of a Circuit
+ *
+ * This example shows how to iterate through the gates of circuit using the \b foreach statement from the Boost library.
+ * For each gate the number of its control lines is printed to the standard output. Therefore,
+ *
+ * -# an empty circuit is created and a RevLib file is parsed,
+ * -# every gate is traversed from left to right using \b foreach, and
+ * -# for each gate the number of its control lines is printed using the begin and end iterators of the controls in the gate (the STL function <tt>std::distance</tt> is used to calculate the distance between the iterators, i. e. the number of elements).
+ *
+ * @code
+ * #include <iostream>
+ * #include <iterator>   // for std::distance
+ *
+ * #include <core/circuit.hpp>
+ * #include <core/gate.hpp>
+ * #include <core/io/read_realization.hpp>
+ *
+ * using namespace revkit;
+ *
+ * int main( int argc, char ** argv )
+ * {
+ *   circuit circ;
+ *   read_realization( circ, "circuit.real" );
+ *
+ *   foreach ( const gate& g, circ )
+ *   {
+ *     unsigned num_controls = std::distance( g.begin_controls(), g.end_controls() );
+ *     std::cout << "Gate has " << num_controls << " controls." << std::endl;
+ *   }
+ *
+ *   return 0;
+ * }
+ * @endcode
+ * Further reading on this example:
+ * - Control iterators in the gate class: \ref revkit::gate::begin_controls() "gate::begin_controls" and \ref revkit::gate::end_controls() "gate::end_controls"
+ *
+ * <hr>
+ * @subsection sub_add_gates Adding Gates
+ * Although there are methods in the circuit class for adding gates (\ref revkit::circuit::append_gate "circuit::append_gate", \ref revkit::circuit::prepend_gate "circuit::prepend_gate", and \ref revkit::circuit::insert_gate "circuit::insert_gate"),
+ * they should only used when adding user defined gates (\ref sub_target_tags).
+ * When adding standard gates (as Toffoli, Fredin, Peres, V, or V+) there are pre-defined helper functions available to use (see also \ref sub_creating).
+ *
+ * In the following example, a circuit is creating with different methods (using different gate types and positions where to insert the corresponding gate).
+ * Further, different techniques are used when adding gates with multiple control lines. Therefore,
+ *
+ * -# An empty circuit with 5 lines is created,
+ * -# a CNOT Gate with control at line 2 (counted from 0) and target at line 3 is added,
+ * -# a V Gate (control on 0, target on 1) is prepended (added in the front of the circuit),
+ * -# a Fredkin Gate with controls on 0 and 1 as well as targets on 2 and 4 is appended at the end of the circuit,
+ * -# a V+ Gate is inserted \e before the second gate (second parameter) with control on 1 and target on 2,
+ * -# a NOT Gate is prepended at the beginning of the circuit, and
+ * -# a Toffoli gate with controls on 0, 1, 2, and 3 and target on 4 is added dynamically.
+ *
+ * @code
+ * #include <boost/assign/std/set.hpp>     // for using += operator with gate::line_container
+ *
+ * #include <core/circuit.hpp>
+ * #include <core/functions/add_gates.hpp>
+ *
+ * using namespace boost::assign;
+ *
+ * int main( int argc, char ** argv )
+ * {
+ *   circuit circ( 5 );
+ *
+ *   append_cnot( circ, 2, 3 );
+ *   prepend_v( circ, 0, 1 );
+ *   append_fredkin( circ )( 0, 1 )( 2, 4 );
+ *   insert_vplus( circ, 2, 1, 2 );
+ *   prepend_not( circ, 2 );
+ *
+ *   gate::line_container controls;
+ *   controls += 0,1,2,3;
+ *   append_toffoli( circ, controls, 4 );
+ * }
+ * @endcode
+ *
+ * This leads to the following circuit:
+ * <center><img src="../images/example_sub_add_gates.png" border="0"></center>
+ *
+ */

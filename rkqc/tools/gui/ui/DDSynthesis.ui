@@ -1,0 +1,425 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>DDSynthesis</class>
+ <widget class="QWidget" name="DDSynthesis">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>542</width>
+    <height>300</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string/>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout_2">
+   <item>
+    <widget class="QSplitter" name="splitter">
+     <property name="orientation">
+      <enum>Qt::Horizontal</enum>
+     </property>
+     <widget class="QTabWidget" name="tabWidget"/>
+     <widget class="QWidget" name="widget" native="true">
+      <layout class="QFormLayout" name="formLayout_2">
+       <property name="fieldGrowthPolicy">
+        <enum>QFormLayout::ExpandingFieldsGrow</enum>
+       </property>
+       <item row="0" column="0">
+        <widget class="QLabel" name="label_3">
+         <property name="text">
+          <string>Diagram Type:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="1">
+        <widget class="QComboBox" name="dd_type">
+         <item>
+          <property name="text">
+           <string>Binary Decision Diagram (BDD)</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>Kronecker Functional Decision Diagram (KFDD)</string>
+          </property>
+         </item>
+        </widget>
+       </item>
+       <item row="1" column="0" colspan="2">
+        <widget class="QGroupBox" name="groupBox">
+         <property name="title">
+          <string>BDD Synthesis</string>
+         </property>
+         <layout class="QVBoxLayout" name="verticalLayout">
+          <item>
+           <widget class="QStackedWidget" name="stackedWidget">
+            <property name="currentIndex">
+             <number>0</number>
+            </property>
+            <widget class="QWidget" name="page">
+             <layout class="QFormLayout" name="formLayout">
+              <property name="margin">
+               <number>0</number>
+              </property>
+              <item row="0" column="1">
+               <widget class="QCheckBox" name="complemented">
+                <property name="text">
+                 <string>Complemented Edges</string>
+                </property>
+                <property name="checked">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="label">
+                <property name="text">
+                 <string>Reordering:</string>
+                </property>
+                <property name="buddy">
+                 <cstring>reordering</cstring>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QComboBox" name="reordering">
+                <property name="currentIndex">
+                 <number>4</number>
+                </property>
+                <item>
+                 <property name="text">
+                  <string>No Reordering</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Same</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Random</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Random Pivot</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Sifting</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Sifting Converge</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Symmetric Sifting</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Symmetric Sifting Converge</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Group Sifting</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Group Sifting Converge</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Window (Size: 2)</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Window (Size: 3)</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Window (Size: 4)</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Window Converge (Size: 2)</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Window Converge (Size: 3)</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Window Converge (Size: 4)</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Annealing</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Genetic</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Exact</string>
+                 </property>
+                </item>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+            <widget class="QWidget" name="page_2">
+             <layout class="QFormLayout" name="formLayout_3">
+              <item row="0" column="0">
+               <widget class="QLabel" name="label_4">
+                <property name="text">
+                 <string>Default Decomposition:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QComboBox" name="default_decomposition">
+                <property name="currentIndex">
+                 <number>2</number>
+                </property>
+                <item>
+                 <property name="text">
+                  <string>Shannon</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Positive Davio</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Negative Davio</string>
+                 </property>
+                </item>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="label_5">
+                <property name="text">
+                 <string>Reordering:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QComboBox" name="kfdd_reordering">
+                <property name="currentIndex">
+                 <number>7</number>
+                </property>
+                <item>
+                 <property name="text">
+                  <string>No Reordering</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Exact Friedman (DTL)</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Exact Permutation (DTL)</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Sifting (DTL)</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Exact Friedman</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Exact Permutation</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Sifting</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Sifting and DTL Sifting</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Invert</string>
+                 </property>
+                </item>
+               </widget>
+              </item>
+              <item row="2" column="0">
+               <widget class="QLabel" name="label_6">
+                <property name="text">
+                 <string>Sifting Factor:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="1">
+               <widget class="QDoubleSpinBox" name="sifting_factor">
+                <property name="alignment">
+                 <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+                </property>
+                <property name="decimals">
+                 <number>1</number>
+                </property>
+                <property name="singleStep">
+                 <double>0.100000000000000</double>
+                </property>
+                <property name="value">
+                 <double>2.500000000000000</double>
+                </property>
+               </widget>
+              </item>
+              <item row="3" column="0">
+               <widget class="QLabel" name="label_7">
+                <property name="text">
+                 <string>Sifting Groth Limit:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="3" column="1">
+               <widget class="QComboBox" name="sifting_growth_limit">
+                <property name="currentIndex">
+                 <number>1</number>
+                </property>
+                <item>
+                 <property name="text">
+                  <string>Relative</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Absolute</string>
+                 </property>
+                </item>
+               </widget>
+              </item>
+              <item row="4" column="0">
+               <widget class="QLabel" name="label_8">
+                <property name="text">
+                 <string>Sifting Method:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="4" column="1">
+               <widget class="QComboBox" name="sifting_method">
+                <property name="currentIndex">
+                 <number>4</number>
+                </property>
+                <item>
+                 <property name="text">
+                  <string>Random</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Initial</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Greatest</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Loser First</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Verify</string>
+                 </property>
+                </item>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item row="3" column="0">
+        <widget class="QLabel" name="label_2">
+         <property name="text">
+          <string>Run-time:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="3" column="1">
+        <widget class="QLabel" name="runtime">
+         <property name="text">
+          <string/>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="1">
+        <widget class="QCheckBox" name="draw_bdd">
+         <property name="text">
+          <string>Draw DD</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <tabstops>
+  <tabstop>tabWidget</tabstop>
+  <tabstop>dd_type</tabstop>
+  <tabstop>complemented</tabstop>
+  <tabstop>reordering</tabstop>
+  <tabstop>draw_bdd</tabstop>
+ </tabstops>
+ <resources/>
+ <connections>
+  <connection>
+   <sender>dd_type</sender>
+   <signal>currentIndexChanged(int)</signal>
+   <receiver>stackedWidget</receiver>
+   <slot>setCurrentIndex(int)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>368</x>
+     <y>13</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>403</x>
+     <y>66</y>
+    </hint>
+   </hints>
+  </connection>
+ </connections>
+</ui>

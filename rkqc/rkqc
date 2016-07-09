@@ -1,0 +1,68 @@
+#!/bin/bash
+
+ROOT=$(dirname $0)
+#ROOT="${BASH_SOURCE[0]}"
+#ROOT=${PWD}
+
+name=${1%.cpp}
+filename="$name.cpp"
+
+echo "Compiling $name"
+
+cp *cpp $ROOT/src/examples
+
+cd $ROOT/src/examples
+
+rm CMakeLists.txt
+
+cat CMAKE_HEADER > CMakeLists.txt
+echo "add_test( $name revkit_core boost_system boost_filesystem boost_regex boost_signals )" >> CMakeLists.txt 
+
+cd ../../scripts/
+
+echo "Building RKQC"
+
+python ../make.py build -DBUILD_UNSTABLE=ON -DBUILD_EXAMPLES=ON -DBUILD_BINDINGS=OFF > messages.log;
+grep -i "Error" messages.log;
+echo "Done."
+
+cd ../
+
+echo "Running $name"
+
+build/examples/$name
+
+echo "Cleaning Output"
+
+qasm="$name.qasm"
+
+if [ -f workers.txt ]; then 
+    cat workers.txt > $qasm
+    rm workers.txt
+fi
+if [ -f ancilla_0g.txt ]; then
+    cat ancilla_0g.txt >> $qasm
+    rm ancilla_0g.txt
+fi 
+if [ -f ancilla_00.txt ]; then 
+    cat ancilla_00.txt >> $qasm 
+    rm ancilla_00.txt
+fi
+if [ -f ancilla_1g.txt ]; then 
+    cat ancilla_1g.txt >> $qasm 
+    rm ancilla_1g.txt
+fi
+if [ -f ancilla_11.txt ]; then 
+    cat ancilla_11.txt >> $qasm 
+    rm ancilla_11.txt
+fi
+if [ -f gates.txt ]; then 
+    cat gates.txt >> $qasm
+    rm gates.txt
+fi
+
+cd $ROOT
+cd ../
+mv rkqc/rkqc.qasm .
+
+

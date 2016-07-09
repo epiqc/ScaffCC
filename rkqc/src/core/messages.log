@@ -1,0 +1,1182 @@
+init
+Tue Apr 26 09:53:44 PDT 2016 /home/adam/Documents/revkit-1.3/scripts/build param: -DBUILD_UNSTABLE=ON -DBUILD_EXAMPLES=ON -DBUILD_BINDINGS=OFF
+-DBUILD_BINDINGS=OFF -DBUILD_UNSTABLE=ON -DBUILD_EXAMPLES=ON
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/adam/Documents/revkit-1.3/build
+[  1%] Built target revkit_unstable
+[ 33%] Built target revkit_algorithms
+Scanning dependencies of target revkit_core
+[ 34%] Building CXX object core/CMakeFiles/revkit_core.dir/io/write_realization.cpp.o
+In file included from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/config.hpp:57:0,
+                 from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/foreach.hpp:30,
+                 from /home/adam/Documents/revkit-1.3/src/core/circuit.hpp:38,
+                 from /home/adam/Documents/revkit-1.3/src/core/io/write_realization.hpp:33,
+                 from /home/adam/Documents/revkit-1.3/src/core/io/write_realization.cpp:18:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iterator/iterator_facade.hpp: In function ‘typename boost::detail::enable_if_interoperable<Derived1, Derived2, typename boost::mpl::apply2<boost::detail::always_bool2, Derived1, Derived2>::type>::type boost::operator==(const boost::iterator_facade<Derived1, V1, TC1, Reference1, Difference1>&, const boost::iterator_facade<Derived2, V2, TC2, Reference2, Difference2>&)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_832’ locally defined but not used [-Wunused-local-typedefs]
+          BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
+                     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iterator/iterator_facade.hpp:814:7: note: in expansion of macro ‘BOOST_STATIC_ASSERT’
+       BOOST_STATIC_ASSERT((                                                     \
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iterator/iterator_facade.hpp:825:3: note: in expansion of macro ‘BOOST_ITERATOR_FACADE_INTEROP’
+   BOOST_ITERATOR_FACADE_INTEROP(                                    \
+   ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iterator/iterator_facade.hpp:832:3: note: in expansion of macro ‘BOOST_ITERATOR_FACADE_RELATION’
+   BOOST_ITERATOR_FACADE_RELATION(==, return, equal)
+   ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iterator/iterator_facade.hpp: In function ‘typename boost::detail::enable_if_interoperable<Derived1, Derived2, typename boost::mpl::apply2<boost::detail::always_bool2, Derived1, Derived2>::type>::type boost::operator!=(const boost::iterator_facade<Derived1, V1, TC1, Reference1, Difference1>&, const boost::iterator_facade<Derived2, V2, TC2, Reference2, Difference2>&)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_833’ locally defined but not used [-Wunused-local-typedefs]
+          BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
+                     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iterator/iterator_facade.hpp:814:7: note: in expansion of macro ‘BOOST_STATIC_ASSERT’
+       BOOST_STATIC_ASSERT((                                                     \
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iterator/iterator_facade.hpp:825:3: note: in expansion of macro ‘BOOST_ITERATOR_FACADE_INTEROP’
+   BOOST_ITERATOR_FACADE_INTEROP(                                    \
+   ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iterator/iterator_facade.hpp:833:3: note: in expansion of macro ‘BOOST_ITERATOR_FACADE_RELATION’
+   BOOST_ITERATOR_FACADE_RELATION(!=, return !, equal)
+   ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iterator/iterator_facade.hpp: In function ‘typename boost::detail::enable_if_interoperable<Derived1, Derived2, typename boost::mpl::apply2<boost::detail::always_bool2, Derived1, Derived2>::type>::type boost::operator<(const boost::iterator_facade<Derived1, V1, TC1, Reference1, Difference1>&, const boost::iterator_facade<Derived2, V2, TC2, Reference2, Difference2>&)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_835’ locally defined but not used [-Wunused-local-typedefs]
+          BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
+                     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iterator/iterator_facade.hpp:814:7: note: in expansion of macro ‘BOOST_STATIC_ASSERT’
+       BOOST_STATIC_ASSERT((                                                     \
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iterator/iterator_facade.hpp:825:3: note: in expansion of macro ‘BOOST_ITERATOR_FACADE_INTEROP’
+   BOOST_ITERATOR_FACADE_INTEROP(                                    \
+   ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iterator/iterator_facade.hpp:835:3: note: in expansion of macro ‘BOOST_ITERATOR_FACADE_RELATION’
+   BOOST_ITERATOR_FACADE_RELATION(<, return 0 >, distance_from)
+   ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iterator/iterator_facade.hpp: In function ‘typename boost::detail::enable_if_interoperable<Derived1, Derived2, typename boost::mpl::apply2<boost::detail::always_bool2, Derived1, Derived2>::type>::type boost::operator>(const boost::iterator_facade<Derived1, V1, TC1, Reference1, Difference1>&, const boost::iterator_facade<Derived2, V2, TC2, Reference2, Difference2>&)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_836’ locally defined but not used [-Wunused-local-typedefs]
+          BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
+                     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iterator/iterator_facade.hpp:814:7: note: in expansion of macro ‘BOOST_STATIC_ASSERT’
+       BOOST_STATIC_ASSERT((                                                     \
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iterator/iterator_facade.hpp:825:3: note: in expansion of macro ‘BOOST_ITERATOR_FACADE_INTEROP’
+   BOOST_ITERATOR_FACADE_INTEROP(                                    \
+   ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iterator/iterator_facade.hpp:836:3: note: in expansion of macro ‘BOOST_ITERATOR_FACADE_RELATION’
+   BOOST_ITERATOR_FACADE_RELATION(>, return 0 <, distance_from)
+   ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iterator/iterator_facade.hpp: In function ‘typename boost::detail::enable_if_interoperable<Derived1, Derived2, typename boost::mpl::apply2<boost::detail::always_bool2, Derived1, Derived2>::type>::type boost::operator<=(const boost::iterator_facade<Derived1, V1, TC1, Reference1, Difference1>&, const boost::iterator_facade<Derived2, V2, TC2, Reference2, Difference2>&)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_837’ locally defined but not used [-Wunused-local-typedefs]
+          BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
+                     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iterator/iterator_facade.hpp:814:7: note: in expansion of macro ‘BOOST_STATIC_ASSERT’
+       BOOST_STATIC_ASSERT((                                                     \
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iterator/iterator_facade.hpp:825:3: note: in expansion of macro ‘BOOST_ITERATOR_FACADE_INTEROP’
+   BOOST_ITERATOR_FACADE_INTEROP(                                    \
+   ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iterator/iterator_facade.hpp:837:3: note: in expansion of macro ‘BOOST_ITERATOR_FACADE_RELATION’
+   BOOST_ITERATOR_FACADE_RELATION(<=, return 0 >=, distance_from)
+   ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iterator/iterator_facade.hpp: In function ‘typename boost::detail::enable_if_interoperable<Derived1, Derived2, typename boost::mpl::apply2<boost::detail::always_bool2, Derived1, Derived2>::type>::type boost::operator>=(const boost::iterator_facade<Derived1, V1, TC1, Reference1, Difference1>&, const boost::iterator_facade<Derived2, V2, TC2, Reference2, Difference2>&)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_838’ locally defined but not used [-Wunused-local-typedefs]
+          BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
+                     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iterator/iterator_facade.hpp:814:7: note: in expansion of macro ‘BOOST_STATIC_ASSERT’
+       BOOST_STATIC_ASSERT((                                                     \
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iterator/iterator_facade.hpp:825:3: note: in expansion of macro ‘BOOST_ITERATOR_FACADE_INTEROP’
+   BOOST_ITERATOR_FACADE_INTEROP(                                    \
+   ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iterator/iterator_facade.hpp:838:3: note: in expansion of macro ‘BOOST_ITERATOR_FACADE_RELATION’
+   BOOST_ITERATOR_FACADE_RELATION(>=, return 0 <=, distance_from)
+   ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iterator/iterator_facade.hpp: In function ‘typename boost::detail::enable_if_interoperable<Derived1, Derived2, typename boost::mpl::apply2<boost::detail::choose_difference_type, Derived1, Derived2>::type>::type boost::operator-(const boost::iterator_facade<Derived1, V1, TC1, Reference1, Difference1>&, const boost::iterator_facade<Derived2, V2, TC2, Reference2, Difference2>&)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_847’ locally defined but not used [-Wunused-local-typedefs]
+          BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
+                     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iterator/iterator_facade.hpp:814:7: note: in expansion of macro ‘BOOST_STATIC_ASSERT’
+       BOOST_STATIC_ASSERT((                                                     \
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iterator/iterator_facade.hpp:842:3: note: in expansion of macro ‘BOOST_ITERATOR_FACADE_INTEROP’
+   BOOST_ITERATOR_FACADE_INTEROP(
+   ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iterator/iterator_adaptor.hpp: In function ‘void boost::detail::iterator_adaptor_assert_traversal()’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_224’ locally defined but not used [-Wunused-local-typedefs]
+          BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
+                     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iterator/iterator_adaptor.hpp:224:7: note: in expansion of macro ‘BOOST_STATIC_ASSERT’
+       BOOST_STATIC_ASSERT((is_convertible<Tr1, Tr2>::value));
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iterator/transform_iterator.hpp: In constructor ‘boost::transform_iterator<UnaryFunction, Iterator, Reference, Value>::transform_iterator(const Iterator&)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_97’ locally defined but not used [-Wunused-local-typedefs]
+          BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
+                     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iterator/transform_iterator.hpp:97:9: note: in expansion of macro ‘BOOST_STATIC_ASSERT’
+         BOOST_STATIC_ASSERT(is_class<UnaryFunc>::value);
+         ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/optional/optional.hpp: In member function ‘void boost::optional_detail::optional_base<T>::construct(const Expr&, const boost::in_place_factory_base*)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_355’ locally defined but not used [-Wunused-local-typedefs]
+          BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
+                     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/optional/optional.hpp:355:8: note: in expansion of macro ‘BOOST_STATIC_ASSERT’
+        BOOST_STATIC_ASSERT ( ::boost::mpl::not_<is_reference_predicate>::value ) ;
+        ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/optional/optional.hpp: In member function ‘void boost::optional_detail::optional_base<T>::construct(const Expr&, const boost::typed_in_place_factory_base*)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_364’ locally defined but not used [-Wunused-local-typedefs]
+          BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
+                     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/optional/optional.hpp:364:8: note: in expansion of macro ‘BOOST_STATIC_ASSERT’
+        BOOST_STATIC_ASSERT ( ::boost::mpl::not_<is_reference_predicate>::value ) ;
+        ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/variant/variant.hpp: In member function ‘void boost::variant<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19>::operator==(const U&) const’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_1724’ locally defined but not used [-Wunused-local-typedefs]
+          BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
+                     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/variant/variant.hpp:1724:9: note: in expansion of macro ‘BOOST_STATIC_ASSERT’
+         BOOST_STATIC_ASSERT( false && sizeof(U) );
+         ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/variant/variant.hpp: In member function ‘void boost::variant<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19>::operator<(const U&) const’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_1731’ locally defined but not used [-Wunused-local-typedefs]
+          BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
+                     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/variant/variant.hpp:1731:9: note: in expansion of macro ‘BOOST_STATIC_ASSERT’
+         BOOST_STATIC_ASSERT( false && sizeof(U) );
+         ^
+In file included from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/tuple/tuple.hpp:33:0,
+                 from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/unordered/detail/allocate.hpp:27,
+                 from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/unordered/detail/buckets.hpp:15,
+                 from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/unordered/detail/table.hpp:10,
+                 from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/unordered/detail/equivalent.hpp:14,
+                 from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/unordered/unordered_set.hpp:17,
+                 from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/unordered_set.hpp:16,
+                 from /home/adam/Documents/revkit-1.3/src/core/gate.hpp:34,
+                 from /home/adam/Documents/revkit-1.3/src/core/circuit.hpp:46,
+                 from /home/adam/Documents/revkit-1.3/src/core/io/write_realization.hpp:33,
+                 from /home/adam/Documents/revkit-1.3/src/core/io/write_realization.cpp:18:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/tuple/detail/tuple_basic.hpp: In function ‘typename boost::tuples::access_traits<typename boost::tuples::element<N, boost::tuples::cons<HT, TT> >::type>::const_type boost::tuples::get(const boost::tuples::cons<HT, TT>&)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/tuple/detail/tuple_basic.hpp:228:45: warning: typedef ‘cons_element’ locally defined but not used [-Wunused-local-typedefs]
+   typedef BOOST_DEDUCED_TYPENAME impl::type cons_element;
+                                             ^
+In file included from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/config.hpp:57:0,
+                 from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/foreach.hpp:30,
+                 from /home/adam/Documents/revkit-1.3/src/core/circuit.hpp:38,
+                 from /home/adam/Documents/revkit-1.3/src/core/io/write_realization.hpp:33,
+                 from /home/adam/Documents/revkit-1.3/src/core/io/write_realization.cpp:18:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/tuple/detail/tuple_basic.hpp: In member function ‘boost::tuples::cons<HT, TT>& boost::tuples::cons<HT, TT>::operator=(const std::pair<_U1, _U2>&)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_325’ locally defined but not used [-Wunused-local-typedefs]
+          BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
+                     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/tuple/detail/tuple_basic.hpp:325:5: note: in expansion of macro ‘BOOST_STATIC_ASSERT’
+     BOOST_STATIC_ASSERT(length<cons>::value == 2); // check length = 2
+     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/tuple/detail/tuple_basic.hpp: In member function ‘boost::tuples::tuple<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9>& boost::tuples::tuple<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9>::operator=(const std::pair<_U1, _U2>&)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_582’ locally defined but not used [-Wunused-local-typedefs]
+          BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
+                     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/tuple/detail/tuple_basic.hpp:582:5: note: in expansion of macro ‘BOOST_STATIC_ASSERT’
+     BOOST_STATIC_ASSERT(length<tuple>::value == 2);// check_length = 2
+     ^
+In file included from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/unordered/unordered_set.hpp:18:0,
+                 from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/unordered_set.hpp:16,
+                 from /home/adam/Documents/revkit-1.3/src/core/gate.hpp:34,
+                 from /home/adam/Documents/revkit-1.3/src/core/circuit.hpp:46,
+                 from /home/adam/Documents/revkit-1.3/src/core/io/write_realization.hpp:33,
+                 from /home/adam/Documents/revkit-1.3/src/core/io/write_realization.cpp:18:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/unordered/detail/unique.hpp: In member function ‘boost::unordered::detail::table_impl<Types>::value_type& boost::unordered::detail::table_impl<Types>::operator[](const key_type&)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/unordered/detail/unique.hpp:385:54: warning: typedef ‘mapped_type’ locally defined but not used [-Wunused-local-typedefs]
+             typedef typename value_type::second_type mapped_type;
+                                                      ^
+In file included from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/config.hpp:57:0,
+                 from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/foreach.hpp:30,
+                 from /home/adam/Documents/revkit-1.3/src/core/circuit.hpp:38,
+                 from /home/adam/Documents/revkit-1.3/src/core/io/write_realization.hpp:33,
+                 from /home/adam/Documents/revkit-1.3/src/core/io/write_realization.cpp:18:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iterator/filter_iterator.hpp: In constructor ‘boost::filter_iterator<Predicate, Iterator>::filter_iterator(Iterator, Iterator)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_70’ locally defined but not used [-Wunused-local-typedefs]
+          BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
+                     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iterator/filter_iterator.hpp:70:11: note: in expansion of macro ‘BOOST_STATIC_ASSERT’
+           BOOST_STATIC_ASSERT(is_class<Predicate>::value);
+           ^
+In file included from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/mpl/aux_/integral_wrapper.hpp:22:0,
+                 from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/mpl/int.hpp:20,
+                 from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/mpl/lambda_fwd.hpp:23,
+                 from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/mpl/aux_/na_spec.hpp:18,
+                 from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/mpl/if.hpp:19,
+                 from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/foreach.hpp:71,
+                 from /home/adam/Documents/revkit-1.3/src/core/circuit.hpp:38,
+                 from /home/adam/Documents/revkit-1.3/src/core/io/write_realization.hpp:33,
+                 from /home/adam/Documents/revkit-1.3/src/core/io/write_realization.cpp:18:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept_check.hpp: In function ‘void boost::function_requires(Model*)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:20: warning: typedef ‘boost_concept_check45’ locally defined but not used [-Wunused-local-typedefs]
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+                    ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/preprocessor/cat.hpp:29:34: note: in definition of macro ‘BOOST_PP_CAT_I’
+ #    define BOOST_PP_CAT_I(a, b) a ## b
+                                  ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:7: note: in expansion of macro ‘BOOST_PP_CAT’
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/assert.hpp:44:5: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT_FN’
+     BOOST_CONCEPT_ASSERT_FN(void(*)ModelInParens)
+     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept_check.hpp:45:7: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT’
+       BOOST_CONCEPT_ASSERT((Model));
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept_check.hpp: In destructor ‘boost::AdaptableGenerator<Func, Return>::~AdaptableGenerator()’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:20: warning: typedef ‘boost_concept_check453’ locally defined but not used [-Wunused-local-typedefs]
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+                    ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/preprocessor/cat.hpp:29:34: note: in definition of macro ‘BOOST_PP_CAT_I’
+ #    define BOOST_PP_CAT_I(a, b) a ## b
+                                  ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:7: note: in expansion of macro ‘BOOST_PP_CAT’
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/assert.hpp:44:5: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT_FN’
+     BOOST_CONCEPT_ASSERT_FN(void(*)ModelInParens)
+     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept_check.hpp:453:11: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT’
+           BOOST_CONCEPT_ASSERT((Convertible<result_type, Return>));
+           ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept_check.hpp: In destructor ‘boost::AdaptableUnaryFunction<Func, Return, Arg>::~AdaptableUnaryFunction()’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:20: warning: typedef ‘boost_concept_check465’ locally defined but not used [-Wunused-local-typedefs]
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+                    ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/preprocessor/cat.hpp:29:34: note: in definition of macro ‘BOOST_PP_CAT_I’
+ #    define BOOST_PP_CAT_I(a, b) a ## b
+                                  ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:7: note: in expansion of macro ‘BOOST_PP_CAT’
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/assert.hpp:44:5: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT_FN’
+     BOOST_CONCEPT_ASSERT_FN(void(*)ModelInParens)
+     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept_check.hpp:465:11: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT’
+           BOOST_CONCEPT_ASSERT((Convertible<result_type, Return>));
+           ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:20: warning: typedef ‘boost_concept_check466’ locally defined but not used [-Wunused-local-typedefs]
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+                    ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/preprocessor/cat.hpp:29:34: note: in definition of macro ‘BOOST_PP_CAT_I’
+ #    define BOOST_PP_CAT_I(a, b) a ## b
+                                  ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:7: note: in expansion of macro ‘BOOST_PP_CAT’
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/assert.hpp:44:5: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT_FN’
+     BOOST_CONCEPT_ASSERT_FN(void(*)ModelInParens)
+     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept_check.hpp:466:11: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT’
+           BOOST_CONCEPT_ASSERT((Convertible<Arg, argument_type>));
+           ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept_check.hpp: In destructor ‘boost::AdaptableBinaryFunction<Func, Return, First, Second>::~AdaptableBinaryFunction()’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:20: warning: typedef ‘boost_concept_check484’ locally defined but not used [-Wunused-local-typedefs]
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+                    ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/preprocessor/cat.hpp:29:34: note: in definition of macro ‘BOOST_PP_CAT_I’
+ #    define BOOST_PP_CAT_I(a, b) a ## b
+                                  ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:7: note: in expansion of macro ‘BOOST_PP_CAT’
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/assert.hpp:44:5: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT_FN’
+     BOOST_CONCEPT_ASSERT_FN(void(*)ModelInParens)
+     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept_check.hpp:484:11: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT’
+           BOOST_CONCEPT_ASSERT((Convertible<result_type, Return>));
+           ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:20: warning: typedef ‘boost_concept_check485’ locally defined but not used [-Wunused-local-typedefs]
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+                    ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/preprocessor/cat.hpp:29:34: note: in definition of macro ‘BOOST_PP_CAT_I’
+ #    define BOOST_PP_CAT_I(a, b) a ## b
+                                  ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:7: note: in expansion of macro ‘BOOST_PP_CAT’
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/assert.hpp:44:5: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT_FN’
+     BOOST_CONCEPT_ASSERT_FN(void(*)ModelInParens)
+     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept_check.hpp:485:11: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT’
+           BOOST_CONCEPT_ASSERT((Convertible<First, first_argument_type>));
+           ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:20: warning: typedef ‘boost_concept_check486’ locally defined but not used [-Wunused-local-typedefs]
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+                    ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/preprocessor/cat.hpp:29:34: note: in definition of macro ‘BOOST_PP_CAT_I’
+ #    define BOOST_PP_CAT_I(a, b) a ## b
+                                  ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:7: note: in expansion of macro ‘BOOST_PP_CAT’
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/assert.hpp:44:5: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT_FN’
+     BOOST_CONCEPT_ASSERT_FN(void(*)ModelInParens)
+     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept_check.hpp:486:11: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT’
+           BOOST_CONCEPT_ASSERT((Convertible<Second, second_argument_type>));
+           ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept_check.hpp: In destructor ‘boost::InputIterator<TT>::~InputIterator()’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:20: warning: typedef ‘boost_concept_check517’ locally defined but not used [-Wunused-local-typedefs]
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+                    ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/preprocessor/cat.hpp:29:34: note: in definition of macro ‘BOOST_PP_CAT_I’
+ #    define BOOST_PP_CAT_I(a, b) a ## b
+                                  ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:7: note: in expansion of macro ‘BOOST_PP_CAT’
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/assert.hpp:44:5: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT_FN’
+     BOOST_CONCEPT_ASSERT_FN(void(*)ModelInParens)
+     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept_check.hpp:517:9: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT’
+         BOOST_CONCEPT_ASSERT((SignedInteger<difference_type>));
+         ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:20: warning: typedef ‘boost_concept_check518’ locally defined but not used [-Wunused-local-typedefs]
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+                    ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/preprocessor/cat.hpp:29:34: note: in definition of macro ‘BOOST_PP_CAT_I’
+ #    define BOOST_PP_CAT_I(a, b) a ## b
+                                  ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:7: note: in expansion of macro ‘BOOST_PP_CAT’
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/assert.hpp:44:5: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT_FN’
+     BOOST_CONCEPT_ASSERT_FN(void(*)ModelInParens)
+     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept_check.hpp:518:9: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT’
+         BOOST_CONCEPT_ASSERT((Convertible<iterator_category, std::input_iterator_tag>));
+         ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept_check.hpp: In destructor ‘boost::ForwardIterator<TT>::~ForwardIterator()’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:20: warning: typedef ‘boost_concept_check551’ locally defined but not used [-Wunused-local-typedefs]
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+                    ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/preprocessor/cat.hpp:29:34: note: in definition of macro ‘BOOST_PP_CAT_I’
+ #    define BOOST_PP_CAT_I(a, b) a ## b
+                                  ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:7: note: in expansion of macro ‘BOOST_PP_CAT’
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/assert.hpp:44:5: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT_FN’
+     BOOST_CONCEPT_ASSERT_FN(void(*)ModelInParens)
+     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept_check.hpp:548:11: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT’
+           BOOST_CONCEPT_ASSERT((Convertible<
+           ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept_check.hpp: In destructor ‘boost::BidirectionalIterator<TT>::~BidirectionalIterator()’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:20: warning: typedef ‘boost_concept_check579’ locally defined but not used [-Wunused-local-typedefs]
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+                    ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/preprocessor/cat.hpp:29:34: note: in definition of macro ‘BOOST_PP_CAT_I’
+ #    define BOOST_PP_CAT_I(a, b) a ## b
+                                  ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:7: note: in expansion of macro ‘BOOST_PP_CAT’
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/assert.hpp:44:5: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT_FN’
+     BOOST_CONCEPT_ASSERT_FN(void(*)ModelInParens)
+     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept_check.hpp:576:11: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT’
+           BOOST_CONCEPT_ASSERT((Convertible<
+           ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept_check.hpp: In destructor ‘boost::RandomAccessIterator<TT>::~RandomAccessIterator()’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:20: warning: typedef ‘boost_concept_check609’ locally defined but not used [-Wunused-local-typedefs]
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+                    ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/preprocessor/cat.hpp:29:34: note: in definition of macro ‘BOOST_PP_CAT_I’
+ #    define BOOST_PP_CAT_I(a, b) a ## b
+                                  ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:7: note: in expansion of macro ‘BOOST_PP_CAT’
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/assert.hpp:44:5: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT_FN’
+     BOOST_CONCEPT_ASSERT_FN(void(*)ModelInParens)
+     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept_check.hpp:606:11: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT’
+           BOOST_CONCEPT_ASSERT((Convertible<
+           ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept_check.hpp: In destructor ‘boost::Container<C>::~Container()’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:20: warning: typedef ‘boost_concept_check653’ locally defined but not used [-Wunused-local-typedefs]
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+                    ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/preprocessor/cat.hpp:29:34: note: in definition of macro ‘BOOST_PP_CAT_I’
+ #    define BOOST_PP_CAT_I(a, b) a ## b
+                                  ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:7: note: in expansion of macro ‘BOOST_PP_CAT’
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/assert.hpp:44:5: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT_FN’
+     BOOST_CONCEPT_ASSERT_FN(void(*)ModelInParens)
+     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept_check.hpp:653:11: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT’
+           BOOST_CONCEPT_ASSERT((InputIterator<const_iterator>));
+           ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept_check.hpp: In destructor ‘boost::Mutable_Container<C>::~Mutable_Container()’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:20: warning: typedef ‘boost_concept_check681’ locally defined but not used [-Wunused-local-typedefs]
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+                    ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/preprocessor/cat.hpp:29:34: note: in definition of macro ‘BOOST_PP_CAT_I’
+ #    define BOOST_PP_CAT_I(a, b) a ## b
+                                  ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:7: note: in expansion of macro ‘BOOST_PP_CAT’
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/assert.hpp:44:5: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT_FN’
+     BOOST_CONCEPT_ASSERT_FN(void(*)ModelInParens)
+     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept_check.hpp:680:11: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT’
+           BOOST_CONCEPT_ASSERT((
+           ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:20: warning: typedef ‘boost_concept_check683’ locally defined but not used [-Wunused-local-typedefs]
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+                    ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/preprocessor/cat.hpp:29:34: note: in definition of macro ‘BOOST_PP_CAT_I’
+ #    define BOOST_PP_CAT_I(a, b) a ## b
+                                  ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:7: note: in expansion of macro ‘BOOST_PP_CAT’
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/assert.hpp:44:5: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT_FN’
+     BOOST_CONCEPT_ASSERT_FN(void(*)ModelInParens)
+     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept_check.hpp:683:11: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT’
+           BOOST_CONCEPT_ASSERT((InputIterator<iterator>));
+           ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept_check.hpp: In destructor ‘boost::ForwardContainer<C>::~ForwardContainer()’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:20: warning: typedef ‘boost_concept_check703’ locally defined but not used [-Wunused-local-typedefs]
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+                    ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/preprocessor/cat.hpp:29:34: note: in definition of macro ‘BOOST_PP_CAT_I’
+ #    define BOOST_PP_CAT_I(a, b) a ## b
+                                  ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:7: note: in expansion of macro ‘BOOST_PP_CAT’
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/assert.hpp:44:5: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT_FN’
+     BOOST_CONCEPT_ASSERT_FN(void(*)ModelInParens)
+     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept_check.hpp:700:11: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT’
+           BOOST_CONCEPT_ASSERT((
+           ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept_check.hpp: In destructor ‘boost::Mutable_ForwardContainer<C>::~Mutable_ForwardContainer()’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:20: warning: typedef ‘boost_concept_check716’ locally defined but not used [-Wunused-local-typedefs]
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+                    ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/preprocessor/cat.hpp:29:34: note: in definition of macro ‘BOOST_PP_CAT_I’
+ #    define BOOST_PP_CAT_I(a, b) a ## b
+                                  ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:7: note: in expansion of macro ‘BOOST_PP_CAT’
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/assert.hpp:44:5: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT_FN’
+     BOOST_CONCEPT_ASSERT_FN(void(*)ModelInParens)
+     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept_check.hpp:713:11: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT’
+           BOOST_CONCEPT_ASSERT((
+           ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept_check.hpp: In destructor ‘boost::ReversibleContainer<C>::~ReversibleContainer()’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:20: warning: typedef ‘boost_concept_check731’ locally defined but not used [-Wunused-local-typedefs]
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+                    ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/preprocessor/cat.hpp:29:34: note: in definition of macro ‘BOOST_PP_CAT_I’
+ #    define BOOST_PP_CAT_I(a, b) a ## b
+                                  ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:7: note: in expansion of macro ‘BOOST_PP_CAT’
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/assert.hpp:44:5: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT_FN’
+     BOOST_CONCEPT_ASSERT_FN(void(*)ModelInParens)
+     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept_check.hpp:729:11: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT’
+           BOOST_CONCEPT_ASSERT((
+           ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:20: warning: typedef ‘boost_concept_check733’ locally defined but not used [-Wunused-local-typedefs]
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+                    ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/preprocessor/cat.hpp:29:34: note: in definition of macro ‘BOOST_PP_CAT_I’
+ #    define BOOST_PP_CAT_I(a, b) a ## b
+                                  ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:7: note: in expansion of macro ‘BOOST_PP_CAT’
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/assert.hpp:44:5: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT_FN’
+     BOOST_CONCEPT_ASSERT_FN(void(*)ModelInParens)
+     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept_check.hpp:733:11: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT’
+           BOOST_CONCEPT_ASSERT((BidirectionalIterator<const_reverse_iterator>));
+           ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept_check.hpp: In destructor ‘boost::Mutable_ReversibleContainer<C>::~Mutable_ReversibleContainer()’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:20: warning: typedef ‘boost_concept_check755’ locally defined but not used [-Wunused-local-typedefs]
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+                    ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/preprocessor/cat.hpp:29:34: note: in definition of macro ‘BOOST_PP_CAT_I’
+ #    define BOOST_PP_CAT_I(a, b) a ## b
+                                  ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:7: note: in expansion of macro ‘BOOST_PP_CAT’
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/assert.hpp:44:5: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT_FN’
+     BOOST_CONCEPT_ASSERT_FN(void(*)ModelInParens)
+     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept_check.hpp:755:11: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT’
+           BOOST_CONCEPT_ASSERT((Mutable_BidirectionalIterator<iterator>));
+           ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:20: warning: typedef ‘boost_concept_check756’ locally defined but not used [-Wunused-local-typedefs]
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+                    ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/preprocessor/cat.hpp:29:34: note: in definition of macro ‘BOOST_PP_CAT_I’
+ #    define BOOST_PP_CAT_I(a, b) a ## b
+                                  ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:7: note: in expansion of macro ‘BOOST_PP_CAT’
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/assert.hpp:44:5: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT_FN’
+     BOOST_CONCEPT_ASSERT_FN(void(*)ModelInParens)
+     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept_check.hpp:756:11: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT’
+           BOOST_CONCEPT_ASSERT((Mutable_BidirectionalIterator<reverse_iterator>));
+           ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept_check.hpp: In destructor ‘boost::RandomAccessContainer<C>::~RandomAccessContainer()’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:20: warning: typedef ‘boost_concept_check776’ locally defined but not used [-Wunused-local-typedefs]
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+                    ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/preprocessor/cat.hpp:29:34: note: in definition of macro ‘BOOST_PP_CAT_I’
+ #    define BOOST_PP_CAT_I(a, b) a ## b
+                                  ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:7: note: in expansion of macro ‘BOOST_PP_CAT’
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/assert.hpp:44:5: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT_FN’
+     BOOST_CONCEPT_ASSERT_FN(void(*)ModelInParens)
+     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept_check.hpp:773:11: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT’
+           BOOST_CONCEPT_ASSERT((
+           ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept_check.hpp: In destructor ‘boost::Mutable_RandomAccessContainer<C>::~Mutable_RandomAccessContainer()’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:20: warning: typedef ‘boost_concept_check800’ locally defined but not used [-Wunused-local-typedefs]
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+                    ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/preprocessor/cat.hpp:29:34: note: in definition of macro ‘BOOST_PP_CAT_I’
+ #    define BOOST_PP_CAT_I(a, b) a ## b
+                                  ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:7: note: in expansion of macro ‘BOOST_PP_CAT’
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/assert.hpp:44:5: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT_FN’
+     BOOST_CONCEPT_ASSERT_FN(void(*)ModelInParens)
+     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept_check.hpp:800:11: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT’
+           BOOST_CONCEPT_ASSERT((Mutable_RandomAccessIterator<typename self::iterator>));
+           ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:20: warning: typedef ‘boost_concept_check801’ locally defined but not used [-Wunused-local-typedefs]
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+                    ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/preprocessor/cat.hpp:29:34: note: in definition of macro ‘BOOST_PP_CAT_I’
+ #    define BOOST_PP_CAT_I(a, b) a ## b
+                                  ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:7: note: in expansion of macro ‘BOOST_PP_CAT’
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/assert.hpp:44:5: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT_FN’
+     BOOST_CONCEPT_ASSERT_FN(void(*)ModelInParens)
+     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept_check.hpp:801:11: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT’
+           BOOST_CONCEPT_ASSERT((Mutable_RandomAccessIterator<typename self::reverse_iterator>));
+           ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept_check.hpp: In destructor ‘boost::AssociativeContainer<C>::~AssociativeContainer()’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:20: warning: typedef ‘boost_concept_check905’ locally defined but not used [-Wunused-local-typedefs]
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+                    ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/preprocessor/cat.hpp:29:34: note: in definition of macro ‘BOOST_PP_CAT_I’
+ #    define BOOST_PP_CAT_I(a, b) a ## b
+                                  ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:7: note: in expansion of macro ‘BOOST_PP_CAT’
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/assert.hpp:44:5: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT_FN’
+     BOOST_CONCEPT_ASSERT_FN(void(*)ModelInParens)
+     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept_check.hpp:905:11: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT’
+           BOOST_CONCEPT_ASSERT((BinaryPredicate<key_compare,key_type,key_type>));
+           ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:20: warning: typedef ‘boost_concept_check908’ locally defined but not used [-Wunused-local-typedefs]
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+                    ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/preprocessor/cat.hpp:29:34: note: in definition of macro ‘BOOST_PP_CAT_I’
+ #    define BOOST_PP_CAT_I(a, b) a ## b
+                                  ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:7: note: in expansion of macro ‘BOOST_PP_CAT’
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/assert.hpp:44:5: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT_FN’
+     BOOST_CONCEPT_ASSERT_FN(void(*)ModelInParens)
+     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept_check.hpp:908:11: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT’
+           BOOST_CONCEPT_ASSERT((BinaryPredicate<value_compare,value_type_,value_type_>));
+           ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/range/algorithm/equal.hpp: In function ‘bool boost::range::equal(const SinglePassRange1&, const SinglePassRange2&)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:20: warning: typedef ‘boost_concept_check172’ locally defined but not used [-Wunused-local-typedefs]
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+                    ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/preprocessor/cat.hpp:29:34: note: in definition of macro ‘BOOST_PP_CAT_I’
+ #    define BOOST_PP_CAT_I(a, b) a ## b
+                                  ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:7: note: in expansion of macro ‘BOOST_PP_CAT’
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/assert.hpp:44:5: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT_FN’
+     BOOST_CONCEPT_ASSERT_FN(void(*)ModelInParens)
+     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/range/concepts.hpp:92:45: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT’
+     #define BOOST_RANGE_CONCEPT_ASSERT( x ) BOOST_CONCEPT_ASSERT( x )
+                                             ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/range/algorithm/equal.hpp:172:13: note: in expansion of macro ‘BOOST_RANGE_CONCEPT_ASSERT’
+             BOOST_RANGE_CONCEPT_ASSERT(( SinglePassRangeConcept<const SinglePassRange1> ));
+             ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:20: warning: typedef ‘boost_concept_check173’ locally defined but not used [-Wunused-local-typedefs]
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+                    ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/preprocessor/cat.hpp:29:34: note: in definition of macro ‘BOOST_PP_CAT_I’
+ #    define BOOST_PP_CAT_I(a, b) a ## b
+                                  ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:7: note: in expansion of macro ‘BOOST_PP_CAT’
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/assert.hpp:44:5: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT_FN’
+     BOOST_CONCEPT_ASSERT_FN(void(*)ModelInParens)
+     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/range/concepts.hpp:92:45: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT’
+     #define BOOST_RANGE_CONCEPT_ASSERT( x ) BOOST_CONCEPT_ASSERT( x )
+                                             ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/range/algorithm/equal.hpp:173:13: note: in expansion of macro ‘BOOST_RANGE_CONCEPT_ASSERT’
+             BOOST_RANGE_CONCEPT_ASSERT(( SinglePassRangeConcept<const SinglePassRange2> ));
+             ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/range/algorithm/equal.hpp: In function ‘bool boost::range::equal(const SinglePassRange1&, const SinglePassRange2&, BinaryPredicate)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:20: warning: typedef ‘boost_concept_check185’ locally defined but not used [-Wunused-local-typedefs]
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+                    ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/preprocessor/cat.hpp:29:34: note: in definition of macro ‘BOOST_PP_CAT_I’
+ #    define BOOST_PP_CAT_I(a, b) a ## b
+                                  ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:7: note: in expansion of macro ‘BOOST_PP_CAT’
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/assert.hpp:44:5: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT_FN’
+     BOOST_CONCEPT_ASSERT_FN(void(*)ModelInParens)
+     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/range/concepts.hpp:92:45: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT’
+     #define BOOST_RANGE_CONCEPT_ASSERT( x ) BOOST_CONCEPT_ASSERT( x )
+                                             ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/range/algorithm/equal.hpp:185:13: note: in expansion of macro ‘BOOST_RANGE_CONCEPT_ASSERT’
+             BOOST_RANGE_CONCEPT_ASSERT(( SinglePassRangeConcept<const SinglePassRange1> ));
+             ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:20: warning: typedef ‘boost_concept_check186’ locally defined but not used [-Wunused-local-typedefs]
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+                    ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/preprocessor/cat.hpp:29:34: note: in definition of macro ‘BOOST_PP_CAT_I’
+ #    define BOOST_PP_CAT_I(a, b) a ## b
+                                  ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:7: note: in expansion of macro ‘BOOST_PP_CAT’
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/assert.hpp:44:5: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT_FN’
+     BOOST_CONCEPT_ASSERT_FN(void(*)ModelInParens)
+     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/range/concepts.hpp:92:45: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT’
+     #define BOOST_RANGE_CONCEPT_ASSERT( x ) BOOST_CONCEPT_ASSERT( x )
+                                             ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/range/algorithm/equal.hpp:186:13: note: in expansion of macro ‘BOOST_RANGE_CONCEPT_ASSERT’
+             BOOST_RANGE_CONCEPT_ASSERT(( SinglePassRangeConcept<const SinglePassRange2> ));
+             ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/algorithm/string/find_format.hpp: In function ‘OutputIteratorT boost::algorithm::find_format_copy(OutputIteratorT, const RangeT&, FinderT, FormatterT)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:20: warning: typedef ‘boost_concept_check69’ locally defined but not used [-Wunused-local-typedefs]
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+                    ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/preprocessor/cat.hpp:29:34: note: in definition of macro ‘BOOST_PP_CAT_I’
+ #    define BOOST_PP_CAT_I(a, b) a ## b
+                                  ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:7: note: in expansion of macro ‘BOOST_PP_CAT’
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/assert.hpp:44:5: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT_FN’
+     BOOST_CONCEPT_ASSERT_FN(void(*)ModelInParens)
+     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/algorithm/string/find_format.hpp:65:13: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT’
+             BOOST_CONCEPT_ASSERT((
+             ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:20: warning: typedef ‘boost_concept_check74’ locally defined but not used [-Wunused-local-typedefs]
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+                    ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/preprocessor/cat.hpp:29:34: note: in definition of macro ‘BOOST_PP_CAT_I’
+ #    define BOOST_PP_CAT_I(a, b) a ## b
+                                  ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:7: note: in expansion of macro ‘BOOST_PP_CAT’
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/assert.hpp:44:5: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT_FN’
+     BOOST_CONCEPT_ASSERT_FN(void(*)ModelInParens)
+     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/algorithm/string/find_format.hpp:70:13: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT’
+             BOOST_CONCEPT_ASSERT((
+             ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/algorithm/string/find_format.hpp: In function ‘SequenceT boost::algorithm::find_format_copy(const SequenceT&, FinderT, FormatterT)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:20: warning: typedef ‘boost_concept_check103’ locally defined but not used [-Wunused-local-typedefs]
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+                    ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/preprocessor/cat.hpp:29:34: note: in definition of macro ‘BOOST_PP_CAT_I’
+ #    define BOOST_PP_CAT_I(a, b) a ## b
+                                  ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:7: note: in expansion of macro ‘BOOST_PP_CAT’
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/assert.hpp:44:5: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT_FN’
+     BOOST_CONCEPT_ASSERT_FN(void(*)ModelInParens)
+     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/algorithm/string/find_format.hpp:99:13: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT’
+             BOOST_CONCEPT_ASSERT((
+             ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:20: warning: typedef ‘boost_concept_check108’ locally defined but not used [-Wunused-local-typedefs]
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+                    ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/preprocessor/cat.hpp:29:34: note: in definition of macro ‘BOOST_PP_CAT_I’
+ #    define BOOST_PP_CAT_I(a, b) a ## b
+                                  ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:7: note: in expansion of macro ‘BOOST_PP_CAT’
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/assert.hpp:44:5: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT_FN’
+     BOOST_CONCEPT_ASSERT_FN(void(*)ModelInParens)
+     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/algorithm/string/find_format.hpp:104:13: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT’
+             BOOST_CONCEPT_ASSERT((
+             ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/algorithm/string/find_format.hpp: In function ‘void boost::algorithm::find_format(SequenceT&, FinderT, FormatterT)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:20: warning: typedef ‘boost_concept_check139’ locally defined but not used [-Wunused-local-typedefs]
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+                    ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/preprocessor/cat.hpp:29:34: note: in definition of macro ‘BOOST_PP_CAT_I’
+ #    define BOOST_PP_CAT_I(a, b) a ## b
+                                  ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:7: note: in expansion of macro ‘BOOST_PP_CAT’
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/assert.hpp:44:5: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT_FN’
+     BOOST_CONCEPT_ASSERT_FN(void(*)ModelInParens)
+     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/algorithm/string/find_format.hpp:135:13: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT’
+             BOOST_CONCEPT_ASSERT((
+             ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:20: warning: typedef ‘boost_concept_check144’ locally defined but not used [-Wunused-local-typedefs]
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+                    ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/preprocessor/cat.hpp:29:34: note: in definition of macro ‘BOOST_PP_CAT_I’
+ #    define BOOST_PP_CAT_I(a, b) a ## b
+                                  ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:7: note: in expansion of macro ‘BOOST_PP_CAT’
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/assert.hpp:44:5: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT_FN’
+     BOOST_CONCEPT_ASSERT_FN(void(*)ModelInParens)
+     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/algorithm/string/find_format.hpp:140:13: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT’
+             BOOST_CONCEPT_ASSERT(( 
+             ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/algorithm/string/find_format.hpp: In function ‘OutputIteratorT boost::algorithm::find_format_all_copy(OutputIteratorT, const RangeT&, FinderT, FormatterT)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:20: warning: typedef ‘boost_concept_check188’ locally defined but not used [-Wunused-local-typedefs]
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+                    ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/preprocessor/cat.hpp:29:34: note: in definition of macro ‘BOOST_PP_CAT_I’
+ #    define BOOST_PP_CAT_I(a, b) a ## b
+                                  ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:7: note: in expansion of macro ‘BOOST_PP_CAT’
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/assert.hpp:44:5: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT_FN’
+     BOOST_CONCEPT_ASSERT_FN(void(*)ModelInParens)
+     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/algorithm/string/find_format.hpp:184:13: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT’
+             BOOST_CONCEPT_ASSERT(( 
+             ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:20: warning: typedef ‘boost_concept_check193’ locally defined but not used [-Wunused-local-typedefs]
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+                    ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/preprocessor/cat.hpp:29:34: note: in definition of macro ‘BOOST_PP_CAT_I’
+ #    define BOOST_PP_CAT_I(a, b) a ## b
+                                  ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:7: note: in expansion of macro ‘BOOST_PP_CAT’
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/assert.hpp:44:5: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT_FN’
+     BOOST_CONCEPT_ASSERT_FN(void(*)ModelInParens)
+     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/algorithm/string/find_format.hpp:189:13: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT’
+             BOOST_CONCEPT_ASSERT(( 
+             ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/algorithm/string/find_format.hpp: In function ‘SequenceT boost::algorithm::find_format_all_copy(const SequenceT&, FinderT, FormatterT)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:20: warning: typedef ‘boost_concept_check223’ locally defined but not used [-Wunused-local-typedefs]
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+                    ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/preprocessor/cat.hpp:29:34: note: in definition of macro ‘BOOST_PP_CAT_I’
+ #    define BOOST_PP_CAT_I(a, b) a ## b
+                                  ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:7: note: in expansion of macro ‘BOOST_PP_CAT’
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/assert.hpp:44:5: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT_FN’
+     BOOST_CONCEPT_ASSERT_FN(void(*)ModelInParens)
+     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/algorithm/string/find_format.hpp:219:13: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT’
+             BOOST_CONCEPT_ASSERT((
+             ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:20: warning: typedef ‘boost_concept_check228’ locally defined but not used [-Wunused-local-typedefs]
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+                    ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/preprocessor/cat.hpp:29:34: note: in definition of macro ‘BOOST_PP_CAT_I’
+ #    define BOOST_PP_CAT_I(a, b) a ## b
+                                  ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:7: note: in expansion of macro ‘BOOST_PP_CAT’
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/assert.hpp:44:5: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT_FN’
+     BOOST_CONCEPT_ASSERT_FN(void(*)ModelInParens)
+     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/algorithm/string/find_format.hpp:224:13: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT’
+             BOOST_CONCEPT_ASSERT((
+             ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/algorithm/string/find_format.hpp: In function ‘void boost::algorithm::find_format_all(SequenceT&, FinderT, FormatterT)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:20: warning: typedef ‘boost_concept_check261’ locally defined but not used [-Wunused-local-typedefs]
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+                    ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/preprocessor/cat.hpp:29:34: note: in definition of macro ‘BOOST_PP_CAT_I’
+ #    define BOOST_PP_CAT_I(a, b) a ## b
+                                  ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:7: note: in expansion of macro ‘BOOST_PP_CAT’
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/assert.hpp:44:5: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT_FN’
+     BOOST_CONCEPT_ASSERT_FN(void(*)ModelInParens)
+     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/algorithm/string/find_format.hpp:257:13: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT’
+             BOOST_CONCEPT_ASSERT((
+             ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:20: warning: typedef ‘boost_concept_check266’ locally defined but not used [-Wunused-local-typedefs]
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+                    ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/preprocessor/cat.hpp:29:34: note: in definition of macro ‘BOOST_PP_CAT_I’
+ #    define BOOST_PP_CAT_I(a, b) a ## b
+                                  ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/detail/general.hpp:71:7: note: in expansion of macro ‘BOOST_PP_CAT’
+       BOOST_PP_CAT(boost_concept_check,__LINE__)
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/concept/assert.hpp:44:5: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT_FN’
+     BOOST_CONCEPT_ASSERT_FN(void(*)ModelInParens)
+     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/algorithm/string/find_format.hpp:262:13: note: in expansion of macro ‘BOOST_CONCEPT_ASSERT’
+             BOOST_CONCEPT_ASSERT((
+             ^
+In file included from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/algorithm/string/finder.hpp:23:0,
+                 from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/algorithm/string/replace.hpp:23,
+                 from /home/adam/Documents/revkit-1.3/src/core/io/write_realization.cpp:23:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/algorithm/string/detail/finder.hpp: In member function ‘boost::iterator_range<Iterator> boost::algorithm::detail::last_finderF<SearchIteratorT, PredicateT>::findit(ForwardIteratorT, ForwardIteratorT, std::forward_iterator_tag) const’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/algorithm/string/detail/finder.hpp:145:46: warning: typedef ‘input_iterator_type’ locally defined but not used [-Wunused-local-typedefs]
+                     typedef ForwardIteratorT input_iterator_type;
+                                              ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/algorithm/string/detail/finder.hpp: In member function ‘boost::iterator_range<Iterator> boost::algorithm::detail::nth_finderF<SearchIteratorT, PredicateT>::find_forward(ForwardIteratorT, ForwardIteratorT, unsigned int) const’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/algorithm/string/detail/finder.hpp:266:46: warning: typedef ‘input_iterator_type’ locally defined but not used [-Wunused-local-typedefs]
+                     typedef ForwardIteratorT input_iterator_type;
+                                              ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/algorithm/string/detail/finder.hpp: In member function ‘boost::iterator_range<Iterator> boost::algorithm::detail::nth_finderF<SearchIteratorT, PredicateT>::find_backward(ForwardIteratorT, ForwardIteratorT, unsigned int) const’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/algorithm/string/detail/finder.hpp:301:46: warning: typedef ‘input_iterator_type’ locally defined but not used [-Wunused-local-typedefs]
+                     typedef ForwardIteratorT input_iterator_type;
+                                              ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/algorithm/string/detail/finder.hpp: In function ‘boost::iterator_range<T> boost::algorithm::detail::find_head_impl(ForwardIteratorT, ForwardIteratorT, unsigned int, std::random_access_iterator_tag)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/algorithm/string/detail/finder.hpp:365:42: warning: typedef ‘input_iterator_type’ locally defined but not used [-Wunused-local-typedefs]
+                 typedef ForwardIteratorT input_iterator_type;
+                                          ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/algorithm/string/detail/finder.hpp: In function ‘boost::iterator_range<T> boost::algorithm::detail::find_tail_impl(ForwardIteratorT, ForwardIteratorT, unsigned int, std::random_access_iterator_tag)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/algorithm/string/detail/finder.hpp:439:42: warning: typedef ‘input_iterator_type’ locally defined but not used [-Wunused-local-typedefs]
+                 typedef ForwardIteratorT input_iterator_type;
+                                          ^
+In file included from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/bind/bind.hpp:29:0,
+                 from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/bind.hpp:22,
+                 from /home/adam/Documents/revkit-1.3/src/core/io/write_realization.cpp:25:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/bind/arg.hpp: In constructor ‘boost::arg<I>::arg(const T&)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/bind/arg.hpp:37:22: warning: typedef ‘T_must_be_placeholder’ locally defined but not used [-Wunused-local-typedefs]
+         typedef char T_must_be_placeholder[ I == is_placeholder<T>::value? 1: -1 ];
+                      ^
+In file included from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/config.hpp:57:0,
+                 from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/foreach.hpp:30,
+                 from /home/adam/Documents/revkit-1.3/src/core/circuit.hpp:38,
+                 from /home/adam/Documents/revkit-1.3/src/core/io/write_realization.hpp:33,
+                 from /home/adam/Documents/revkit-1.3/src/core/io/write_realization.cpp:18:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/fusion/view/single_view/detail/next_impl.hpp: In static member function ‘static boost::fusion::extension::next_impl<boost::fusion::single_view_iterator_tag>::apply<Iterator>::type boost::fusion::extension::next_impl<boost::fusion::single_view_iterator_tag>::apply<Iterator>::call(const Iterator&)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_40’ locally defined but not used [-Wunused-local-typedefs]
+          BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
+                     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/fusion/view/single_view/detail/next_impl.hpp:40:21: note: in expansion of macro ‘BOOST_STATIC_ASSERT’
+                     BOOST_STATIC_ASSERT((type::position::value < 2));
+                     ^
+In file included from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/spirit/home/support/char_set/range_run.hpp:55:0,
+                 from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/spirit/home/support/char_set/basic_chset.hpp:19,
+                 from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/spirit/home/karma/char/char.hpp:19,
+                 from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/spirit/home/karma/char.hpp:13,
+                 from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/spirit/home/karma.hpp:13,
+                 from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/spirit/include/karma.hpp:16,
+                 from /home/adam/Documents/revkit-1.3/src/core/io/write_realization.cpp:29:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/spirit/home/support/char_set/range_run_impl.hpp: In function ‘bool boost::spirit::support::detail::try_merge(Run&, Iterator, const Range&)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/spirit/home/support/char_set/range_run_impl.hpp:29:48: warning: typedef ‘integer_traits’ locally defined but not used [-Wunused-local-typedefs]
+             typedef integer_traits<value_type> integer_traits;
+                                                ^
+In file included from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/config.hpp:57:0,
+                 from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/foreach.hpp:30,
+                 from /home/adam/Documents/revkit-1.3/src/core/circuit.hpp:38,
+                 from /home/adam/Documents/revkit-1.3/src/core/io/write_realization.hpp:33,
+                 from /home/adam/Documents/revkit-1.3/src/core/io/write_realization.cpp:18:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/spirit/home/karma/detail/output_iterator.hpp: In member function ‘void boost::spirit::karma::detail::buffer_sink::output(const T&)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_200’ locally defined but not used [-Wunused-local-typedefs]
+          BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
+                     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/spirit/home/karma/detail/output_iterator.hpp:200:13: note: in expansion of macro ‘BOOST_STATIC_ASSERT’
+             BOOST_STATIC_ASSERT(sizeof(T) <= sizeof(wchar_t));
+             ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/utility/value_init.hpp: In member function ‘boost::initialized<T>& boost::initialized<T>::operator=(const boost::initialized<T>&)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_123’ locally defined but not used [-Wunused-local-typedefs]
+          BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
+                     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/utility/value_init.hpp:123:7: note: in expansion of macro ‘BOOST_STATIC_ASSERT’
+       BOOST_STATIC_ASSERT( ! is_const<T>::value );
+       ^
+In file included from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/spirit/home/karma/string.hpp:13:0,
+                 from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/spirit/home/karma.hpp:14,
+                 from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/spirit/include/karma.hpp:16,
+                 from /home/adam/Documents/revkit-1.3/src/core/io/write_realization.cpp:29:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/spirit/home/karma/string/lit.hpp: In member function ‘bool boost::spirit::karma::literal_string<String, CharEncoding, Tag, no_attribute>::generate(OutputIterator&, Context&, const Delimiter&, const Attribute&) const’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/spirit/home/karma/string/lit.hpp:179:17: warning: typedef ‘extracted_string_type’ locally defined but not used [-Wunused-local-typedefs]
+                 extracted_string_type;
+                 ^
+In file included from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/config.hpp:57:0,
+                 from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/foreach.hpp:30,
+                 from /home/adam/Documents/revkit-1.3/src/core/circuit.hpp:38,
+                 from /home/adam/Documents/revkit-1.3/src/core/io/write_realization.hpp:33,
+                 from /home/adam/Documents/revkit-1.3/src/core/io/write_realization.cpp:18:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/math/policies/policy.hpp: In function ‘int boost::math::policies::detail::digits_imp(const true_&)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_822’ locally defined but not used [-Wunused-local-typedefs]
+          BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
+                     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/math/policies/policy.hpp:822:4: note: in expansion of macro ‘BOOST_STATIC_ASSERT’
+    BOOST_STATIC_ASSERT( ::std::numeric_limits<T>::is_specialized);
+    ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/math/policies/policy.hpp: In function ‘T boost::math::policies::detail::get_epsilon_imp(const true_&)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_900’ locally defined but not used [-Wunused-local-typedefs]
+          BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
+                     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/math/policies/policy.hpp:900:4: note: in expansion of macro ‘BOOST_STATIC_ASSERT’
+    BOOST_STATIC_ASSERT( ::std::numeric_limits<T>::is_specialized);
+    ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_901’ locally defined but not used [-Wunused-local-typedefs]
+          BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
+                     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/math/policies/policy.hpp:901:4: note: in expansion of macro ‘BOOST_STATIC_ASSERT’
+    BOOST_STATIC_ASSERT( ::std::numeric_limits<T>::radix == 2);
+    ^
+In file included from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/spirit/home/support/detail/sign.hpp:22:0,
+                 from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/spirit/home/karma/numeric/detail/numeric_utils.hpp:22,
+                 from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/spirit/home/karma/numeric/bool_policies.hpp:16,
+                 from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/spirit/home/karma/numeric/bool.hpp:29,
+                 from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/spirit/home/karma/numeric.hpp:13,
+                 from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/spirit/home/karma.hpp:15,
+                 from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/spirit/include/karma.hpp:16,
+                 from /home/adam/Documents/revkit-1.3/src/core/io/write_realization.cpp:29:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/math/special_functions/fpclassify.hpp: In function ‘bool boost::math::isfinite(T)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/math/special_functions/fpclassify.hpp:314:55: warning: typedef ‘fp_tag’ locally defined but not used [-Wunused-local-typedefs]
+    typedef typename boost::is_floating_point<T>::type fp_tag;
+                                                       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/math/special_functions/fpclassify.hpp: In function ‘bool boost::math::isnormal(T)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/math/special_functions/fpclassify.hpp:373:55: warning: typedef ‘fp_tag’ locally defined but not used [-Wunused-local-typedefs]
+    typedef typename boost::is_floating_point<T>::type fp_tag;
+                                                       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/math/special_functions/fpclassify.hpp: In function ‘bool boost::math::isinf(T)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/math/special_functions/fpclassify.hpp:450:55: warning: typedef ‘fp_tag’ locally defined but not used [-Wunused-local-typedefs]
+    typedef typename boost::is_floating_point<T>::type fp_tag;
+                                                       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/math/special_functions/fpclassify.hpp: In function ‘bool boost::math::isnan(T)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/math/special_functions/fpclassify.hpp:519:55: warning: typedef ‘fp_tag’ locally defined but not used [-Wunused-local-typedefs]
+    typedef typename boost::is_floating_point<T>::type fp_tag;
+                                                       ^
+In file included from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/spirit/home/support/detail/sign.hpp:23:0,
+                 from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/spirit/home/karma/numeric/detail/numeric_utils.hpp:22,
+                 from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/spirit/home/karma/numeric/bool_policies.hpp:16,
+                 from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/spirit/home/karma/numeric/bool.hpp:29,
+                 from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/spirit/home/karma/numeric.hpp:13,
+                 from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/spirit/home/karma.hpp:15,
+                 from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/spirit/include/karma.hpp:16,
+                 from /home/adam/Documents/revkit-1.3/src/core/io/write_realization.cpp:29:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/math/special_functions/sign.hpp: In function ‘int boost::math::signbit(T)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/math/special_functions/sign.hpp:113:55: warning: typedef ‘fp_tag’ locally defined but not used [-Wunused-local-typedefs]
+    typedef typename boost::is_floating_point<T>::type fp_tag;
+                                                       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/math/special_functions/sign.hpp: In function ‘T boost::math::changesign(const T&)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/math/special_functions/sign.hpp:127:55: warning: typedef ‘fp_tag’ locally defined but not used [-Wunused-local-typedefs]
+    typedef typename boost::is_floating_point<T>::type fp_tag;
+                                                       ^
+In file included from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/config.hpp:57:0,
+                 from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/foreach.hpp:30,
+                 from /home/adam/Documents/revkit-1.3/src/core/circuit.hpp:38,
+                 from /home/adam/Documents/revkit-1.3/src/core/io/write_realization.hpp:33,
+                 from /home/adam/Documents/revkit-1.3/src/core/io/write_realization.cpp:18:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/lexical_cast.hpp: In function ‘CharT* boost::detail::lcast_put_unsigned(T, CharT*)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_592’ locally defined but not used [-Wunused-local-typedefs]
+          BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
+                     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/lexical_cast.hpp:592:13: note: in expansion of macro ‘BOOST_STATIC_ASSERT’
+             BOOST_STATIC_ASSERT(!std::numeric_limits<T>::is_signed);
+             ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_617’ locally defined but not used [-Wunused-local-typedefs]
+          BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
+                     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/lexical_cast.hpp:617:17: note: in expansion of macro ‘BOOST_STATIC_ASSERT’
+                 BOOST_STATIC_ASSERT(std::numeric_limits<T>::digits10 < CHAR_MAX);
+                 ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/lexical_cast.hpp: In function ‘bool boost::detail::lcast_ret_unsigned(T&, const CharT*, const CharT*)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_671’ locally defined but not used [-Wunused-local-typedefs]
+          BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
+                     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/lexical_cast.hpp:671:13: note: in expansion of macro ‘BOOST_STATIC_ASSERT’
+             BOOST_STATIC_ASSERT(!std::numeric_limits<T>::is_signed);
+             ^
+In file included from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/spirit/home/karma/directive/left_alignment.hpp:29:0,
+                 from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/spirit/home/karma/directive.hpp:19,
+                 from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/spirit/home/karma.hpp:19,
+                 from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/spirit/include/karma.hpp:16,
+                 from /home/adam/Documents/revkit-1.3/src/core/io/write_realization.cpp:29:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/lexical_cast.hpp:673:47: warning: typedef ‘int_type’ locally defined but not used [-Wunused-local-typedefs]
+             typedef typename Traits::int_type int_type;
+                                               ^
+In file included from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/config.hpp:57:0,
+                 from /home/adam/Documents/revkit-1.3/src/../libs/include/boost/foreach.hpp:30,
+                 from /home/adam/Documents/revkit-1.3/src/core/circuit.hpp:38,
+                 from /home/adam/Documents/revkit-1.3/src/core/io/write_realization.hpp:33,
+                 from /home/adam/Documents/revkit-1.3/src/core/io/write_realization.cpp:18:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/lexical_cast.hpp: In member function ‘bool boost::detail::lexical_stream_limited_src<CharT, Traits, RequiresStringbuffer>::shl_char(T)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_1274’ locally defined but not used [-Wunused-local-typedefs]
+          BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
+                     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/static_assert.hpp:23:45: note: in expansion of macro ‘BOOST_STATIC_ASSERT’
+ #  define BOOST_STATIC_ASSERT_MSG( B, Msg ) BOOST_STATIC_ASSERT( B )
+                                             ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/lexical_cast.hpp:1272:17: note: in expansion of macro ‘BOOST_STATIC_ASSERT_MSG’
+                 BOOST_STATIC_ASSERT_MSG(( sizeof(T) <= sizeof(CharT)) ,
+                 ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/lexical_cast.hpp: In member function ‘bool boost::detail::lexical_stream_limited_src<CharT, Traits, RequiresStringbuffer>::shl_char_array(const T*)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_1299’ locally defined but not used [-Wunused-local-typedefs]
+          BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
+                     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/static_assert.hpp:23:45: note: in expansion of macro ‘BOOST_STATIC_ASSERT’
+ #  define BOOST_STATIC_ASSERT_MSG( B, Msg ) BOOST_STATIC_ASSERT( B )
+                                             ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/lexical_cast.hpp:1297:17: note: in expansion of macro ‘BOOST_STATIC_ASSERT_MSG’
+                 BOOST_STATIC_ASSERT_MSG(( sizeof(T) <= sizeof(CharT)),
+                 ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/lexical_cast.hpp: In member function ‘bool boost::detail::lexical_stream_limited_src<CharT, Traits, RequiresStringbuffer>::shr_xchar(T&)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_1727’ locally defined but not used [-Wunused-local-typedefs]
+          BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
+                     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/static_assert.hpp:23:45: note: in expansion of macro ‘BOOST_STATIC_ASSERT’
+ #  define BOOST_STATIC_ASSERT_MSG( B, Msg ) BOOST_STATIC_ASSERT( B )
+                                             ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/lexical_cast.hpp:1725:17: note: in expansion of macro ‘BOOST_STATIC_ASSERT_MSG’
+                 BOOST_STATIC_ASSERT_MSG(( sizeof(CharT) == sizeof(T) ),
+                 ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iostreams/concepts.hpp: In member function ‘void boost::iostreams::device<Mode, Ch>::close()’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_41’ locally defined but not used [-Wunused-local-typedefs]
+          BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
+                     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iostreams/concepts.hpp:41:9: note: in expansion of macro ‘BOOST_STATIC_ASSERT’
+         BOOST_STATIC_ASSERT((!is_convertible<Mode, two_sequence>::value));
+         ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iostreams/concepts.hpp: In member function ‘void boost::iostreams::device<Mode, Ch>::close(std::ios_base::openmode)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_47’ locally defined but not used [-Wunused-local-typedefs]
+          BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
+                     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iostreams/concepts.hpp:47:9: note: in expansion of macro ‘BOOST_STATIC_ASSERT’
+         BOOST_STATIC_ASSERT((is_convertible<Mode, two_sequence>::value));
+         ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iostreams/concepts.hpp: In member function ‘void boost::iostreams::filter<Mode, Ch>::close(Device&)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_78’ locally defined but not used [-Wunused-local-typedefs]
+          BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
+                     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iostreams/concepts.hpp:78:9: note: in expansion of macro ‘BOOST_STATIC_ASSERT’
+         BOOST_STATIC_ASSERT((!is_convertible<Mode, two_sequence>::value));
+         ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_79’ locally defined but not used [-Wunused-local-typedefs]
+          BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
+                     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iostreams/concepts.hpp:79:9: note: in expansion of macro ‘BOOST_STATIC_ASSERT’
+         BOOST_STATIC_ASSERT((!is_convertible<Mode, dual_use>::value));
+         ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iostreams/concepts.hpp: In member function ‘void boost::iostreams::filter<Mode, Ch>::close(Device&, std::ios_base::openmode)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_89’ locally defined but not used [-Wunused-local-typedefs]
+          BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
+                     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iostreams/concepts.hpp:86:9: note: in expansion of macro ‘BOOST_STATIC_ASSERT’
+         BOOST_STATIC_ASSERT(
+         ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iostreams/detail/adapter/concept_adapter.hpp: In constructor ‘boost::iostreams::detail::concept_adapter<T>::concept_adapter(const boost::reference_wrapper<T>&)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_66’ locally defined but not used [-Wunused-local-typedefs]
+          BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
+                     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iostreams/detail/adapter/concept_adapter.hpp:66:7: note: in expansion of macro ‘BOOST_STATIC_ASSERT’
+     { BOOST_STATIC_ASSERT(is_std_io<T>::value); }
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iostreams/detail/adapter/concept_adapter.hpp: In constructor ‘boost::iostreams::detail::concept_adapter<T>::concept_adapter(const T&)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_68’ locally defined but not used [-Wunused-local-typedefs]
+          BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
+                     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iostreams/detail/adapter/concept_adapter.hpp:68:7: note: in expansion of macro ‘BOOST_STATIC_ASSERT’
+     { BOOST_STATIC_ASSERT(!is_std_io<T>::value); }
+       ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iostreams/pipeline.hpp: In function ‘boost::iostreams::pipeline<boost::iostreams::pipeline<Pipeline, Filter>, Component> boost::iostreams::operator|(const boost::iostreams::pipeline<Pipeline, Filter>&, const Component&)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_122’ locally defined but not used [-Wunused-local-typedefs]
+          BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
+                     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iostreams/pipeline.hpp:122:5: note: in expansion of macro ‘BOOST_STATIC_ASSERT’
+     BOOST_STATIC_ASSERT(is_filter<Filter>::value);
+     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iostreams/device/array.hpp: In constructor ‘boost::iostreams::detail::array_adapter<Mode, Ch>::array_adapter(const char_type*, const char_type*)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_117’ locally defined but not used [-Wunused-local-typedefs]
+          BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
+                     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iostreams/device/array.hpp:117:3: note: in expansion of macro ‘BOOST_STATIC_ASSERT’
+ { BOOST_STATIC_ASSERT((!is_convertible<Mode, output>::value)); }
+   ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iostreams/device/array.hpp: In constructor ‘boost::iostreams::detail::array_adapter<Mode, Ch>::array_adapter(const char_type*, std::size_t)’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_124’ locally defined but not used [-Wunused-local-typedefs]
+          BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
+                     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iostreams/device/array.hpp:124:3: note: in expansion of macro ‘BOOST_STATIC_ASSERT’
+ { BOOST_STATIC_ASSERT((!is_convertible<Mode, output>::value)); }
+   ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iostreams/device/array.hpp: In member function ‘boost::iostreams::detail::array_adapter<Mode, Ch>::pair_type boost::iostreams::detail::array_adapter<Mode, Ch>::input_sequence()’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_129’ locally defined but not used [-Wunused-local-typedefs]
+          BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
+                     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iostreams/device/array.hpp:129:3: note: in expansion of macro ‘BOOST_STATIC_ASSERT’
+ { BOOST_STATIC_ASSERT((is_convertible<Mode, input>::value));
+   ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iostreams/device/array.hpp: In member function ‘boost::iostreams::detail::array_adapter<Mode, Ch>::pair_type boost::iostreams::detail::array_adapter<Mode, Ch>::output_sequence()’:
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_135’ locally defined but not used [-Wunused-local-typedefs]
+          BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
+                     ^
+/home/adam/Documents/revkit-1.3/src/../libs/include/boost/iostreams/device/array.hpp:135:3: note: in expansion of macro ‘BOOST_STATIC_ASSERT’
+ { BOOST_STATIC_ASSERT((is_convertible<Mode, output>::value));
+   ^
+Linking CXX static library librevkit_core.a
+[ 98%] Built target revkit_core
+Linking CXX executable e002
+[100%] Built target e002
+creating symlinks
+/home/adam/Documents/revkit-1.3/build/bindings/revkit_python.so: ELF 64-bit LSB  shared object, x86-64, version 1 (GNU/Linux), dynamically linked, BuildID[sha1]=88b7b49542ca8dfaaac7d3052187affc7c9f8619, not stripped
+/home/adam/Documents/revkit-1.3/src/bindings/revkit.py: Python script, ASCII text executable
+/home/adam/Documents/revkit-1.3/src/bindings/revkitui.py: Python script, ASCII text executable
+/home/adam/Documents/revkit-1.3/src/bindings/revkitmath.py: Python script, ASCII text executable

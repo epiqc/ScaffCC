@@ -1,0 +1,17 @@
+/**
+ * @page acknowledgment Acknowledgment
+ *
+ * @section sec_acknowledgment Acknowledgment
+ *
+ * We are indebted to the following people for providing tools and/or support, which significantly helped us developing RevKit:
+ * <ul>
+ * <li>D. Michael Miller: For his help in implementing the adding lines optimization method and many useful comments.</li>
+ * <li>Eleonora Schönborn and Bastian Blachetta: For their help in implementing the RevLib simulation file format.</li>
+ * <li>Nils Przigoda: For his help in implementing the simple cycle-based synthesis algorithm.</li>
+ * <li>Fabio Somenzi:  Author of the BDD-Package <a href="http://vlsi.colorado.edu/~fabio/CUDD/" target="_blank">CUDD</a>, which is used by RevKit.  </li>
+ * <li>Wolfgang Günther: Author of a parser for CUDD, which is used by RevKit.  </li>
+ * <li>Niklas Een and Niklas Sörensson: Authors of the SAT solver <a href="http://minisat.se/" target="_blank">MiniSAT</a>, which is used by RevKit.  </li>
+ * <li>Andreas Hett, Harry Hengster, and Bernd Becker: Co-authors of the OKFDD-Package PUMA, which is used by RevKit.  </li>
+ * </ul>
+ */
+

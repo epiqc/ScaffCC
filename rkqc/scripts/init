@@ -1,0 +1,14 @@
+echo "init"
+LOGFILE=$1
+ERRFILE=$2
+LOGDIR=$(dirname $1)
+
+mkdir -p $LOGDIR
+if [ -f $LOGFILE ]; then
+	rm -f $LOGFILE
+	touch $LOGFILE
+fi
+if [ -f $ERRFILE ]; then
+	rm -f $ERRFILE
+	touch $ERRFILE
+fi

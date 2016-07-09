@@ -1,0 +1,194 @@
+/**
+ * @page getting_started Getting Started
+ *
+ * @section sec_started Getting Started
+ * <hr>
+ * @subsection sub_obtaining Obtaining Sources
+ * RevKit can be downloaded from the <a href="http://www.revkit.org" target="_blank">www.revkit.org</a> website. 
+ * <hr>
+ * @subsection sub_dependencies Required Dependencies 
+ * RevKit has the following requirements:
+ * - <a href="http://www.cmake.org" target="_blank">CMake</a> is required to compile the sources.<br>
+ *   It is recommended to install cmake via the package manager of the respective distribution. However, if this is not possible, cmake can also be installed
+ *   in the bootstrap process. Afterwards, add the directory <code>libs/cmake-2.8.0/bin</code> to your PATH environment variable.
+ * - <a href="http://gcc.gnu.org/" target="_blank">g++ 4.4</a> or newer is required to compile the sources.
+ * - <a href="http://www.python.org/" target="_blank">Python 2.6</a> or newer is required to compile the Python bindings.
+ *
+ * Further requirements are <a href="http://www.boost.org" target="_blank">boost 1.51.0</a>, <a href="http://vlsi.colorado.edu/~fabio/CUDD/cuddIntro.html" target="_blank">CUDD</a>, cuddread, and PUMA.
+ * Their sources will be automatically downloaded and compiled during the bootstrap of the installation (see below). 
+ * This process may take some time.
+ *
+ * <hr>
+ * @subsection sub_directories Overview of the Directory Structure
+ * The following table lists the names of all directories and a short description.
+ * @htmlonly
+ * <table>
+ *   <tr>
+ *     <td class="indexkey">Directory</td>
+ *     <td class="indexkey">Description</td>
+ *   </tr>
+ *   <tr>
+ *     <td class="indexvalue">build</td>
+ *     <td class="indexvalue">Build directory which is created by the <code>./build.sh</code> script</td>
+ *   </tr>
+ *   <tr>
+ *     <td class="indexvalue">doc</td>
+ *     <td class="indexvalue">Source code documentation and user manual</td>
+ *   </tr>
+ *   <tr>
+ *     <td class="indexvalue">helpers</td>
+ *     <td class="indexvalue">Helper scripts for code-stub generation</td>
+ *   </tr>
+ *   <tr>
+ *     <td class="indexvalue">scripts</td>
+ *     <td class="indexvalue">Scripts for the bootstrap and build process</td>
+ *   </tr>
+ *   <tr>
+ *     <td class="indexvalue">src/algorithms</td>
+ *     <td class="indexvalue">stable algorithms (e.g. for synthesis, optimization, ...)</td>
+ *   </tr>
+ *   <tr>
+ *     <td class="indexvalue">src/bindings</td>
+ *     <td class="indexvalue">Code for the Python bindings</td>
+ *   </tr>
+ *   <tr>
+ *     <td class="indexvalue">src/core</td>
+ *     <td class="indexvalue">Core library with basic data structures and functions</td>
+ *   </tr>
+ *   <tr>
+ *     <td class="indexvalue">src/examples</td>
+ *     <td class="indexvalue">C++ First Steps examples from this documentation. <!--Also used for @endhtmlonly \ref page_tutorial_window_optimization "automatically generated test cases" @htmlonly--></td>
+ *   </tr>
+ *   <tr>
+ *     <td class="indexvalue">src/unstable</td>
+ *     <td class="indexvalue">Unstable algorithms (under development)</td>
+ *   </tr>
+ *   <tr>
+ *     <td class="indexvalue">libs</td>
+ *     <td class="indexvalue">Third party dependencies</td>
+ *   </tr>
+ *   <tr>
+ *     <td class="indexvalue">tools</td>
+ *     <td class="indexvalue">Small python scripts for stand-alone usage of the algorithms</td>
+ *   </tr>
+ * </table>
+ * @endhtmlonly
+ * <hr>
+ * @subsection sub_installing Installation (Initial Building)
+ * In order to install RevKit, go to the directory to where you checked out the sources (i.e. where you find directories like \b src, \b scripts, \b tools ...). Then, perform the following steps:
+ * @code
+ * $ ./make.py bootstrap
+ * @endcode
+ * This will initialize the revkit directory with the depending libraries. So this step has to be performed once.
+ * In this process, compiling boost takes some time. If you already have installed boost using the distribution's package manager, the option -DBOOST_PATH can be used to specify its path, e.g. -DBOOST_PATH=/usr.
+ * Alternatively you can specify the boost include and libs path separately by using --boost, --boost-include-dir and --boost-lib-dir as arguements.
+ * If there are multiple versions of python installed on the system and boost is compiled to utilize all versions, there may be no libboost_python library (link) but several libboost_python-* libraries. In that case a symlink to libboost_python-2.* located at the lib or your revkit/libs directory will solve this problem.  
+ * Afterwards the Revkit algorithms can be compiled. To do so, call:
+ * @code
+ * $ ./make.py build
+ * @endcode
+ * This will compile the core, algorithms, examples, and the Python bindings.
+ * If for some reason the Python bindings cannot be compiled or if they are not required, they can be dactivated by adding the \em -DBUILD_BINDINGS=OFF option:
+ * @code
+ * $ ./make.py build -DBUILD_BINDINGS=OFF
+ * @endcode
+ * If you want to install the library to certain location (which is not necessary), you can use \em -DCMAKE_INSTALL_PREFIX, e.g.:
+ * @code
+ * $ ./make.py bootstrap -DCMAKE_INSTALL_PREFIX=/usr
+ * $ cd build
+ * $ make install
+ * @endcode
+ * Of course, all the options can be combined and also changed after the initial building, e.g. with the cmake-gui:
+ * @code
+ * $ cd build
+ * $ cmake-gui ..
+ * @endcode
+ *
+ * <hr>
+ * @subsection sub_building Compiling (After Initial Build)
+ * If you added a new C++ based algorithm to RevKit or modified the existing ones, there is no need to run <code>./make.py build</code> again. But it's still possible. Instead, you can compile your extensions by simply entering:
+ * @code
+ * $ cd build
+ * $ make
+ * @endcode
+ * \b Hint: The libraries and executables that were built are in the respective sub-directories, e.g. \b build/core, \b build/examples, ...
+ *
+ * <hr>
+ * @subsection sub_boost_for_revkit_users Boost for RevKit Users
+ * Internally, RevKit extensively uses the Boost libraries.
+ * Some of the concepts might also be useful for extensions.
+ * Thus, in the following two of the Boost libraries are motivated by means of small examples.
+ *
+ * @subsubsection sub_assign Boost.Assignment
+ * <a href="http://www.boost.org/doc/libs/1_51_0/libs/assign/doc/index.html" target="_blank">Boost.Assignment</a> makes it easier to insert elements into containers.
+ * This is illustrated by the following example, where names are added to a \p vector of \p std::string.
+ * @code
+ * #include <string>
+ * #include <vector>
+ * #include <boost/assign/std/vector.hpp>
+ *
+ * using namespace boost::assign;
+ * using namespace revkit;
+ *
+ * int main( int argc, char ** argv )
+ * {
+ *   std::vector<std::string> names;
+ *   names += "Ada","Bob","Cipher";
+ *
+ *   return 0;
+ * }
+ * @endcode
+ * This example also works e.g. with \p std::set.
+ *
+ * @subsubsection sub_foreach Boost.Foreach
+ * <a href="http://www.boost.org/doc/libs/1_43_0/libs/foreach/index.html">Boost.Foreach</a> enables a foreach - style loop
+ * inside C++. This construct internally uses efficient C++ iterator techniques, so it is safe to use from this point of
+ * view. The following small example demonstrates how to use Boost.Foreach in order to loop through a vector of strings
+ * which was former created by Boost.Assign (see above). Note, that we defined a macro to call BOOST_FOREACH foreach in
+ * order to make it more readable.
+ * @code
+ * #include <string>
+ * #include <vector>
+ * #include <boost/assign/std/vector.hpp>
+ * #include <boost/foreach.hpp>
+ *
+ * #define foreach BOOST_FOREACH
+ *
+ * using namespace boost::assign;
+ * using namespace revkit;
+ *
+ * int main( int argc, char ** argv )
+ * {
+ *   std::vector<std::string> names;
+ *   names += "Ada","Bob","Cipher";
+ *
+ *   foreach ( const std::string& name, names )
+ *   {
+ *     std::cout << "Name: " << name << std::endl;
+ *   }
+ *
+ *   return 0;
+ * }
+ * @endcode
+ *
+ * @subsubsection sub_format Boost.Format
+ * <a href="http://www.boost.org/doc/libs/1_51_0/libs/format/index.html">Boost.Format</a> gives you a C++ alternative to C's \p printf.
+ * In the following example, first a string is printed out to the standard output and, afterwards, another string is generated.
+ * All known placeholders and format options of \p printf can be used.
+ * @code
+ * #include <iostream>
+ * #include <string>
+ *
+ * #include <boost/format.hpp>
+ *
+ * int main( int argc, char ** argv )
+ * {
+ *   std::cout << boost::format( "Gates: %d, Runtime: %f" ) % 12 % 3.44;
+ *
+ *   std::string s = boost::str( boost::format( "Quantum costs: %d" ) % 42 );
+ *
+ *   return 0;
+ * }
+ * @endcode
+ * 
+ */

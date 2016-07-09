@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>TransformationBasedSynthesis</class>
+ <widget class="QWidget" name="TransformationBasedSynthesis">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>282</width>
+    <height>132</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string/>
+  </property>
+  <layout class="QFormLayout" name="formLayout">
+   <item row="3" column="1">
+    <widget class="QCheckBox" name="bidi_synthesis">
+     <property name="text">
+      <string>Bidirectional</string>
+     </property>
+     <property name="checked">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item row="4" column="0">
+    <widget class="QLabel" name="label">
+     <property name="text">
+      <string>Run-time:</string>
+     </property>
+    </widget>
+   </item>
+   <item row="4" column="1">
+    <widget class="QLabel" name="runtime">
+     <property name="text">
+      <string/>
+     </property>
+    </widget>
+   </item>
+   <item row="1" column="1">
+    <widget class="QComboBox" name="swop">
+     <item>
+      <property name="text">
+       <string>None</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>Exhaustive</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>Heuristic</string>
+      </property>
+     </item>
+    </widget>
+   </item>
+   <item row="1" column="0">
+    <widget class="QLabel" name="label_2">
+     <property name="text">
+      <string>Output Permutation:</string>
+     </property>
+     <property name="buddy">
+      <cstring>swop</cstring>
+     </property>
+    </widget>
+   </item>
+   <item row="2" column="1">
+    <widget class="QComboBox" name="cost_function">
+     <property name="enabled">
+      <bool>false</bool>
+     </property>
+     <item>
+      <property name="text">
+       <string>Gates</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>Quantum Costs</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>Transistor Costs</string>
+      </property>
+     </item>
+    </widget>
+   </item>
+   <item row="2" column="0">
+    <widget class="QLabel" name="cost_function_label">
+     <property name="enabled">
+      <bool>false</bool>
+     </property>
+     <property name="text">
+      <string>Cost Function:</string>
+     </property>
+    </widget>
+   </item>
+   <item row="0" column="0">
+    <widget class="QLabel" name="label_3">
+     <property name="text">
+      <string>Variant:</string>
+     </property>
+    </widget>
+   </item>
+   <item row="0" column="1">
+    <widget class="QComboBox" name="variant">
+     <item>
+      <property name="text">
+       <string>Truth Table</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>Reed Muller Spectra</string>
+      </property>
+     </item>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <tabstops>
+  <tabstop>swop</tabstop>
+  <tabstop>bidi_synthesis</tabstop>
+ </tabstops>
+ <resources/>
+ <connections/>
+</ui>

@@ -1,0 +1,11 @@
+Sat Jul  9 15:36:45 PDT 2016 /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/scripts/build param: -DBUILD_UNSTABLE=ON -DBUILD_EXAMPLES=ON -DBUILD_BINDINGS=OFF
+-DBUILD_BINDINGS=OFF -DBUILD_UNSTABLE=ON -DBUILD_EXAMPLES=ON
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/build
+[  2%] Built target revkit_unstable
+[ 97%] Built target revkit_core
+Scanning dependencies of target e001_hello_world
+[100%] Building CXX object examples/CMakeFiles/e001_hello_world.dir/e001_hello_world.cpp.o
+Linking CXX executable e001_hello_world
+[100%] Built target e001_hello_world

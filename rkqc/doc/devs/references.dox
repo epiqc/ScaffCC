@@ -1,0 +1,48 @@
+/**
+ * @page references References
+ *
+ * @section sec_references References
+ *
+ * \anchor SWD10 <b>[SWD10]</b> M. Soeken, R. Wille, and R. Drechsler, <a href="http://ieeexplore.ieee.org/xpls/abs_all.jsp?arnumber=5724427" target="_blank">Hierarchical synthesis of reversible circuits using positive and negative Davio decomposition</a>, <i>International Design and Test Workshop</i>, pages 143-148, 2010.<!--<br><a href="http://www.informatik.uni-bremen.de/agra/doc/konf/10DAC_line_reduction.pdf" target="_blank">Download</a>-->
+ *
+ * \anchor WSD10 <b>[WSD10]</b> R. Wille, M. Soeken, and R. Drechsler, <a href="http://ieeexplore.ieee.org/xpls/abs_all.jsp?arnumber=5523384" target="_blank">Reducing the Number of Lines in Reversible Circuits</a>, <i>Design Automation Conference</i>, pages 647-652, 2010.<br><a href="http://www.informatik.uni-bremen.de/agra/doc/konf/10DAC_line_reduction.pdf" target="_blank">Download</a>
+ *
+ * \anchor MWD10 <b>[MWD10]</b> D. M. Miller, R. Wille, and R. Drechsler, <a href="http://ieeexplore.ieee.org/xpls/abs_all.jsp?arnumber=5489136" target="_blank">Reducing Reversible Circuit Cost by Adding Lines</a>, <i>International Symposium on Multiple-Valued Logic</i>, pages 647, 2010.
+ *
+ * \anchor SWDD10 <b>[SWDD10]</b> M. Soeken, R. Wille, G. W. Dueck, and R. Drechsler, <a href="http://ieeexplore.ieee.org/xpls/abs_all.jsp?arnumber=5491754" target="_blank">Window Optimization of Reversible and Quantum Circuits</a>, <i>International Symposium on Design and Diagnostics of Electronic Circuits and Systems</i>, pages 431-435, 2010.
+ * <br><a href="http://www.informatik.uni-bremen.de/agra/doc/konf/10DDECS_window_optimization.pdf" target="_blank">Download</a>
+ *
+ *
+ * \anchor WD09 <b>[WD09]</b> R. Wille and R. Drechsler, <a href="http://portal.acm.org/citation.cfm?id=1629984" target="_blank">BDD-based synthesis of reversible logic for large functions</a>, <i>Design Automation Conference</i>, pages 270-275, 2009.<br><a href="http://www.informatik.uni-bremen.de/agra/doc/konf/09dac_bdd_synth.pdf" target="_blank">Download</a>
+ *
+ *
+  * \anchor GWDD09 <b>[GWDD09]</b> D. Große, R. Wille, G. W. Dueck, and R. Drechsler, <a href="http://ieeexplore.ieee.org/xpl/freeabs_all.jsp?arnumber=4838823" target="_blank">Exact Multiple Control Toffoli Network Synthesis with SAT Techniques</a>, <i>IEEE Trans. on CAD</i>, pages 703-715, 2009.
+ *
+ *
+ * \anchor WGDD09 <b>[WGDD09]</b> R. Wille, D. Große, G. W. Dueck, and R. Drechsler, <a href="http://ieeexplore.ieee.org/xpl/freeabs_all.jsp?arnumber=4749673" target="_blabk">Reversible Logic Synthesis with Output Permutation</a>, <i>International Conference on VLSI Design</i>, pages 189-194, 2009.<br><a href="http://www.informatik.uni-bremen.de/agra/doc/konf/09_vlsidesign_swop.pdf" target="_blank">Download</a>
+ *
+ *
+ * \anchor WGMD09 <b>[WGMD09]</b> R. Wille, D. Große, D. M. Miller, and R. Drechsler, <a href="http://ieeexplore.ieee.org/xpls/abs_all.jsp?arnumber=5010420&tag=1" target="_blabk">Equivalence Checking of Reversible Circuits</a>, <i>International Symposium on Multi-Valued Logic</i>, pages 324-330, 2009.<br><a href="http://www.informatik.uni-bremen.de/agra/doc/konf/09_ismvl_rev_ec.pdf" target="_blank">Download</a>
+ *
+ * \anchor FTR07 <b>[FTR07]</b> K. Fazel, M. A. Thornton, and J. E. Rice, <a href="http://ieeexplore.ieee.org/xpl/freeabs_all.jsp?arnumber=4313212" target="_blank">ESOP-based Toffoli Gate Cascade Generation</a>, In <i>IEEE Pacific Rim Conference on Communications, Computers and Signal Processing</i>, pages 206-209, 2007.
+ *
+ * \anchor MDM07 <b>[MDM07]</b> D. Maslov, G. W. Dueck, and D. M. Miller, <a href="http://portal.acm.org/citation.cfm?id=1278355" target="_blank">Techniques for the synthesis of reversible Toffoli networks</a>, In <i>ACM Transactions on Design Automation of Electronic Systems</i>, Volume 12, Issue 4, Article 42, 2007.
+ *
+ * \anchor MMD03 <b>[MMD03]</b> D. M. Miller, D. Maslov, and G. W. Dueck, <a href="http://ieeexplore.ieee.org/xpls/abs_all.jsp?arnumber=1219016&isnumber=27397&punumber=8647&type=ref" target="_blank">A Transformation Based Algorithm for Reversible Logic Synthesis</a>, <i>Design Automation Conference</i>, pages 318-323, 2003.
+ *
+ * \anchor MD03 <b>[MD03]</b> D. Maslov and G. W. Dueck, <a href="http://ieeexplore.ieee.org/xpl/freeabs_all.jsp?arnumber=1255714" target="_blank">Improved quantum cost for <i>n</i>-bit Toffoli gates</a>, In <i>Electronic Letters</i> 39(25), pages 1790-1791, 2003.
+ *
+
+ *
+
+ *
+
+ *
+
+ *
+ *
+ * \anchor BBC95 <b>[BBC+95]</b> A. Barenco, C. H. Bennett, R. Cleve, D. P. DiVincenzo, N. Margolus, P. Shor, T. Sleator, J. A. Smolin, and H. Weinfurter, <a href="http://pra.aps.org/abstract/PRA/v52/i5/p3457_1" target="_blank">Elementary gates for quantum computation</a>, In <i>Physical Review A</i> 52(5), pages 3457-3467, 1995.
+ *
+ * <br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br>
+ */
+

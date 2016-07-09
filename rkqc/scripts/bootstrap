@@ -1,0 +1,216 @@
+#!/bin/bash
+
+
+# usage: shows the help message including all arguments
+usage() {
+    cat << EOF
+    $0 sets up a build directory.
+usage:
+    $0  build
+    --help          
+	show this help
+    --clean         
+	delete build directory before creating a new one
+    --deps <dir>    
+	build dependencies in this directory
+    -d <dir>       
+	can be shared in different projects
+    --mode <type>   
+	the CMake build type to configure, types are
+    -m <type>      
+	RELEASE, MINSIZEREL, RELWITHDEBINFO, DEBUG
+    -Dvar=val      
+	pass options to CMake
+    --cmake=/p/t/c  
+	use this version of CMake
+    --cmake         
+	build a custom CMake version
+    --boost | -DBOOST_PATH
+    	use the boost version installed on the system; default /usr
+    --DBOOST_PATH=<dir> 
+        specify the directory of the boost version installed on the system for the include and lib path
+    --boost-include-dir=<dir> 
+	set if an installed boost should be used and the include path differs from /usr/include/boost
+    --boost-lib-dir=<dir> 
+	set if an installed boost should be used and the library path differs from /usr/lib
+EOF
+    exit 1
+}
+
+###Bootstrap Main
+
+#loading common functions
+ROOT_DIR=$( cd $(dirname $(dirname $0)) && pwd)
+commons="$ROOT_DIR/scripts/commons"
+if [ -f $commons ]; then
+    source $commons  #requires ROOT_DIR
+else
+    echo "$commons not found" 1>&2 
+    exit 1
+fi
+#loading configuration
+config="$ROOT_DIR/scripts/config"
+if [ -f $config ]; then
+    source $config  #requires ROOT_DIR
+else
+    echo "$config not found" 1>&2 
+    exit 1
+fi
+#loading bootstrap functions
+bootstrap_functions="$ROOT_DIR/scripts/bootstrap_functions"
+if [ -f $bootstrap_functions ]; then
+    source $bootstrap_functions  #requires ROOT_DIR
+else
+    echo "$bootstrap_functions not found" 1>&2 
+    exit 1
+fi
+
+
+
+
+#process arguments
+while [[ "$@" ]]; do
+    case $1 in
+        --help|-h)    
+	    usage;;
+        --deps|-d)    
+	    DEPS="$2"; shift;;
+	--boost|-DBOOST_PATH)	
+	    echo "request for using systems boost version"
+	    SYSTEM_BOOST="yes";;
+	--boost-include-dir=*) 
+	    boost_include_dir="${1#--boost-include-dir=}" && 
+	    if [ ! -d "$boost_include_dir" ]; then 
+		echoerr "$boost_include_dir not found" 
+		exit 1; 
+	    fi
+	    boost_version_file=$(cd $boost_include_dir &>/dev/null && pwd)/version.hpp 
+	    ;;
+	--boost-lib-dir=*) 
+	    boost_lib_dir="${1#--boost-lib-dir=}"
+	    if [ ! -d "$boost_lib_dir" ]; then 
+		echoerr "$boost_lib_dir not found" 
+		exit 1; 
+	    fi;;
+	-DBOOST_PATH=*) 
+	    SYSTEM_BOOST="yes"
+	    boost_include_dir="${1#-DBOOST_PATH=}"
+	    boost_include_dir="$boost_include_dir/include/boost"
+	    boost_lib_dir="$boost_include_dir/lib"
+	    if [ ! -d "$boost_include_dir" ]; then 
+		echoerr "$boost_include_dir not found" 
+		exit 1; 
+	    fi
+	    echo $boost_include_dir
+	    boost_version_file=$(cd $boost_include_dir &>/dev/null && pwd)/version.hpp 
+	    ;;
+	--clean|-c)   
+	    echo "removing" $BUILD_DIR &&  rm -rf $BUILD_DIR ;;
+        --cmake=*)    
+	    CMAKE="${1#--cmake=}";;
+        --cmake)      
+	    BUILD_CMAKE="yes";;
+        --mode|-m)    
+	    CMAKE_ARGS="$CMAKE_ARGS -DCMAKE_BUILD_TYPE=$2"; shift;;
+        -D*)         
+	    CMAKE_ARGS="$CMAKE_ARGS $1";;
+    esac
+    shift;
+done
+
+#process required programs
+
+echo "process required programs"
+for prog in $requiredPrograms; do
+	v=$(whereis -b $prog) &&
+	if [ -z "${v#$prog:}" ]; then
+		echoerr "$prog not found." 
+		exit 1
+	fi
+done
+echo "done"
+
+#confirm boost version
+
+if [ "$SYSTEM_BOOST" == "yes" ]; then
+#if [ -z "$BOOST_PATH" ]; then
+    echo "boost lookup:..."
+    if [ -f $boost_version_file ]; then 
+	found_boost_version=$( sed -n ' s/#define BOOST_LIB_VERSION//p ' $boost_version_file | sed 's/"//g ; s/_//' )
+	#found_boost_version=${found_boost_version:0:3}
+	
+	required_boost_version=$(echo $BOOST | sed 's/boost-// ; s/_//' )  
+	required_boost_version=${required_boost_version:0:3} 
+	
+	if (( $required_boost_version > $found_boost_version )); then
+	    echo "Boost $found_boost_version was found at $boost_include_dir but $required_boost_version is required"
+	else
+	    echo "found boost version is up-to-date"
+	    BOOST=""
+	fi
+    else 
+	echoerr "no installed boost version found"
+	exit 1
+    fi
+#else
+#    BOOST=""
+#fi
+fi
+
+#set the REQUIRES variable (with or without boost)
+requires
+
+echo "build directory: $BUILD_DIR"
+echo "dependencies directory $DEPS"
+
+#clone/check the requirements
+
+cd $DEPS
+if [ -d $INSTALLER_DIR ]; then
+        # packaged mode
+   	cd $INSTALLER_DIR
+
+	#it may be nessesary to pull the git repository if libs are missing 
+	for lib in $REQUIRES
+	do 
+		[ ! -d $lib ] && 
+		req=$(git pull) &&
+		if [ -n "${req#"Already up-to-date."}" ]; then 
+			echoerr "error: $lib library script unavailable"
+			exit 1
+		fi
+	done
+	echo "dependency scan -- done"
+else
+        # repository mode
+	git clone $GIT_OPT $GIT_REPO $INSTALLER_DIR &&
+	cd $INSTALLER_DIR
+fi
+
+#ensure the cmake configurations
+
+if [ "$CMAKE" == "cmake" ]; then    #cmake unchanged
+    cmake_v="" && cmake_v=$(env cmake --version) && echo $cmake_v && cmake_v=${cmake_v#cmake version}
+    if [ -z "$cmake_v" ]; then #no cmake in env found
+	echoerr "env: cmake not found"
+	BUILD_CMAKE="yes"
+    else
+	#make the strings compareable
+	cmake_v=$(echo $cmake_v | sed 's/\.//g')
+	required_cmake_v=$(echo $CMAKE_VERSION | sed 's/_//g')
+
+	#if version found, ensure that its greater then the required version
+	if (( $cmake_v < $required_cmake_v )); then
+	    BUILD_CMAKE="yes"
+    	else
+	    echo "your cmake is up-to-date"
+	fi
+    fi
+fi 
+
+
+building_dependencies &&
+copy_dependencies &&
+prepare_build_dir &&
+python_settings &&
+finalize || quote_error

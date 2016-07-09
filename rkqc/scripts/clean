@@ -1,0 +1,79 @@
+#!/bin/bash
+
+#loading common functions
+ROOT_DIR=$( cd $(dirname $(dirname $0)) && pwd)
+commons="$ROOT_DIR/scripts/commons"
+if [ -f $commons ]; then
+    source $commons  #requires ROOT_DIR
+else
+    echo "$commons not found" 2>&1 
+    exit 1
+fi
+
+logs=""
+dependencies="dependencies"
+
+# usage: shows the help message including all arguments
+usage() {
+    cat << EOF
+    $0 cleans the revkit directory.
+usage:
+    $0  build
+    --help          
+	show this help
+    --logs
+        remove log folder
+    --keep-deps
+        keeping dependency sources and binaries.
+    --dep-clean-scripts
+        run the clean scripts from the requirements.
+EOF
+    exit 1
+}
+
+echo "process arguments: $@"
+#process arguments
+while [[ "$@" ]]; do
+    case $1 in
+        --help|-h)    usage;;
+        --logs|-l)    logs="log"; shift;;
+        --keep-deps|-!deps) echo "keeping dependency sources and binaries."; dependencies=""; shift;;
+        --dep-clean-scripts|-dcs) echo "calling requirements clean scripts after"; dcs="true"; dependencies=""; shift;;
+	*) echoerr "invalid arguments: $1. Try --help"; exit;;
+    esac
+    shift;
+done
+
+#rm files in revkit root directory
+rmfiles="build libs python revkit_python.so revkitmath.py revkitui.py revkitui.pyc revkit.py $dependencies $logs"
+for f in $rmfiles; do
+    rm -rf $ROOT_DIR/$f
+done
+
+#run clean scripts for the dependencies
+if [ "$dcs" == "true" ]; then
+
+    #load config
+    config="$ROOT_DIR/scripts/config"
+    if [ -f $config ]; then
+	source $config  #requires ROOT_DIR
+    else
+	echo "$config not found" 2>&1 
+	exit 1
+    fi
+    #init REQUIRES
+    requires 
+    cd $DEPS
+
+    #boost may have been changed when calling the bootstrap script
+
+    reqs="$REQUIRES $SPECIAL_REQUIRES"
+    for d in $reqs; do
+	echo "removing $d libs"
+	cd $d &&
+	rm -rf lib &&
+	cd ..
+    done
+fi
+
+
