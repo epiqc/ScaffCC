@@ -78,7 +78,7 @@ for f in $*; do
       for th in ${THRESHOLDS[@]}; do
         echo "[gen-lpfs.sh] $b.flat${th}: Generating SIMD K=$k D=$d leaves ..."        
         if [ ! -e ${b}/${b}.flat${th}.simd.${k}.${d}.leaves.local ]; then
-          $OPT -load $SCAF -GenLPFSSchedule -simd-kconstraint-lpfs $k -simd-dconstraint-lpfs $d -simd_l 1 -local_mem 1 ${b}/${b}.flat${th}.ll > /dev/null 2> ${b}/${b}.flat${th}.simd.${k}.${d}.leaves.local
+          $OPT -load $SCAF -GenLPFSSchedule -simd-kconstraint-lpfs $k -simd-dconstraint-lpfs $d -simd_l 1 -full_sched 1 -local_mem 1 ${b}/${b}.flat${th}.ll > /dev/null 2> ${b}/${b}.flat${th}.simd.${k}.${d}.leaves.local
         fi
       done
     done
