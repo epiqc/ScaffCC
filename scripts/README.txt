@@ -1,6 +1,6 @@
 =================================================================
                 Scaffold Compiler Working Group
-              https://github.com/ajavadia/ScaffCC
+              https://github.com/epiqc/ScaffCC
 
                     Scripts README Document
 =================================================================

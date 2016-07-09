@@ -88,6 +88,7 @@ or use the package manager of your system ("yum" on Red Hat or "apt-get" on Ubun
     % sudo ./configure --disable-shared --enable-static
     % sudo make && sudo make check && sudo make install
       
+6. Python 2.7 (or later)
 
 Once you have all of the required libraries, simply run `make' or `make 
 USE_GCC=1' at the root of the repository. The USE_GCC flag will force the 

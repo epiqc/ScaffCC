@@ -125,6 +125,9 @@ Clang: llvm build
 	@if [ -z `echo ${PATH} | grep ${PWD}/Debug+Asserts/bin` ]; then \
 		export PATH=${PATH}:${PWD}/Debug+Asserts/bin; \
 	else true; fi
+	@if [ -z `echo ${PATH} | grep ${PWD}/Debug+Asserts/bin` ]; then \
+		export PATH=${PATH}:${PWD}/Debug+Asserts/bin; \
+	else true; fi
 
 build: llvm
 	@mkdir -p build
