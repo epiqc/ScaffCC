@@ -706,12 +706,8 @@ void GenRKQC::printFuncHeaderToFile(Function* F, ofstream& ss, bool lastFunc)
   //print name of function
 
   string funcName = F->getName();
-  if (lastFunc) {
-    lastFuncName = funcName;
-    ss << "\nint main () {\n"; 
-    ss << "  set_LLVM(true);\n";
-  }
-  else {
+  
+  if (!lastFunc) {
     ss <<"\nvoid "<< funcName;
   
     //print arguments of function
@@ -771,6 +767,66 @@ void GenRKQC::printFuncHeaderToFile(Function* F, ofstream& ss, bool lastFunc)
     
     ss <<" ) {\n ";   
   }
+  else {
+    lastFuncName = funcName;
+    ss << "\nint main () {\n"; 
+    ss << "  set_LLVM(true);\n";
+
+    funcArgList = funcCallsArgs.find(F)->second;
+    unsigned tmp_num_elem = funcArgList.size();
+    
+    if(tmp_num_elem > 0){
+      for(unsigned tmp_i=0;tmp_i<tmp_num_elem - 1;tmp_i++){
+        
+        qGateArg tmpQA = funcArgList[tmp_i];
+        
+        if(debugGenrkqc)
+      print_qgateArg(tmpQA);
+        
+        if(tmpQA.isQbit)
+      ss <<"  qbit";
+        else if(tmpQA.isCbit)
+      ss <<"  cbit";
+        else{
+      Type* argTy = tmpQA.argPtr->getType();
+      if(argTy->isDoubleTy()) ss << "double";
+      else if(argTy->isFloatTy()) ss << "float";
+      else
+        ss <<"UNRECOGNIZED "<<argTy<<" ";
+        }
+        
+//        if(tmpQA.isPtr)
+//      	  ss <<"*";	  
+        
+        ss <<" "<<printVarName(tmpQA.argPtr->getName())<<" ;\n";
+      }
+      
+      if(debugGenrkqc)
+        print_qgateArg(funcArgList[tmp_num_elem-1]);
+      
+      
+      if((funcArgList[tmp_num_elem-1]).isQbit)
+        ss <<"  qbit";
+      else if((funcArgList[tmp_num_elem-1]).isCbit)
+        ss <<"  cbit";
+      else{
+        Type* argTy = (funcArgList[tmp_num_elem-1]).argPtr->getType();
+        if(argTy->isDoubleTy()) ss  << "double";
+        else if(argTy->isFloatTy()) ss  << "float";
+        else
+      ss <<"UNRECOGNIZED "<<argTy<<" ";
+      }
+      
+//      if((funcArgList[tmp_num_elem-1]).isPtr)
+//          ss <<"*";
+      
+      ss  <<" "<<printVarName((funcArgList[tmp_num_elem-1]).argPtr->getName()) << " ;\n";
+      
+    }
+
+
+  }
+
     //print qbits declared in function
     //mvpItr=qbitsInitInFunc.find(F);	    
     vector<qGateArg> qbitsInit = mapQbitsInitInFunc.find(F)->second;
