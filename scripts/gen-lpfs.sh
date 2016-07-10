@@ -16,7 +16,7 @@ D=(1024)
 # Number of SIMD regions
 K=(4)
 # Module flattening thresholds: must be picked from the set in scripts/flattening_thresh.py
-THRESHOLDS=(000k 100k)
+THRESHOLDS=(100k)
 # Full schedule? otherwise only generates metrics (faster)
 FULL_SCHED=true
 
@@ -37,7 +37,7 @@ for f in $*; do
     $ROOT/scaffold.sh -r $f
     mv ${b}11.ll ${b}11.ll.keep_me
     # clean intermediary compilation files (comment out for speed)
-    $ROOT/scaffold.sh -c $f
+    #$ROOT/scaffold.sh -c $f
     # Keep the final output for the compilation
     mv ${b}11.ll.keep_me ${b}/${b}.ll
   fi
@@ -51,7 +51,7 @@ for f in $*; do
   python $DIR/flattening_thresh.py ${b}  
   for th in ${THRESHOLDS[@]}; do      
     if [ ! -e ${b}/${b}.flat${th}.ll ]; then
-      echo "[gen-lpfs.sh] $b.flat${th}: Flattening ..."      
+      echo "[gen-lpfs.sh] $b_flat${th}: Flattening ..."      
       mv ${b}.flat${th}.txt flat_info.txt
       $OPT -S -load $SCAF -FlattenModule -dce -internalize -globaldce ${b}/${b}.ll -o ${b}/${b}.flat${th}.ll
     fi

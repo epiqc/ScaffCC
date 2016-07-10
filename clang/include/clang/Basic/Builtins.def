@@ -106,6 +106,19 @@ BUILTIN(MeasZ , "lq"  , "")
 BUILTIN(Toffoli , "vqqq"  , "")
 BUILTIN(Fredkin , "vqqq"  , "")
 
+// RKQC builtin gates:
+BUILTIN(cnot , "vyy"  , "")
+BUILTIN(toffoli , "vyyy" , "")
+BUILTIN(NOT  , "vy" , "")
+BUILTIN(assign_value_of_b_to_a  , "vyyi" , "")
+BUILTIN(assign_value_of_int_to_a  , "vyii" , "")
+BUILTIN(a_eq_a_plus_b  , "vyyi" , "")
+BUILTIN(a_eq_a_minus_b  , "vyyi" , "")
+BUILTIN(a_eq_a_plus_b_times_c  , "vyyyi" , "")
+BUILTIN(a_swap_b  , "vyyi" , "")
+
+
+
 // Standard libc/libm functions:
 BUILTIN(__builtin_atan2 , "ddd"  , "Fnc")
 BUILTIN(__builtin_atan2f, "fff"  , "Fnc")

@@ -498,6 +498,13 @@ void ASTContext::InitBuiltinTypes(const TargetInfo &Target) {
   // Scaffold: cbit and qbit types added here for initialization
   InitBuiltinType(CbitTy,               BuiltinType::Cbit);
   InitBuiltinType(QbitTy,               BuiltinType::Qbit);
+  
+  // RKQC: qint added for initialization
+  InitBuiltinType(QintTy,               BuiltinType::Qint);
+  InitBuiltinType(zzBitTy,               BuiltinType::zzBit);
+  InitBuiltinType(zgBitTy,               BuiltinType::zgBit);
+  InitBuiltinType(ooBitTy,               BuiltinType::ooBit);
+  InitBuiltinType(ogBitTy,               BuiltinType::ogBit);
 
 }
 
@@ -982,6 +989,10 @@ ASTContext::getTypeInfoImpl(const Type *T) const {
     case BuiltinType::Qbit:
       Width = Target->getQbitWidth();
       Align = Target->getQbitAlign();
+      break;
+    case BuiltinType::Qint:
+      Width = Target->getQintWidth();
+      Align = Target->getQintAlign();
       break;
     }
     break;
@@ -3629,6 +3640,7 @@ unsigned ASTContext::getIntegerRank(const Type *T) const {
    // Scaffold will use that rank for cbit and qbit as a result
   case BuiltinType::Cbit:
   case BuiltinType::Qbit:
+  case BuiltinType::Qint:
   case BuiltinType::Bool:
     return 1 + (getIntWidth(BoolTy) << 3);
   case BuiltinType::Char_S:
@@ -4378,6 +4390,7 @@ static char ObjCEncodingForPrimitiveKind(const ASTContext *C, QualType T) {
     // -- FIXME collision between cbit and qbit values, may cause other problems
     case BuiltinType::Cbit:       return 'l';
     case BuiltinType::Qbit:       return 'q';
+    case BuiltinType::Qint:       return 'y';
     }
 }
 
@@ -6350,6 +6363,11 @@ static QualType DecodeTypeFromStr(const char *&Str, const ASTContext &Context,
     assert(HowLong == 0 && !Signed && !Unsigned &&
            "Bad modifiers used with 'q'!");
     Type = Context.QbitTy;
+    break;
+  case 'y':
+    assert(HowLong == 0 && !Signed && !Unsigned && 
+           "Bad modifiers used with 'y'!");
+    Type = Context.QintTy;
     break;
   case 'v':
     assert(HowLong == 0 && !Signed && !Unsigned &&

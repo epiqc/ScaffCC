@@ -707,8 +707,8 @@ def err_seh___finally_block : Error<
   "%0 only allowed in __finally block">;
   
 // Scaffold
-def err_typename_qint : Error<
-  "qint is allowed inside ctqg only">;
+//def err_typename_qint : Error<
+//  "qint is allowed inside rkqc only">;
 
 } // end of Parse Issue category.
 

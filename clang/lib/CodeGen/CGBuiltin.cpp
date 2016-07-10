@@ -1275,6 +1275,72 @@ RValue CodeGenFunction::EmitBuiltinExpr(const FunctionDecl *FD,
     llvm::StringRef Str = cast<StringLiteral>(AnnotationStrExpr)->getString();
     return RValue::get(EmitAnnotationCall(F, AnnVal, Str, E->getExprLoc()));
   }
+  // RKQC
+  case Builtin::BIcnot: {
+    Value *ControlQbit = EmitScalarExpr(E->getArg(0));
+    Value *TargetQbit = EmitScalarExpr(E->getArg(1));
+    Value *F = CGM.getIntrinsic(Intrinsic::cnot);
+    return RValue::get(Builder.CreateCall2(F, ControlQbit, TargetQbit));
+  }
+  case Builtin::BItoffoli: {
+    Value *ControlQbit1 = EmitScalarExpr(E->getArg(0));
+    Value *ControlQbit2 = EmitScalarExpr(E->getArg(1));
+    Value *TargetQbit = EmitScalarExpr(E->getArg(2));
+    Value *F = CGM.getIntrinsic(Intrinsic::toffoli);
+    return RValue::get(Builder.CreateCall3(F, ControlQbit1, ControlQbit2, TargetQbit));
+  }
+  case Builtin::BINOT: {
+    Value *TargetQbit = EmitScalarExpr(E->getArg(0));
+    Value *F = CGM.getIntrinsic(Intrinsic::NOT);
+    return RValue::get(Builder.CreateCall(F, TargetQbit));
+  }
+  case Builtin::BIassign_value_of_b_to_a: {
+    Value *ControlQbit = EmitScalarExpr(E->getArg(0));
+    Value *TargetQbit = EmitScalarExpr(E->getArg(1));
+    Value *Size = EmitScalarExpr(E->getArg(2)); 
+    Value *F = CGM.getIntrinsic(Intrinsic::assign_value_of_b_to_a);
+    return RValue::get(Builder.CreateCall3(F, ControlQbit, TargetQbit, Size));
+  }
+ case Builtin::BIassign_value_of_int_to_a: {
+    Value *ControlQbit = EmitScalarExpr(E->getArg(0));
+    Value *TargetQbit = EmitScalarExpr(E->getArg(1));
+    Value *Size = EmitScalarExpr(E->getArg(2)); 
+    Value *F = CGM.getIntrinsic(Intrinsic::assign_value_of_int_to_a);
+    return RValue::get(Builder.CreateCall3(F, ControlQbit, TargetQbit, Size));
+  }
+  case Builtin::BIa_eq_a_plus_b: {
+    Value *ControlQbit = EmitScalarExpr(E->getArg(0));
+    Value *TargetQbit = EmitScalarExpr(E->getArg(1));
+    Value *Size = EmitScalarExpr(E->getArg(2)); 
+    Value *F = CGM.getIntrinsic(Intrinsic::a_eq_a_plus_b);
+    return RValue::get(Builder.CreateCall3(F, ControlQbit, TargetQbit, Size));
+  }
+  case Builtin::BIa_eq_a_minus_b: {
+    Value *ControlQbit = EmitScalarExpr(E->getArg(0));
+    Value *TargetQbit = EmitScalarExpr(E->getArg(1));
+    Value *Size = EmitScalarExpr(E->getArg(2)); 
+    Value *F = CGM.getIntrinsic(Intrinsic::a_eq_a_minus_b);
+    return RValue::get(Builder.CreateCall3(F, ControlQbit, TargetQbit, Size));
+  }
+  case Builtin::BIa_eq_a_plus_b_times_c: {
+    Value *ControlQbit = EmitScalarExpr(E->getArg(0));
+    Value *TargetQbit = EmitScalarExpr(E->getArg(1));
+    Value *TargetQbit2 = EmitScalarExpr(E->getArg(2));
+    Value *Size = EmitScalarExpr(E->getArg(3)); 
+    Value *F = CGM.getIntrinsic(Intrinsic::a_eq_a_plus_b_times_c);
+    return RValue::get(Builder.CreateCall4(F, ControlQbit, TargetQbit, TargetQbit2, Size));
+  }
+  case Builtin::BIa_swap_b: {
+    Value *ControlQbit = EmitScalarExpr(E->getArg(0));
+    Value *TargetQbit = EmitScalarExpr(E->getArg(1));
+    Value *Size = EmitScalarExpr(E->getArg(2)); 
+    Value *F = CGM.getIntrinsic(Intrinsic::a_swap_b);
+    return RValue::get(Builder.CreateCall3(F, ControlQbit, TargetQbit, Size));
+  }
+
+
+
+
   // Scaffold
   case Builtin::BICNOT: {
     Value *ControlQbit = EmitScalarExpr(E->getArg(0));

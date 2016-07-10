@@ -377,6 +377,11 @@ bool PrintfSpecifier::fixType(QualType QT, const LangOptions &LangOpt,
   // Scaffold's types
   case BuiltinType::Cbit:
   case BuiltinType::Qbit:
+  case BuiltinType::Qint:
+  case BuiltinType::zzBit:
+  case BuiltinType::zgBit:
+  case BuiltinType::ooBit:
+  case BuiltinType::ogBit:
     // Various types which are non-trivial to correct.
     return false;
 

@@ -143,6 +143,9 @@ def llvm_vararg_ty     : LLVMType<isVoid>;   // this means vararg here
 def llvm_cbit_ty      : LLVMType<i1>;      //  
 def llvm_qbit_ty      : LLVMType<i16>;      //  
 
+// RKQC
+def rkqc_qint_ty      : LLVMType<i16>;      //
+
 
 
 //===----------------------------------------------------------------------===//
@@ -199,6 +202,22 @@ def int_MeasX : Intrinsic<[llvm_cbit_ty], [llvm_qbit_ty], [], "llvm.MeasX">;
 def int_MeasZ : Intrinsic<[llvm_cbit_ty], [llvm_qbit_ty], [], "llvm.MeasZ">;
 def int_Toffoli : Intrinsic<[], [llvm_qbit_ty, llvm_qbit_ty, llvm_qbit_ty], [], "llvm.Toffoli">;        
 def int_Fredkin : Intrinsic<[], [llvm_qbit_ty, llvm_qbit_ty, llvm_qbit_ty], [], "llvm.Fredkin">;        
+
+// RKQC
+def int_cnot : Intrinsic<[], [rkqc_qint_ty, rkqc_qint_ty], [], "llvm.rkqc.cnot">;
+def int_NOT : Intrinsic<[], [rkqc_qint_ty], [], "llvm.rkqc.NOT">;        
+def int_toffoli : Intrinsic<[], [rkqc_qint_ty, rkqc_qint_ty, rkqc_qint_ty], [], "llvm.rkqc.toffoli">;        
+
+def int_a_swap_b : Intrinsic<[], [rkqc_qint_ty, rkqc_qint_ty, llvm_i32_ty], [], "llvm.rkqc.a_swap_b">;
+def int_a_eq_a_plus_b : Intrinsic<[], [rkqc_qint_ty, rkqc_qint_ty, llvm_i32_ty], [], "llvm.rkqc.a_eq_a_plus_b">;
+def int_a_eq_a_minus_b : Intrinsic<[], [rkqc_qint_ty, rkqc_qint_ty, llvm_i32_ty], [], "llvm.rkqc.a_eq_a_minus_b">;
+def int_a_eq_a_plus_b_times_c : Intrinsic<[], [rkqc_qint_ty, rkqc_qint_ty, rkqc_qint_ty, llvm_i32_ty], [], "llvm.rkqc.a_eq_a_plus_b_times_c">;
+def int_assign_value_of_b_to_a : Intrinsic<[], [rkqc_qint_ty, rkqc_qint_ty, llvm_i32_ty], [], "llvm.rkqc.assign_value_of_b_to_a">;
+def int_assign_value_of_int_to_a : Intrinsic<[], [rkqc_qint_ty, llvm_i32_ty, llvm_i32_ty], [], "llvm.rkqc.assign_value_of_int_to_a">;
+
+
+
+
 
 
 //===--------------- Variable Argument Handling Intrinsics ----------------===//

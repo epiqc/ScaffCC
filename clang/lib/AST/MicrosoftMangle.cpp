@@ -717,6 +717,7 @@ void MicrosoftCXXNameMangler::mangleType(const BuiltinType *T) {
   // Scaffold cbit & qbit added here since there is no "default" in here
   case BuiltinType::Cbit:
   case BuiltinType::Qbit:
+  case BuiltinType::Qint:
 
   case BuiltinType::Char16:
   case BuiltinType::Char32:

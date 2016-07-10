@@ -2,10 +2,10 @@
 
 ROOT=$(dirname $0)
 
-# Get CTQG path
-export CTQG_PATH=${ROOT}/ctqg/CTQG
-if [ $(echo $PATH | grep ${CTQG_PATH} | wc -l) -eq 0 ]; then
-	export PATH=$PATH:$CTQG_PATH
+# Get RKQC path
+export RKQC_PATH=${ROOT}/rkqc
+if [ $(echo $PATH | grep ${RKQC_PATH} | wc -l) -eq 0 ]; then
+	export PATH=$PATH:$RKQC_PATH
 fi
 
 function show_help {
@@ -25,7 +25,7 @@ function show_help {
 
 # Parse opts
 OPTIND=1         # Reset in case getopts has been used previously in the shell.
-ctqg=0
+rkqc=0
 clean=0
 dryrun=""
 force=0
@@ -98,16 +98,16 @@ dir="$(dirname ${filename})/"
 file=$(basename ${filename} .scaffold)
 cfile="${file}.*"
 
-if [ $(egrep '^ctqg.*{\s*' ${filename} | wc -l) -gt 0 ]; then
-	ctqg=1
+if [ $(egrep '^rkqc.*{\s*' ${filename} | wc -l) -gt 0 ]; then
+	rkqc=1
 	toff=1
-	#dir=""
+	dir=""
 fi
 
 if [ ${clean} -eq 1 ]; then
 	make -f $ROOT/scaffold/Scaffold.makefile ${dryrun} ROOT=$ROOT DIRNAME=${dir} FILENAME=${filename} FILE=${file} CFILE=${cfile} clean
     exit
 fi
-make -f $ROOT/scaffold/Scaffold.makefile ${dryrun} ROOT=$ROOT DIRNAME=${dir} FILENAME=${filename} FILE=${file} CFILE=${cfile} TOFF=${toff} CTQG=${ctqg} ROTATIONS=${rot} ${targets}
+make -f $ROOT/scaffold/Scaffold.makefile ${dryrun} ROOT=$ROOT DIRNAME=${dir} FILENAME=${filename} FILE=${file} CFILE=${cfile} TOFF=${toff} RKQC=${rkqc} ROTATIONS=${rot} ${targets}
 
 exit 0

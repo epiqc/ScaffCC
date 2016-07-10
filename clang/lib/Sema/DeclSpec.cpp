@@ -273,6 +273,11 @@ bool Declarator::isDeclarationOfFunction() const {
     case TST_wchar:
     case TST_cbit:	//Scaffold addition
     case TST_qbit:	//Scaffold addition
+    case TST_qint:
+    case TST_zero_to_zero:
+    case TST_zero_to_garbage:
+    case TST_one_to_one:
+    case TST_one_to_garbage:
     case TST_qstruct:
     case TST_qunion:	    
       return false;
@@ -411,6 +416,12 @@ const char *DeclSpec::getSpecifierName(DeclSpec::TST T) {
   case DeclSpec::TST_qbit:	  return "qbit";
   case DeclSpec::TST_qstruct:     return "qstruct";
   case DeclSpec::TST_qunion:      return "qunion";
+  // RKQC type specifier names
+  case DeclSpec::TST_qint:        return "qint";
+  case DeclSpec::TST_zero_to_zero:            return "qint";
+  case DeclSpec::TST_zero_to_garbage:         return "qint";
+  case DeclSpec::TST_one_to_one:              return "qint";
+  case DeclSpec::TST_one_to_garbage:          return "qint";
 				  
   }
   llvm_unreachable("Unknown typespec!");

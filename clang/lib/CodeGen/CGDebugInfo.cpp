@@ -389,6 +389,11 @@ llvm::DIType CGDebugInfo::CreateType(const BuiltinType *BT) {
   // Scaffold Cbit and Qbit added to avoid warning
   case BuiltinType::Cbit:
   case BuiltinType::Qbit:
+  case BuiltinType::Qint:
+  case BuiltinType::zzBit:
+  case BuiltinType::zgBit:
+  case BuiltinType::ooBit:
+  case BuiltinType::ogBit:
 
   case BuiltinType::UChar:
   case BuiltinType::Char_U: Encoding = llvm::dwarf::DW_ATE_unsigned_char; break;

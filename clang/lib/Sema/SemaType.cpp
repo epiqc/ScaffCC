@@ -11,6 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <iostream>
 #include "clang/Sema/ScopeInfo.h"
 #include "clang/Sema/SemaInternal.h"
 #include "clang/Sema/Template.h"
@@ -631,6 +632,7 @@ static QualType ConvertDeclSpecToType(TypeProcessingState &state) {
       Result = Context.Char32Ty;
     break;
   case DeclSpec::TST_unspecified:
+    std::cout << "UNSPEC" << std::endl;
     // "<proto1,proto2>" is an objc qualified ID with a missing id.
     if (DeclSpec::ProtocolQualifierListTy PQ = DS.getProtocolQualifiers()) {
       Result = Context.getObjCObjectType(Context.ObjCBuiltinIdTy,
@@ -890,6 +892,11 @@ static QualType ConvertDeclSpecToType(TypeProcessingState &state) {
   // Scaffold types
   case DeclSpec::TST_cbit: Result = Context.CbitTy; break;
   case DeclSpec::TST_qbit: Result = Context.QbitTy; break;
+  case DeclSpec::TST_qint: Result = Context.QintTy; break;
+  case DeclSpec::TST_zero_to_zero: Result = Context.QintTy; break;
+  case DeclSpec::TST_zero_to_garbage: Result = Context.QintTy; break;
+  case DeclSpec::TST_one_to_one: Result = Context.QintTy; break;
+  case DeclSpec::TST_one_to_garbage: Result = Context.QintTy; break;
   }
 
   // Handle complex types.

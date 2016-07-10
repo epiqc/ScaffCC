@@ -1882,6 +1882,8 @@ void CXXNameMangler::mangleType(const BuiltinType *T) {
   case BuiltinType::NullPtr: Out << "Dn"; break;
   case BuiltinType::Cbit: Out << "Cb"; break;  // Scaffold
   case BuiltinType::Qbit: Out << 'q'; break;  // Scaffold
+  case BuiltinType::Qint: Out << 'y'; break;  // Scaffold
+
 
 #define BUILTIN_TYPE(Id, SingletonId)
 #define PLACEHOLDER_TYPE(Id, SingletonId) \

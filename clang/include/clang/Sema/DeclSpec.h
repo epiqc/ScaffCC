@@ -272,6 +272,13 @@ public:
   static const TST TST_qstruct = clang::TST_qstruct;
   static const TST TST_qunion = clang::TST_qunion;
 
+  // RKQC types
+  static const TST TST_qint = clang::TST_qint;
+  static const TST TST_zero_to_zero = clang::TST_zero_to_zero;
+  static const TST TST_zero_to_garbage = clang::TST_zero_to_garbage;
+  static const TST TST_one_to_one = clang::TST_one_to_one;
+  static const TST TST_one_to_garbage = clang::TST_one_to_garbage;
+
   // type-qualifiers
   enum TQ {   // NOTE: These flags must be kept in sync with Qualifiers::TQ.
     TQ_unspecified = 0,

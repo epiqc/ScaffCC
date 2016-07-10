@@ -11,6 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <iostream>
 #include "clang/Parse/Parser.h"
 #include "clang/Parse/ParseDiagnostic.h"
 #include "clang/Basic/OpenCL.h"
@@ -2374,6 +2375,32 @@ void Parser::ParseDeclarationSpecifiers(DeclSpec &DS,
       isInvalid = DS.SetTypeSpecType(DeclSpec::TST_qbit, Loc, PrevSpec,
                                      DiagID);
       break;
+
+    case tok::kw_qint:
+      isInvalid = DS.SetTypeSpecType(DeclSpec::TST_qbit, Loc, PrevSpec,
+                                     DiagID);
+      break;
+
+    case tok::kw_zero_to_zero:
+      isInvalid = DS.SetTypeSpecType(DeclSpec::TST_qbit, Loc, PrevSpec,
+                                     DiagID);
+      break;
+
+    case tok::kw_zero_to_garbage:
+      isInvalid = DS.SetTypeSpecType(DeclSpec::TST_qbit, Loc, PrevSpec,
+                                     DiagID);
+      break;
+    case tok::kw_one_to_one:
+      isInvalid = DS.SetTypeSpecType(DeclSpec::TST_qbit, Loc, PrevSpec,
+                                     DiagID);
+      break;
+    case tok::kw_one_to_garbage:
+      isInvalid = DS.SetTypeSpecType(DeclSpec::TST_qbit, Loc, PrevSpec,
+                                     DiagID);
+      break;
+
+
+
         // ***********//
     case tok::kw_bool:
     case tok::kw__Bool:
@@ -2506,6 +2533,12 @@ void Parser::ParseDeclarationSpecifiers(DeclSpec &DS,
 
       // Scaffold module. They are implicitly "void". FIXME: is this cheating?!
     case tok::kw_module:
+      isInvalid = DS.SetTypeSpecType(DeclSpec::TST_void, Loc, PrevSpec,
+		      DiagID);
+
+      break;
+
+    case tok::kw_rkqc:
       isInvalid = DS.SetTypeSpecType(DeclSpec::TST_void, Loc, PrevSpec,
 		      DiagID);
 
@@ -3285,6 +3318,11 @@ bool Parser::isTypeSpecifierQualifier() {
     // Scaffold type specifiers such as qbit
   case tok::kw_cbit:
   case tok::kw_qbit:
+  case tok::kw_qint:
+  case tok::kw_zero_to_zero:
+  case tok::kw_zero_to_garbage:
+  case tok::kw_one_to_one:
+  case tok::kw_one_to_garbage:
   case tok::kw_qstruct:
   case tok::kw_qunion:	
 
@@ -3414,6 +3452,11 @@ bool Parser::isDeclarationSpecifier(bool DisambiguatingWithExpression) {
     // Scaffold type specifiers such as qbit
   case tok::kw_cbit:
   case tok::kw_qbit:
+  case tok::kw_qint:
+  case tok::kw_zero_to_zero:
+  case tok::kw_zero_to_garbage:
+  case tok::kw_one_to_one:
+  case tok::kw_one_to_garbage:
 
     // struct-or-union-specifier (C99) or class-specifier (C++)
   case tok::kw_class:
@@ -4846,6 +4889,7 @@ bool Parser::TryAltiVecVectorTokenOutOfLine() {
   case tok::kw_signed:
   case tok::kw_unsigned:
   case tok::kw_void:
+  case tok::kw_rkqc:
   case tok::kw_char:
   case tok::kw_int:
   case tok::kw_float:
@@ -4853,6 +4897,11 @@ bool Parser::TryAltiVecVectorTokenOutOfLine() {
   case tok::kw_bool:
   case tok::kw_cbit:
   case tok::kw_qbit:
+  case tok::kw_qint:
+  case tok::kw_zero_to_zero:
+  case tok::kw_zero_to_garbage:
+  case tok::kw_one_to_one:
+  case tok::kw_one_to_garbage:
   case tok::kw___pixel:
     Tok.setKind(tok::kw___vector);
     return true;
@@ -4876,6 +4925,7 @@ bool Parser::TryAltiVecTokenOutOfLine(DeclSpec &DS, SourceLocation Loc,
     case tok::kw_signed:
     case tok::kw_unsigned:
     case tok::kw_void:
+    case tok::kw_rkqc:
     case tok::kw_char:
     case tok::kw_int:
     case tok::kw_float:
@@ -4883,6 +4933,11 @@ bool Parser::TryAltiVecTokenOutOfLine(DeclSpec &DS, SourceLocation Loc,
     case tok::kw_bool:
     case tok::kw_cbit:
     case tok::kw_qbit:
+    case tok::kw_qint:
+    case tok::kw_zero_to_zero:
+    case tok::kw_zero_to_garbage:
+    case tok::kw_one_to_one:
+    case tok::kw_one_to_garbage:
     case tok::kw___pixel:
       isInvalid = DS.SetTypeAltiVecVector(true, Loc, PrevSpec, DiagID);
       return true;

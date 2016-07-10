@@ -1,17 +1,26 @@
 init
-Sat Jul  9 15:36:45 PDT 2016 /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/scripts/build param: -DBUILD_UNSTABLE=ON -DBUILD_EXAMPLES=ON -DBUILD_BINDINGS=OFF
+Sat Jul  9 19:05:44 PDT 2016 /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/scripts/build param: -DBUILD_UNSTABLE=ON -DBUILD_EXAMPLES=ON -DBUILD_BINDINGS=OFF
 -DBUILD_BINDINGS=OFF -DBUILD_UNSTABLE=ON -DBUILD_EXAMPLES=ON
 -- Configuring done
 -- Generating done
 -- Build files have been written to: /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/build
+make[1]: Entering directory `/home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/build'
+make[2]: Entering directory `/home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/build'
+make[3]: Entering directory `/home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/build'
+make[3]: Leaving directory `/home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/build'
 [  2%] Built target revkit_unstable
+make[3]: Entering directory `/home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/build'
+make[3]: Leaving directory `/home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/build'
 [ 97%] Built target revkit_core
-Scanning dependencies of target e001_hello_world
-[100%] Building CXX object examples/CMakeFiles/e001_hello_world.dir/e001_hello_world.cpp.o
+make[3]: Entering directory `/home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/build'
+Scanning dependencies of target rkqc
+make[3]: Leaving directory `/home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/build'
+make[3]: Entering directory `/home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/build'
+[100%] Building CXX object examples/CMakeFiles/rkqc.dir/rkqc.cpp.o
 In file included from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/../libs/include/boost/config.hpp:57:0,
                  from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/../libs/include/boost/foreach.hpp:30,
                  from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/core/circuit.hpp:38,
-                 from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/examples/e001_hello_world.cpp:20:
+                 from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/examples/rkqc.cpp:2:
 /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/../libs/include/boost/iterator/iterator_facade.hpp: In function ‘typename boost::detail::enable_if_interoperable<Derived1, Derived2, typename boost::mpl::apply2<boost::detail::always_bool2, Derived1, Derived2>::type>::type boost::operator==(const boost::iterator_facade<Derived1, V1, TC1, Reference1, Difference1>&, const boost::iterator_facade<Derived2, V2, TC2, Reference2, Difference2>&)’:
 /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_832’ locally defined but not used [-Wunused-local-typedefs]
           BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
@@ -151,7 +160,7 @@ In file included from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPi
                  from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/../libs/include/boost/unordered_set.hpp:16,
                  from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/core/gate.hpp:34,
                  from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/core/circuit.hpp:46,
-                 from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/examples/e001_hello_world.cpp:20:
+                 from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/examples/rkqc.cpp:2:
 /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/../libs/include/boost/tuple/detail/tuple_basic.hpp: In function ‘typename boost::tuples::access_traits<typename boost::tuples::element<N, boost::tuples::cons<HT, TT> >::type>::const_type boost::tuples::get(const boost::tuples::cons<HT, TT>&)’:
 /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/../libs/include/boost/tuple/detail/tuple_basic.hpp:228:45: warning: typedef ‘cons_element’ locally defined but not used [-Wunused-local-typedefs]
    typedef BOOST_DEDUCED_TYPENAME impl::type cons_element;
@@ -159,7 +168,7 @@ In file included from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPi
 In file included from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/../libs/include/boost/config.hpp:57:0,
                  from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/../libs/include/boost/foreach.hpp:30,
                  from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/core/circuit.hpp:38,
-                 from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/examples/e001_hello_world.cpp:20:
+                 from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/examples/rkqc.cpp:2:
 /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/../libs/include/boost/tuple/detail/tuple_basic.hpp: In member function ‘boost::tuples::cons<HT, TT>& boost::tuples::cons<HT, TT>::operator=(const std::pair<_U1, _U2>&)’:
 /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_325’ locally defined but not used [-Wunused-local-typedefs]
           BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
@@ -178,7 +187,7 @@ In file included from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPi
                  from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/../libs/include/boost/unordered_set.hpp:16,
                  from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/core/gate.hpp:34,
                  from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/core/circuit.hpp:46,
-                 from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/examples/e001_hello_world.cpp:20:
+                 from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/examples/rkqc.cpp:2:
 /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/../libs/include/boost/unordered/detail/unique.hpp: In member function ‘boost::unordered::detail::table_impl<Types>::value_type& boost::unordered::detail::table_impl<Types>::operator[](const key_type&)’:
 /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/../libs/include/boost/unordered/detail/unique.hpp:385:54: warning: typedef ‘mapped_type’ locally defined but not used [-Wunused-local-typedefs]
              typedef typename value_type::second_type mapped_type;
@@ -186,7 +195,7 @@ In file included from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPi
 In file included from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/../libs/include/boost/config.hpp:57:0,
                  from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/../libs/include/boost/foreach.hpp:30,
                  from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/core/circuit.hpp:38,
-                 from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/examples/e001_hello_world.cpp:20:
+                 from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/examples/rkqc.cpp:2:
 /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/../libs/include/boost/iterator/filter_iterator.hpp: In constructor ‘boost::filter_iterator<Predicate, Iterator>::filter_iterator(Iterator, Iterator)’:
 /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_70’ locally defined but not used [-Wunused-local-typedefs]
           BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
@@ -215,7 +224,7 @@ In file included from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPi
     BOOST_STATIC_ASSERT( ::std::numeric_limits<T>::radix == 2);
     ^
 In file included from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/../libs/include/boost/lexical_cast.hpp:153:0,
-                 from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/examples/e001_hello_world.cpp:24:
+                 from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/examples/rkqc.cpp:4:
 /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/../libs/include/boost/math/special_functions/sign.hpp: In function ‘int boost::math::signbit(T)’:
 /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/../libs/include/boost/math/special_functions/sign.hpp:113:55: warning: typedef ‘fp_tag’ locally defined but not used [-Wunused-local-typedefs]
     typedef typename boost::is_floating_point<T>::type fp_tag;
@@ -225,7 +234,7 @@ In file included from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPi
     typedef typename boost::is_floating_point<T>::type fp_tag;
                                                        ^
 In file included from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/../libs/include/boost/lexical_cast.hpp:154:0,
-                 from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/examples/e001_hello_world.cpp:24:
+                 from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/examples/rkqc.cpp:4:
 /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/../libs/include/boost/math/special_functions/fpclassify.hpp: In function ‘bool boost::math::isfinite(T)’:
 /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/../libs/include/boost/math/special_functions/fpclassify.hpp:314:55: warning: typedef ‘fp_tag’ locally defined but not used [-Wunused-local-typedefs]
     typedef typename boost::is_floating_point<T>::type fp_tag;
@@ -249,7 +258,7 @@ In file included from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPi
                  from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/../libs/include/boost/mpl/if.hpp:19,
                  from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/../libs/include/boost/foreach.hpp:71,
                  from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/core/circuit.hpp:38,
-                 from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/examples/e001_hello_world.cpp:20:
+                 from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/examples/rkqc.cpp:2:
 /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/../libs/include/boost/concept_check.hpp: In function ‘void boost::function_requires(Model*)’:
 /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/../libs/include/boost/concept/detail/general.hpp:71:20: warning: typedef ‘boost_concept_check45’ locally defined but not used [-Wunused-local-typedefs]
        BOOST_PP_CAT(boost_concept_check,__LINE__)
@@ -734,7 +743,7 @@ In file included from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPi
 In file included from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/../libs/include/boost/config.hpp:57:0,
                  from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/../libs/include/boost/foreach.hpp:30,
                  from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/core/circuit.hpp:38,
-                 from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/examples/e001_hello_world.cpp:20:
+                 from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/examples/rkqc.cpp:2:
 /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/../libs/include/boost/lexical_cast.hpp: In function ‘CharT* boost::detail::lcast_put_unsigned(T, CharT*)’:
 /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_592’ locally defined but not used [-Wunused-local-typedefs]
           BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
@@ -755,14 +764,14 @@ In file included from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPi
 /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/../libs/include/boost/lexical_cast.hpp:671:13: note: in expansion of macro ‘BOOST_STATIC_ASSERT’
              BOOST_STATIC_ASSERT(!std::numeric_limits<T>::is_signed);
              ^
-In file included from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/examples/e001_hello_world.cpp:24:0:
+In file included from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/examples/rkqc.cpp:4:0:
 /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/../libs/include/boost/lexical_cast.hpp:673:47: warning: typedef ‘int_type’ locally defined but not used [-Wunused-local-typedefs]
              typedef typename Traits::int_type int_type;
                                                ^
 In file included from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/../libs/include/boost/config.hpp:57:0,
                  from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/../libs/include/boost/foreach.hpp:30,
                  from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/core/circuit.hpp:38,
-                 from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/examples/e001_hello_world.cpp:20:
+                 from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/examples/rkqc.cpp:2:
 /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/../libs/include/boost/lexical_cast.hpp: In member function ‘bool boost::detail::lexical_stream_limited_src<CharT, Traits, RequiresStringbuffer>::shl_char(T)’:
 /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/../libs/include/boost/static_assert.hpp:125:21: warning: typedef ‘boost_static_assert_typedef_1274’ locally defined but not used [-Wunused-local-typedefs]
           BOOST_JOIN(boost_static_assert_typedef_, __LINE__)
@@ -793,8 +802,11 @@ In file included from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPi
 /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/src/../libs/include/boost/lexical_cast.hpp:1725:17: note: in expansion of macro ‘BOOST_STATIC_ASSERT_MSG’
                  BOOST_STATIC_ASSERT_MSG(( sizeof(CharT) == sizeof(T) ),
                  ^
-Linking CXX executable e001_hello_world
-[100%] Built target e001_hello_world
+Linking CXX executable rkqc
+make[3]: Leaving directory `/home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/build'
+[100%] Built target rkqc
+make[2]: Leaving directory `/home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/build'
+make[1]: Leaving directory `/home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/EPiQC_Scaffold/rkqc/build'
 rm: cannot remove ‘revkit.py’: No such file or directory
 rm: cannot remove ‘revkit_python.so’: No such file or directory
 rm: cannot remove ‘revkitmath.py’: No such file or directory

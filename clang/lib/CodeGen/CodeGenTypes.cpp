@@ -351,6 +351,30 @@ llvm::Type *CodeGenTypes::ConvertType(QualType T) {
                                  static_cast<unsigned>(Context.getTypeSize(T)));
       break;
 
+    case BuiltinType::Qint:
+      ResultType = llvm::IntegerType::get(getLLVMContext(),
+                                 static_cast<unsigned>(Context.getTypeSize(T)));
+      break;
+    case BuiltinType::zzBit:
+      ResultType = llvm::IntegerType::get(getLLVMContext(),
+                                 static_cast<unsigned>(Context.getTypeSize(T)));
+      break;
+    case BuiltinType::zgBit:
+      ResultType = llvm::IntegerType::get(getLLVMContext(),
+                                 static_cast<unsigned>(Context.getTypeSize(T)));
+      break;
+    case BuiltinType::ooBit:
+      ResultType = llvm::IntegerType::get(getLLVMContext(),
+                                 static_cast<unsigned>(Context.getTypeSize(T)));
+      break;
+    case BuiltinType::ogBit:
+      ResultType = llvm::IntegerType::get(getLLVMContext(),
+                                 static_cast<unsigned>(Context.getTypeSize(T)));
+      break;
+
+
+
+
     case BuiltinType::Half:
       // Half is special: it might be lowered to i16 (and will be storage-only
       // type),. or can be represented as a set of native operations.

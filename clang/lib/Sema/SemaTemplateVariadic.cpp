@@ -684,6 +684,11 @@ bool Sema::containsUnexpandedParameterPacks(Declarator &D) {
   case TST_error:
   case TST_cbit:
   case TST_qbit:
+  case TST_qint:
+  case TST_zero_to_zero:
+  case TST_zero_to_garbage:
+  case TST_one_to_one:
+  case TST_one_to_garbage:
   case TST_qstruct:
   case TST_qunion:  
     break;

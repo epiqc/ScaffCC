@@ -71,6 +71,7 @@ protected:
   unsigned char BoolWidth, BoolAlign;
   unsigned char CbitWidth, CbitAlign; // Scaffold
   unsigned char QbitWidth, QbitAlign; // Scaffold
+  unsigned char QintWidth, QintAlign; // RKQC
   unsigned char IntWidth, IntAlign;
   unsigned char HalfWidth, HalfAlign;
   unsigned char FloatWidth, FloatAlign;
@@ -237,6 +238,11 @@ public:
   /// \brief Return Scaffold Qbit type width and Align.
   unsigned getQbitWidth() const { return 16; }
   unsigned getQbitAlign() const { return 16; }
+
+  /// \brief Return RKQC Qint type width and Align.
+  unsigned getQintWidth() const { return 16; }
+  unsigned getQintAlign() const { return 16; }
+
 
 
   /// getChar16Width/Align - Return the size of 'char16_t' for this target, in

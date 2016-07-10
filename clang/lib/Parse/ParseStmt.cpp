@@ -232,16 +232,16 @@ Retry:
       return Actions.ActOnDeclStmt(Decl, DeclStart, DeclEnd);
     }
 
-    // Scaffold checking for qint outside of ctqg
-    if (Tok.is(tok::kw_qint)) {
-      Diag(Tok, diag::err_typename_qint);
-      // Handle errors here by skipping up to the next semicolon or '}', and
-      // eat the semicolon if that's what stopped us.
-      SkipUntil(tok::r_brace, /*StopAtSemi=*/true, /*DontConsume=*/true);
-      if (Tok.is(tok::semi))
-        ConsumeToken();
-      return StmtError();
-    }
+    // Scaffold checking for qint outside of rkqc 
+//    if (Tok.is(tok::kw_qint)) {
+//      Diag(Tok, diag::err_typename_qint);
+//      // Handle errors here by skipping up to the next semicolon or '}', and
+//      // eat the semicolon if that's what stopped us.
+//      SkipUntil(tok::r_brace, /*StopAtSemi=*/true, /*DontConsume=*/true);
+//      if (Tok.is(tok::semi))
+//        ConsumeToken();
+//      return StmtError();
+//    }
 
     if (Tok.is(tok::r_brace)) {
       Diag(Tok, diag::err_expected_statement);

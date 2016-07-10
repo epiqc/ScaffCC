@@ -572,6 +572,11 @@ public:
   CanQualType ObjCBuiltinBoolTy;
   CanQualType CbitTy;
   CanQualType QbitTy;
+  CanQualType QintTy;
+  CanQualType zzBitTy;
+  CanQualType zgBitTy;
+  CanQualType ooBitTy;
+  CanQualType ogBitTy;
 
   // Types for deductions in C++0x [stmt.ranged]'s desugaring. Built on demand.
   mutable QualType AutoDeductTy;     // Deduction against 'auto'.

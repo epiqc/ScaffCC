@@ -602,6 +602,17 @@ void USRGenerator::VisitType(QualType T) {
           c = 'B'; break;  
         case BuiltinType::Qbit: // Scaffold type
           c = 'q'; break;  
+        case BuiltinType::Qint:
+          c = 'y'; break;
+        case BuiltinType::zzBit:
+          c = 'y'; break;
+        case BuiltinType::zgBit:
+          c = 'y'; break;
+        case BuiltinType::ooBit:
+          c = 'y'; break;
+        case BuiltinType::ogBit:
+          c = 'y'; break;
+
       }
       Out << c;
       return;

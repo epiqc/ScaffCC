@@ -215,7 +215,17 @@ TypeSpecifierType BuiltinTypeLoc::getWrittenTypeSpec() const {
   case BuiltinType::Cbit:
     return TST_cbit; 
   case BuiltinType::Qbit:
-    return TST_qbit; 
+    return TST_qbit;
+  case BuiltinType::Qint:
+    return TST_qint;
+  case BuiltinType::zzBit:
+    return TST_zero_to_zero;
+  case BuiltinType::zgBit:
+    return TST_zero_to_garbage;
+  case BuiltinType::ooBit:
+    return TST_one_to_one;
+  case BuiltinType::ogBit:
+    return TST_one_to_garbage;
   case BuiltinType::UChar:
   case BuiltinType::UShort:
   case BuiltinType::UInt:

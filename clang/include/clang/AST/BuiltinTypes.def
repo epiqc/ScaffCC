@@ -99,6 +99,15 @@ UNSIGNED_TYPE(Cbit, CbitTy)
 // 'qbit' in Scaffold (added similar to bool)
 UNSIGNED_TYPE(Qbit, QbitTy)
 
+// 'qint' in RKQC 
+UNSIGNED_TYPE(Qint, QintTy)
+
+// 'ancilla' in RKQC
+UNSIGNED_TYPE(zzBit, zzBitTy)
+UNSIGNED_TYPE(zgBit, zgBitTy)
+UNSIGNED_TYPE(ooBit, ooBitTy)
+UNSIGNED_TYPE(ogBit, ogBitTy)
+
 
 //===- Signed Types -------------------------------------------------------===//
 

@@ -4432,6 +4432,13 @@ QualType ASTReader::GetType(TypeID ID) {
     case PREDEF_TYPE_CBIT_ID:       T = Context.CbitTy;     break;
     case PREDEF_TYPE_QBIT_ID:       T = Context.QbitTy;     break;
 
+     // RKQC qint type
+    case PREDEF_TYPE_QINT_ID:       T = Context.QintTy;     break;
+    case PREDEF_TYPE_zzBit_ID:       T = Context.QintTy;     break;
+    case PREDEF_TYPE_zgBit_ID:       T = Context.QintTy;     break;
+    case PREDEF_TYPE_ooBit_ID:       T = Context.QintTy;     break;
+    case PREDEF_TYPE_ogBit_ID:       T = Context.QintTy;     break;
+
     }
 
     assert(!T.isNull() && "Unknown predefined type");

@@ -66,7 +66,15 @@ namespace clang {
     TST_cbit,
     TST_qbit,
     TST_qstruct,
-    TST_qunion    
+    TST_qunion,    
+
+    // RKQC additions
+    TST_qint,
+    TST_zero_to_zero,
+    TST_zero_to_garbage,
+    TST_one_to_one,
+    TST_one_to_garbage
+
   };
   
   /// WrittenBuiltinSpecs - Structure that packs information about the 

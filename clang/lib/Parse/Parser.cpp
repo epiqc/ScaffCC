@@ -503,49 +503,48 @@ namespace {
 bool Parser::ParseTopLevelDecl(DeclGroupPtrTy &Result) {
   DestroyTemplateIdAnnotationsRAIIObj CleanupRAII(TemplateIds);
 
-  // Scaffold separation of ctqg code
-  if (Tok.is(tok::kw_ctqg)) {
+  // Scaffold separation of rkqc code
+  if (Tok.is(tok::kw_rkqc)) {
 
     // Create ReWriter class for removing this part of text
-    Rewriter TheRewriter(PP.getSourceManager(), PP.getLangOpts());
+//    Rewriter TheRewriter(PP.getSourceManager(), PP.getLangOpts());
     //TheRewriter.setSourceMgr(PP.getSourceManager(), PP.getLangOpts());
     //TheRewriter.RewriteOptions.RemoveLineIfEmpty(true);
-
-    static int ctqg_count = 0;
-	  printf("Saw one ctqg!\n");
-
-	  std::ofstream outfile;
-	
-	  char filename [100];
-	  snprintf (filename, 100, "ctqg_%u.txt", ctqg_count);
-	  outfile.open (filename);
-
-    SourceRange ctqg_range;
-    ctqg_range.setBegin(Tok.getLocation());
-
-	  while (!Tok.is(tok::r_brace) || BraceCount!=1) {
-	  //	printf("%u --- %u --- %u --- %s --- %d\n", 
-	  //		Tok.getLocation().getRawEncoding(),
-	  //       	SM.getPresumedLineNumber(Tok.getLocation()), 
-	  //		SM.getPresumedColumnNumber(Tok.getLocation()),
-	  //       	Tok.getName(),
-	  //		Tok.getLength());
-      std::string TokenSpelling = PP.getSpelling(Tok);
-      outfile << TokenSpelling << std::endl;
-		  ConsumeAnyToken();
-	  }
-	  outfile << PP.getSpelling(Tok) << std::endl;
-
-    ConsumeBrace();
-
-    ctqg_range.setEnd(Tok.getLocation());
-
-	  ctqg_count++;
-	  outfile.close();
-
-    // remove the ctqg text that was just copied out
-    //TheRewriter.RemoveText(ctqg_range);
-	  return false;
+//
+    static int rkqc_count = 0;
+//
+//	  std::ofstream outfile;
+//	
+//	  char filename [100];
+//	  snprintf (filename, 100, "rkqc_%u.txt", rkqc_count);
+//	  outfile.open (filename);
+//
+//    SourceRange rkqc_range;
+//    rkqc_range.setBegin(Tok.getLocation());
+//
+//	  while (!Tok.is(tok::r_brace) || BraceCount!=1) {
+//	  //	printf("%u --- %u --- %u --- %s --- %d\n", 
+//	  //		Tok.getLocation().getRawEncoding(),
+//	  //       	SM.getPresumedLineNumber(Tok.getLocation()), 
+//	  //		SM.getPresumedColumnNumber(Tok.getLocation()),
+//	  //       	Tok.getName(),
+//	  //		Tok.getLength());
+//      std::string TokenSpelling = PP.getSpelling(Tok);
+////      outfile << TokenSpelling << " ";  
+//		  ConsumeAnyToken();
+//	  }
+////	  outfile << PP.getSpelling(Tok) << std::endl;
+//
+//    ConsumeBrace();
+//
+//    rkqc_range.setEnd(Tok.getLocation());
+//
+//	  rkqc_count++;
+////	  outfile.close();
+//
+//    // remove the rkqc text that was just copied out
+////    TheRewriter.RemoveText(rkqc_range);
+////	  return false;
   }
 
 

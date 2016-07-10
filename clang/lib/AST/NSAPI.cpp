@@ -309,6 +309,11 @@ NSAPI::getNSNumberFactoryMethodKind(QualType T) {
   // Scaffold: Cbit and Qbit added here since it gives warning, since there is no "default" in the switch
   case BuiltinType::Cbit:
   case BuiltinType::Qbit:
+  case BuiltinType::Qint:
+  case BuiltinType::zzBit:
+  case BuiltinType::zgBit:
+  case BuiltinType::ooBit:
+  case BuiltinType::ogBit:
     break;
   }
   

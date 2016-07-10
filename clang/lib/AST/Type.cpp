@@ -1525,6 +1525,11 @@ const char *BuiltinType::getName(const PrintingPolicy &Policy) const {
   case ObjCSel:           return "SEL";
   case Cbit:              return "cbit"; // Scaffold
   case Qbit:              return "qbit"; // Scaffold
+  case Qint:              return "qint"; // RKQC
+  case zzBit:             return "qint"; // RKQC
+  case zgBit:             return "qint"; // RKQC
+  case ooBit:             return "qint"; // RKQC
+  case ogBit:             return "qint"; // RKQC
   }
   
   llvm_unreachable("Invalid builtin type.");

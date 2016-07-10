@@ -27,7 +27,8 @@ ifeq ($(UNAME_S),Darwin)
 SCAFFOLD_LIB=$(ROOT)/build/Release+Asserts/lib/Scaffold.dylib
 endif
 
-CTQG=0
+
+RKQC=0
 ROTATIONS=0
 TOFF=0
 
@@ -52,25 +53,10 @@ qasm: $(FILE).qasmh
 ################################
 # Intermediate targets
 ################################
-# Pre-process CTQG
-$(FILE)_merged.scaffold: $(FILENAME)
-	@if [ $(CTQG) -eq 1 ]; then \
-		echo "[Scaffold.makefile] Extracting CTQG from Scaffold ..."; \
-		$(PERL) $(ROOT)/ctqg/trans/pre_process.pl $(FILENAME); \
-		echo "[Scaffold.makefile] Compiling CTQG ..."; \
-		$(ROOT)/ctqg/CTQG/ctqg $(CFILE).ctqg; \
-		echo "[Scaffold.makefile] Merging CTQG output back into Scaffold ..."; \
-    $(PERL) $(ROOT)/ctqg/trans/trans.pl $(CFILE).qasm > trans.qasm; \
-    mv trans.qasm $(CFILE).qasm; \
-		$(PERL) $(ROOT)/ctqg/trans/merge.pl $(CFILE).qasm; \
-	else \
-		cp $(FILENAME) $(FILE)_merged.scaffold; \
-	fi
-
 # Compile Scaffold to LLVM bytecode
-$(FILE).ll: $(FILE)_merged.scaffold
-	@echo "[Scaffold.makefile] Compiling $(FILE)_merged.scaffold ..."
-	@$(CC) $(FILE)_merged.scaffold $(CC_FLAGS) -o $(FILE).ll
+$(FILE).ll: $(FILE).scaffold
+	@echo "[Scaffold.makefile] Compiling $(FILE).scaffold ..."
+	@$(CC) -c -emit-llvm -I/usr/include -I/usr/include/x86_64-linux-gnu -I/usr/lib/gcc/x86_64-linux-gnu/4.6/include $(FILE).scaffold -o $(FILE).ll
 
 $(FILE)1.ll: $(FILE).ll
 	@echo "[Scaffold.makefile] Transforming cbits ..."
@@ -124,18 +110,28 @@ $(FILE)7.ll: $(FILE)6.ll
 	fi
 
 # Remove any code that is useless after optimizations
-$(FILE)10.ll: $(FILE)7.ll
+$(FILE)8.ll: $(FILE)7.ll
 	@echo "[Scaffold.makefile] Internalizing and Removing Unused Functions ..."
-	@$(OPT) -S $(FILE)7.ll -internalize -globaldce -deadargelim -o $(FILE)10.ll > /dev/null
+	@$(OPT) -S $(FILE)7.ll -internalize -globaldce -deadargelim -o $(FILE)8.ll > /dev/null
 
 # Perform Toffoli decomposition if TOFF is 1
-$(FILE)11.ll: $(FILE)10.ll
+$(FILE)9.ll: $(FILE)8.ll
 	@if [ $(TOFF) -eq 1 ]; then \
     echo "[Scaffold.makefile] Toffoli Decomposition ..."; \
-		$(OPT) -S -load $(SCAFFOLD_LIB) -ToffoliReplace $(FILE)10.ll -o $(FILE)11.ll > /dev/null; \
+		$(OPT) -S -load $(SCAFFOLD_LIB) -ToffoliReplace $(FILE)8.ll -o $(FILE)9.ll > /dev/null; \
 	else \
-		cp $(FILE)10.ll $(FILE)11.ll; \
+		cp $(FILE)8.ll $(FILE)9.ll; \
 	fi
+
+# Compile RKQC 
+$(FILE)11.ll: $(FILE)9.ll
+	@if [ $(RKQC) -eq 1 ]; then \
+        echo "[Scaffold.makefile] Compiling RKQC Functions ..."; \
+        $(OPT) -S -load $(SCAFFOLD_LIB) -GenRKQC -filename $(FILE)9.ll $(FILE)9.ll > /dev/null 2> $(FILE).errs; \
+        cp $(FILE)9.ll_final.ll $(FILE)11.ll; \
+	else \
+		mv $(FILE)9.ll $(FILE)11.ll; \
+    fi
 
 # Insert reverse functions if REVERSE is 1
 $(FILE)12.ll: $(FILE)11.ll
@@ -171,7 +167,7 @@ $(FILE).qasmf: $(FILE)_qasm
 
 # purge cleans temp files
 purge:
-	@rm -f $(FILE)_merged.scaffold $(FILE)_noctqg.scaffold $(FILE).ll $(FILE)1.ll $(FILE)1a.ll $(FILE)1b.ll $(FILE)2.ll $(FILE)3.ll $(FILE)4.ll $(FILE)5.ll $(FILE)5a.ll $(FILE)6.ll $(FILE)6tmp.ll $(FILE)7.ll $(FILE)8.ll $(FILE)9.ll $(FILE)10.ll $(FILE)11.ll $(FILE)12.ll $(FILE)tmp.ll $(FILE)_qasm $(FILE)_qasm.scaffold fdecl.out $(CFILE).ctqg $(CFILE).c $(CFILE).signals $(FILE).tmp sim_$(CFILE) $(FILE).*.qasm
+	@rm -f $(FILE)_merged.scaffold $(FILE)_no.scaffold $(FILE).ll $(FILE)1.ll $(FILE)1a.ll $(FILE)1b.ll $(FILE)2.ll $(FILE)3.ll $(FILE)4.ll $(FILE)5.ll $(FILE)5a.ll $(FILE)6.ll $(FILE)6tmp.ll $(FILE)7.ll $(FILE)8.ll $(FILE)9.ll $(FILE)10.ll $(FILE)11.ll $(FILE)12.ll $(FILE)tmp.ll $(FILE)_qasm $(FILE)_qasm.scaffold fdecl.out $(CFILE).ctqg $(CFILE).c $(CFILE).signals $(FILE).tmp sim_$(CFILE) $(FILE).*.qasm
 
 # clean removes all completed files
 clean: purge
