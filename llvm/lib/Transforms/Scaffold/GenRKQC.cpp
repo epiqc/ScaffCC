@@ -1152,6 +1152,7 @@ void GenRKQC::mergeLLVMIR()
         while( getline( new_ll_file, line )){
             final_ll_file << line << endl;
         }
+        final_ll_file << "  ret void" << endl << "}" << endl;
     }
     else if (find(isRKQCNames.begin(), isRKQCNames.end(), funcName) != isRKQCNames.end() ) {
         final_ll_file << "  ret void" << endl << "}" << endl;
@@ -1360,13 +1361,14 @@ bool GenRKQC::runOnModule(Module &M) {
                     vector<string> thisFuncQbits;
                     qbitDecls.insert( make_pair( F, thisFuncQbits ) );
                     RkqcFunctions.insert( make_pair( make_pair( F, funcArgs), vectCalls) );
-                }
+                
 
                 //visit Alloc Insts in func and find if function is quantum or classical function
 
-                for(inst_iterator instIb = inst_begin(F),instIe=inst_end(F); instIb!=instIe;++instIb){
-                    Instruction *pInst = &*instIb; // Grab pointer to instruction reference	      
-                    analyzeAllocInst(F,pInst);
+                    for(inst_iterator instIb = inst_begin(F),instIe=inst_end(F); instIb!=instIe;++instIb){
+                        Instruction *pInst = &*instIb; // Grab pointer to instruction reference	      
+                        analyzeAllocInst(F,pInst);
+                    }
                 }
 
                 //map<Function*, vector<qGateArg> >::iterator mpItr = qbitsInFunc.find(F);
