@@ -7,7 +7,7 @@ SCAF=$ROOT/build/Release+Asserts/lib/Scaffold.so
 
 rm -rf $ROOT/test_cases
 mkdir $ROOT/test_cases
-for testcase in Cat_State Square_Root; do
+for testcase in Cat_State Square_Root SHA-1; do
 #for testcase in Cat_State QFT Square_Root; do
     mkdir $ROOT/test_cases/$testcase
     cp -R $ROOT/Algorithms/$testcase  $ROOT/test_cases

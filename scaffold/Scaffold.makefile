@@ -56,7 +56,7 @@ qasm: $(FILE).qasmh
 # Compile Scaffold to LLVM bytecode
 
 $(FILE)_merged.scaffold: $(FILENAME)
-	cp $(FILENAME) $(FILE)_merged.scaffold
+	@cp $(FILENAME) $(FILE)_merged.scaffold
 
 $(FILE).ll: $(FILE)_merged.scaffold
 	@echo "[Scaffold.makefile] Compiling $(FILE).scaffold ..."
@@ -118,24 +118,28 @@ $(FILE)8.ll: $(FILE)7.ll
 	@echo "[Scaffold.makefile] Internalizing and Removing Unused Functions ..."
 	@$(OPT) -S $(FILE)7.ll -internalize -globaldce -deadargelim -o $(FILE)8.ll > /dev/null
 
-# Perform Toffoli decomposition if TOFF is 1
-$(FILE)9.ll: $(FILE)8.ll
-	@if [ $(TOFF) -eq 1 ]; then \
-    echo "[Scaffold.makefile] Toffoli Decomposition ..."; \
-		$(OPT) -S -load $(SCAFFOLD_LIB) -ToffoliReplace $(FILE)8.ll -o $(FILE)9.ll > /dev/null; \
-	else \
-		cp $(FILE)8.ll $(FILE)9.ll; \
-	fi
-
 # Compile RKQC 
-$(FILE)11.ll: $(FILE)9.ll
+$(FILE)9.ll: $(FILE)8.ll
 	@if [ $(RKQC) -eq 1 ]; then \
         echo "[Scaffold.makefile] Compiling RKQC Functions ..."; \
-        $(OPT) -S -load $(SCAFFOLD_LIB) -GenRKQC -filename $(FILE)9.ll $(FILE)9.ll > /dev/null 2> $(FILE).errs; \
-        cp $(FILE)9.ll_final.ll $(FILE)11.ll; \
+        $(OPT) -S -load $(SCAFFOLD_LIB) -GenRKQC -filename $(FILE)8.ll $(FILE)8.ll > /dev/null 2> $(FILE).errs; \
+        cp $(FILE)8.ll_final.ll $(FILE)9.ll; \
+        rm rkqc.cpp; \
+        rm rkqc.qasm; \
+        rm main.qasm; \
+        rm $(FILE).errs; \
 	else \
-		mv $(FILE)9.ll $(FILE)11.ll; \
+		mv $(FILE)8.ll $(FILE)9.ll; \
     fi
+
+# Perform Toffoli decomposition if TOFF is 1
+$(FILE)11.ll: $(FILE)9.ll
+	@if [ $(TOFF) -eq 1 ]; then \
+    echo "[Scaffold.makefile] Toffoli Decomposition ..."; \
+		$(OPT) -S -load $(SCAFFOLD_LIB) -ToffoliReplace $(FILE)9.ll -o $(FILE)11.ll > /dev/null; \
+	else \
+		cp $(FILE)9.ll $(FILE)11.ll; \
+	fi
 
 # Insert reverse functions if REVERSE is 1
 $(FILE)12.ll: $(FILE)11.ll

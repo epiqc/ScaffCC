@@ -101,7 +101,6 @@ cfile="${file}.*"
 if [ $(egrep '^rkqc.*{\s*' ${filename} | wc -l) -gt 0 ]; then
 	rkqc=1
 	toff=1
-	dir=""
 fi
 
 if [ ${clean} -eq 1 ]; then

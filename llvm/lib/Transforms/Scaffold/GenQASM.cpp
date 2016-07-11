@@ -431,6 +431,17 @@ void GenQASM::analyzeAllocInst(Function* F, Instruction* pInst){
       }
 
     }
+    else if(allocatedType->isIntegerTy(16)){
+        qGateArg tmpQArg;
+        if(debugGenQASM) errs() << "Found New Qbit Allocation \n";
+        vectQbit.push_back(AI);
+        tmpQArg.isQbit = true;
+        tmpQArg.argPtr = AI;
+        tmpQArg.numDim = 1;
+        qbitsInFunc.push_back(tmpQArg);
+        qbitsInitInFunc.push_back(tmpQArg);
+    }
+
     else if(allocatedType->isPointerTy()){
       
       /*Note: this is necessary if -mem2reg is not run on LLVM IR before.

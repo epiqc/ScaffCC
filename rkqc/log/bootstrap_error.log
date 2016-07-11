@@ -1,0 +1,130 @@
+Cloning into 'installer'...
+--2016-07-10 18:11:22--  ftp://vlsi.colorado.edu/pub/cudd-2.5.0.tar.gz
+           => ‘cudd-2.5.0.tar.gz’
+Resolving vlsi.colorado.edu (vlsi.colorado.edu)... 128.138.189.43
+Connecting to vlsi.colorado.edu (vlsi.colorado.edu)|128.138.189.43|:21... connected.
+Logging in as anonymous ... Logged in!
+==> SYST ... done.    ==> PWD ... done.
+==> TYPE I ... done.  ==> CWD (1) /pub ... done.
+==> SIZE cudd-2.5.0.tar.gz ... 1053054
+==> PASV ... done.    ==> RETR cudd-2.5.0.tar.gz ... done.
+Length: 1053054 (1.0M) (unauthoritative)
+
+     0K .......... .......... .......... .......... ..........  4%  403K 2s
+    50K .......... .......... .......... .......... ..........  9%  418K 2s
+   100K .......... .......... .......... .......... .......... 14%  418K 2s
+   150K .......... .......... .......... .......... .......... 19%  790K 2s
+   200K .......... .......... .......... .......... .......... 24%  764K 2s
+   250K .......... .......... .......... .......... .......... 29%  838K 1s
+   300K .......... .......... .......... .......... .......... 34%  170K 2s
+   350K .......... .......... .......... .......... .......... 38% 22.4M 1s
+   400K .......... .......... .......... .......... .......... 43%  249K 1s
+   450K .......... .......... .......... .......... .......... 48%  553K 1s
+   500K .......... .......... .......... .......... .......... 53%  256K 1s
+   550K .......... .......... .......... .......... .......... 58%  550K 1s
+   600K .......... .......... .......... .......... .......... 63%  622K 1s
+   650K .......... .......... .......... .......... .......... 68%  166M 1s
+   700K .......... .......... .......... .......... .......... 72%  284K 1s
+   750K .......... .......... .......... .......... .......... 77%  280K 1s
+   800K .......... .......... .......... .......... .......... 82%  284K 0s
+   850K .......... .......... .......... .......... .......... 87% 85.1M 0s
+   900K .......... .......... .......... .......... .......... 92%  282K 0s
+   950K .......... .......... .......... .......... .......... 97%  130M 0s
+  1000K .......... .......... ........                        100%  188K=2.4s
+
+2016-07-10 18:11:26 (434 KB/s) - ‘cudd-2.5.0.tar.gz’ saved [1053054]
+
+CMake Warning (dev) in CMakeLists.txt:
+  Syntax Warning in cmake code at
+
+    /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/July10_ScaffCC/rkqc/dependencies/build/cudd-2.5.0/CMakeLists.txt:204:41
+
+  Argument not separated from preceding token by whitespace.
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+CMake Warning (dev) in CMakeLists.txt:
+  Syntax Warning in cmake code at
+
+    /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/July10_ScaffCC/rkqc/dependencies/build/cudd-2.5.0/CMakeLists.txt:204:68
+
+  Argument not separated from preceding token by whitespace.
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+CMake Warning (dev) in CMakeLists.txt:
+  Syntax Warning in cmake code at
+
+    /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/July10_ScaffCC/rkqc/dependencies/build/cudd-2.5.0/CMakeLists.txt:206:10
+
+  Argument not separated from preceding token by whitespace.
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+CMake Warning (dev) in CMakeLists.txt:
+  Syntax Warning in cmake code at
+
+    /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/July10_ScaffCC/rkqc/dependencies/build/cudd-2.5.0/CMakeLists.txt:206:40
+
+  Argument not separated from preceding token by whitespace.
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+/home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/July10_ScaffCC/rkqc/dependencies/build/cudd-2.5.0/dddmp/dddmpLoad.c: In function ‘DddmpCuddDdArrayLoad’:
+/home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/July10_ScaffCC/rkqc/dependencies/build/cudd-2.5.0/dddmp/dddmpLoad.c:1112:9: warning: ignoring return value of ‘fgets’, declared with attribute warn_unused_result [-Wunused-result]
+   fgets (buf, DDDMP_MAXSTRLEN-1,fp);
+         ^
+/home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/July10_ScaffCC/rkqc/dependencies/build/cudd-2.5.0/dddmp/dddmpLoad.c: In function ‘DddmpBddReadHeader’:
+/home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/July10_ScaffCC/rkqc/dependencies/build/cudd-2.5.0/dddmp/dddmpLoad.c:1276:12: warning: ignoring return value of ‘fgets’, declared with attribute warn_unused_result [-Wunused-result]
+       fgets(buf,DDDMP_MAXSTRLEN,fp);
+            ^
+/home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/July10_ScaffCC/rkqc/dependencies/build/cudd-2.5.0/dddmp/dddmpLoad.c:1429:12: warning: ignoring return value of ‘fgets’, declared with attribute warn_unused_result [-Wunused-result]
+       fgets(buf,DDDMP_MAXSTRLEN,fp);
+            ^
+/home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/July10_ScaffCC/rkqc/dependencies/build/cudd-2.5.0/dddmp/dddmpLoadCnf.c: In function ‘DddmpBddReadHeaderCnf’:
+/home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/July10_ScaffCC/rkqc/dependencies/build/cudd-2.5.0/dddmp/dddmpLoadCnf.c:557:14: warning: ignoring return value of ‘fscanf’, declared with attribute warn_unused_result [-Wunused-result]
+       fscanf (fp, "%*s %d %d", &nv, &nc);
+              ^
+/home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/July10_ScaffCC/rkqc/dependencies/build/cudd-2.5.0/dddmp/dddmpLoadCnf.c:572:13: warning: ignoring return value of ‘fgets’, declared with attribute warn_unused_result [-Wunused-result]
+       fgets (buf, DDDMP_MAXSTRLEN, fp);
+             ^
+/home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/July10_ScaffCC/rkqc/dependencies/build/cudd-2.5.0/dddmp/dddmpLoadCnf.c: In function ‘DddmpReadCnfClauses’:
+/home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/July10_ScaffCC/rkqc/dependencies/build/cudd-2.5.0/dddmp/dddmpLoadCnf.c:814:13: warning: ignoring return value of ‘fgets’, declared with attribute warn_unused_result [-Wunused-result]
+       fgets (word, DDDMP_MAX_CNF_ROW_LENGTH-1, fp);
+             ^
+/home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/July10_ScaffCC/rkqc/dependencies/build/cudd-2.5.0/dddmp/dddmpDbg.c: In function ‘Dddmp_cuddBddDisplayBinary’:
+/home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/July10_ScaffCC/rkqc/dependencies/build/cudd-2.5.0/dddmp/dddmpDbg.c:144:8: warning: ignoring return value of ‘fgets’, declared with attribute warn_unused_result [-Wunused-result]
+   fgets(buf, 999,fp);
+        ^
+--2016-07-10 18:11:42--  http://www.informatik.uni-bremen.de/revkit/files/puma-2.23.tar.gz
+Resolving www.informatik.uni-bremen.de (www.informatik.uni-bremen.de)... 134.102.224.17, 2001:638:708:30e0::17
+Connecting to www.informatik.uni-bremen.de (www.informatik.uni-bremen.de)|134.102.224.17|:80... connected.
+HTTP request sent, awaiting response... 200 OK
+Length: 185796 (181K) [application/x-gzip]
+Saving to: ‘puma-2.23.tar.gz’
+
+     0K .......... .......... .......... .......... .......... 27% 56.3K 2s
+    50K .......... .......... .......... .......... .......... 55%  131K 1s
+   100K .......... .......... .......... .......... .......... 82%  151K 0s
+   150K .......... .......... .......... .                    100%  155K=1.8s
+
+2016-07-10 18:11:44 (101 KB/s) - ‘puma-2.23.tar.gz’ saved [185796/185796]
+
+ar: creating ../lib/lib_puma.a
+--2016-07-10 18:11:48--  http://www.informatik.uni-bremen.de/revkit/files/fmi-0.3.tar.gz
+Resolving www.informatik.uni-bremen.de (www.informatik.uni-bremen.de)... 134.102.224.17, 2001:638:708:30e0::17
+Connecting to www.informatik.uni-bremen.de (www.informatik.uni-bremen.de)|134.102.224.17|:80... connected.
+HTTP request sent, awaiting response... 200 OK
+Length: 143050 (140K) [application/x-gzip]
+Saving to: ‘fmi-0.3.tar.gz’
+
+     0K .......... .......... .......... .......... .......... 35% 56.6K 2s
+    50K .......... .......... .......... .......... .......... 71%  138K 0s
+   100K .......... .......... .......... .........            100%  210K=1.4s
+
+2016-07-10 18:11:50 (97.4 KB/s) - ‘fmi-0.3.tar.gz’ saved [143050/143050]
+
+/home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/July10_ScaffCC/rkqc/dependencies/build/fmi-0.3/fmi/solver/sat/minisat/Solver.C: In member function ‘lbool minisat2::Solver::search(int, int)’:
+/home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/July10_ScaffCC/rkqc/dependencies/build/fmi-0.3/fmi/solver/sat/minisat/Solver.C:559:10: warning: variable ‘first’ set but not used [-Wunused-but-set-variable]
+     bool first = true;
+          ^
+/home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/July10_ScaffCC/rkqc/dependencies/build/fmi-0.3/fmi/solver/sat/minisat/Solver.C: In member function ‘void minisat2::Solver::verifyModel()’:
+/home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/July10_ScaffCC/rkqc/dependencies/build/fmi-0.3/fmi/solver/sat/minisat/Solver.C:715:10: warning: variable ‘failed’ set but not used [-Wunused-but-set-variable]
+     bool failed = false;
+          ^
