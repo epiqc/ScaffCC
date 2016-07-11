@@ -150,7 +150,7 @@ rkqc finalHash(qint a[32], qint h0[32], qint h1[32], qint h2[32], qint h3[32], q
 }
 
 
-rkqc encrypt( qbit in[448], qbit ha[160] ){
+rkqc encrypt(){
     qbit input[448];
     qbit hash[160];
 
@@ -633,8 +633,6 @@ rkqc encrypt( qbit in[448], qbit ha[160] ){
 
 
 int main() {
-    qbit a[448];
-    qbit b[160];
-    encrypt(a,b);
+    encrypt();
     return 0;
 }

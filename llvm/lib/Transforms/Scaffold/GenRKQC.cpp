@@ -706,8 +706,13 @@ void GenRKQC::printFuncHeaderToFile(Function* F, ofstream& ss, bool lastFunc)
   //print name of function
 
   string funcName = F->getName();
-  
-  if (!lastFunc) {
+  if (lastFunc) {
+    lastFuncName = funcName;
+    ss << "\nint main () {\n"; 
+    ss << "  set_LLVM(true);\n";
+  }
+
+  else {
     ss <<"\nvoid "<< funcName;
   
     //print arguments of function
@@ -767,7 +772,8 @@ void GenRKQC::printFuncHeaderToFile(Function* F, ofstream& ss, bool lastFunc)
     
     ss <<" ) {\n ";   
   }
-  else {
+  // -- Below Required to Transform Function Parameters to Declarations -- //
+  /*else {
     lastFuncName = funcName;
     ss << "\nint main () {\n"; 
     ss << "  set_LLVM(true);\n";
@@ -823,9 +829,9 @@ void GenRKQC::printFuncHeaderToFile(Function* F, ofstream& ss, bool lastFunc)
       ss  <<" "<<printVarName((funcArgList[tmp_num_elem-1]).argPtr->getName()) << " ;\n";
       
     }
-
-
-  }
+  
+  
+  }*/
 
     //print qbits declared in function
     //mvpItr=qbitsInitInFunc.find(F);	    
@@ -1073,7 +1079,6 @@ void GenRKQC::mergeQASM()
     string currentLine;
     int i;
     size_t position;
-    size_t eofPosition;
     int lineNo = 0;
     int toReplaceNo = 0;
     string toReplace = "extern void";
@@ -1131,7 +1136,6 @@ void GenRKQC::mergeLLVMIR()
     }
     string line;
     string currentLine;
-    int i;
     size_t position;
     size_t lastFuncPosition;
     string funcName;
@@ -1353,11 +1357,12 @@ bool GenRKQC::runOnModule(Module &M) {
                 
                 getFunctionArguments(F);
 
+
                 if(analyzeRKQC(F)) {
                     circuitHasRKQC = true;
                     isRKQC.push_back(F);
                     isRKQCNames.push_back(F->getName());
-                    errs() << "Added to RKQC List: " << F->getName() << "\n";
+                    if (debugGenrkqc) errs() << "Added to RKQC List: " << F->getName() << "\n";
                     vector<string> thisFuncQbits;
                     qbitDecls.insert( make_pair( F, thisFuncQbits ) );
                     RkqcFunctions.insert( make_pair( make_pair( F, funcArgs), vectCalls) );
@@ -1371,6 +1376,7 @@ bool GenRKQC::runOnModule(Module &M) {
                     }
                 }
 
+                int size = qbitsInFunc.size();
                 //map<Function*, vector<qGateArg> >::iterator mpItr = qbitsInFunc.find(F);
                 if(qbitsInFunc.size()>0){ //Is Quantum Function
                   bool funcRKQC = false;
@@ -1395,10 +1401,6 @@ bool GenRKQC::runOnModule(Module &M) {
       }
       errs() << "\n";
 
-//      for( vector<Function*>::iterator it = isRKQC.begin(); it != isRKQC.end(); it++){
-//        errs() << "RKQC FUNC: " << (*it)->getName() << "\n";
-//      }
-
     // Post Order Processing Of Each RKQC Function //
     if( circuitHasRKQC ){
         ofstream rkqc_file;
@@ -1409,7 +1411,6 @@ bool GenRKQC::runOnModule(Module &M) {
         rkqc_file << "#include <boost/lexical_cast.hpp>\n\n";
         rkqc_file << "using namespace revkit;\n\n";
         int i;
-        int j;
 
         vector<Function*>::iterator it;
         if (isRKQC.size() != 0 ){

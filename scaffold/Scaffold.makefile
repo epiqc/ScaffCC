@@ -54,9 +54,13 @@ qasm: $(FILE).qasmh
 # Intermediate targets
 ################################
 # Compile Scaffold to LLVM bytecode
-$(FILE).ll: $(FILE).scaffold
+
+$(FILE)_merged.scaffold: $(FILENAME)
+	cp $(FILENAME) $(FILE)_merged.scaffold
+
+$(FILE).ll: $(FILE)_merged.scaffold
 	@echo "[Scaffold.makefile] Compiling $(FILE).scaffold ..."
-	@$(CC) -c -emit-llvm -I/usr/include -I/usr/include/x86_64-linux-gnu -I/usr/lib/gcc/x86_64-linux-gnu/4.6/include $(FILE).scaffold -o $(FILE).ll
+	@$(CC) $(FILE)_merged.scaffold $(CC_FLAGS) -o $(FILE).ll 
 
 $(FILE)1.ll: $(FILE).ll
 	@echo "[Scaffold.makefile] Transforming cbits ..."

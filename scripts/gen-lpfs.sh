@@ -16,7 +16,7 @@ D=(1024)
 # Number of SIMD regions
 K=(4)
 # Module flattening thresholds: must be picked from the set in scripts/flattening_thresh.py
-THRESHOLDS=(100k)
+THRESHOLDS=(010k)
 # Full schedule? otherwise only generates metrics (faster)
 FULL_SCHED=true
 

@@ -485,6 +485,7 @@ void GenLPFSSched::lpfs(Function* F, int ts, int simd_l, int refill_simd, int op
                 Instruction* myInst = (*vit).first;
                 op myOp = (*mapCalls.find(myInst)).second;
 //                errs() << "scheduling op " << myOp.name.qFunc->getName() << "\n";
+//                errs() << "myOp has args: " << myOp.name.numArgs << "\n";
                 bool scheduled = false;
 //                errs() << "ts = " << ts << " Checking op: " << myOp.id << " ";
 //                print_qgate(myOp.name);
@@ -1580,6 +1581,7 @@ void GenLPFSSched::print_schedule(Function* F, int op_count){
                     string tmpName = (*oper).second.name.qFunc->getName();
                     if( tmpName.find("llvm.") != string::npos) errs() << tmpName.substr(5);
                     else errs() << tmpName;
+//                    errs() << "Args of this function: " << (*oper).second.name.numArgs << "\n";
                     for(int i = 0; i<(*oper).second.name.numArgs; i++){
                         errs() << " " << (*oper).second.name.args[i].name;
                         if((*oper).second.name.args[i].index != -1) errs() << (*oper).second.name.args[i].index;
