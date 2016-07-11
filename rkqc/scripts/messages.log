@@ -1,5 +1,5 @@
 init
-Sun Jul 10 21:53:23 PDT 2016 /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/July10_ScaffCC/rkqc/scripts/build param: -DBUILD_UNSTABLE=ON -DBUILD_EXAMPLES=ON -DBUILD_BINDINGS=OFF
+Mon Jul 11 00:23:48 PDT 2016 /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/July10_ScaffCC/rkqc/scripts/build param: -DBUILD_UNSTABLE=ON -DBUILD_EXAMPLES=ON -DBUILD_BINDINGS=OFF
 -DBUILD_BINDINGS=OFF -DBUILD_UNSTABLE=ON -DBUILD_EXAMPLES=ON
 -- Configuring done
 -- Generating done
@@ -802,3 +802,12 @@ In file included from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/Jul
 /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/July10_ScaffCC/rkqc/src/../libs/include/boost/lexical_cast.hpp:1725:17: note: in expansion of macro ‘BOOST_STATIC_ASSERT_MSG’
                  BOOST_STATIC_ASSERT_MSG(( sizeof(CharT) == sizeof(T) ),
                  ^
+Linking CXX executable rkqc
+make[3]: Leaving directory `/home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/July10_ScaffCC/rkqc/build'
+[100%] Built target rkqc
+make[2]: Leaving directory `/home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/July10_ScaffCC/rkqc/build'
+make[1]: Leaving directory `/home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/July10_ScaffCC/rkqc/build'
+rm: cannot remove ‘revkit.py’: No such file or directory
+rm: cannot remove ‘revkit_python.so’: No such file or directory
+rm: cannot remove ‘revkitmath.py’: No such file or directory
+rm: cannot remove ‘revkitui.py’: No such file or directory

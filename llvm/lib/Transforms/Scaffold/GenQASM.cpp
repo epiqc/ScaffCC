@@ -63,7 +63,14 @@ namespace {
     std::vector<qGateArg> tmpDepQbit;
     std::vector<qGateArg> allDepQbit;
 
+
+    map<Function*, vector<qGateArg> > mapQbitsInit;
+    map<Function*, vector<qGateArg> > mapFuncArgs;
+    map<Function*, vector<FnCall> > mapMapFunc;
+
+
     vector<qGateArg> qbitsInFunc; //qbits in function
+    vector<qGateArg> qbitsInFuncShort; //qbits in function
     vector<qGateArg> qbitsInitInFunc; //new qbits declared in function
     vector<qGateArg> funcArgList; //function arguments
     vector<FnCall> mapFunction; //trace sequence of qgate calls
@@ -77,13 +84,14 @@ namespace {
     bool getQbitArrDim(Type* instType, qGateArg* qa);
     bool backtraceOperand(Value* opd, int opOrIndex);
     void analyzeAllocInst(Function* F,Instruction* pinst);
+    void analyzeAllocInstShort(Function* F,Instruction* pinst);
     void analyzeCallInst(Function* F,Instruction* pinst);
     void analyzeInst(Function* F,Instruction* pinst);
 
     // run - Print out SCCs in the call graph for the specified module.
     bool runOnModule(Module &M);
 
-    void printFuncHeader(Function* F);
+    void printFuncHeader(Function* F, bool lastFunc);
 
     string printVarName(StringRef s)
     {
@@ -128,6 +136,7 @@ namespace {
 
     void genQASM(Function* F);
     void getFunctionArguments(Function* F);
+    bool DetermineQFunc(Function* F);
     
     void print(raw_ostream &O, const Module* = 0) const { 
       errs() << "Qbits found: ";
@@ -364,6 +373,41 @@ bool GenQASM::getQbitArrDim(Type *instType, qGateArg* qa)
   }
 
   return myRet;
+
+}
+
+void GenQASM::analyzeAllocInstShort(Function* F, Instruction* pInst){
+
+  if (AllocaInst *AI = dyn_cast<AllocaInst>(pInst)) {
+    Type *allocatedType = AI->getAllocatedType();
+    
+    if(ArrayType *arrayType = dyn_cast<ArrayType>(allocatedType)) {      
+      qGateArg tmpQArg;
+
+      Type *elementType = arrayType->getElementType();
+      uint64_t arraySize = arrayType->getNumElements();
+      if (elementType->isIntegerTy(16)){
+	if(debugGenQASM)
+	  errs() << "New QBit Allocation Found: " << AI->getName() <<"\n";
+	qbitsInFuncShort.push_back(tmpQArg);
+      }
+      
+      else if (elementType->isIntegerTy(1)){
+	if(debugGenQASM)
+	  errs() << "New CBit Allocation Found: " << AI->getName() <<"\n";
+	qbitsInFuncShort.push_back(tmpQArg);
+      }
+
+    }
+    else if(allocatedType->isIntegerTy(16)){
+        qGateArg tmpQArg;
+        qbitsInFuncShort.push_back(tmpQArg);
+    }
+	//find argName2 in funcArgList - avoid printing out qbit declaration twice
+	//std::map<Function*, vector<qGateArg> >::iterator mIter = funcArgList.find(F);
+	//if(mIter != funcArgList.end()){
+    return;
+  }
 
 }
 
@@ -651,7 +695,7 @@ void GenQASM::analyzeInst(Function* F, Instruction* pInst){
   return;
 }
 
-void GenQASM::printFuncHeader(Function* F)
+void GenQASM::printFuncHeader(Function* F, bool lastFunc)
 {
 
   //map<Function*, vector<qGateArg> >::iterator mpItr;
@@ -661,7 +705,11 @@ void GenQASM::printFuncHeader(Function* F)
   //mpItr = qbitsInFunc.find(F);
 
   //print name of function
-  errs()<<"\nmodule "<<F->getName();
+
+  funcArgList = mapFuncArgs.find(F)->second;
+  qbitsInitInFunc = mapQbitsInit.find(F)->second;
+  if(lastFunc) errs() << "\nmodule main";
+  else errs()<<"\nmodule "<<F->getName();
   
   //print arguments of function
   //mpItr2=funcArgList.find(F);    
@@ -745,9 +793,9 @@ void GenQASM::genQASM(Function* F)
   //map<Function*, vector<qGateArg> >::iterator mvpItr;
   
   //mpItr = qbitsInFunc.find(F);
-  if(qbitsInFunc.size()>0){
+//  if(qbitsInFunc.size()>0){
     
-    
+    mapFunction = mapMapFunc.find(F)->second; 
     //print gates in function
     //map<Function*, vector<FnCall> >::iterator mfvIt = mapFunction.find(F);
     for(unsigned mIndex=0;mIndex<mapFunction.size();mIndex++){
@@ -842,9 +890,20 @@ void GenQASM::genQASM(Function* F)
 
     //errs() << "//--//-- End Fn: " << F->getName() << " --//--// \n";
     errs()<<"}\n";
-  }
+//  }
 }
 
+
+bool GenQASM::DetermineQFunc(Function* F)
+{
+    for(inst_iterator instIb = inst_begin(F),instIe=inst_end(F); instIb!=instIe;++instIb){
+        Instruction *pInst = &*instIb; // Grab pointer to instruction reference	      
+	    analyzeAllocInstShort(F,pInst);
+	}
+    if(qbitsInFuncShort.size() > 0) return true;
+    qbitsInFuncShort.clear();
+    return false;
+}
 
 void GenQASM::getFunctionArguments(Function* F)
 {
@@ -902,13 +961,51 @@ void GenQASM::getFunctionArguments(Function* F)
 
 // run - Find datapaths for qubits
 bool GenQASM::runOnModule(Module &M) {
+  vector<Function*> qFuncs;
+
   CallGraphNode* rootNode = getAnalysis<CallGraph>().getRoot();
   unsigned sccNum = 0;
 
-  errs() << "-------QASM Generation Pass:\n";
+//  for (scc_iterator<CallGraphNode*> sccIb = scc_begin(rootNode),
+//         E = scc_end(rootNode); sccIb != E; ++sccIb)
+//    {
+//      const std::vector<CallGraphNode*> &nextSCC = *sccIb;
+//
+//      if(debugGenQASM)
+//	errs() << "\nSCC #" << ++sccNum << " : ";      
+//
+//      for (std::vector<CallGraphNode*>::const_iterator nsccI = nextSCC.begin(),
+//	     E = nextSCC.end(); nsccI != E; ++nsccI)
+//	{
+//	  Function *F=(*nsccI)->getFunction();	  
+//	  
+//	  if(F && !F->isDeclaration()){
+//        if(DetermineQFunc(F)){
+//            qFuncs.push_back(F);
+//        }
+//      }
+//    }
+//  }
+//
+//  bool hasMain = false;
+//  for( vector<Function*>::iterator it = qFuncs.begin(); it!=qFuncs.end(); it++)
+//  {
+//    if ((*it)->getName() == "main") hasMain = true;
+//  }
+//  if(!hasMain){
+//    vector<Function*>::iterator it = qFuncs.end();
+//    it--;
+//    (*it)->setName("main");
+//  }
 
-  for (scc_iterator<CallGraphNode*> sccIb = scc_begin(rootNode),
-         E = scc_end(rootNode); sccIb != E; ++sccIb)
+   
+  errs() << "-------QASM Generation Pass:\n";
+  CallGraphNode* rootNode1 = getAnalysis<CallGraph>().getRoot();
+
+  sccNum = 0;
+
+  for (scc_iterator<CallGraphNode*> sccIb = scc_begin(rootNode1),
+         E = scc_end(rootNode1); sccIb != E; ++sccIb)
     {
       const std::vector<CallGraphNode*> &nextSCC = *sccIb;
 
@@ -949,7 +1046,9 @@ bool GenQASM::runOnModule(Module &M) {
 
 	    //map<Function*, vector<qGateArg> >::iterator mpItr = qbitsInFunc.find(F);
 	    if(qbitsInFunc.size()>0){ //Is Quantum Function
-	      printFuncHeader(F);
+          mapQbitsInit.insert( make_pair( F, qbitsInitInFunc ) );
+          mapFuncArgs.insert( make_pair( F, funcArgList ) );
+          qFuncs.push_back(F);
 	    
 	      for(inst_iterator instIb = inst_begin(F),instIe=inst_end(F); instIb!=instIe;++instIb){
 
@@ -960,12 +1059,11 @@ bool GenQASM::runOnModule(Module &M) {
 		  errs() << "\n Processing Inst: "<<*pInst << "\n";
 		
 		analyzeInst(F,pInst); //spatil: need a bool return type?
+
 	      }
-	      
-
-	      genQASM(F);	      
-
+          mapMapFunc.insert( make_pair( F, mapFunction ) );
 	    }
+
 	    
 	  }
 	  else{
@@ -976,6 +1074,24 @@ bool GenQASM::runOnModule(Module &M) {
 	}
       if (nextSCC.size() == 1 && sccIb.hasLoop())
 	errs() << " (Has self-loop).";
+    }
+
+    bool hasMain = false;
+    for( vector<Function*>::iterator it = qFuncs.begin(); it!=qFuncs.end(); it++)
+    {
+      if ((*it)->getName() == "main") hasMain = true;
+    }
+
+    vector<Function*>::iterator lastItPos;
+    if(!hasMain){
+        lastItPos = qFuncs.end();
+        lastItPos--;
+    }
+
+    for( vector<Function*>::iterator it = qFuncs.begin(); it != qFuncs.end(); it++){
+        if(it == lastItPos) printFuncHeader((*it), true);
+        else printFuncHeader((*it), false);
+        genQASM((*it));
     }
   errs()<<"\n--------End of QASM generation";
   errs() << "\n";

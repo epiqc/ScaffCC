@@ -783,3 +783,7 @@ In file included from /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/Jul
 /home/adam/Desktop/EPiQC_Releases/Full_Install_Testing/July10_ScaffCC/rkqc/src/../libs/include/boost/lexical_cast.hpp:1725:17: note: in expansion of macro ‘BOOST_STATIC_ASSERT_MSG’
                  BOOST_STATIC_ASSERT_MSG(( sizeof(CharT) == sizeof(T) ),
                  ^
+rm: cannot remove ‘revkit.py’: No such file or directory
+rm: cannot remove ‘revkit_python.so’: No such file or directory
+rm: cannot remove ‘revkitmath.py’: No such file or directory
+rm: cannot remove ‘revkitui.py’: No such file or directory
