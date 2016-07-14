@@ -1,1 +1,14 @@
-export PATH=$PATH:${PWD}/rkqc/
+/bin/bash rkqc > /dev/null 2> /dev/null
+
+if [ "$?" == "0" ]
+then
+  echo
+  echo "It looks like \"rkqc\" is already in your \$PATH (possibly from a previous installation)."
+  echo "Remove the old \"rkqc\" executable from your \$PATH, then source \"source_me\" one more time."
+  echo
+  echo
+else
+  export RKQC_PATH=$(pwd)/rkqc
+  export PATH=$PATH:$RKQC_PATH
+fi
+

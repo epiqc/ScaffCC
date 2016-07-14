@@ -482,6 +482,8 @@ void GenQASM::analyzeAllocInst(Function* F, Instruction* pInst){
         tmpQArg.isQbit = true;
         tmpQArg.argPtr = AI;
         tmpQArg.numDim = 1;
+        tmpQArg.dimSize[0] = 1;
+        tmpQArg.valOrIndex = 1;
         qbitsInFunc.push_back(tmpQArg);
         qbitsInitInFunc.push_back(tmpQArg);
     }
@@ -780,8 +782,8 @@ void GenQASM::printFuncHeader(Function* F, bool lastFunc)
 
       //if n-dimensional qbit arrays expected 
       for(int ndim = 0; ndim < (*vvit).numDim; ndim++)
-	errs()<<"["<<(*vvit).dimSize[ndim]<<"]";
-      errs() << ";\n";
+        errs()<<"["<<(*vvit).dimSize[ndim]<<"]";
+        errs() << ";\n";
     }
   //errs() << "//--//-- Fn: " << F->getName() << " --//--//\n";
 }
