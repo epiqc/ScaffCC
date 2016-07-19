@@ -1,0 +1,2 @@
+total_gates = 4
+

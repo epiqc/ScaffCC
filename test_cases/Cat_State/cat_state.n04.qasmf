@@ -1,0 +1,8 @@
+qubit bits0
+qubit bits1
+qubit bits2
+qubit bits3
+H bits0
+CNOT bits1,bits0
+CNOT bits2,bits1
+CNOT bits3,bits2
