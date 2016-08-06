@@ -291,8 +291,11 @@ bool FunctionClone::runOnModule (Module &M) {
 
             for (std::vector<std::string>::iterator i = originalInts.begin(), e = originalInts.end(); i!=e; ++i)
               ss << "_IP" << *i;
-            for (std::vector<std::string>::iterator j = originalDoubles.begin(), e = originalDoubles.end(); j!=e; ++j)
-              ss << "_DP" << *j;
+            for (std::vector<std::string>::iterator j = originalDoubles.begin(), e = originalDoubles.end(); j!=e; ++j){
+              std::replace( j->begin(), j->end(), '.', '_');
+              std::replace( j->begin(), j->end(), '-', '_');
+              ss << "_DP" << *j; 
+            }
             
             std::string specializedName = originalCore + ss.str();
 

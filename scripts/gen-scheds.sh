@@ -109,7 +109,7 @@ done
 for f in $*; do
   b=$(basename $f .scaffold)
   cd ${b}
-  for c in comm_aware_schedule.txt.${b}_*; do
+  for c in comm_aware_schedule.txt.${b}.*; do
     k=$(perl -e '$ARGV[0] =~ /_K(\d+)/; print $1' $c)
     d=$(perl -e '$ARGV[0] =~ /_D(\d+)/; print $1' $c)
     x=$(perl -e '$ARGV[0] =~ /.*_(.+)/; print $1' $c)

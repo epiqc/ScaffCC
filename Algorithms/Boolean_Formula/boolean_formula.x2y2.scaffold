@@ -22361,13 +22361,29 @@ int main (int argc, char** argv){
 	int loop_counter;
 
   // Compile time input
-  char red_input [12] = {'0','1','0','0','0','1','0','1','0','0','0','1'};
-  char blue_input [12] = {'0','1','0','1','1','1','1','1','1','1','0','0'};
+//  char red_input [12] = {'0','1','0','0','0','1','0','1','0','0','0','1'};
+//  char blue_input [12] = {'0','1','0','1','1','1','1','1','1','1','0','0'};
+//
+//  for (loop_counter=0; loop_counter<s; loop_counter++){
+//    PrepZ(red_input[loop_counter], red_input[loop_counter] - 48); // poor man's atoi ('0' = 48, '1' = 49)
+//    PrepZ(blue_input[loop_counter], blue_input[loop_counter] - 48);
+//  }  
+    
+    /* ---Boolean Formula Fix: August 5 2016: Chars->Qbits--- */
 
-  for (loop_counter=0; loop_counter<s; loop_counter++){
-    PrepZ(red_input[loop_counter], red_input[loop_counter] - 48); // poor man's atoi ('0' = 48, '1' = 49)
-    PrepZ(blue_input[loop_counter], blue_input[loop_counter] - 48);
-  }  
+    qbit red_input[12];
+    qbit blue_input[12];
+
+    PrepZ(red_input[0],0);
+    PrepZ(red_input[1],1);
+    PrepZ(red_input[2],0);
+    PrepZ(red_input[3],0);
+
+    PrepZ(blue_input[0],0);
+    PrepZ(blue_input[1],1);
+    PrepZ(blue_input[2],0);
+    PrepZ(blue_input[3],1);
+
 
 	//|a> =0
 	for (loop_counter=0; loop_counter<t; loop_counter++){ //forall
