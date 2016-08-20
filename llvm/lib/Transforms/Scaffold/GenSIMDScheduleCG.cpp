@@ -1489,16 +1489,13 @@ void GenSIMDSchedCG::init_gates_as_functions(){
     string gName = gate_name[i];
     string fName = "llvm.";
     fName.append(gName);
-    
   }
-
 }
 
 
 bool GenSIMDSchedCG::runOnModule (Module &M) {
   init_gate_names();
   init_gates_as_functions();
-  
   read_schedule_file();
 
   // iterate over all functions, and over all instructions in those functions
@@ -1528,13 +1525,6 @@ bool GenSIMDSchedCG::runOnModule (Module &M) {
         if(F->getName() == "main"){
           //print_ArrParGates(F);
          
-	  //Print Histogram Data
-	  ofstream outputFile;    
-          outputFile.open("histogram_data.txt");
-          // outputFile << "\nHistogram Data\n" << endl;
-          ostream_iterator<int> output_iterator(outputFile, " ");
-          copy(histogramData.begin(), histogramData.end(), output_iterator);
-
           errs() << "\n#Num of SIMD time steps for function main : " << getNumCritSteps(F) << "\n";               
         }
 
@@ -1548,8 +1538,8 @@ bool GenSIMDSchedCG::runOnModule (Module &M) {
           }
     }
   }
-  //print_tableFuncQbits();
-  //print_parallelism();
-
+//  //print_tableFuncQbits();
+//  //print_parallelism();
+//
   return false;
 } // End runOnModule

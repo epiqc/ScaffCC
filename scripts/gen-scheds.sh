@@ -10,9 +10,9 @@ D=(1024)
 # Number of SIMD regions
 K=(2)
 # Module flattening threshold: must be picked from the set in scripts/flattening_thresh.py
-THRESHOLDS=(2M)
+THRESHOLDS=(010k)
 # Full schedule? otherwise only generates metrics (faster)
-FULL_SCHED=true
+FULL_SCHED=false
 
 # Create directory to put all byproduct and output files in
 for f in $*; do
@@ -59,7 +59,7 @@ for f in $*; do
   b=$(basename $f .scaffold)
   echo "[gen-scheds.sh] $b: Resource count ..."
   for th in ${THRESHOLDS[@]}; do      
-    if [ -n ${b}/${b}.flat${th}.resources ]; then
+    if [ ! -e ${b}/${b}.flat${th}.resources ]; then
       echo "[gen-scheds.sh] Resource count for Threshold = $th flattening ..."
       $OPT -S -load $SCAF -ResourceCount ${b}/${b}.flat${th}.ll > /dev/null 2> ${b}/${b}.flat${th}.resources
     fi
@@ -115,17 +115,18 @@ for f in $*; do
     x=$(perl -e '$ARGV[0] =~ /.*_(.+)/; print $1' $c)
     th=$(perl -e '$ARGV[0] =~ /.flat(\d+[a-zA-Z])/; print $1' $c)    
     echo "[gen-scheds.sh] $b: Coarse-grain schedule ..."
-    mv $c comm_aware_schedule.txt
+    cp $c comm_aware_schedule.txt
     if [ ! -e ${b}.flat${th}.simd.${k}.${d}.${x}.time ]; then
       ../$OPT -load ../$SCAF -GenCGSIMDSchedule -simd-kconstraint-cg $k -simd-dconstraint-cg $d ${b}.flat${th}.ll > /dev/null 2> ${b}.flat${th}.simd.${k}.${d}.${x}.cg
     fi
+    echo "[gen-scheds.sh] $b: Done."
 
     # Now do 0-communication cost
     #if [ ! -e ${b}.flat${th}.simd.${k}.${d}.w0.${x}.time ]; then
     #  ../$OPT -load ../$SCAF -GenCGSIMDSchedule -move-weight-cg 0 -simd-kconstraint-cg $k -simd-dconstraint-cg $d ${b}.flat${th}.ll > /dev/null 2> ${b}.flat${th}.simd.${k}.${d}.w0.${x}.time
     #fi
   done
-  rm -f comm_aware_schedule.txt
+#  rm -f comm_aware_schedule.txt
   cd ..
 done
 
