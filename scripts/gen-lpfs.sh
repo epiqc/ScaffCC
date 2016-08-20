@@ -29,46 +29,46 @@ for f in $*; do
 done
 
 # Generate .ll file if not done already
-#for f in $*; do
-#  b=$(basename $f .scaffold)
-#  echo "[gen-lpfs.sh] $b: Compiling ..."
-#  if [ ! -e ${b}/${b}.ll ]; then
-#    # Generate compiled files
-#    $ROOT/scaffold.sh -r $f
-#    mv ${b}11.ll ${b}11.ll.keep_me
-#    # clean intermediary compilation files (comment out for speed)
-#    #$ROOT/scaffold.sh -c $f
-#    # Keep the final output for the compilation
-#    mv ${b}11.ll.keep_me ${b}/${b}.ll
-#  fi
-#done
-#
-## Module flattening pass with different thresholds
-#for f in $*; do
-#  b=$(basename $f .scaffold)
-#  echo "[gen-lpfs.sh] $b: Computing module gate counts ..."  
-#  $OPT -S -load $SCAF -ResourceCount2 ${b}/${b}.ll > /dev/null 2> ${b}.out  
-#  python $DIR/flattening_thresh.py ${b}  
-#  for th in ${THRESHOLDS[@]}; do      
-#    if [ ! -e ${b}/${b}.flat${th}.ll ]; then
-#      echo "[gen-lpfs.sh] $b_flat${th}: Flattening ..."      
-#      mv ${b}.flat${th}.txt flat_info.txt
-#      $OPT -S -load $SCAF -FlattenModule -dce -internalize -globaldce ${b}/${b}.ll -o ${b}/${b}.flat${th}.ll
-#    fi
-#  done
-#  rm -f *flat*.txt ${b}.out     
-#done
-#
-## Perform resource estimation 
-#for f in $*; do
-#  b=$(basename $f .scaffold)
-#  for th in ${THRESHOLDS[@]}; do      
-#    echo "[gen-lpfs.sh] $b.flat${th}: Resource count ..."    
-#    if [ -n ${b}/${b}.flat${th}.resources ]; then
-#      $OPT -S -load $SCAF -ResourceCount ${b}/${b}.flat${th}.ll > /dev/null 2> ${b}/${b}.flat${th}.resources
-#    fi
-#  done
-#done
+for f in $*; do
+  b=$(basename $f .scaffold)
+  echo "[gen-lpfs.sh] $b: Compiling ..."
+  if [ ! -e ${b}/${b}.ll ]; then
+    # Generate compiled files
+    $ROOT/scaffold.sh -r $f
+    mv ${b}11.ll ${b}11.ll.keep_me
+    # clean intermediary compilation files (comment out for speed)
+    #$ROOT/scaffold.sh -c $f
+    # Keep the final output for the compilation
+    mv ${b}11.ll.keep_me ${b}/${b}.ll
+  fi
+done
+
+# Module flattening pass with different thresholds
+for f in $*; do
+  b=$(basename $f .scaffold)
+  echo "[gen-lpfs.sh] $b: Computing module gate counts ..."  
+  $OPT -S -load $SCAF -ResourceCount2 ${b}/${b}.ll > /dev/null 2> ${b}.out  
+  python $DIR/flattening_thresh.py ${b}  
+  for th in ${THRESHOLDS[@]}; do      
+    if [ ! -e ${b}/${b}.flat${th}.ll ]; then
+      echo "[gen-lpfs.sh] $b_flat${th}: Flattening ..."      
+      mv ${b}.flat${th}.txt flat_info.txt
+      $OPT -S -load $SCAF -FlattenModule -dce -internalize -globaldce ${b}/${b}.ll -o ${b}/${b}.flat${th}.ll
+    fi
+  done
+  rm -f *flat*.txt ${b}.out     
+done
+
+# Perform resource estimation 
+for f in $*; do
+  b=$(basename $f .scaffold)
+  for th in ${THRESHOLDS[@]}; do      
+    echo "[gen-lpfs.sh] $b.flat${th}: Resource count ..."    
+    if [ -n ${b}/${b}.flat${th}.resources ]; then
+      $OPT -S -load $SCAF -ResourceCount ${b}/${b}.flat${th}.ll > /dev/null 2> ${b}/${b}.flat${th}.resources
+    fi
+  done
+done
 
 # For different K and D values specified above, generate MultiSIMD schedules
 for f in $*; do
