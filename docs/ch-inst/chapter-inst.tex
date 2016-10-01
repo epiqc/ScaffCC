@@ -46,12 +46,16 @@ or use the package manager of your system (``yum" on Red Hat or ``apt-get" on Ub
     sudo ./bootstrap.sh
     sudo ./b2 install --prefix=/usr/local
     \end{lstlisting}
+    Alternatively, Ubuntu users can install the current Boost version via:
+    \begin{lstlisting}
+    sudo apt-get install libboost-all-dev
+    \end{lstlisting}
   \end{itemize}
 
   \item The GNU Multiple Precision Arithmetic Library (gmp and gmpxx)    
   \begin{itemize}
     \item ``Ubuntu"
-    Use tab-completion to verify the correct packages (e.g. libgmp<tab><tab>)
+    Use tab-completion to verify the correct packages (e.g. libgmp\textless tab\textgreater \textless tab\textgreater)
     \begin{lstlisting}
     sudo apt-get install libgmp-dev libgmpxx4ldbl
     \end{lstlisting}
@@ -81,6 +85,18 @@ or use the package manager of your system (``yum" on Red Hat or ``apt-get" on Ub
 
   \item Python 2.7 (or later)
 
+  \item CMake (For Integrating RKQC Functionality)
+  \begin{itemize}
+    \item ``Ubuntu"
+    \begin{lstlisting}
+    sudo apt-get install cmake
+    \end{lstlisting}
+
+    \item ``Source Build" \\
+    There are instructions for downloading and building CMake from source at: \\
+    \url{https://cmake.org/install}
+  \end{itemize}
+
 \end{enumerate}
 
 Once you have all of the required libraries, simply run 
@@ -95,3 +111,19 @@ at the root of the repository. The $USE\_GCC$ flag will force the
 Makefile to use GCC to compile instead, and this has been seen to be faster 
 on some systems.
 
+\section{Verifying Installation}
+
+Included with ScaffCC is a suite of tests designed to verify the integrity of new installations. To access these tests and verify that the installation process completed successfully:
+
+\begin{enumerate}
+    \item Enter the scripts/ directory:
+    \begin{lstlisting}
+        cd scripts/
+    \end{lstlisting}
+    \item Run the Regression Test Suite:
+    \begin{lstlisting}
+        ./regression_test.sh
+    \end{lstlisting}
+\end{enumerate}
+
+This invokation will compile three small benchmarks, and verify that the generated files match those precompiled on an existing system, which are included in the test cases directory. If the three tests complete with a ``Succeeded", the installation was successful.

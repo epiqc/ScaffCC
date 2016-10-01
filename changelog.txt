@@ -1,0 +1,5 @@
+2016-08-20:
+    Release version - v1.0-beta.2
+    Updates made to Class Number algorithm, corrections to QASM section
+    Changes made to gen-lpfs.sh and gen-scheds.sh to allow for integration of coarse-grained scheduling with full schedule outputs of LPFS
+    Changes made to GenLPFSSchedule.cpp to prepend metrics header to all LPFS scheduled functions for integration with CG scheduling

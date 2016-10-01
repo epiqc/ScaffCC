@@ -76,7 +76,7 @@ for f in $*; do
   for d in ${D[@]}; do
     for k in ${K[@]}; do
       for th in ${THRESHOLDS[@]}; do
-        echo "[gen-lpfs.sh] $b.flat${th}: Generating SIMD K=$k D=$d leaves ..."        
+        echo "[gen-lpfs.sh] $b.flat${th}: Generating SIMD K=$k D=$d LPFS schedules ..."        
         if [ ! -e ${b}/${b}.flat${th}.simd.${k}.${d}.leaves.local ]; then
           $OPT -load $SCAF -GenLPFSSchedule -simd-kconstraint-lpfs $k -simd-dconstraint-lpfs $d -simd_l 1 -full_sched 1 -local_mem 1 ${b}/${b}.flat${th}.ll > /dev/null 2> ${b}/${b}.flat${th}.simd.${k}.${d}.leaves.local
         fi
@@ -120,29 +120,29 @@ rename 's/\.simd\.(\d)\.(\d+)\.leaves\.local/\.lpfs/' ${b}/*leaves.local
 rename 's/\.simd\.(\d)\.(\d+)\.local\.time/\.cg/' ${b}/*time
 
 # Perform module frequency estimation
-for f in $*; do
-  b=$(basename $f .scaffold)  
-  b_dir=$(dirname "$(readlink -f $f)")
-  echo "[gen-lpfs.sh] Compiling frequency-estimation-hybrid.c" >&2
-  $CLANG -c -O1 -emit-llvm frequency-estimation-hybrid.c -o frequency-estimation-hybrid.bc
-  echo "[gen-lpfs.sh] $b: Frequency count ..." >&2
-  if [ -n ${b}/${b}.freq ]; then
-    cp ${b}/${b}.ll ${b}/${b}_dynamic.ll          
-    echo -e "\t[gen-lpfs.sh] Decomposing Toffolis" >&2
-    $OPT -S -load $SCAF -ToffoliReplace ${b}/${b}_dynamic.ll -o ${b}/${b}_dynamic.ll
-    echo -e "\t[gen-lpfs.sh] Identifying Loops to retain..." >&2
-    $OPT -S -mem2reg -instcombine -loop-simplify -loop-rotate -indvars ${b}/${b}_dynamic.ll -o ${b}/${b}_marked.ll
-    echo -e "\t[gen-lpfs.sh] Rolling up Loops" >&2
-    $OPT -S -load $SCAF -dyn-rollup-loops ${b}/${b}_marked.ll -o ${b}/${b}_rolled.ll
-    echo -e "\t[gen-lpfs.sh] Linking frequency-estimation-hybrid.bc and ${b}/${b}_rolled.ll" >&2
-    $LLVM_LINK frequency-estimation-hybrid.bc ${b}/${b}_rolled.ll -S -o=${b}/${b}_linked.ll
-    echo -e "\t[gen-lpfs.sh] Instrumenting ${b}/${b}_linked.ll" >&2
-    $OPT -S -load $SCAF -runtime-frequency-estimation-hybrid ${b}/${b}_linked.ll -o ${b}/${b}_instr.ll
-    $OPT -S -dce -dse -dce ${b}/${b}_instr.ll -o ${b}/${b}_instr2.ll
-    $OPT -S -O1 ${b}/${b}_instr2.ll -o ${b}/${b}_instr.ll
-    echo -e "\t[gen-lpfs.sh] Executing ${b}/${b}_instr.ll with lli" >&2
-    $LLI ${b}/${b}_instr.ll > ${b}/${b}.freq
-    echo -e "\t[gen-lpfs.sh] Frequency estimates written to ${b}.freq"
-  fi
-  rm frequency-estimation-hybrid.bc ${b}/${b}*_dynamic.ll ${b}/${b}*_marked.ll ${b}/${b}*_rolled.ll ${b}/${b}*_linked.ll ${b}/${b}*_instr.ll ${b}/${b}*_instr2.ll
-done
+#for f in $*; do
+#  b=$(basename $f .scaffold)  
+#  b_dir=$(dirname "$(readlink -f $f)")
+#  echo "[gen-lpfs.sh] Compiling frequency-estimation-hybrid.c" >&2
+#  $CLANG -c -O1 -emit-llvm frequency-estimation-hybrid.c -o frequency-estimation-hybrid.bc
+#  echo "[gen-lpfs.sh] $b: Frequency count ..." >&2
+#  if [ -n ${b}/${b}.freq ]; then
+#    cp ${b}/${b}.ll ${b}/${b}_dynamic.ll          
+#    echo -e "\t[gen-lpfs.sh] Decomposing Toffolis" >&2
+#    $OPT -S -load $SCAF -ToffoliReplace ${b}/${b}_dynamic.ll -o ${b}/${b}_dynamic.ll
+#    echo -e "\t[gen-lpfs.sh] Identifying Loops to retain..." >&2
+#    $OPT -S -mem2reg -instcombine -loop-simplify -loop-rotate -indvars ${b}/${b}_dynamic.ll -o ${b}/${b}_marked.ll
+#    echo -e "\t[gen-lpfs.sh] Rolling up Loops" >&2
+#    $OPT -S -load $SCAF -dyn-rollup-loops ${b}/${b}_marked.ll -o ${b}/${b}_rolled.ll
+#    echo -e "\t[gen-lpfs.sh] Linking frequency-estimation-hybrid.bc and ${b}/${b}_rolled.ll" >&2
+#    $LLVM_LINK frequency-estimation-hybrid.bc ${b}/${b}_rolled.ll -S -o=${b}/${b}_linked.ll
+#    echo -e "\t[gen-lpfs.sh] Instrumenting ${b}/${b}_linked.ll" >&2
+#    $OPT -S -load $SCAF -runtime-frequency-estimation-hybrid ${b}/${b}_linked.ll -o ${b}/${b}_instr.ll
+#    $OPT -S -dce -dse -dce ${b}/${b}_instr.ll -o ${b}/${b}_instr2.ll
+#    $OPT -S -O1 ${b}/${b}_instr2.ll -o ${b}/${b}_instr.ll
+#    echo -e "\t[gen-lpfs.sh] Executing ${b}/${b}_instr.ll with lli" >&2
+#    $LLI ${b}/${b}_instr.ll > ${b}/${b}.freq
+#    echo -e "\t[gen-lpfs.sh] Frequency estimates written to ${b}.freq"
+#  fi
+#  rm frequency-estimation-hybrid.bc ${b}/${b}*_dynamic.ll ${b}/${b}*_marked.ll ${b}/${b}*_rolled.ll ${b}/${b}*_linked.ll ${b}/${b}*_instr.ll ${b}/${b}*_instr2.ll
+#done
