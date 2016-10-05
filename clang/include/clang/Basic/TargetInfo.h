@@ -69,6 +69,7 @@ protected:
   bool NoAsmVariants;  // True if {|} are normal characters.
   unsigned char PointerWidth, PointerAlign;
   unsigned char BoolWidth, BoolAlign;
+  unsigned char AbitWidth, AbitAlign; // Scaffold
   unsigned char CbitWidth, CbitAlign; // Scaffold
   unsigned char QbitWidth, QbitAlign; // Scaffold
   unsigned char QintWidth, QintAlign; // RKQC
@@ -230,6 +231,11 @@ public:
   /// bits.
   unsigned getWCharWidth() const { return getTypeWidth(WCharType); }
   unsigned getWCharAlign() const { return getTypeAlign(WCharType); }
+
+
+  /// \brief Return Scaffold Abit type width and align.
+  unsigned getAbitWidth() const { return 8; }
+  unsigned getAbitAlign() const { return 8; } 
 
   /// \brief Return Scaffold Cbit type width and align.
   unsigned getCbitWidth() const { return 1; }

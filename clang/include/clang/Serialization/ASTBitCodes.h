@@ -642,7 +642,9 @@ namespace clang {
       PREDEF_TYPE_zzBit_ID = 39,
       PREDEF_TYPE_zgBit_ID = 40,
       PREDEF_TYPE_ooBit_ID = 41,
-      PREDEF_TYPE_ogBit_ID = 42
+      PREDEF_TYPE_ogBit_ID = 42,
+      /// \brief the 'abit' type in Scaffold
+      PREDEF_TYPE_ABIT_ID = 43
     };
 
     /// \brief The number of predefined type IDs that are reserved for

@@ -212,6 +212,8 @@ TypeSpecifierType BuiltinTypeLoc::getWrittenTypeSpec() const {
   case BuiltinType::WChar_U:
     return TST_wchar;
   // Scaffold types
+  case BuiltinType::Abit:
+    return TST_abit;
   case BuiltinType::Cbit:
     return TST_cbit; 
   case BuiltinType::Qbit:

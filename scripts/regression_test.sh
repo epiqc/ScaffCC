@@ -10,7 +10,7 @@ echo -e "==================================="
 for test_case in $ROOT/test_cases/*; do
     if [[ -d $test_case ]]; then
         $ROOT/scaffold.sh -R $test_case/*.scaffold > tmp.txt
-        python get_total_gates_line.py tmp.txt  > total_gates.txt
+        python get_total_gates_line.py *.resources  > total_gates.txt
         diff total_gates.txt $test_case/total_gates.txt
         if cmp total_gates.txt $test_case/total_gates.txt
         then

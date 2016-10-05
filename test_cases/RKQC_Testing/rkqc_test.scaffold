@@ -1,10 +1,11 @@
-rkqc reverseBits32(qint a[32]){
-    zero_to_garbage ancilla[32];
+rkqc reverseBits32(qbit a[32]){
     int i;
-    for (i=0;i<32;i++){
-//        assign_value_of_b_to_a(ancilla[32-i-1],a[i],1);
-        NOT(a[i]);
-        toffoli(a[i%4],a[i],ancilla[i]);
+    for (i=0;i<2;i++){
+		assign_value_of_0_to_a(a[0], 1);
+		assign_value_of_1_to_a(a[i], 1);
+		assign_value_of_b_to_a(a[i], a[i+1], 1);
+		a_swap_b(a[i+1],a[i],1);
+		a_eq_a_plus_b(a[i+1],a[i],1);
     }
 }
 rkqc encrypt(){

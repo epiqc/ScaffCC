@@ -387,6 +387,7 @@ llvm::DIType CGDebugInfo::CreateType(const BuiltinType *BT) {
   }
 
   // Scaffold Cbit and Qbit added to avoid warning
+  case BuiltinType::Abit:
   case BuiltinType::Cbit:
   case BuiltinType::Qbit:
   case BuiltinType::Qint:

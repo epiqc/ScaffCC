@@ -307,6 +307,7 @@ NSAPI::getNSNumberFactoryMethodKind(QualType T) {
   case BuiltinType::PseudoObject:
 
   // Scaffold: Cbit and Qbit added here since it gives warning, since there is no "default" in the switch
+  case BuiltinType::Abit:
   case BuiltinType::Cbit:
   case BuiltinType::Qbit:
   case BuiltinType::Qint:

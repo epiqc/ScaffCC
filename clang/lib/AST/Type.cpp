@@ -1523,6 +1523,7 @@ const char *BuiltinType::getName(const PrintingPolicy &Policy) const {
   case ObjCId:            return "id";
   case ObjCClass:         return "Class";
   case ObjCSel:           return "SEL";
+  case Abit:              return "abit"; // Scaffold
   case Cbit:              return "cbit"; // Scaffold
   case Qbit:              return "qbit"; // Scaffold
   case Qint:              return "qint"; // RKQC

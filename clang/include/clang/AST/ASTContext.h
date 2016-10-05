@@ -570,6 +570,7 @@ public:
   CanQualType PseudoObjectTy, ARCUnbridgedCastTy;
   CanQualType ObjCBuiltinIdTy, ObjCBuiltinClassTy, ObjCBuiltinSelTy;
   CanQualType ObjCBuiltinBoolTy;
+  CanQualType AbitTy;
   CanQualType CbitTy;
   CanQualType QbitTy;
   CanQualType QintTy;

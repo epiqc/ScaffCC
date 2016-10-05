@@ -60,6 +60,7 @@ serialization::TypeIdxFromBuiltin(const BuiltinType *BT) {
   case BuiltinType::ObjCId:     ID = PREDEF_TYPE_OBJC_ID;       break;
   case BuiltinType::ObjCClass:  ID = PREDEF_TYPE_OBJC_CLASS;    break;
   case BuiltinType::ObjCSel:    ID = PREDEF_TYPE_OBJC_SEL;      break;
+  case BuiltinType::Abit:       ID = PREDEF_TYPE_ABIT_ID;       break;
   case BuiltinType::Cbit:	    ID = PREDEF_TYPE_CBIT_ID;	    break;
   case BuiltinType::Qbit:	    ID = PREDEF_TYPE_QBIT_ID;	    break;
   case BuiltinType::Qint:       ID = PREDEF_TYPE_QINT_ID;       break;

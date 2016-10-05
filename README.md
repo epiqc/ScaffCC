@@ -171,6 +171,12 @@ included in the test cases directory. If the three tests complete with a
 Using ScaffCC 
 =============
 
+Types
+-----
+
+In programming a quantum algorithm, the Scaffold programming language now offers three distinct data types to the user: qubit, abit, and cbit. The first of these is the traditional qubit, for use in computation and throughout applications. Abit types are specifically "ancilla qubits", or those qubits that are used as intermediary steps in computation. To this end, the function afree() has been provided, which allows for ancilla bits (abits) to be freed explicitly by the programmer. This allows programmers to explicitly conserve usage of ancilla bits throughout their algorithm. The last of these is cbit, for the classical bit of information.
+
+
 Running the Compiler
 --------------------
 
@@ -205,6 +211,7 @@ To see a list of compiler options which can be passed as flags, run:
         -p   Purge all intermediate files (preserves specified output,
              but requires recompilation for any new output)
         -d   Dry-run; show all commands to be run, but do not execute
+		-s 	 Generate QX Simulator input file 
         -v   Show current ScaffCC version
 
 Sample Scripts
@@ -321,6 +328,15 @@ This section describes the apps provided with this software, in the
 10. Shor’s Factoring Algorithm: Performs factorization using the Quantum
     Fourier Transform. The app is parameterized by n, the size
     in bits of the number to factor.
+
+QX: Quantum Computer Simulator
+===================================
+
+New compatibility has been added to allow Scaffold to compile algorithms down to files with acceptable formatting to act as inputs to the QX Quantum Computer Simulator available at: 
+
+	http://qutech.nl/qx-quantum-computer-simulator/	
+
+Using the "-s" compile flag will tell Scaffold to compile the desired algorithm to flat QASM, and transform that QASM output into an acceptable format for the QX Simulator. Note: the simulator only supports up to tens of qubits at the moment (~30), and does not support specific primitive gates built into Scaffold. The QX Transform flag will emit a notification if these parameters are not satisfied, and the algorithm is unsuitable for simulation.
 
 RKQC: RevKit For Quantum Computation 
 ===================================

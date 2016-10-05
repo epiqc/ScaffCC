@@ -715,6 +715,7 @@ void MicrosoftCXXNameMangler::mangleType(const BuiltinType *T) {
   case BuiltinType::ObjCSel: Out << "PAUobjc_selector@@"; break;
 
   // Scaffold cbit & qbit added here since there is no "default" in here
+  case BuiltinType::Abit:
   case BuiltinType::Cbit:
   case BuiltinType::Qbit:
   case BuiltinType::Qint:

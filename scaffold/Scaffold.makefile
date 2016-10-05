@@ -13,6 +13,7 @@ BUILD=$(ROOT)/build/Release+Asserts
 SQCTPATH=$(ROOT)/Rotations/sqct/rotZ
 GRIDSYNTHPATH=$(ROOT)/Rotations/gridsynth/gridsynth
 ROTATIONPATH=$(GRIDSYNTHPATH) # select rotation decomposition tool
+SCRIPTSPATH=$(ROOT)/scripts/ # select rotation decomposition tool
 
 CC=$(BUILD)/bin/clang
 OPT=$(BUILD)/bin/opt
@@ -36,7 +37,6 @@ TOFF=0
 # Resource Count Estimation
 ################################
 resources: $(FILE).resources
-	@cat $(FILE).resources
 
 ################################
 # Flat QASM generation
@@ -48,7 +48,12 @@ flat: $(FILE).qasmf
 ################################
 qasm: $(FILE).qasmh
 
-.PHONY: res_count qasm flat
+################################
+# QX Simulator generation
+################################
+qc: $(FILE).qc
+
+.PHONY: resources qasm flat qc
 
 ################################
 # Intermediate targets
@@ -122,12 +127,7 @@ $(FILE)8.ll: $(FILE)7.ll
 $(FILE)9.ll: $(FILE)8.ll
 	@if [ $(RKQC) -eq 1 ]; then \
         echo "[Scaffold.makefile] Compiling RKQC Functions ..."; \
-        $(OPT) -S -load $(SCAFFOLD_LIB) -GenRKQC -filename $(FILE)8.ll $(FILE)8.ll > /dev/null 2> $(FILE).errs; \
-        cp $(FILE)8.ll_final.ll $(FILE)9.ll; \
-        rm rkqc.cpp; \
-        rm rkqc.qasm; \
-        rm main.qasm; \
-        rm $(FILE).errs; \
+        $(OPT) -S -load $(SCAFFOLD_LIB) -GenRKQC $(FILE)8.ll -o $(FILE)9.ll > /dev/null 2> $(FILE).errs; \
 	else \
 		mv $(FILE)8.ll $(FILE)9.ll; \
     fi
@@ -171,14 +171,19 @@ $(FILE)_qasm: $(FILE)_qasm.scaffold
 $(FILE).qasmf: $(FILE)_qasm
 	@./$(FILE)_qasm > $(FILE).tmp
 	@cat fdecl.out $(FILE).tmp > $(FILE).qasmf
-	@echo "[Scaffold.makefile] Flat QASM written to $(FILE).qasmf ..."    
+	@echo "[Scaffold.makefile] Flat QASM written to $(FILE).qasmf ..."
+
+$(FILE).qc: $(FILE).qasmf
+	@echo "[Scaffold.makefile] Transforming flat QASM to QX Simulator input ..."
+	@$(SHELL) $(ROOT)/scripts/qasmf2qc.sh $(FILE).qasmf
+	@echo "[Scaffold.makefile] QX Simulator input written to $(FILE).qc ..." 
 
 # purge cleans temp files
 purge:
-	@rm -f $(FILE)_merged.scaffold $(FILE)_no.scaffold $(FILE).ll $(FILE)1.ll $(FILE)1a.ll $(FILE)1b.ll $(FILE)2.ll $(FILE)3.ll $(FILE)4.ll $(FILE)5.ll $(FILE)5a.ll $(FILE)6.ll $(FILE)6tmp.ll $(FILE)7.ll $(FILE)8.ll $(FILE)9.ll $(FILE)10.ll $(FILE)11.ll $(FILE)12.ll $(FILE)tmp.ll $(FILE)_qasm $(FILE)_qasm.scaffold fdecl.out $(CFILE).ctqg $(CFILE).c $(CFILE).signals $(FILE).tmp sim_$(CFILE) $(FILE).*.qasm
+	@rm -f $(FILE)_merged.scaffold $(FILE)_no.scaffold $(FILE).ll $(FILE)1.ll $(FILE)1a.ll $(FILE)1b.ll $(FILE)2.ll $(FILE)3.ll $(FILE)4.ll $(FILE)5.ll $(FILE)5a.ll $(FILE)6.ll $(FILE)6tmp.ll $(FILE)7.ll $(FILE)8.ll $(FILE)9.ll $(FILE)10.ll $(FILE)11.ll $(FILE)12.ll $(FILE)tmp.ll $(FILE)_qasm $(FILE)_qasm.scaffold fdecl.out $(CFILE).ctqg $(CFILE).c $(CFILE).signals $(FILE).tmp sim_$(CFILE) $(FILE).*.qasm 
 
 # clean removes all completed files
 clean: purge
-	@rm -f $(FILE).resources $(FILE).qasmh $(FILE).qasmf
+	@rm -f $(FILE).resources $(FILE).qasmh $(FILE).qasmf $(FILE).qc
 
 .PHONY: clean purge

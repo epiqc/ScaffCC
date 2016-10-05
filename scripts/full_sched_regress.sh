@@ -9,7 +9,7 @@ for f in $*; do
     b=$(basename $f)
     k=$(perl -e '($n,$size,$th,$simd,$k,$d,$x) = split /\./, $ARGV[0]; print $k' ${b})
     d=$(perl -e '($n,$size,$th,$simd,$k,$d,$x) = split /\./, $ARGV[0]; print $d' ${b})
-    echo "[full_sched_regress.sh] $f: Running sched.pl ..."
+    echo "[full_sched_regress.sh] $f: Running sched.pl ... k: $k d: $d"
     #if [ ! -e ${b}.ss ]; then
     #    /usr/bin/time -f "\t%E real,\t%U user,\t%S sys:\t%C" ${DIR}/sched.pl -n ss -k $k -d $d $f -s > ${b}.ss
     #fi
@@ -30,7 +30,7 @@ for f in $*; do
     #        /usr/bin/time -f "\t%E real,\t%U user,\t%S sys:\t%C" ${DIR}/sched.pl -n lpfs -k $k -l $l -d $d $f -s -opp > ${b}.s.l${l}.lpfs
     #    fi
         if [ ! -e ${b}.rs.l${l}.lpfs ]; then
-            /usr/bin/time -f "\t%E real,\t%U user,\t%S sys:\t%C" ${DIR}/sched.pl -n lpfs -k $k -l $l -d $d $f -s -opp -refill > ${b}.rs.l${l}.lpfs
+            /usr/bin/time -f "\t%E real,\t%U user,\t%S sys:\t%C" ${DIR}/sched.pl -n lpfs -k $k -l $l -d $d $f -a -opp -refill > ${b}.rs.l${l}.lpfs
         fi
     done
     #if [ ! -e ${b}.o1.d1.s1.rcp ]; then

@@ -1,6 +1,35 @@
 -------QASM Generation Pass:
 
-module ToffoliImpl ( qbit target , qbit control1 , qbit control2 ) {
+module assign_value_of_0_to_a_i16_i32_impl ( qbit target , int size  ) {
+ 	qbit ancilla_zero_zero[1];
+	qbit ancilla_zero_garbage[1];
+	CNOT ( target , ancilla_zero_garbage[0] );
+ 	CNOT ( ancilla_zero_garbage[0] , target );
+ 	CNOT ( ancilla_zero_zero[0] , target );
+ }
+
+module assign_value_of_1_to_a_i16_i32_impl ( qbit target , int size  ) {
+ 	qbit ancilla_one_one[1];
+	qbit ancilla_zero_garbage[1];
+	CNOT ( target , ancilla_zero_garbage[0] );
+ 	CNOT ( ancilla_zero_garbage[0] , target );
+ 	CNOT ( ancilla_one_one[0] , target );
+ }
+
+module assign_value_of_b_to_a_i16_i16_i32_impl ( qbit target , qbit control ) {
+ 	qbit ancilla_zg[1];
+	CNOT ( target , ancilla_zg[0] );
+ 	CNOT ( ancilla_zg[0] , target );
+ 	CNOT ( control , target );
+ }
+
+module a_swap_b_i16_i16_i32_impl ( qbit target0 , qbit target1 ) {
+ 	CNOT ( target0 , target1 );
+ 	CNOT ( target1 , target0 );
+ 	CNOT ( target0 , target1 );
+ }
+
+module ToffoliImpl_Q_A_Q ( qbit target , qbit control1 , qbit control2 ) {
  	H ( target );
  	Tdag ( control1 );
  	T ( control2 );
@@ -20,135 +49,39 @@ module ToffoliImpl ( qbit target , qbit control1 , qbit control2 ) {
  	H ( target );
  }
 
+module a_eq_a_plus_b_i16_i16_i32_impl ( qbit target , qbit control , int size  ) {
+ 	qbit ancilla_zg[1];
+	qbit ancilla_zz[1];
+	CNOT ( target , ancilla_zg[0] );
+ 	CNOT ( control , ancilla_zz[0] );
+ 	CNOT ( target , control );
+ 	ToffoliImpl_Q_A_Q ( control , ancilla_zg[0] , target );
+ 	CNOT ( ancilla_zz[0] , ancilla_zg[0] );
+ 	CNOT ( ancilla_zz[0] , control );
+ 	CNOT ( ancilla_zz[0] , control );
+ 	CNOT ( control , ancilla_zz[0] );
+ 	CNOT ( ancilla_zz[0] , control );
+ 	CNOT ( ancilla_zg[0] , target );
+ 	CNOT ( target , ancilla_zg[0] );
+ 	CNOT ( ancilla_zg[0] , target );
+ }
+
+module reverseBits32 ( qbit* a ) {
+ 	assign_value_of_0_to_a_i16_i32_impl ( a[0] , 1 );
+ 	assign_value_of_1_to_a_i16_i32_impl ( a[0] , 1 );
+ 	assign_value_of_b_to_a_i16_i16_i32_impl ( a[0] , a[1] );
+ 	a_swap_b_i16_i16_i32_impl ( a[1] , a[0] );
+ 	a_eq_a_plus_b_i16_i16_i32_impl ( a[1] , a[0] , 1 );
+ 	assign_value_of_0_to_a_i16_i32_impl ( a[0] , 1 );
+ 	assign_value_of_1_to_a_i16_i32_impl ( a[1] , 1 );
+ 	assign_value_of_b_to_a_i16_i16_i32_impl ( a[1] , a[2] );
+ 	a_swap_b_i16_i16_i32_impl ( a[2] , a[1] );
+ 	a_eq_a_plus_b_i16_i16_i32_impl ( a[2] , a[1] , 1 );
+ }
+
 module main (  ) {
- 	qbit w0I0[1];
-	qbit w0I1[1];
-	qbit w0I2[1];
-	qbit w0I3[1];
-	qbit w0I4[1];
-	qbit w0I5[1];
-	qbit w0I6[1];
-	qbit w0I7[1];
-	qbit w0I8[1];
-	qbit w0I9[1];
-	qbit w0I10[1];
-	qbit w0I11[1];
-	qbit w0I12[1];
-	qbit w0I13[1];
-	qbit w0I14[1];
-	qbit w0I15[1];
-	qbit w0I16[1];
-	qbit w0I17[1];
-	qbit w0I18[1];
-	qbit w0I19[1];
-	qbit w0I20[1];
-	qbit w0I21[1];
-	qbit w0I22[1];
-	qbit w0I23[1];
-	qbit w0I24[1];
-	qbit w0I25[1];
-	qbit w0I26[1];
-	qbit w0I27[1];
-	qbit w0I28[1];
-	qbit w0I29[1];
-	qbit w0I30[1];
-	qbit w0I31[1];
-	qbit w32I0[1];
-	qbit w32I1[1];
-	qbit w32I2[1];
-	qbit w32I3[1];
-	qbit w32I4[1];
-	qbit w32I5[1];
-	qbit w32I6[1];
-	qbit w32I7[1];
-	qbit w32I8[1];
-	qbit w32I9[1];
-	qbit w32I10[1];
-	qbit w32I11[1];
-	qbit w32I12[1];
-	qbit w32I13[1];
-	qbit w32I14[1];
-	qbit w32I15[1];
-	qbit w32I16[1];
-	qbit w32I17[1];
-	qbit w32I18[1];
-	qbit w32I19[1];
-	qbit w32I20[1];
-	qbit w32I21[1];
-	qbit w32I22[1];
-	qbit w32I23[1];
-	qbit w32I24[1];
-	qbit w32I25[1];
-	qbit w32I26[1];
-	qbit w32I27[1];
-	qbit w32I28[1];
-	qbit w32I29[1];
-	qbit w32I30[1];
-	qbit w32I31[1];
-	X ( w0I0[0] );
- 	ToffoliImpl ( w0I0[0] , w0I0[0] , w32I0[0] );
- 	X ( w0I1[0] );
- 	ToffoliImpl ( w0I1[0] , w0I1[0] , w32I1[0] );
- 	X ( w0I2[0] );
- 	ToffoliImpl ( w0I2[0] , w0I2[0] , w32I2[0] );
- 	X ( w0I3[0] );
- 	ToffoliImpl ( w0I3[0] , w0I3[0] , w32I3[0] );
- 	X ( w0I4[0] );
- 	ToffoliImpl ( w0I0[0] , w0I4[0] , w32I4[0] );
- 	X ( w0I5[0] );
- 	ToffoliImpl ( w0I1[0] , w0I5[0] , w32I5[0] );
- 	X ( w0I6[0] );
- 	ToffoliImpl ( w0I2[0] , w0I6[0] , w32I6[0] );
- 	X ( w0I7[0] );
- 	ToffoliImpl ( w0I3[0] , w0I7[0] , w32I7[0] );
- 	X ( w0I8[0] );
- 	ToffoliImpl ( w0I0[0] , w0I8[0] , w32I8[0] );
- 	X ( w0I9[0] );
- 	ToffoliImpl ( w0I1[0] , w0I9[0] , w32I9[0] );
- 	X ( w0I10[0] );
- 	ToffoliImpl ( w0I2[0] , w0I10[0] , w32I10[0] );
- 	X ( w0I11[0] );
- 	ToffoliImpl ( w0I3[0] , w0I11[0] , w32I11[0] );
- 	X ( w0I12[0] );
- 	ToffoliImpl ( w0I0[0] , w0I12[0] , w32I12[0] );
- 	X ( w0I13[0] );
- 	ToffoliImpl ( w0I1[0] , w0I13[0] , w32I13[0] );
- 	X ( w0I14[0] );
- 	ToffoliImpl ( w0I2[0] , w0I14[0] , w32I14[0] );
- 	X ( w0I15[0] );
- 	ToffoliImpl ( w0I3[0] , w0I15[0] , w32I15[0] );
- 	X ( w0I16[0] );
- 	ToffoliImpl ( w0I0[0] , w0I16[0] , w32I16[0] );
- 	X ( w0I17[0] );
- 	ToffoliImpl ( w0I1[0] , w0I17[0] , w32I17[0] );
- 	X ( w0I18[0] );
- 	ToffoliImpl ( w0I2[0] , w0I18[0] , w32I18[0] );
- 	X ( w0I19[0] );
- 	ToffoliImpl ( w0I3[0] , w0I19[0] , w32I19[0] );
- 	X ( w0I20[0] );
- 	ToffoliImpl ( w0I0[0] , w0I20[0] , w32I20[0] );
- 	X ( w0I21[0] );
- 	ToffoliImpl ( w0I1[0] , w0I21[0] , w32I21[0] );
- 	X ( w0I22[0] );
- 	ToffoliImpl ( w0I2[0] , w0I22[0] , w32I22[0] );
- 	X ( w0I23[0] );
- 	ToffoliImpl ( w0I3[0] , w0I23[0] , w32I23[0] );
- 	X ( w0I24[0] );
- 	ToffoliImpl ( w0I0[0] , w0I24[0] , w32I24[0] );
- 	X ( w0I25[0] );
- 	ToffoliImpl ( w0I1[0] , w0I25[0] , w32I25[0] );
- 	X ( w0I26[0] );
- 	ToffoliImpl ( w0I2[0] , w0I26[0] , w32I26[0] );
- 	X ( w0I27[0] );
- 	ToffoliImpl ( w0I3[0] , w0I27[0] , w32I27[0] );
- 	X ( w0I28[0] );
- 	ToffoliImpl ( w0I0[0] , w0I28[0] , w32I28[0] );
- 	X ( w0I29[0] );
- 	ToffoliImpl ( w0I1[0] , w0I29[0] , w32I29[0] );
- 	X ( w0I30[0] );
- 	ToffoliImpl ( w0I2[0] , w0I30[0] , w32I30[0] );
- 	X ( w0I31[0] );
- 	ToffoliImpl ( w0I3[0] , w0I31[0] , w32I31[0] );
+ 	qbit h0[32];
+	reverseBits32 ( h0 );
  }
 
 --------End of QASM generation
