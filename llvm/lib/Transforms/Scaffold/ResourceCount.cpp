@@ -33,7 +33,7 @@ using namespace llvm;
 // An anonymous namespace for the pass. Things declared inside it are
 // only visible to the current file.
 namespace {
-  unsigned long long app_total_gates;
+  unsigned int app_total_gates;
   // Derived from ModulePass to count qbits in functions
   struct ResourceCount : public ModulePass {
     static char ID; // Pass identification
@@ -44,7 +44,7 @@ namespace {
       AU.addRequired<CallGraph>();    
     }
     
-    void CountFunctionResources (Function *F, std::map <Function*, unsigned long long* > FunctionResources) const {
+    void CountFunctionResources (Function *F, std::map <Function*, unsigned int* > FunctionResources) const {
       // Traverse instruction by instruction
       for (inst_iterator I = inst_begin(*F), E = inst_end(*F); I != E; ++I) {
         Instruction *Inst = &*I;                            // Grab pointer to instruction reference
@@ -140,7 +140,7 @@ namespace {
             // Resource numbers must be previously entered
             // for this call. Look them up and add to this function's numbers.
             if (FunctionResources.find(callee) != FunctionResources.end()) {
-              unsigned long long* callee_numbers = FunctionResources.find(callee)->second;
+              unsigned int* callee_numbers = FunctionResources.find(callee)->second;
 			  FunctionResources[F][14] += callee_numbers[14];
               if(callee_numbers[3] > FunctionResources[F][3] - FunctionResources[F][2])
                 FunctionResources[F][3] = FunctionResources[F][2] + callee_numbers[3];
@@ -156,8 +156,8 @@ namespace {
 
     virtual bool runOnModule (Module &M) {
       // Function* ---> Qubits | Gross Abits | Net Abits | Max Abit Width | X | Z | H | T | CNOT | Toffoli | PrepZ | MeasZ | Rz | Ry
-      std::map <Function*, unsigned long long*> FunctionResources;
-      std::map <Function*, unsigned long long> FunctionTotals;
+      std::map <Function*, unsigned int*> FunctionResources;
+      std::map <Function*, unsigned int> FunctionTotals;
   	  std::vector<Function*> callStack;
 	  app_total_gates = 0;
 
@@ -172,7 +172,7 @@ namespace {
           Function *F = (*nsccI)->getFunction();	  
           if (F && !F->isDeclaration()) {
             // dynamically create array holding gate numbers for this function
-            unsigned long long* ResourceNumbers = new unsigned long long[NCOUNTS];
+            unsigned int* ResourceNumbers = new unsigned int[NCOUNTS];
             for (int k=0; k<NCOUNTS+1; k++)
               ResourceNumbers[k] = 0;
             FunctionResources.insert(std::make_pair(F, ResourceNumbers));
@@ -184,9 +184,9 @@ namespace {
       
       // print results     
       errs() << "\tQubit\tGross A\tNet A\tWidth\tX\tZ\tH\tT\tT_dag\tS\tS_dag\tCNOT\tPrepZ\tMeasZ\n";
-      for (std::map<Function*, unsigned long long*>::iterator i = FunctionResources.begin(), e = FunctionResources.end(); i!=e; ++i) {
+      for (std::map<Function*, unsigned int*>::iterator i = FunctionResources.begin(), e = FunctionResources.end(); i!=e; ++i) {
         errs() << "Function: " << i->first->getName() << "\n";
-		unsigned long long function_total_gates = 0;
+		unsigned int function_total_gates = 0;
         for (int j=0; j<NCOUNTS; j++){
 		  if(j > 3){
           	function_total_gates += (i->second)[j];
@@ -200,7 +200,7 @@ namespace {
 	  errs() << "total_gates = "<< app_total_gates << "\n";
 
       // free memory
-      for (std::map<Function*, unsigned long long*>::iterator i = FunctionResources.begin(), e = FunctionResources.end(); i!=e; ++i)
+      for (std::map<Function*, unsigned int*>::iterator i = FunctionResources.begin(), e = FunctionResources.end(); i!=e; ++i)
         delete [] i->second;
 
 

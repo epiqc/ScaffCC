@@ -809,8 +809,11 @@ public:
         typedef GraphTraits<Inverse<BlockT*> > InvBlockTraits;
 
         // Add all of the predecessors of X to the end of the work stack...
-        TodoStack.insert(TodoStack.end(), InvBlockTraits::child_begin(X),
-                         InvBlockTraits::child_end(X));
+//        TodoStack.insert(TodoStack.end(), InvBlockTraits::child_begin(X),
+//                         InvBlockTraits::child_end(X));
+		for(typename InvBlockTraits::ChildIteratorType I = InvBlockTraits::child_begin(X); I != InvBlockTraits::child_end(X); ++I){
+            TodoStack.push_back(*I);
+        }
       }
     }
 

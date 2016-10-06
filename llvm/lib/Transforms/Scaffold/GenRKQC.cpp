@@ -89,7 +89,7 @@ namespace {
 					ReturnInst::Create(getGlobalContext(), 0, BB);
 				}
 				std::vector<Value*>  Args(2);
-				for (int i=0; i<3; i++) Args[i] = I.getArgOperand(i);
+				for (int i=0; i<2; i++) Args[i] = I.getArgOperand(i);
 				BasicBlock::iterator ii(&I);
 				ReplaceInstWithInst(I.getParent()->getInstList(), ii,
 					CallInst::Create(RKQC_Func, ArrayRef<Value*>(Args)));

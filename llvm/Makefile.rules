@@ -1205,10 +1205,10 @@ LibName.BCA:= $(LibDir)/lib$(LIBRARYNAME).bca
 #---------------------------------------------------------
 ifdef SHARED_LIBRARY
 
-all-local:: $(LibName.SO)
+all-local:: $(LibName.dylib)
 
 ifdef EXPORTED_SYMBOL_FILE
-$(LibName.SO): $(NativeExportsFile)
+$(LibName.dylib): $(NativeExportsFile)
 endif
 
 ifdef LINK_LIBS_IN_SHARED
@@ -1218,13 +1218,13 @@ SharedLinkOptions := $(LoadableModuleOptions) $(SharedLinkOptions)
 else
 SharedLibKindMessage := "Shared Library"
 endif
-$(LibName.SO): $(ObjectsO) $(ProjLibsPaths) $(LLVMLibsPaths) $(SharedLibDir)/.dir
+$(LibName.dylib): $(ObjectsO) $(ProjLibsPaths) $(LLVMLibsPaths) $(SharedLibDir)/.dir
 	$(Echo) Linking $(BuildMode) $(SharedLibKindMessage) \
 	  $(notdir $@)
 	$(Verb) $(Link) $(SharedLinkOptions) -o $@ $(ObjectsO) \
 	  $(ProjLibsOptions) $(LLVMLibsOptions) $(LIBS)
 else
-$(LibName.SO): $(ObjectsO) $(SharedLibDir)/.dir
+$(LibName.dylib): $(ObjectsO) $(SharedLibDir)/.dir
 	$(Echo) Linking $(BuildMode) Shared Library $(notdir $@)
 	$(Verb) $(Link) $(SharedLinkOptions) -o $@ $(ObjectsO)
 endif

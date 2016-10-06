@@ -8,7 +8,8 @@ FILE=""
 CFILE=""
 DIRNAME=""
 
-BUILD=$(ROOT)/build/Release+Asserts
+#BUILD=$(ROOT)/build/Release+Asserts
+BUILD=$(ROOT)/build
 
 SQCTPATH=$(ROOT)/Rotations/sqct/rotZ
 GRIDSYNTHPATH=$(ROOT)/Rotations/gridsynth/gridsynth
@@ -25,7 +26,7 @@ ifeq ($(UNAME_S),Linux)
 SCAFFOLD_LIB=$(ROOT)/build/Release+Asserts/lib/Scaffold.so
 endif
 ifeq ($(UNAME_S),Darwin)
-SCAFFOLD_LIB=$(ROOT)/build/Release+Asserts/lib/Scaffold.dylib
+SCAFFOLD_LIB=$(ROOT)/build/lib/LLVMScaffold.dylib
 endif
 
 

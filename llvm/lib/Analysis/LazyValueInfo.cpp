@@ -974,7 +974,10 @@ void LazyValueInfoCache::threadEdge(BasicBlock *PredBB, BasicBlock *OldSucc,
 
     if (!changed) continue;
     
-    worklist.insert(worklist.end(), succ_begin(ToUpdate), succ_end(ToUpdate));
+//    worklist.insert(worklist.end(), succ_begin(ToUpdate), succ_end(ToUpdate));
+	for(SuccIterator<llvm::TerminatorInst *, llvm::BasicBlock> it = succ_begin(ToUpdate); it != succ_end(ToUpdate); ++it){
+        worklist.push_back(*it);
+    }
   }
 }
 
