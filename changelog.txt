@@ -1,5 +1,6 @@
 2016-10-01:
 	Release version -v2.0
+	Added OSX Build - available on ScaffCC_OSX branch
 	New data type abit added - representation of ancilla bits
 	New function afree() added - usage: free ancilla bits and conserve usage
 	throughout algorithms

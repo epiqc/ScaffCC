@@ -19,7 +19,7 @@ ScaffCC is currently in a beta release. Specifically, the release details are:
 
 -   Version 2.0
 
--   Release Date: July 10, 2016
+-   Release Date: October, 2016
 
 Supported Operating Systems
 ---------------------------
@@ -29,6 +29,8 @@ ScaffCC currently offers support for the following operating systems:
 -   “Ubuntu"
 
 -   “Red Hat"
+
+-	"OS X"
 
 This list will continue to grow in the future!
 
@@ -40,9 +42,13 @@ Getting ScaffCC
 
 1.  Go to https://github.com/epiqc/ScaffCC
 
-2.  Download the repository:
+2.  For the Unix build, download the repository:
 
            git clone https://github.com/epiqc/ScaffCC.git [dir]
+
+3.	For the OS X build, download this repository:
+
+           git clone -b ScaffCC_OSX https://github.com/epiqc/ScaffCC.git [dir]
 
 Building ScaffCC
 ----------------
