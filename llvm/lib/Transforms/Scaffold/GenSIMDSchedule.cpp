@@ -98,11 +98,12 @@ namespace {
     int argNum;
     bool isQbit;
     bool isCbit;
+    bool isAbit;
     bool isUndef;
     bool isPtr;
     int valOrIndex; //Value if not Qbit, Index if Qbit & not a Ptr
     double angle;
-    qGateArg(): argPtr(NULL), argNum(-1), isQbit(false), isCbit(false), isUndef(false), isPtr(false), valOrIndex(-1), angle(0.0){ }
+    qGateArg(): argPtr(NULL), argNum(-1), isQbit(false), isCbit(false), isAbit(false), isUndef(false), isPtr(false), valOrIndex(-1), angle(0.0){ }
   };
   
 struct qArgInfo{
@@ -235,6 +236,7 @@ struct qGate{
       errs() << "  Arg Num: "<<qg.argNum<<"\n"
              << "  isUndef: "<<qg.isUndef
              << "  isQbit: "<<qg.isQbit
+             << "  isAbit: "<<qg.isAbit
              << "  isCbit: "<<qg.isCbit
              << "  isPtr: "<<qg.isPtr << "\n"
              << "  Value or Index: "<<qg.valOrIndex<<"\n";
@@ -296,6 +298,11 @@ void GenSIMDSched::getFunctionArguments(Function* F)
           vectQbit.push_back(ait);
           funcArgs[argName] = argNum;
         }
+		else if (elementType->isIntegerTy(8)){
+		  tmpQArg.isAbit = true;
+		  vectQbit.push_back(ait);
+		  funcArgs[argName] = argNum;
+		}
       }
       else if (argType->isIntegerTy(16)){ //qbit
         tmpQArg.isQbit = true;
@@ -312,7 +319,11 @@ void GenSIMDSched::getFunctionArguments(Function* F)
         vectQbit.push_back(ait);
           funcArgs[argName] = argNum;
       }
-      
+      else if (argType->isIntegerTy(8)){
+		  tmpQArg.isAbit = true;
+		  vectQbit.push_back(ait);
+		  funcArgs[argName] = argNum;
+		}
     }
 }
 
@@ -354,7 +365,7 @@ bool GenSIMDSched::backtraceOperand(Value* opd, int opOrIndex)
             unsigned numOps = pInst->getNumOperands();
             backtraceOperand(pInst->getOperand(0),0);
 
-            if(tmpDepQbit[0].isQbit && !(tmpDepQbit[0].isPtr)){     
+            if((tmpDepQbit[0].isQbit||tmpDepQbit[0].isAbit) && !(tmpDepQbit[0].isPtr)){     
               //NOTE: getelemptr instruction can have multiple indices. consider last operand as desired index for qubit. Check if this is true for all.
               backtraceOperand(pInst->getOperand(numOps-1),1);
               
@@ -460,6 +471,19 @@ void GenSIMDSched::analyzeAllocInst(Function* F, Instruction* pInst){
         funcQbits[AI->getName()]=tmpMap;
 
       }
+
+	  if (elementType->isIntegerTy(8)){
+		vectQbit.push_back(AI);
+		tmpQArg.isAbit = true;
+		tmpQArg.argPtr = AI;
+		tmpQArg.valOrIndex = arraySize;
+
+		map<int,uint64_t> tmpMap; //add qbit to funcQbits
+        tmpMap[-1] = 0; //entry for entire array ops
+        tmpMap[-2] = 0; //entry for max
+        funcQbits[AI->getName()]=tmpMap;
+	  }
+
       
       if (elementType->isIntegerTy(1)){
         vectQbit.push_back(AI); //Cbit added here
@@ -1241,11 +1265,18 @@ void GenSIMDSched::analyzeCallInst(Function* F, Instruction* pInst){
             tmpQGateArg.isQbit = true;
           if(argElemType->isIntegerTy(1))
             tmpQGateArg.isCbit = true;
+		  if(argElemType->isIntegerTy(8))
+            tmpQGateArg.isAbit = true;
+
         }
         else if(argType->isIntegerTy(16)){
           tmpQGateArg.isQbit = true;
           tmpQGateArg.valOrIndex = 0;    
         }               
+		else if(argType->isIntegerTy(8)){
+          tmpQGateArg.isAbit = true;
+          tmpQGateArg.valOrIndex = 0;    
+        }  
         else if(argType->isIntegerTy(1)){
           tmpQGateArg.isCbit = true;
           tmpQGateArg.valOrIndex = 0;    
@@ -1263,7 +1294,7 @@ void GenSIMDSched::analyzeCallInst(Function* F, Instruction* pInst){
         }               
         
         //if(tmpQGateArg.isQbit || tmpQGateArg.isCbit){
-        if(tmpQGateArg.isQbit){
+        if(tmpQGateArg.isQbit || tmpQGateArg.isAbit){
             tmpDepQbit.push_back(tmpQGateArg);  
             tracked_all_operands &= backtraceOperand(CI->getArgOperand(iop),0);
         }
