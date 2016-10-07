@@ -128,7 +128,7 @@ of your system (“yum" on Red Hat or “apt-get" on Ubuntu).
 
 6.  Python 2.7 (or later)
 
-7.  CMake (For Integrating RKQC Functionality)
+7.  CMake (For OS X build)
 
     -   “Ubuntu"
 
