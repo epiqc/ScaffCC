@@ -119,7 +119,8 @@ Clang: llvm build
 	@cd llvm/tools && /bin/rm -f clang && /bin/ln -s ../../clang;
 	@cd clang && /bin/rm -f build && /bin/ln -s ../build;
 	@if [ -z $(USE_GCC) ]; then \
-		cd build && cmake ../llvm/ && make ; \
+		cd build && cmake ../llvm/ ;\
+		mv ../Intrinsics.gen include/llvm/ && make ; \
 	else \
 		mkdir -p build && cd build && ../llvm/configure --disable-debug-symbols CC=gcc CXX=g++ && make ; fi
 	@if [ -z `echo ${PATH} | grep ${PWD}/Release+Asserts/bin` ]; then \
