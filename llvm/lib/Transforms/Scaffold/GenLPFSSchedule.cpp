@@ -2227,6 +2227,7 @@ bool GenLPFSSched::runOnModule (Module &M) {
                 if(METRICS)
                     print_schedule_metrics(F,op_count);
                  if(FULL_SCHED)
+                    print_schedule_metrics(F,op_count);
                     print_schedule(F,op_count);
                  if(MOVES_SCHED)
                     print_moves_schedule(F,op_count);
