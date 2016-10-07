@@ -120,7 +120,7 @@ Clang: llvm build
 	@cd clang && /bin/rm -f build && /bin/ln -s ../build;
 	@if [ -z $(USE_GCC) ]; then \
 		cd build && cmake ../llvm/ ;\
-		mv ../Intrinsics.gen include/llvm/ && make ; \
+		cp ../llvm/Intrinsics.gen include/llvm/ && make ; \
 	else \
 		mkdir -p build && cd build && ../llvm/configure --disable-debug-symbols CC=gcc CXX=g++ && make ; fi
 	@if [ -z `echo ${PATH} | grep ${PWD}/Release+Asserts/bin` ]; then \

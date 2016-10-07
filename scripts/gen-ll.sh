@@ -2,8 +2,8 @@
 
 DIR=$(dirname $0)
 ROOT=$DIR/..
-OPT=$ROOT/build/Release+Asserts/bin/opt
-SCAF=$ROOT/build/Release+Asserts/lib/Scaffold.so
+OPT=$ROOT/build/bin/opt
+SCAF=$ROOT/build/lib/LLVMScaffold.dylib
 
 # Create directory to put all byproduct and output files in
 for f in $*; do

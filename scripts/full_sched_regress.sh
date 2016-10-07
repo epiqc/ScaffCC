@@ -2,8 +2,8 @@
 
 DIR=$(dirname $0)
 ROOT=$DIR/..
-OPT=$ROOT/build/Release+Asserts/bin/opt
-SCAF=$ROOT/build/Release+Asserts/lib/Scaffold.so
+OPT=$ROOT/build/bin/opt
+SCAF=$ROOT/build/lib/LLVMScaffold.dylib
 
 for f in $*; do
     b=$(basename $f)
@@ -30,7 +30,7 @@ for f in $*; do
     #        /usr/bin/time -f "\t%E real,\t%U user,\t%S sys:\t%C" ${DIR}/sched.pl -n lpfs -k $k -l $l -d $d $f -s -opp > ${b}.s.l${l}.lpfs
     #    fi
         if [ ! -e ${b}.rs.l${l}.lpfs ]; then
-            /usr/bin/time -f "\t%E real,\t%U user,\t%S sys:\t%C" ${DIR}/sched.pl -n lpfs -k $k -l $l -d $d $f -a -opp -refill > ${b}.rs.l${l}.lpfs
+            ${DIR}/sched.pl -n lpfs -k $k -l $l -d $d $f -a -opp -refill > ${b}.rs.l${l}.lpfs
         fi
     done
     #if [ ! -e ${b}.o1.d1.s1.rcp ]; then

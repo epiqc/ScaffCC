@@ -14,23 +14,23 @@ for test_case in $ROOT/test_cases/*; do
         diff total_gates.txt $test_case/total_gates.txt
         if cmp total_gates.txt $test_case/total_gates.txt
         then
-            echo -e "[$test_case] Generating Resource Estimate \e[32mSucceeded\e[39m"
+            echo -e "[$test_case] Generating Resource Estimate \033[32mSucceeded\033[0m";
         else
-            echo -e "[$test_case] Generating Resource Estimate \e[31mFailed\e[39m"
+            echo -e "[$test_case] Generating Resource Estimate \033[31mFailed\033[0m"
         fi
         $ROOT/scaffold.sh -q -R $test_case/*.scaffold
         if cmp *.qasmh $test_case/*.qasmh
         then
-            echo -e "[$test_case] Generating QASM \e[32mSucceeded\e[39m"
+            echo -e "[$test_case] Generating QASM \033[32mSucceeded\033[0m"
         else
-            echo -e "[$test_case] Generating QASM \e[31mFailed\e[39m"
+            echo -e "[$test_case] Generating QASM \033[31mFailed\033[0m"
         fi
         $ROOT/scaffold.sh -f -R $test_case/*.scaffold 
         if cmp *.qasmf $test_case/*.qasmf
         then
-            echo -e "[$test_case] Generating Flattened QASM \e[32mSucceeded\e[39m"
+            echo -e "[$test_case] Generating Flattened QASM \033[32mSucceeded\033[0m"
         else
-            echo -e "[$test_case] Generating Flattened QASM \e[31mFailed\e[39m"
+            echo -e "[$test_case] Generating Flattened QASM \033[31mFailed\033[0m"
         fi
         $ROOT/scaffold.sh -c $test_case/*.scaffold
         rm -rf tmp.txt

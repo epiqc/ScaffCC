@@ -682,8 +682,27 @@ uint64_t GenSIMDSchedCG::get_ts_to_schedule_leaf(Function* F, uint64_t ts, Funct
   int funcIndex = -1;
 
   assert(funcToSched->getName().str().find("llvm.")!=string::npos &&  "Non-Intrinsic Func Found in Leaf Function"); 
+  std::string intrinsic_overloaded_name = funcToSched->getName().str();
   
-  map<string, int>::iterator gidx = gate_index.find(funcToSched->getName().str().substr(5));
+  if(intrinsic_overloaded_name.find("CNOT.i") != string::npos) intrinsic_overloaded_name = "CNOT";
+  else if(intrinsic_overloaded_name.find("NOT.i") != string::npos) intrinsic_overloaded_name = "X";
+  else if(intrinsic_overloaded_name.find("Toffoli.i") != string::npos) intrinsic_overloaded_name = "Toffoli";
+  else if(intrinsic_overloaded_name.find("MeasX.") != string::npos) intrinsic_overloaded_name = "MeasX";
+  else if(intrinsic_overloaded_name.find("MeasZ.") != string::npos) intrinsic_overloaded_name = "MeasZ";
+  else if(intrinsic_overloaded_name.find("H.i") != string::npos) intrinsic_overloaded_name = "H";
+  else if(intrinsic_overloaded_name.find("Fredkin.i") != string::npos) intrinsic_overloaded_name = "Fredkin";
+  else if(intrinsic_overloaded_name.find("PrepX.") != string::npos) intrinsic_overloaded_name = "PrepX";
+  else if(intrinsic_overloaded_name.find("PrepZ.") != string::npos) intrinsic_overloaded_name = "PrepZ";
+  else if(intrinsic_overloaded_name.substr(0,2) == "Rz") intrinsic_overloaded_name = "Rz";
+  else if(intrinsic_overloaded_name.find("S.") != string::npos) intrinsic_overloaded_name = "S";
+  else if(intrinsic_overloaded_name.find("T.") != string::npos) intrinsic_overloaded_name = "T";
+  else if(intrinsic_overloaded_name.find("Sdag.") != string::npos) intrinsic_overloaded_name = "Sdag";
+  else if(intrinsic_overloaded_name.find("Tdag.") != string::npos) intrinsic_overloaded_name = "Tdag";
+  else if(intrinsic_overloaded_name.find("X.") != string::npos) intrinsic_overloaded_name = "X";
+  else if(intrinsic_overloaded_name.find("Z.") != string::npos) intrinsic_overloaded_name = "Z";
+
+
+  map<string, int>::iterator gidx = gate_index.find(intrinsic_overloaded_name);
   assert(gidx!=gate_index.end() && "No Gate Index Found for this Intrinsic Function");
   funcIndex = (*gidx).second;
 
