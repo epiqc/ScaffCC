@@ -598,6 +598,8 @@ void USRGenerator::VisitType(QualType T) {
           c = 'O'; break;
         case BuiltinType::ObjCSel:
           c = 'e'; break;
+        case BuiltinType::Abit: // Scaffold
+          c = 'a'; break;
         case BuiltinType::Cbit: // Scaffold type
           c = 'B'; break;  
         case BuiltinType::Qbit: // Scaffold type

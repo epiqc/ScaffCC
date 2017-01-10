@@ -93,6 +93,9 @@ UNSIGNED_TYPE(ULongLong, UnsignedLongLongTy)
 // '__uint128_t'
 UNSIGNED_TYPE(UInt128, UnsignedInt128Ty)
 
+// 'abit' in Scaffold (added similar to bool)
+UNSIGNED_TYPE(Abit, AbitTy)
+
 // 'cbit' in Scaffold (added similar to bool)
 UNSIGNED_TYPE(Cbit, CbitTy)
 

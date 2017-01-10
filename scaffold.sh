@@ -9,18 +9,19 @@ if [ $(echo $PATH | grep ${RKQC_PATH} | wc -l) -eq 0 ]; then
 fi
 
 function show_help {
-    echo "Usage: $0 [-hv] [-rqfRFcpd] [-L #] <filename>.scaffold"
+    echo "Usage: $0 [-hv] [-rqfRFcpds] [-L #] <filename>.scaffold"
     echo "    -r   Generate resource estimate (default)"
     echo "    -q   Generate QASM"
     echo "    -f   Generate flattened QASM"
     echo "    -R   Disable rotation decomposition"
     echo "    -T   Disable Toffoli decomposition"    
-	  echo "    -l   Levels of recursion to run (default=1)"
+	echo "    -l   Levels of recursion to run (default=1)"
     echo "    -F   Force running all steps"
     echo "    -c   Clean all files (no other actions)"
     echo "    -p   Purge all intermediate files (preserves specified output,"
     echo "         but requires recompilation for any new output)"
     echo "    -d   Dry-run; show all commands to be run, but do not execute"
+    echo "    -s   Generate QX Simulator input file"  
     echo "    -v   Show current Scaffold version information" 
 }
 
@@ -38,8 +39,10 @@ purge=0
 res=0
 rot=1
 toff=1
+flat=0
+qc=0
 targets=""
-while getopts "h?vcdfFpqrRTl:" opt; do
+while getopts "h?vcdfsFpqrRTl:" opt; do
     case "$opt" in
     h|\?)
         show_help
@@ -55,8 +58,8 @@ while getopts "h?vcdfFpqrRTl:" opt; do
 		;;
     F) force=1
         ;;
-    f) targets="${targets} flat"
-        ;;
+    f) flat=1
+		;;
     p) purge=1
         ;;
     q) targets="${targets} qasm"
@@ -67,12 +70,22 @@ while getopts "h?vcdfFpqrRTl:" opt; do
         ;;
     T) toff=0
         ;;        
+	s) qc=1
+		;;
     l) targets="${targets} SQCT_LEVELS=${OPTARG}"
         ;;
     esac
 done
 shift $((OPTIND-1))
 [ "$1" = "--" ] && shift
+
+if [ ${flat} -eq 1 ]; then
+	targets="${targets} flat"
+fi
+
+if [ ${qc} -eq 1 ]; then
+	targets="${targets} qc"
+fi
 
 # Put resources at the end so it is easy to read
 if [ ${res} -eq 1 ]; then

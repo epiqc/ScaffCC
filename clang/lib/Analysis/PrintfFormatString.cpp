@@ -375,6 +375,7 @@ bool PrintfSpecifier::fixType(QualType QT, const LangOptions &LangOpt,
   case BuiltinType::Int128:
   case BuiltinType::Half:
   // Scaffold's types
+  case BuiltinType::Abit:
   case BuiltinType::Cbit:
   case BuiltinType::Qbit:
   case BuiltinType::Qint:

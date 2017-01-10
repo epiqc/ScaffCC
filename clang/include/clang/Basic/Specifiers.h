@@ -63,6 +63,7 @@ namespace clang {
     TST_error,         // erroneous type
 
     // Scaffold additions
+    TST_abit,
     TST_cbit,
     TST_qbit,
     TST_qstruct,

@@ -140,6 +140,7 @@ def llvm_v4f64_ty      : LLVMType<v4f64>;    //  4 x double
 def llvm_vararg_ty     : LLVMType<isVoid>;   // this means vararg here
 
 // Scaffold
+def llvm_abit_ty      : LLVMType<i8>;
 def llvm_cbit_ty      : LLVMType<i1>;      //  
 def llvm_qbit_ty      : LLVMType<i16>;      //  
 
@@ -184,39 +185,37 @@ class GCCBuiltin<string name> {
 }
 
 // Scaffold
-def int_CNOT : Intrinsic<[], [llvm_qbit_ty, llvm_qbit_ty], [], "llvm.CNOT">;
-def int_X : Intrinsic<[], [llvm_qbit_ty], [], "llvm.X">;        
-def int_Y : Intrinsic<[], [llvm_qbit_ty], [], "llvm.Y">;        
-def int_Z : Intrinsic<[], [llvm_qbit_ty], [], "llvm.Z">;        
-def int_H : Intrinsic<[], [llvm_qbit_ty], [], "llvm.H">;        
-def int_T : Intrinsic<[], [llvm_qbit_ty], [], "llvm.T">;        
-def int_Tdag : Intrinsic<[], [llvm_qbit_ty], [], "llvm.Tdag">;        
-def int_S : Intrinsic<[], [llvm_qbit_ty], [], "llvm.S">;        
-def int_Sdag : Intrinsic<[], [llvm_qbit_ty], [], "llvm.Sdag">;        
-def int_Rx : Intrinsic<[], [llvm_qbit_ty, llvm_double_ty], [], "llvm.Rx">;        
-def int_Ry : Intrinsic<[], [llvm_qbit_ty, llvm_double_ty], [], "llvm.Ry">;        
-def int_Rz : Intrinsic<[], [llvm_qbit_ty, llvm_double_ty], [], "llvm.Rz">;        
-def int_PrepX : Intrinsic<[], [llvm_qbit_ty, llvm_i32_ty], [], "llvm.PrepX">;        
-def int_PrepZ : Intrinsic<[], [llvm_qbit_ty, llvm_i32_ty], [], "llvm.PrepZ">;        
-def int_MeasX : Intrinsic<[llvm_cbit_ty], [llvm_qbit_ty], [], "llvm.MeasX">;
-def int_MeasZ : Intrinsic<[llvm_cbit_ty], [llvm_qbit_ty], [], "llvm.MeasZ">;
-def int_Toffoli : Intrinsic<[], [llvm_qbit_ty, llvm_qbit_ty, llvm_qbit_ty], [], "llvm.Toffoli">;        
-def int_Fredkin : Intrinsic<[], [llvm_qbit_ty, llvm_qbit_ty, llvm_qbit_ty], [], "llvm.Fredkin">;        
+def int_CNOT : Intrinsic<[], [llvm_anyint_ty, llvm_anyint_ty], [], "llvm.CNOT">;
+def int_X : Intrinsic<[], [llvm_anyint_ty], [], "llvm.X">;        
+def int_Y : Intrinsic<[], [llvm_anyint_ty], [], "llvm.Y">;        
+def int_Z : Intrinsic<[], [llvm_anyint_ty], [], "llvm.Z">;        
+def int_H : Intrinsic<[], [llvm_anyint_ty], [], "llvm.H">;        
+def int_T : Intrinsic<[], [llvm_anyint_ty], [], "llvm.T">;        
+def int_Tdag : Intrinsic<[], [llvm_anyint_ty], [], "llvm.Tdag">;        
+def int_S : Intrinsic<[], [llvm_anyint_ty], [], "llvm.S">;        
+def int_Sdag : Intrinsic<[], [llvm_anyint_ty], [], "llvm.Sdag">;        
+def int_Rx : Intrinsic<[], [llvm_anyint_ty, llvm_double_ty], [], "llvm.Rx">;        
+def int_Ry : Intrinsic<[], [llvm_anyint_ty, llvm_double_ty], [], "llvm.Ry">;        
+def int_Rz : Intrinsic<[], [llvm_anyint_ty, llvm_double_ty], [], "llvm.Rz">;        
+def int_PrepX : Intrinsic<[], [llvm_anyint_ty, llvm_i32_ty], [], "llvm.PrepX">;        
+def int_PrepZ : Intrinsic<[], [llvm_anyint_ty, llvm_i32_ty], [], "llvm.PrepZ">;        
+def int_MeasX : Intrinsic<[llvm_cbit_ty], [llvm_anyint_ty], [], "llvm.MeasX">;
+def int_MeasZ : Intrinsic<[llvm_cbit_ty], [llvm_anyint_ty], [], "llvm.MeasZ">;
+def int_Toffoli : Intrinsic<[], [llvm_anyint_ty, llvm_anyint_ty, llvm_anyint_ty], [], "llvm.Toffoli">;        
+def int_Fredkin : Intrinsic<[], [llvm_anyint_ty, llvm_anyint_ty, llvm_anyint_ty], [], "llvm.Fredkin">;        
 
 // RKQC
-def int_cnot : Intrinsic<[], [rkqc_qint_ty, rkqc_qint_ty], [], "llvm.rkqc.cnot">;
-def int_NOT : Intrinsic<[], [rkqc_qint_ty], [], "llvm.rkqc.NOT">;        
-def int_toffoli : Intrinsic<[], [rkqc_qint_ty, rkqc_qint_ty, rkqc_qint_ty], [], "llvm.rkqc.toffoli">;        
+def int_cnot : Intrinsic<[], [llvm_anyint_ty, llvm_anyint_ty], [], "llvm.rkqc.cnot">;
+def int_NOT : Intrinsic<[], [llvm_anyint_ty], [], "llvm.rkqc.NOT">;        
+def int_toffoli : Intrinsic<[], [llvm_anyint_ty, llvm_anyint_ty, llvm_anyint_ty], [], "llvm.rkqc.toffoli">;        
 
-def int_a_swap_b : Intrinsic<[], [rkqc_qint_ty, rkqc_qint_ty, llvm_i32_ty], [], "llvm.rkqc.a_swap_b">;
-def int_a_eq_a_plus_b : Intrinsic<[], [rkqc_qint_ty, rkqc_qint_ty, llvm_i32_ty], [], "llvm.rkqc.a_eq_a_plus_b">;
-def int_a_eq_a_minus_b : Intrinsic<[], [rkqc_qint_ty, rkqc_qint_ty, llvm_i32_ty], [], "llvm.rkqc.a_eq_a_minus_b">;
-def int_a_eq_a_plus_b_times_c : Intrinsic<[], [rkqc_qint_ty, rkqc_qint_ty, rkqc_qint_ty, llvm_i32_ty], [], "llvm.rkqc.a_eq_a_plus_b_times_c">;
-def int_assign_value_of_b_to_a : Intrinsic<[], [rkqc_qint_ty, rkqc_qint_ty, llvm_i32_ty], [], "llvm.rkqc.assign_value_of_b_to_a">;
-def int_assign_value_of_int_to_a : Intrinsic<[], [rkqc_qint_ty, llvm_i32_ty, llvm_i32_ty], [], "llvm.rkqc.assign_value_of_int_to_a">;
-
-
-
+def int_a_swap_b : Intrinsic<[], [llvm_anyint_ty, llvm_anyint_ty, llvm_i32_ty], [], "llvm.rkqc.a_swap_b">;
+def int_a_eq_a_plus_b : Intrinsic<[], [llvm_anyint_ty, llvm_anyint_ty, llvm_i32_ty], [], "llvm.rkqc.a_eq_a_plus_b">;
+def int_a_eq_a_minus_b : Intrinsic<[], [llvm_anyint_ty, llvm_anyint_ty, llvm_i32_ty], [], "llvm.rkqc.a_eq_a_minus_b">;
+def int_a_eq_a_plus_b_times_c : Intrinsic<[], [llvm_anyint_ty, llvm_anyint_ty, llvm_anyint_ty, llvm_i32_ty], [], "llvm.rkqc.a_eq_a_plus_b_times_c">;
+def int_assign_value_of_b_to_a : Intrinsic<[], [llvm_anyint_ty, llvm_anyint_ty, llvm_i32_ty], [], "llvm.rkqc.assign_value_of_b_to_a">;
+def int_assign_value_of_0_to_a : Intrinsic<[], [llvm_anyint_ty, llvm_i32_ty], [], "llvm.rkqc.assign_value_of_0_to_a">;
+def int_assign_value_of_1_to_a : Intrinsic<[], [llvm_anyint_ty, llvm_i32_ty], [], "llvm.rkqc.assign_value_of_1_to_a">;
 
 
 

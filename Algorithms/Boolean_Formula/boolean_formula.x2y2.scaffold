@@ -22340,7 +22340,7 @@ module EXP_U(int power, qbit ctrl[1], qbit pos[width], qbit leaf[1], qbit parale
 /* init_r & init_b are runtime inputs of the program */
 //int main (qbit init_r[s], qbit init_b[s]){
 
-int main (int argc, char** argv){
+int main (){
 	int i;
 	qbit a[t];
   //qstruct B_qstruct b;

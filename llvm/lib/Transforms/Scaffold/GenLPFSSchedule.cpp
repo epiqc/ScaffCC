@@ -74,7 +74,7 @@ LOCAL_WINDOW("local_W", cl::init(10), cl::Hidden,
   cl::desc("Look-ahead window parameter for local mem"));
 
 static cl::opt<unsigned>
-METRICS("metrics", cl::init(1), cl::Hidden,
+METRICS("metrics", cl::init(0), cl::Hidden,
   cl::desc("Print Metrics"));
 
 static cl::opt<unsigned>
@@ -247,7 +247,6 @@ struct move{
     int ots; //operating time steps
     int simds;
     int tgates_cnt; //tgates
-    int max_ts; //number of real timesteps
     multimap<int, move> move_schedule; //all the instructions in a given simd region
     multimap<int, move> local_move_schedule; //all the instructions in a given simd region
     int mts; //move time steps
@@ -789,7 +788,6 @@ void GenLPFSSched::sched_op(Instruction* currentOp, int timeStep, int simd){
         if(((*mapCalls.find(currentOp)).second.name.qFunc->getName() == "llvm.T")||((*mapCalls.find(currentOp)).second.name.qFunc->getName() == "llvm.Tdag" )) { 
             tgates_cnt++;
         }
-        if(timeStep > max_ts) max_ts = timeStep;
 
 //        errs() << "scheduled! \n";
 //        errs() << "Added to path " << currentOp << " at timestep " << timeStep << " in region " << simd << " || " << (*mapCalls.find(currentOp)).second.simd << "\n";
@@ -1632,16 +1630,14 @@ void GenLPFSSched::print_schedule_metrics(Function* F, int op_count){
         mts++;
     }
 
-    errs() << "SIMDs = " << simds << "\n";
-    errs() << "ts = " << (ots - mts) + (mts * 5) << "\n";
-    errs() << "ots = " << ots << "\n";
-    errs() << "mts = " << mts << "\n";
-    errs() << "moves = " << bmoves_count + moves_count << "\n";
-    errs() << "tgates = " << tgates_cnt << "\n";
     errs() << "ops = " << op_count << "\n";
     errs() << "tmoves = " << moves_count << "\n";
     errs() << "bmoves = " << bmoves_count << "\n";
-    errs() << "==================================================================\n";
+    errs() << "ots = " << ots << "\n";
+    errs() << "mts = " << mts << "\n";
+    errs() << "ts = " << (ots - mts) + (mts * 5) << "\n";
+    errs() << "SIMDs = " << simds << "\n";
+    errs() << "tgates = " << tgates_cnt << "\n";
      
 }
 
@@ -2203,7 +2199,6 @@ bool GenLPFSSched::runOnModule (Module &M) {
         ots = 0;    
         simds = 0; 
         tgates_cnt = 0;   
-        max_ts = 0;
 
         getFunctionArguments(F);
 
@@ -2232,6 +2227,7 @@ bool GenLPFSSched::runOnModule (Module &M) {
                 if(METRICS)
                     print_schedule_metrics(F,op_count);
                  if(FULL_SCHED)
+                    print_schedule_metrics(F,op_count);
                     print_schedule(F,op_count);
                  if(MOVES_SCHED)
                     print_moves_schedule(F,op_count);

@@ -107,15 +107,16 @@ BUILTIN(Toffoli , "vqqq"  , "")
 BUILTIN(Fredkin , "vqqq"  , "")
 
 // RKQC builtin gates:
-BUILTIN(cnot , "vyy"  , "")
-BUILTIN(toffoli , "vyyy" , "")
-BUILTIN(NOT  , "vy" , "")
-BUILTIN(assign_value_of_b_to_a  , "vyyi" , "")
-BUILTIN(assign_value_of_int_to_a  , "vyii" , "")
-BUILTIN(a_eq_a_plus_b  , "vyyi" , "")
-BUILTIN(a_eq_a_minus_b  , "vyyi" , "")
-BUILTIN(a_eq_a_plus_b_times_c  , "vyyyi" , "")
-BUILTIN(a_swap_b  , "vyyi" , "")
+BUILTIN(cnot , "vqq"  , "")
+BUILTIN(toffoli , "vqqq" , "")
+BUILTIN(NOT  , "vq" , "")
+BUILTIN(assign_value_of_b_to_a  , "vqqi" , "")
+BUILTIN(assign_value_of_0_to_a  , "vqi" , "")
+BUILTIN(assign_value_of_1_to_a  , "vqi" , "")
+BUILTIN(a_eq_a_plus_b  , "vqqi" , "")
+BUILTIN(a_eq_a_minus_b  , "vqqi" , "")
+BUILTIN(a_eq_a_plus_b_times_c  , "vqqqi" , "")
+BUILTIN(a_swap_b  , "vqqi" , "")
 
 
 

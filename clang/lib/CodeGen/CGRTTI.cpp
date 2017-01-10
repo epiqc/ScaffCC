@@ -194,6 +194,7 @@ static bool TypeInfoIsInStandardLibrary(const BuiltinType *Ty) {
     case BuiltinType::UInt128:
 
   //  Scaffold Cbit and Qbit added to avoid warning
+    case BuiltinType::Abit:
     case BuiltinType::Cbit:
     case BuiltinType::Qbit:
     case BuiltinType::Qint:

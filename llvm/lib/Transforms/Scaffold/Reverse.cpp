@@ -62,78 +62,193 @@ namespace {
             // The constructor is called once per module (in runOnModule)
             InsertReverseFunctionsVisitor(Module *module) : M(module) {
                 // This table maps each intrinsic function to its inverse
-                IntrinsicInverses[Intrinsic::getDeclaration
-                (M, Intrinsic::CNOT)] = Intrinsic::getDeclaration
-                (M, Intrinsic::CNOT);
+                std::vector<std::vector<Type*> > onePerm;
+                std::vector<std::vector<Type*> > twoPerms;
+                std::vector<std::vector<Type*> > threePerms;
+                //std::vector<ArrayRef<Type*> > prepTys;
+                //std::vector<ArrayRef<Type*> > RTys;
+                std::vector<Type*> v;
+                //errs() << "About to get type pointers\n";
+                Type *aa = Type::getInt8Ty(M->getContext());
+                Type *qq = Type::getInt16Ty(M->getContext());
+                Type *dd = Type::getDoubleTy(M->getContext());
+                Type *ii = Type::getInt32Ty(M->getContext());
+                /*
+                v.push_back(aa);
+                v.push_back(dd);
+                RTys.push_back(makeArrayRef(v));
+                v.pop_back();
+                v.pop_back();
+                v.push_back(qq);
+                v.push_back(dd);
+                RTys.push_back(makeArrayRef(v));
+
+
+                v.push_back(aa);
+                v.push_back(ii);
+                prepTys.push_back(makeArrayRef(v));
+                v.pop_back();
+                v.pop_back();
+                v.push_back(qq);
+                v.push_back(ii);
+                prepTys.push_back(makeArrayRef(v));
+                */
+                //errs() << "About to make onePerm\n";
+
+                v.push_back(aa);
+                onePerm.push_back(v);//a
+                v.pop_back();
+
+                v.push_back(qq);
+                onePerm.push_back(v);//q
+                v.pop_back();
+
+                //errs() << "About to make twoPerms\n";
+
+                v.push_back(aa);
+                v.push_back(aa);
+                twoPerms.push_back(v);//aa
+                v.pop_back();
+                v.push_back(qq);
+                twoPerms.push_back(v);//aq
+                v.pop_back();
+                v.pop_back();
+                v.push_back(qq);
+                v.push_back(aa);
+                twoPerms.push_back(v);//qa
+                v.pop_back();
+                v.push_back(qq);
+                twoPerms.push_back(v);//qq
+
+                //errs() << "About to do threePerms\n";
+
+                v.push_back(qq);
+                threePerms.push_back(v);//qqq
+                v.pop_back();
+
+                v.push_back(aa);
+                threePerms.push_back(v);//qqa
+                v.pop_back();
+                v.pop_back();
+
+                v.push_back(aa);
+                v.push_back(aa);
+                threePerms.push_back(v);//qaa
+                v.pop_back();
+
+                v.push_back(qq);
+                threePerms.push_back(v);//qaq
+                v.pop_back();
+                v.pop_back();
+                v.pop_back();
+
+                v.push_back(aa);
+                v.push_back(qq);
+                v.push_back(qq);
+                threePerms.push_back(v);//aqq
+                v.pop_back();
+
+                v.push_back(aa);
+                threePerms.push_back(v);//aqa
+                v.pop_back();
+                v.pop_back();
+
+                v.push_back(aa);
+                v.push_back(aa);
+                threePerms.push_back(v);//aaa
+                v.pop_back();
+
+                v.push_back(qq);
+                threePerms.push_back(v);//aaq
+
+                for(int i=0; i<2; i++){
+                  llvm::ArrayRef<Type*> ar = llvm::makeArrayRef(onePerm[i]);
+
+                  //errs() << "doing one perm getDeclaration for " << i;
+
+                  IntrinsicInverses[Intrinsic::getDeclaration
+                  (M, Intrinsic::H, ar)] = Intrinsic::getDeclaration
+                  (M, Intrinsic::H, ar);
+
+                  IntrinsicInverses[Intrinsic::getDeclaration
+                  (M, Intrinsic::MeasX, ar)] = Intrinsic::getDeclaration
+                  (M, Intrinsic::MeasX, ar);
+
+                  IntrinsicInverses[Intrinsic::getDeclaration
+                  (M, Intrinsic::MeasZ, ar)] = Intrinsic::getDeclaration
+                  (M, Intrinsic::MeasZ, ar);
+
+                  IntrinsicInverses[Intrinsic::getDeclaration
+                  (M, Intrinsic::PrepX, ar)] = Intrinsic::getDeclaration
+                  (M, Intrinsic::PrepX, ar);
+
+                  IntrinsicInverses[Intrinsic::getDeclaration
+                  (M, Intrinsic::PrepZ, ar)] = Intrinsic::getDeclaration
+                  (M, Intrinsic::PrepZ, ar);
                 
-                IntrinsicInverses[Intrinsic::getDeclaration
-                (M, Intrinsic::Fredkin)] = Intrinsic::getDeclaration
-                (M, Intrinsic::Fredkin);
+                  IntrinsicInverses[Intrinsic::getDeclaration
+                  (M, Intrinsic::Rx, ar)] = Intrinsic::getDeclaration
+                  (M, Intrinsic::Rx, ar);
                 
-                IntrinsicInverses[Intrinsic::getDeclaration
-                (M, Intrinsic::H)] = Intrinsic::getDeclaration
-                (M, Intrinsic::H);
+                  IntrinsicInverses[Intrinsic::getDeclaration
+                  (M, Intrinsic::Ry, ar)] = Intrinsic::getDeclaration
+                  (M, Intrinsic::Ry, ar);
                 
-                IntrinsicInverses[Intrinsic::getDeclaration
-                (M, Intrinsic::MeasX)] = Intrinsic::getDeclaration
-                (M, Intrinsic::MeasX);
+                  IntrinsicInverses[Intrinsic::getDeclaration
+                  (M, Intrinsic::Rz, ar)] = Intrinsic::getDeclaration
+                  (M, Intrinsic::Rz, ar);
+                 
+                  IntrinsicInverses[Intrinsic::getDeclaration
+                  (M, Intrinsic::S, ar)] = Intrinsic::getDeclaration
+                  (M, Intrinsic::Sdag, ar);
+
+                  IntrinsicInverses[Intrinsic::getDeclaration
+                  (M, Intrinsic::Sdag, ar)] = Intrinsic::getDeclaration
+                  (M, Intrinsic::S, ar);
+
+                  IntrinsicInverses[Intrinsic::getDeclaration
+                  (M, Intrinsic::T, ar)] = Intrinsic::getDeclaration
+                  (M, Intrinsic::Tdag, ar);
+
+                  IntrinsicInverses[Intrinsic::getDeclaration
+                  (M, Intrinsic::Tdag, ar)] = Intrinsic::getDeclaration
+                  (M, Intrinsic::T, ar);
+
+                  IntrinsicInverses[Intrinsic::getDeclaration
+                  (M, Intrinsic::X, ar)] = Intrinsic::getDeclaration
+                  (M, Intrinsic::X, ar);
+
+                  IntrinsicInverses[Intrinsic::getDeclaration
+                  (M, Intrinsic::Y, ar)] = Intrinsic::getDeclaration
+                  (M, Intrinsic::Y, ar);
+
+                  IntrinsicInverses[Intrinsic::getDeclaration
+                  (M, Intrinsic::Z, ar)] = Intrinsic::getDeclaration
+                  (M, Intrinsic::Z, ar);
+                }
+
+                //errs() << "2perms getDeclaration\n";
                 
-                IntrinsicInverses[Intrinsic::getDeclaration
-                (M, Intrinsic::MeasZ)] = Intrinsic::getDeclaration
-                (M, Intrinsic::MeasZ);
-
-                IntrinsicInverses[Intrinsic::getDeclaration
-                (M, Intrinsic::PrepX)] = Intrinsic::getDeclaration
-                (M, Intrinsic::PrepX);
-
-                IntrinsicInverses[Intrinsic::getDeclaration
-                (M, Intrinsic::PrepZ)] = Intrinsic::getDeclaration
-                (M, Intrinsic::PrepZ);
+                for(int i=0; i<4; i++){
+                  llvm::ArrayRef<Type*> ar = llvm::makeArrayRef(twoPerms[i]);
+                  IntrinsicInverses[Intrinsic::getDeclaration
+                  (M, Intrinsic::CNOT, ar)] = Intrinsic::getDeclaration
+                  (M, Intrinsic::CNOT, ar);
+                }
+                //errs() << "3perms getDeclaration\n";
                 
-                IntrinsicInverses[Intrinsic::getDeclaration
-                (M, Intrinsic::Rx)] = Intrinsic::getDeclaration
-                (M, Intrinsic::Rx);
+                for(int i=0; i<8; i++){
+                  llvm::ArrayRef<Type*> ar = llvm::makeArrayRef(threePerms[i]);
+                  IntrinsicInverses[Intrinsic::getDeclaration
+                  (M, Intrinsic::Toffoli, ar)] = Intrinsic::getDeclaration
+                  (M, Intrinsic::Toffoli, ar);
+
+                  IntrinsicInverses[Intrinsic::getDeclaration
+                  (M, Intrinsic::Fredkin, ar)] = Intrinsic::getDeclaration
+                  (M, Intrinsic::Fredkin, ar);
+                }
                 
-                IntrinsicInverses[Intrinsic::getDeclaration
-                (M, Intrinsic::Ry)] = Intrinsic::getDeclaration
-                (M, Intrinsic::Ry);
-
-                IntrinsicInverses[Intrinsic::getDeclaration
-                (M, Intrinsic::Rz)] = Intrinsic::getDeclaration
-                (M, Intrinsic::Rz);
-                
-                IntrinsicInverses[Intrinsic::getDeclaration
-                (M, Intrinsic::S)] = Intrinsic::getDeclaration
-                (M, Intrinsic::Sdag);
-
-                IntrinsicInverses[Intrinsic::getDeclaration
-                (M, Intrinsic::Sdag)] = Intrinsic::getDeclaration
-                (M, Intrinsic::S);
-
-                IntrinsicInverses[Intrinsic::getDeclaration
-                (M, Intrinsic::T)] = Intrinsic::getDeclaration
-                (M, Intrinsic::Tdag);
-
-                IntrinsicInverses[Intrinsic::getDeclaration
-                (M, Intrinsic::Tdag)] = Intrinsic::getDeclaration
-                (M, Intrinsic::T);
-
-                IntrinsicInverses[Intrinsic::getDeclaration
-                (M, Intrinsic::Toffoli)] = Intrinsic::getDeclaration
-                (M, Intrinsic::Toffoli);
-
-                IntrinsicInverses[Intrinsic::getDeclaration
-                (M, Intrinsic::X)] = Intrinsic::getDeclaration
-                (M, Intrinsic::X);
-
-                IntrinsicInverses[Intrinsic::getDeclaration
-                (M, Intrinsic::Y)] = Intrinsic::getDeclaration
-                (M, Intrinsic::Y);
-
-                IntrinsicInverses[Intrinsic::getDeclaration
-                (M, Intrinsic::Z)] = Intrinsic::getDeclaration
-                (M, Intrinsic::Z);
-
+                //errs() << "store_cbit getDeclaration\n";
                 IntrinsicInverses[M->getFunction("store_cbit")] 
                 = M->getFunction("store_cbit");
             }

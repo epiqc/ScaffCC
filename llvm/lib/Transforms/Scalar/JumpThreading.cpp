@@ -1404,7 +1404,6 @@ bool JumpThreading::ThreadEdge(BasicBlock *BB,
   // now have to update all uses of the value to use either the original value,
   // the cloned value, or some PHI derived value.  This can require arbitrary
   // PHI insertion, of which we are prepared to do, clean these up now.
-  SSAUpdater SSAUpdate;
   SmallVector<Use*, 16> UsesToRename;
   for (BasicBlock::iterator I = BB->begin(); I != BB->end(); ++I) {
     // Scan all uses of this instruction to see if it is used outside of its
@@ -1424,19 +1423,21 @@ bool JumpThreading::ThreadEdge(BasicBlock *BB,
     // If there are no uses outside the block, we're done with this instruction.
     if (UsesToRename.empty())
       continue;
+    else{
+      DEBUG(dbgs() << "JT: Renaming non-local uses of: " << *I << "\n");
 
-    DEBUG(dbgs() << "JT: Renaming non-local uses of: " << *I << "\n");
+      // We found a use of I outside of BB.  Rename all uses of I that are outside
+      // its block to be uses of the appropriate PHI node etc.  See ValuesInBlocks
+      // with the two values we know.
+      SSAUpdater SSAUpdate;
+      SSAUpdate.Initialize(I->getType(), I->getName());
+      SSAUpdate.AddAvailableValue(BB, I);
+      SSAUpdate.AddAvailableValue(NewBB, ValueMapping[I]);
 
-    // We found a use of I outside of BB.  Rename all uses of I that are outside
-    // its block to be uses of the appropriate PHI node etc.  See ValuesInBlocks
-    // with the two values we know.
-    SSAUpdate.Initialize(I->getType(), I->getName());
-    SSAUpdate.AddAvailableValue(BB, I);
-    SSAUpdate.AddAvailableValue(NewBB, ValueMapping[I]);
-
-    while (!UsesToRename.empty())
-      SSAUpdate.RewriteUse(*UsesToRename.pop_back_val());
-    DEBUG(dbgs() << "\n");
+      while (!UsesToRename.empty())
+        SSAUpdate.RewriteUse(*UsesToRename.pop_back_val());
+      DEBUG(dbgs() << "\n");
+    }
   }
 
 

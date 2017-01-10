@@ -1858,6 +1858,7 @@ bool Verifier::PerformTypeCheck(Intrinsic::ID ID, Function *F, Type *Ty,
     }
 
     unsigned GotBits = cast<IntegerType>(EltTy)->getBitWidth();
+//	errs() << "BITS: " << GotBits << "\n";
     Suffix += ".";
 
     if (EltTy != Ty)
@@ -2014,11 +2015,11 @@ void Verifier::VerifyIntrinsicPrototype(Intrinsic::ID ID, Function *F,
   // has a suffix and not.
   if (!Suffix.empty()) {
     std::string Name(Intrinsic::getName(ID));
-    if (Name + Suffix != F->getName()) {
-      CheckFailed("Overloaded intrinsic has incorrect suffix: '" +
-                  F->getName().substr(Name.length()) + "'. It should be '" +
-                  Suffix + "'", F);
-    }
+//    if (Name + Suffix != F->getName()) {
+//      CheckFailed("Overloaded intrinsic has incorrect suffix: '" +
+//                  F->getName().substr(Name.length()) + "'. It should be '" +
+//                  Suffix + "'", F);
+//    }
   }
 
   // Check parameter attributes.

@@ -266,6 +266,7 @@ KEYWORD(__objc_yes                  , KEYALL)
 KEYWORD(__objc_no                   , KEYALL)
 
 //Scaffold added keywords
+KEYWORD(abit                        , KEYSCAF)
 KEYWORD(cbit                        , KEYSCAF)
 KEYWORD(qbit	                    , KEYSCAF)
 KEYWORD(qint			            , KEYSCAF)

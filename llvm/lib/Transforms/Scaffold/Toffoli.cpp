@@ -40,19 +40,25 @@ namespace {
 				Function *CF = I.getCalledFunction();
 				if (CF->isIntrinsic() && CF->getIntrinsicID() == Intrinsic::Toffoli) {
 					// Retrieve the FT Toffoli implementation
-					Function *ToffoliImpl = M->getFunction("ToffoliImpl");
-					// If it doesn't exist yet, create it
-					if (!ToffoliImpl) {
-						std::vector<Type*> ArgTypes(3);
-						for (int i=0; i<3; i++)
-							ArgTypes[i] = Type::getInt16Ty(getGlobalContext());
+					std::string implName = "ToffoliImpl";
+		            std::vector<Type*> ArgTypes(3);
+				    for (int i=0; i<3; i++){
+					    ArgTypes[i] = I.getArgOperand(i)->getType();//Type::getInt16Ty(getGlobalContext());
+                        if(ArgTypes[i] == Type::getInt16Ty(getGlobalContext()))
+                            implName.append("_Q");
+                        else
+                            implName.append("_A");
+                    }
+                        
+                    Function *ToffoliImpl = M->getFunction(implName);
+                    if(!ToffoliImpl){
 						FunctionType *FuncType = FunctionType::get(
 								Type::getVoidTy(getGlobalContext()),
 								ArrayRef<Type*>(ArgTypes),
 								false);
 						ToffoliImpl = Function::Create(FuncType,
 								GlobalVariable::ExternalLinkage,
-								"ToffoliImpl",
+								implName,
 								M);
 						ToffoliImpl->addFnAttr(Attribute::AlwaysInline);
 
@@ -63,16 +69,16 @@ namespace {
 						Value *Control1 = arg_it++;
 						Value *Control2 = arg_it;
             
-            Control1->setName("control1");
-            Control2->setName("control2");
-            Target->setName("target");
+                        Control1->setName("control1");
+                        Control2->setName("control2");
+                        Target->setName("target");
 
 						// Fetch gate definitions
-						Function* gate_H = Intrinsic::getDeclaration(M, Intrinsic::H);
-						Function* gate_T = Intrinsic::getDeclaration(M, Intrinsic::T);
-						Function* gate_t = Intrinsic::getDeclaration(M, Intrinsic::Tdag);
-						Function* gate_S = Intrinsic::getDeclaration(M, Intrinsic::S);
-						Function* gate_CNOT = Intrinsic::getDeclaration(M, Intrinsic::CNOT);
+						//Function* gate_H = Intrinsic::getDeclaration(M, Intrinsic::H);
+						//Function* gate_T = Intrinsic::getDeclaration(M, Intrinsic::T);
+						//Function* gate_t = Intrinsic::getDeclaration(M, Intrinsic::Tdag);
+						//Function* gate_S = Intrinsic::getDeclaration(M, Intrinsic::S);
+						//Function* gate_CNOT = Intrinsic::getDeclaration(M, Intrinsic::CNOT);
 
 						// Create BasicBlock
 						BasicBlock *BB = BasicBlock::Create(getGlobalContext(), "", ToffoliImpl, 0);
@@ -104,32 +110,78 @@ namespace {
 
             // -- Improved T-depth Toffoli gate (Amy et al.)
             // CNOT shorthands
-						std::vector<Value*> C1C2; C1C2.push_back(Control2); C1C2.push_back(Control1);                        
+
+						std::vector<Value*> C1C2; C1C2.push_back(Control2); C1C2.push_back(Control1); 
+                        std::vector<Type*> C1C2ty; C1C2ty.push_back(ArgTypes[2]); C1C2ty.push_back(ArgTypes[1]);
+
 						std::vector<Value*> C2T; C2T.push_back(Target); C2T.push_back(Control2);
+                        std::vector<Type*> C2Tty; C2Tty.push_back(ArgTypes[0]); C2Tty.push_back(ArgTypes[2]);
+
+
 						std::vector<Value*> TC1; TC1.push_back(Control1); TC1.push_back(Target);
-						std::vector<Value*> C2C1; C2C1.push_back(Control1); C2C1.push_back(Control2);            
+						std::vector<Type*> TC1ty; TC1ty.push_back(ArgTypes[1]); TC1ty.push_back(ArgTypes[0]);
             
-						// Construct circuit
-						CallInst::Create(gate_H, ArrayRef<Value*>(Target), "", BB)->setTailCall();
-						CallInst::Create(gate_t, ArrayRef<Value*>(Control1), "", BB)->setTailCall();
-						CallInst::Create(gate_T, ArrayRef<Value*>(Control2), "", BB)->setTailCall();
-						CallInst::Create(gate_T, ArrayRef<Value*>(Target), "", BB)->setTailCall();
-						CallInst::Create(gate_CNOT, ArrayRef<Value*>(C1C2), "", BB)->setTailCall();
-						CallInst::Create(gate_CNOT, ArrayRef<Value*>(TC1), "", BB)->setTailCall();
-						CallInst::Create(gate_t, ArrayRef<Value*>(Control1), "", BB)->setTailCall();
-						CallInst::Create(gate_CNOT, ArrayRef<Value*>(C2T), "", BB)->setTailCall();
-						CallInst::Create(gate_CNOT, ArrayRef<Value*>(C2C1), "", BB)->setTailCall();
-						CallInst::Create(gate_t, ArrayRef<Value*>(Control1), "", BB)->setTailCall();
-						CallInst::Create(gate_t, ArrayRef<Value*>(Control2), "", BB)->setTailCall();
-						CallInst::Create(gate_T, ArrayRef<Value*>(Target), "", BB)->setTailCall();
-						CallInst::Create(gate_CNOT, ArrayRef<Value*>(TC1), "", BB)->setTailCall();
-						CallInst::Create(gate_S, ArrayRef<Value*>(Control1), "", BB)->setTailCall();
-						CallInst::Create(gate_CNOT, ArrayRef<Value*>(C2T), "", BB)->setTailCall();
-						CallInst::Create(gate_CNOT, ArrayRef<Value*>(C1C2), "", BB)->setTailCall();
-						CallInst::Create(gate_H, ArrayRef<Value*>(Target), "", BB)->setTailCall();
+						std::vector<Value*> C2C1; C2C1.push_back(Control1); C2C1.push_back(Control2);            
+						std::vector<Type*> C2C1ty; C2C1ty.push_back(ArgTypes[1]); C2C1ty.push_back(ArgTypes[2]);            
+						
+                        // Construct circuit
+
+                        //TODO: replace each gate_SOMETHING with a unique getDeclaration using 3 arguments
+                        //t is Tdag, T is T
+						CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::H, ArrayRef<Type*>(ArgTypes[2])), 
+                                         ArrayRef<Value*>(Target), "", BB)->setTailCall();
+
+						CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::Tdag, ArrayRef<Type*>(ArgTypes[1])), 
+                                         ArrayRef<Value*>(Control1), "", BB)->setTailCall();
+
+						CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::T, ArrayRef<Type*>(ArgTypes[2])),
+                                         ArrayRef<Value*>(Control2), "", BB)->setTailCall();
+
+						CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::T, ArrayRef<Type*>(ArgTypes[0])),
+                                         ArrayRef<Value*>(Target), "", BB)->setTailCall();
+                                   
+						CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::CNOT, ArrayRef<Type*>(C1C2ty)),
+						                 ArrayRef<Value*>(C1C2), "", BB)->setTailCall();
+
+						CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::CNOT, ArrayRef<Type*>(TC1ty)),
+						                 ArrayRef<Value*>(TC1), "", BB)->setTailCall();
+
+                        CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::Tdag, ArrayRef<Type*>(ArgTypes[1])),
+						                 ArrayRef<Value*>(Control1), "", BB)->setTailCall();
+
+                        CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::CNOT, ArrayRef<Type*>(C2Tty)),
+						                 ArrayRef<Value*>(C2T), "", BB)->setTailCall();
+
+                        CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::CNOT, ArrayRef<Type*>(C2C1ty)),
+						                 ArrayRef<Value*>(C2C1), "", BB)->setTailCall();
+
+                        CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::Tdag, ArrayRef<Type*>(ArgTypes[1])),
+						                 ArrayRef<Value*>(Control1), "", BB)->setTailCall();
+
+                        CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::Tdag, ArrayRef<Type*>(ArgTypes[2])),
+						                 ArrayRef<Value*>(Control2), "", BB)->setTailCall();
+
+                        CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::T, ArrayRef<Type*>(ArgTypes[0])),
+			                             ArrayRef<Value*>(Target), "", BB)->setTailCall();
+
+                        CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::CNOT, ArrayRef<Type*>(TC1ty)),
+						                 ArrayRef<Value*>(TC1), "", BB)->setTailCall();
+
+                        CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::S, ArrayRef<Type*>(ArgTypes[1])),
+						                 ArrayRef<Value*>(Control1), "", BB)->setTailCall();
+
+                        CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::CNOT, ArrayRef<Type*>(C2Tty)),
+						                 ArrayRef<Value*>(C2T), "", BB)->setTailCall();
+
+                        CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::CNOT, ArrayRef<Type*>(C1C2ty)),
+						                 ArrayRef<Value*>(C1C2), "", BB)->setTailCall();
+
+                        CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::H, ArrayRef<Type*>(ArgTypes[0])),
+						                 ArrayRef<Value*>(Target), "", BB)->setTailCall();
+                        //end TODO
 
 						ReturnInst::Create(getGlobalContext(), 0, BB);
-					}
+					}//end !ToffoliImpl
 					std::vector<Value*>  Args(3);
 					for (int i=0; i<3; i++)
 						Args[i] = I.getArgOperand(i);
@@ -139,7 +191,6 @@ namespace {
 
 				} // endif 'found Toffoli'
 			} // visitCallInst()
-
 		}; // struct ToffoliVisitor
 
 		virtual bool runOnModule(Module &M) {

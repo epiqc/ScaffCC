@@ -98,11 +98,12 @@ namespace {
     int argNum;
     bool isQbit;
     bool isCbit;
+    bool isAbit;
     bool isUndef;
     bool isPtr;
     int valOrIndex; //Value if not Qbit, Index if Qbit & not a Ptr
     double angle;
-    qGateArg(): argPtr(NULL), argNum(-1), isQbit(false), isCbit(false), isUndef(false), isPtr(false), valOrIndex(-1), angle(0.0){ }
+    qGateArg(): argPtr(NULL), argNum(-1), isQbit(false), isCbit(false), isAbit(false), isUndef(false), isPtr(false), valOrIndex(-1), angle(0.0){ }
   };
   
 struct qArgInfo{
@@ -235,6 +236,7 @@ struct qGate{
       errs() << "  Arg Num: "<<qg.argNum<<"\n"
              << "  isUndef: "<<qg.isUndef
              << "  isQbit: "<<qg.isQbit
+             << "  isAbit: "<<qg.isAbit
              << "  isCbit: "<<qg.isCbit
              << "  isPtr: "<<qg.isPtr << "\n"
              << "  Value or Index: "<<qg.valOrIndex<<"\n";
@@ -296,6 +298,11 @@ void GenSIMDSched::getFunctionArguments(Function* F)
           vectQbit.push_back(ait);
           funcArgs[argName] = argNum;
         }
+		else if (elementType->isIntegerTy(8)){
+		  tmpQArg.isAbit = true;
+		  vectQbit.push_back(ait);
+		  funcArgs[argName] = argNum;
+		}
       }
       else if (argType->isIntegerTy(16)){ //qbit
         tmpQArg.isQbit = true;
@@ -312,7 +319,11 @@ void GenSIMDSched::getFunctionArguments(Function* F)
         vectQbit.push_back(ait);
           funcArgs[argName] = argNum;
       }
-      
+      else if (argType->isIntegerTy(8)){
+		  tmpQArg.isAbit = true;
+		  vectQbit.push_back(ait);
+		  funcArgs[argName] = argNum;
+		}
     }
 }
 
@@ -354,7 +365,7 @@ bool GenSIMDSched::backtraceOperand(Value* opd, int opOrIndex)
             unsigned numOps = pInst->getNumOperands();
             backtraceOperand(pInst->getOperand(0),0);
 
-            if(tmpDepQbit[0].isQbit && !(tmpDepQbit[0].isPtr)){     
+            if((tmpDepQbit[0].isQbit||tmpDepQbit[0].isAbit) && !(tmpDepQbit[0].isPtr)){     
               //NOTE: getelemptr instruction can have multiple indices. consider last operand as desired index for qubit. Check if this is true for all.
               backtraceOperand(pInst->getOperand(numOps-1),1);
               
@@ -460,6 +471,19 @@ void GenSIMDSched::analyzeAllocInst(Function* F, Instruction* pInst){
         funcQbits[AI->getName()]=tmpMap;
 
       }
+
+	  if (elementType->isIntegerTy(8)){
+		vectQbit.push_back(AI);
+		tmpQArg.isAbit = true;
+		tmpQArg.argPtr = AI;
+		tmpQArg.valOrIndex = arraySize;
+
+		map<int,uint64_t> tmpMap; //add qbit to funcQbits
+        tmpMap[-1] = 0; //entry for entire array ops
+        tmpMap[-2] = 0; //entry for max
+        funcQbits[AI->getName()]=tmpMap;
+	  }
+
       
       if (elementType->isIntegerTy(1)){
         vectQbit.push_back(AI); //Cbit added here
@@ -648,8 +672,30 @@ uint64_t GenSIMDSched::get_ts_to_schedule_leaf(Function* F, uint64_t ts, Functio
   int funcIndex = -1;
 
   assert(funcToSched->getName().str().find("llvm.")!=string::npos &&  "Non-Intrinsic Func Found in Leaf Function"); 
+
+  std::string intrinsic_overloaded_name = funcToSched->getName().str();
   
-  map<string, int>::iterator gidx = gate_index.find(funcToSched->getName().str().substr(5));
+  if(intrinsic_overloaded_name.find("CNOT.i") != string::npos) intrinsic_overloaded_name = "CNOT";
+  else if(intrinsic_overloaded_name.find("NOT.i") != string::npos) intrinsic_overloaded_name = "X";
+  else if(intrinsic_overloaded_name.find("Toffoli.i") != string::npos) intrinsic_overloaded_name = "Toffoli";
+  else if(intrinsic_overloaded_name.find("MeasX.") != string::npos) intrinsic_overloaded_name = "MeasX";
+  else if(intrinsic_overloaded_name.find("MeasZ.") != string::npos) intrinsic_overloaded_name = "MeasZ";
+  else if(intrinsic_overloaded_name.find("H.i") != string::npos) intrinsic_overloaded_name = "H";
+  else if(intrinsic_overloaded_name.find("Fredkin.i") != string::npos) intrinsic_overloaded_name = "Fredkin";
+  else if(intrinsic_overloaded_name.find("PrepX.") != string::npos) intrinsic_overloaded_name = "PrepX";
+  else if(intrinsic_overloaded_name.find("PrepZ.") != string::npos) intrinsic_overloaded_name = "PrepZ";
+  else if(intrinsic_overloaded_name.substr(0,2) == "Rz") intrinsic_overloaded_name = "Rz";
+  else if(intrinsic_overloaded_name.find("S.") != string::npos) intrinsic_overloaded_name = "S";
+  else if(intrinsic_overloaded_name.find("T.") != string::npos) intrinsic_overloaded_name = "T";
+  else if(intrinsic_overloaded_name.find("Sdag.") != string::npos) intrinsic_overloaded_name = "Sdag";
+  else if(intrinsic_overloaded_name.find("Tdag.") != string::npos) intrinsic_overloaded_name = "Tdag";
+  else if(intrinsic_overloaded_name.find("X.") != string::npos) intrinsic_overloaded_name = "X";
+  else if(intrinsic_overloaded_name.find("Z.") != string::npos) intrinsic_overloaded_name = "Z";
+
+  
+//  map<string, int>::iterator gidx = gate_index.find(funcToSched->getName().str().substr(5));
+  map<string, int>::iterator gidx = gate_index.find(intrinsic_overloaded_name);
+
   assert(gidx!=gate_index.end() && "No Gate Index Found for this Intrinsic Function");
   funcIndex = (*gidx).second;
 
@@ -875,6 +921,23 @@ void GenSIMDSched::memset_funcQbits(uint64_t val){
 
 void GenSIMDSched::print_scheduled_gate(qGate qg, uint64_t ts){
   string tmpGateName = qg.qFunc->getName();
+  if(tmpGateName.find("CNOT.") != string::npos) tmpGateName = "CNOT";
+  else if(tmpGateName.find("NOT.") != string::npos) tmpGateName = "X";
+  else if(tmpGateName.find("Toffoli.") != string::npos) tmpGateName = "Toffoli";
+  else if(tmpGateName.find("MeasX.") != string::npos) tmpGateName = "MeasX";
+  else if(tmpGateName.find("MeasZ.") != string::npos) tmpGateName = "MeasZ";
+  else if(tmpGateName.find("H.i") != string::npos) tmpGateName = "H";
+  else if(tmpGateName.find("Fredkin.") != string::npos) tmpGateName = "Fredkin";
+  else if(tmpGateName.find("PrepX.") != string::npos) tmpGateName = "PrepX";
+  else if(tmpGateName.find("PrepZ.") != string::npos) tmpGateName = "PrepZ";
+  else if(tmpGateName.substr(0,2) == "Rz") tmpGateName = "Rz";
+  else if(tmpGateName.find("S.") != string::npos) tmpGateName = "S";
+  else if(tmpGateName.find("T.") != string::npos) tmpGateName = "T";
+  else if(tmpGateName.find("Sdag.") != string::npos) tmpGateName = "Sdag";
+  else if(tmpGateName.find("Tdag.") != string::npos) tmpGateName = "Tdag";
+  else if(tmpGateName.find("X.") != string::npos) tmpGateName = "X";
+  else if(tmpGateName.find("Z.") != string::npos) tmpGateName = "Z";
+
   if(tmpGateName.find("llvm.")!=string::npos)
     tmpGateName = tmpGateName.substr(5);
   errs() << ts << " " << tmpGateName;
@@ -1202,11 +1265,18 @@ void GenSIMDSched::analyzeCallInst(Function* F, Instruction* pInst){
             tmpQGateArg.isQbit = true;
           if(argElemType->isIntegerTy(1))
             tmpQGateArg.isCbit = true;
+		  if(argElemType->isIntegerTy(8))
+            tmpQGateArg.isAbit = true;
+
         }
         else if(argType->isIntegerTy(16)){
           tmpQGateArg.isQbit = true;
           tmpQGateArg.valOrIndex = 0;    
         }               
+		else if(argType->isIntegerTy(8)){
+          tmpQGateArg.isAbit = true;
+          tmpQGateArg.valOrIndex = 0;    
+        }  
         else if(argType->isIntegerTy(1)){
           tmpQGateArg.isCbit = true;
           tmpQGateArg.valOrIndex = 0;    
@@ -1224,7 +1294,7 @@ void GenSIMDSched::analyzeCallInst(Function* F, Instruction* pInst){
         }               
         
         //if(tmpQGateArg.isQbit || tmpQGateArg.isCbit){
-        if(tmpQGateArg.isQbit){
+        if(tmpQGateArg.isQbit || tmpQGateArg.isAbit){
             tmpDepQbit.push_back(tmpQGateArg);  
             tracked_all_operands &= backtraceOperand(CI->getArgOperand(iop),0);
         }
@@ -1410,7 +1480,7 @@ bool GenSIMDSched::runOnModule (Module &M) {
         vectCalls.clear();
         mapInstSet.clear();
         priorityVector.clear();
-        
+
         getFunctionArguments(F);
 
         // count the critical resources for this function

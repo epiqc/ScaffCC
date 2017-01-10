@@ -890,6 +890,7 @@ static QualType ConvertDeclSpecToType(TypeProcessingState &state) {
     break;
 
   // Scaffold types
+  case DeclSpec::TST_abit: Result = Context.AbitTy; break;
   case DeclSpec::TST_cbit: Result = Context.CbitTy; break;
   case DeclSpec::TST_qbit: Result = Context.QbitTy; break;
   case DeclSpec::TST_qint: Result = Context.QintTy; break;

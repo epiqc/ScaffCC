@@ -682,6 +682,7 @@ bool Sema::containsUnexpandedParameterPacks(Declarator &D) {
   case TST_auto:
   case TST_unknown_anytype:
   case TST_error:
+  case TST_abit:
   case TST_cbit:
   case TST_qbit:
   case TST_qint:

@@ -339,6 +339,13 @@ llvm::Type *CodeGenTypes::ConvertType(QualType T) {
     case BuiltinType::Char16:
     case BuiltinType::Char32:
 
+
+    // Scaffold
+    case BuiltinType::Abit:
+      ResultType = llvm::IntegerType::get(getLLVMContext(),
+                                 static_cast<unsigned>(Context.getTypeSize(T)));
+      break;
+
     // Scaffold Cbit copied from Qbit
     case BuiltinType::Cbit:
       ResultType = llvm::IntegerType::get(getLLVMContext(),

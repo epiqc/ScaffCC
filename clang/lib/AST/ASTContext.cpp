@@ -496,6 +496,7 @@ void ASTContext::InitBuiltinTypes(const TargetInfo &Target) {
   InitBuiltinType(HalfTy, BuiltinType::Half);
 
   // Scaffold: cbit and qbit types added here for initialization
+  InitBuiltinType(AbitTy,               BuiltinType::Abit);
   InitBuiltinType(CbitTy,               BuiltinType::Cbit);
   InitBuiltinType(QbitTy,               BuiltinType::Qbit);
   
@@ -982,6 +983,10 @@ ASTContext::getTypeInfoImpl(const Type *T) const {
       break;
 
     // Scaffold types
+    case BuiltinType::Abit:
+      Width = Target->getAbitWidth();
+      Align = Target->getAbitAlign();
+      break;
     case BuiltinType::Cbit:
       Width = Target->getCbitWidth();
       Align = Target->getCbitAlign();
@@ -3638,6 +3643,7 @@ unsigned ASTContext::getIntegerRank(const Type *T) const {
   default: llvm_unreachable("getIntegerRank(): not a built-in integer");
    // Bool has lowest integer conversion rank by definition (C99 6.3.1.1)
    // Scaffold will use that rank for cbit and qbit as a result
+  case BuiltinType::Abit:
   case BuiltinType::Cbit:
   case BuiltinType::Qbit:
   case BuiltinType::Qint:
@@ -4388,6 +4394,7 @@ static char ObjCEncodingForPrimitiveKind(const ASTContext *C, QualType T) {
 
     // Scaffold types
     // -- FIXME collision between cbit and qbit values, may cause other problems
+    case BuiltinType::Abit:       return 'a';
     case BuiltinType::Cbit:       return 'l';
     case BuiltinType::Qbit:       return 'q';
     case BuiltinType::Qint:       return 'y';

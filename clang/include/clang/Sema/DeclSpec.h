@@ -267,6 +267,7 @@ public:
   static const TST TST_atomic = clang::TST_atomic;
   static const TST TST_error = clang::TST_error;
   // Scaffold types
+  static const TST TST_abit = clang::TST_abit;
   static const TST TST_cbit = clang::TST_cbit;
   static const TST TST_qbit = clang::TST_qbit;
   static const TST TST_qstruct = clang::TST_qstruct;

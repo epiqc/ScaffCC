@@ -2367,6 +2367,10 @@ void Parser::ParseDeclarationSpecifiers(DeclSpec &DS,
       break;
 
         // Scaffold declaration specifiers
+    case tok::kw_abit:
+      isInvalid = DS.SetTypeSpecType(DeclSpec::TST_abit, Loc, PrevSpec,
+                                     DiagID);
+      break;
     case tok::kw_cbit:
       isInvalid = DS.SetTypeSpecType(DeclSpec::TST_cbit, Loc, PrevSpec,
                                      DiagID);
@@ -3316,6 +3320,7 @@ bool Parser::isTypeSpecifierQualifier() {
   case tok::annot_typename:
 
     // Scaffold type specifiers such as qbit
+  case tok::kw_abit:
   case tok::kw_cbit:
   case tok::kw_qbit:
   case tok::kw_qint:
@@ -3450,6 +3455,7 @@ bool Parser::isDeclarationSpecifier(bool DisambiguatingWithExpression) {
   case tok::kw___vector:
 
     // Scaffold type specifiers such as qbit
+  case tok::kw_abit:
   case tok::kw_cbit:
   case tok::kw_qbit:
   case tok::kw_qint:
@@ -4895,6 +4901,7 @@ bool Parser::TryAltiVecVectorTokenOutOfLine() {
   case tok::kw_float:
   case tok::kw_double:
   case tok::kw_bool:
+  case tok::kw_abit:
   case tok::kw_cbit:
   case tok::kw_qbit:
   case tok::kw_qint:
@@ -4931,6 +4938,7 @@ bool Parser::TryAltiVecTokenOutOfLine(DeclSpec &DS, SourceLocation Loc,
     case tok::kw_float:
     case tok::kw_double:
     case tok::kw_bool:
+    case tok::kw_abit:
     case tok::kw_cbit:
     case tok::kw_qbit:
     case tok::kw_qint:

@@ -233,6 +233,4 @@ namespace {
 } // namespace
 
 char Rotations::ID = 0;
-static RegisterPass<Rotations> X("Rotations", "Rotation Decomposition", false, false);
-
-
+static RegisterPass
