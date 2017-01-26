@@ -17,9 +17,9 @@ Current Release
 
 ScaffCC is currently in a beta release. Specifically, the release details are:
 
--   Version 2.0
+-   Version 2.1
 
--   Release Date: October, 2016
+-   Release Date: December, 2016
 
 Supported Operating Systems
 ---------------------------
