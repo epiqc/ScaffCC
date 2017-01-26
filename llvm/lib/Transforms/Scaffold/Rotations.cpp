@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <sstream>
+#include <string>
 
 #include "llvm/ADT/ArrayRef.h"
 
@@ -112,15 +113,11 @@ namespace {
 						case '"': FuncName.erase(iter); iter--; break;
 					}
 				}
-                if(Target->getType()->isIntegerTy(16))
-                    FuncName.append("Q");
-                else if(Target->getType()->isIntegerTy(8))
-                    FuncName.append("A");
 				// Create a FunctionType object with 'void' return type and one 'qbit'
 				// parameter
 				FunctionType *FuncType = FunctionType::get(
 					Type::getVoidTy(getGlobalContext()),
-					ArrayRef<Type*>(Target->getType()),
+					ArrayRef<Type*>(Type::getInt16Ty(getGlobalContext())),
 					false);
 				// Lookup the Function in the module
 				Function *DR = M->getFunction(FuncName);
@@ -132,10 +129,7 @@ namespace {
 
 					Function::arg_iterator args = DR->arg_begin(); //set name of variable
 					Value* qArg = args;
-                    if(Target->getType()->isIntegerTy(16))
-					    qArg->setName("q");
-                    else if(Target->getType()->isIntegerTy(8))
-                        qArg->setName("a");
+					qArg->setName("q");
 
 					// Create a BasicBlock and insert it at the end of the Function
 					BasicBlock *BB = BasicBlock::Create(getGlobalContext(), "", DR, 0);
@@ -146,11 +140,10 @@ namespace {
 					if (!path) {
 						errs() << "Rotation decomposer not found!\n";
 						return;
-					}
+					}          
+          char *prec = getenv("PRECISION");
           if (std::string(path).find("gridsynth") != std::string::npos) {
-   			  ss2 << path << " \"(" << std::fixed << Angle << ")\"";          
-//    			  ss2 << path << " " << std::fixed << Angle;          
-
+    			  ss2 << path << " \"(" << std::fixed << Angle << ")\"" << " -d " << prec;          
           }
           else if (std::string(path).find("sqct") != std::string::npos) {
             ss2 << path << " " << Angle << axis << SqctLevels;
@@ -172,33 +165,28 @@ namespace {
 						Function *gate = NULL;
 						switch(circuit[i]) {
 							case 'T':
-								gate = Intrinsic::getDeclaration(M, Intrinsic::T, makeArrayRef(Target->getType()) );
+								gate = Intrinsic::getDeclaration(M, Intrinsic::T);
 								break;
 							case 't':
-								gate = Intrinsic::getDeclaration(M, Intrinsic::Tdag,  makeArrayRef(Target->getType()) );
-								break;
-							case 'S':
-								gate = Intrinsic::getDeclaration(M, Intrinsic::S,  makeArrayRef(Target->getType())) ;
+								gate = Intrinsic::getDeclaration(M, Intrinsic::Tdag);
 								break;
 							case 'P':
-								// TODO: P NOT YET SUPPORTED
-								gate = Intrinsic::getDeclaration(M, Intrinsic::S,  makeArrayRef(Target->getType())) ;
+								gate = Intrinsic::getDeclaration(M, Intrinsic::S);
 								break;
 							case 'p':
-								// TODO: P NOT YET SUPPORTED
-								gate = Intrinsic::getDeclaration(M, Intrinsic::Sdag,  makeArrayRef(Target->getType()) );
+								gate = Intrinsic::getDeclaration(M, Intrinsic::Sdag);
 								break;
 							case 'H':
-								gate = Intrinsic::getDeclaration(M, Intrinsic::H,  makeArrayRef(Target->getType()) );
+								gate = Intrinsic::getDeclaration(M, Intrinsic::H);
 								break;
 							case 'X':
-								gate = Intrinsic::getDeclaration(M, Intrinsic::X,  makeArrayRef(Target->getType()) );
+								gate = Intrinsic::getDeclaration(M, Intrinsic::X);
 								break;
 							case 'Y':
-								gate = Intrinsic::getDeclaration(M, Intrinsic::Y,  makeArrayRef(Target->getType()) );
+								gate = Intrinsic::getDeclaration(M, Intrinsic::Y);
 								break;
 							case 'Z':
-								gate = Intrinsic::getDeclaration(M, Intrinsic::Z,  makeArrayRef(Target->getType()) );
+								gate = Intrinsic::getDeclaration(M, Intrinsic::Z);
 								break;
 							default:
 								continue;
@@ -233,4 +221,6 @@ namespace {
 } // namespace
 
 char Rotations::ID = 0;
-static RegisterPass
+static RegisterPass<Rotations> X("Rotations", "Rotation Decomposition", false, false);
+
+
