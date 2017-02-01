@@ -12,6 +12,7 @@ def process_qasm(fname):
     qgates_4 = ['PrepX','PrepZ']
     qgates_5 = ['MeasX','MeasZ']
     qgates_6 = ['Rz']
+    qgates_7 = ['afree']
     
 
     gateNames = {
@@ -30,7 +31,8 @@ def process_qasm(fname):
         'Rz':'Rz',
         'CNOT':'CNOT', #'CX',
         'Toffoli':'Tof',
-        'Fredkin':'Fredkin'
+        'Fredkin':'Fredkin',
+        'afree':'afree'
         }
     
     pattern_qbit_decl = re.compile(r"\s*\bqbit\b\s+(?P<qbit_var>\w+)\s*\[\s*(?P<array_size>\d+)\s*\]\s*;")
@@ -97,6 +99,13 @@ def process_qasm(fname):
         instFnName = 'qg_'+q
         fstr = 'void '+instFnName+'(char* a, double b){ printf("' +gateNames[q] +' %s,%f\\n",a,b); }\n'
         fout.write(fstr)
+    
+    for q in qgates_7:
+        instFnName = q
+        fstr = 'void '+instFnName+'(char** a, int b ){ for(int i = 0; i < b; i++){ printf("' +gateNames[q] +' %s\\n",(*a)); a++; }}\n'
+                
+        fout.write(fstr)
+
 
     fout.write('\n')
 
