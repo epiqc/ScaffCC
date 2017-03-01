@@ -23,7 +23,7 @@
 using namespace llvm;
 using namespace std;
 
-#define _MAX_FUNCTION_NAME 60
+#define _MAX_FUNCTION_NAME 90
 #define _MAX_INT_PARAMS 4
 #define _MAX_DOUBLE_PARAMS 4
 

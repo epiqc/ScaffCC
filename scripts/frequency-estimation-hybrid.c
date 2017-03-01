@@ -1,6 +1,3 @@
-// Note: This isn't really memoization. Just a hash table is implemented to keep track 
-// of invocation frequencies of each module in the program
-
 #include <stdlib.h>    /* malloc    */
 #include <stdio.h>     /* printf    */
 #include <stddef.h>    /* offsetof  */
@@ -10,7 +7,7 @@
 #include "uthash.h"    /* HASH_ADD  */
 #include <math.h>      /* floorf    */
 
-#define _MAX_FUNCTION_NAME 60
+#define _MAX_FUNCTION_NAME 90
 #define _MAX_INT_PARAMS 4
 #define _MAX_DOUBLE_PARAMS 4
 #define _MAX_CALL_DEPTH 16
