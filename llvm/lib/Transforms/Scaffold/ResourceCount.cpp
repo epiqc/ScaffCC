@@ -54,7 +54,7 @@ namespace {
           Type *allocatedType = AI->getAllocatedType();
           Type *intType=NULL;
           uint64_t arraySize=0;
-          errs() << allocatedType->getTypeID() << " allocated: ";
+          //errs() << allocatedType->getTypeID() << " allocated: ";
           //errs() << "Does it have a name? " << AI->getName() << "\n";
           
           if (ArrayType *arrayType = dyn_cast<ArrayType>(allocatedType)) { // Filter allocation of arrays

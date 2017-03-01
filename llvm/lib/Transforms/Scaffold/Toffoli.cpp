@@ -126,7 +126,6 @@ namespace {
 						
                         // Construct circuit
 
-                        //TODO: replace each gate_SOMETHING with a unique getDeclaration using 3 arguments
                         //t is Tdag, T is T
 						CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::H, ArrayRef<Type*>(ArgTypes[2])), 
                                          ArrayRef<Value*>(Target), "", BB)->setTailCall();
@@ -145,38 +144,38 @@ namespace {
 
 						CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::CNOT, ArrayRef<Type*>(TC1ty)),
 						                 ArrayRef<Value*>(TC1), "", BB)->setTailCall();
-
-                        CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::Tdag, ArrayRef<Type*>(ArgTypes[1])),
+            
+            CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::Tdag, ArrayRef<Type*>(ArgTypes[1])),
 						                 ArrayRef<Value*>(Control1), "", BB)->setTailCall();
-
-                        CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::CNOT, ArrayRef<Type*>(C2Tty)),
+            
+            CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::CNOT, ArrayRef<Type*>(C2Tty)),
 						                 ArrayRef<Value*>(C2T), "", BB)->setTailCall();
-
-                        CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::CNOT, ArrayRef<Type*>(C2C1ty)),
+            
+            CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::CNOT, ArrayRef<Type*>(C2C1ty)),
 						                 ArrayRef<Value*>(C2C1), "", BB)->setTailCall();
-
-                        CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::Tdag, ArrayRef<Type*>(ArgTypes[1])),
+            
+            CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::Tdag, ArrayRef<Type*>(ArgTypes[1])),
 						                 ArrayRef<Value*>(Control1), "", BB)->setTailCall();
-
-                        CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::Tdag, ArrayRef<Type*>(ArgTypes[2])),
+            
+            CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::Tdag, ArrayRef<Type*>(ArgTypes[2])),
 						                 ArrayRef<Value*>(Control2), "", BB)->setTailCall();
-
-                        CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::T, ArrayRef<Type*>(ArgTypes[0])),
+            
+            CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::T, ArrayRef<Type*>(ArgTypes[0])),
 			                             ArrayRef<Value*>(Target), "", BB)->setTailCall();
-
-                        CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::CNOT, ArrayRef<Type*>(TC1ty)),
+            
+            CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::CNOT, ArrayRef<Type*>(TC1ty)),
 						                 ArrayRef<Value*>(TC1), "", BB)->setTailCall();
-
-                        CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::S, ArrayRef<Type*>(ArgTypes[1])),
+            
+            CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::S, ArrayRef<Type*>(ArgTypes[1])),
 						                 ArrayRef<Value*>(Control1), "", BB)->setTailCall();
-
-                        CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::CNOT, ArrayRef<Type*>(C2Tty)),
+            
+            CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::CNOT, ArrayRef<Type*>(C2Tty)),
 						                 ArrayRef<Value*>(C2T), "", BB)->setTailCall();
-
-                        CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::CNOT, ArrayRef<Type*>(C1C2ty)),
+            
+            CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::CNOT, ArrayRef<Type*>(C1C2ty)),
 						                 ArrayRef<Value*>(C1C2), "", BB)->setTailCall();
-
-                        CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::H, ArrayRef<Type*>(ArgTypes[0])),
+            
+            CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::H, ArrayRef<Type*>(ArgTypes[0])),
 						                 ArrayRef<Value*>(Target), "", BB)->setTailCall();
                         //end TODO
 

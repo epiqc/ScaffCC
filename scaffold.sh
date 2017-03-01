@@ -9,24 +9,25 @@ if [ $(echo $PATH | grep ${RKQC_PATH} | wc -l) -eq 0 ]; then
 fi
 
 function show_help {
-    echo "Usage: $0 [-hv] [-rqfRFcpds] [-L #] <filename>.scaffold"
+    echo "Usage: $0 [-hv] [-rqfRFcpds] [-l #] [-P #] <filename>.scaffold"
     echo "    -r   Generate resource estimate (default)"
     echo "    -q   Generate QASM"
     echo "    -f   Generate flattened QASM"
     echo "    -R   Disable rotation decomposition"
-    echo "    -T   Disable Toffoli decomposition"    
-	echo "    -l   Levels of recursion to run (default=1)"
+    echo "    -T   Disable Toffoli decomposition"
+    echo "    -l   Levels of recursion to run (default=1)"
+    echo "    -P   Set precision of rotation decomposition in decimal digits (default=10)"
     echo "    -F   Force running all steps"
     echo "    -c   Clean all files (no other actions)"
-    echo "    -p   Purge all intermediate files (preserves specified output,"
+    echo "    -k   Keep all intermediate files (default only keeps specified output,"
     echo "         but requires recompilation for any new output)"
     echo "    -d   Dry-run; show all commands to be run, but do not execute"
-    echo "    -s   Generate QX Simulator input file"  
-    echo "    -v   Show current Scaffold version information" 
+    echo "    -s   Generate QX Simulator input file"
+    echo "    -v   Show current Scaffold version information"
 }
 
 function show_version {
-    echo "Scaffold - Release 2.0 (July 10, 2016) Beta"
+    echo "Scaffold - Release 2.2 (Feb 1, 2017) Beta"
 }
 
 # Parse opts
@@ -35,14 +36,15 @@ rkqc=0
 clean=0
 dryrun=""
 force=0
-purge=0
+purge=1
 res=0
 rot=1
 toff=1
 flat=0
 qc=0
+precision="3"
 targets=""
-while getopts "h?vcdfsFpqrRTl:" opt; do
+while getopts "h?vcdfsFkqrRT:l:P:" opt; do
     case "$opt" in
     h|\?)
         show_help
@@ -55,12 +57,12 @@ while getopts "h?vcdfsFpqrRTl:" opt; do
     c) clean=1
         ;;
 	  d) dryrun="--dry-run"
-		;;
+		    ;;
     F) force=1
         ;;
     f) flat=1
-		;;
-    p) purge=1
+		    ;;
+    k) purge=0
         ;;
     q) targets="${targets} qasm"
         ;;
@@ -70,10 +72,11 @@ while getopts "h?vcdfsFpqrRTl:" opt; do
         ;;
     T) toff=0
         ;;        
-	s) qc=1
-		;;
+    s) qc=1
+    		;;
     l) targets="${targets} SQCT_LEVELS=${OPTARG}"
         ;;
+    P) precision=${OPTARG}
     esac
 done
 shift $((OPTIND-1))
@@ -91,10 +94,6 @@ fi
 if [ ${res} -eq 1 ]; then
     targets="${targets} resources"
 fi
-# Don't purge until done
-if [ ${purge} -eq 1 ]; then
-    targets="${targets} purge"
-fi
 # Force first
 if [ ${force} -eq 1 ]; then
     targets="clean ${targets}"
@@ -102,6 +101,10 @@ fi
 # Default to resource estimate
 if [ -z "${targets}" ]; then
     targets="resources"
+fi
+# Don't purge until done
+if [ ${purge} -eq 1 ]; then
+    targets="${targets} purge"
 fi
 
 if [ $# -lt 1 ]; then 
@@ -129,6 +132,6 @@ if [ ${clean} -eq 1 ]; then
 	make -f $ROOT/scaffold/Scaffold.makefile ${dryrun} ROOT=$ROOT DIRNAME=${dir} FILENAME=${filename} FILE=${file} CFILE=${cfile} clean
     exit
 fi
-make -f $ROOT/scaffold/Scaffold.makefile ${dryrun} ROOT=$ROOT DIRNAME=${dir} FILENAME=${filename} FILE=${file} CFILE=${cfile} TOFF=${toff} RKQC=${rkqc} ROTATIONS=${rot} ${targets}
+make -f $ROOT/scaffold/Scaffold.makefile ${dryrun} ROOT=$ROOT DIRNAME=${dir} FILENAME=${filename} FILE=${file} CFILE=${cfile} TOFF=${toff} RKQC=${rkqc} ROTATIONS=${rot} PRECISION=${precision} ${targets}
 
 exit 0
