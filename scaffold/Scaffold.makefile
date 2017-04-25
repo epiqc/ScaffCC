@@ -48,7 +48,12 @@ flat: $(FILE).qasmf
 ################################
 qasm: $(FILE).qasmh
 
-.PHONY: res_count qasm flat
+################################
+# QX Simulator Generation
+################################
+qc: $(FILE).qc
+
+.PHONY: res_count qasm flat qc
 
 ################################
 # Intermediate targets
