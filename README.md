@@ -15,11 +15,13 @@ Release Information
 Current Release
 ---------------
 
-ScaffCC is currently in a beta release. Specifically, the release details are:
+ScaffCC is currently in an *alpha* release. Specifically, the release details are:
 
--   Version 2.2
+-   Version 3.0
 
--   Release Date: February, 2017
+-   Release Date: August, 2017
+
+-   Release Note: The current version is still an alpha release. Multiple new features are in active developement. For instance, .qasmf formart conforming to standardized QASM and optimization to parallel scheduler are expected to be included in the near term.
 
 Supported Operating Systems
 ---------------------------
@@ -42,16 +44,28 @@ Getting ScaffCC
 
 1.  Go to https://github.com/epiqc/ScaffCC
 
-2.  For the Unix build, download the repository:
+2.  For the **Unix build**, download the repository:
 
            git clone https://github.com/epiqc/ScaffCC.git [dir]
 
-3.	For the OS X build, download this repository:
+3.	For the **OS X build**, download the repository:
 
            git clone -b ScaffCC_OSX https://github.com/epiqc/ScaffCC.git [dir]
 
 Building ScaffCC
 ----------------
+
+### Prerequisites
+
+#### For OS X build
+
+1.  If not already installed, Xcode command line tool is required in order to build ScaffCC. 
+
+            xcode-select --install
+
+2.  Python 2.7 (or later): Python is usually bundled with OS X. The built-in version should be sufficient.
+ 
+#### For Unix build
 
 First you need to install the following dependencies. For each one, you
 can either install by building from source, or use the package manager
@@ -59,9 +73,7 @@ of your system (“yum" on Red Hat or “apt-get" on Ubuntu).
 
 1.  Static libraries for libstdc++ and glibc
 
-    -   “Ubuntu"
-
-        Install GNU gold linker
+    -   “Ubuntu": Install GNU gold linker
 
         You can check if you have this now by doing ‘ld -v’ and if it
         says ‘GNU gold’ you have it
@@ -75,15 +87,13 @@ of your system (“yum" on Red Hat or “apt-get" on Ubuntu).
                 sudo yum install glibc-static
                 
 
-2.  GCC 4.5 or higher NOTE: if you need to preserve an older build,
+2.  GCC 4.5 or higher: if you need to preserve an older build,
     consider using ‘update-alternatives’ as system-wide method for
     preserving and maintaining these.
 
 3.  Boost 1.48
 
-    -   “Source Build"
-
-        Boost installation instructions are here:
+    -   “Source Build": Boost installation instructions are here:
         <http://www.boost.org/doc/libs/1_48_0/doc/html/bbv2/installation.html>
 
                 wget http://sourceforge.net/projects/boost/files/boost/1.48.0/boost_1_48_0.tar.gz
@@ -100,7 +110,7 @@ of your system (“yum" on Red Hat or “apt-get" on Ubuntu).
 
 4.  The GNU Multiple Precision Arithmetic Library (gmp and gmpxx)
 
-    -   “Ubuntu" Use tab-completion to verify the correct packages
+    -   “Ubuntu": Use tab-completion to verify the correct packages
 
                 sudo apt-get install libgmp-dev libgmpxx4ldbl
                 
@@ -141,15 +151,16 @@ of your system (“yum" on Red Hat or “apt-get" on Ubuntu).
         source at:
         <https://cmake.org/install>
 
+### Installing
 Once you have all of the required libraries, simply run
 
-    make
+        make
 
 or
 
-    make USE_GCC=1
+        make USE_GCC=1
 
-at the root of the repository. The USE\_GCC flag will force the
+at the root of the repository. The `USE_GCC` flag will force the
 Makefile to use GCC to compile instead, and this has been seen to be
 faster on some systems.
 
@@ -174,6 +185,7 @@ This invokation will compile three small benchmarks, and verify that the
 generated files match those precompiled on an existing system, which are
 included in the test cases directory. If the three tests complete with a
 “Succeeded", the installation was successful.
+
 Using ScaffCC 
 =============
 
@@ -186,20 +198,10 @@ In programming a quantum algorithm, the Scaffold programming language now offers
 Running the Compiler
 --------------------
 
-To run the compiler, simply use the ‘scaffold.sh’ script in the main
+To run the compiler, simply use the `scaffold.sh` script in the main
 directory, with the name of the program and optional compiler flags.
 
-### Basic Example:
-
-The command below runs the compiler with default options on the Binary
-Welded Tree algorithm, with n=100 and s=100 as problem sizes. The
-default compiler option is to generate resource estimations (number of
-qubits and gates).
-
-    ./scaffold.sh Algorithms/Binary Welded Tree/Binary_Welded_Tree_n100s100.scaffold
-
-Compiler Options
-----------------
+### Compiler Options
 
 To see a list of compiler options which can be passed as flags, run:
 
@@ -217,26 +219,30 @@ To see a list of compiler options which can be passed as flags, run:
         -p   Purge all intermediate files (preserves specified output,
              but requires recompilation for any new output)
         -d   Dry-run; show all commands to be run, but do not execute
-		-s 	 Generate QX Simulator input file 
+        -s 	 Generate QX Simulator input file 
         -v   Show current ScaffCC version
+
+### Basic Example:
+
+The command below runs the compiler with default options on the Binary
+Welded Tree algorithm, with n=100 and s=100 as problem sizes. The
+default compiler option is to generate resource estimations (number of
+qubits and gates).
+
+    ./scaffold.sh Algorithms/Binary_Welded_Tree/binary_welded_tree.n100s100.scaffold
 
 Sample Scripts
 --------------
 
-This section describes some of the example scripts contained in the
-‘scripts/’ directory. They are written to test the various
-functionalities of ScaffCC, as detailed below.
+This section describes some of the example scripts contained in the ‘scripts/’ directory. They are written to test the various functionalities of ScaffCC, as detailed below. Each of them automates the process of running multiple compiler passes on an input file to perform the required analysis or optimization.
 
-Each of them automates the process of running multiple compiler passes
-on an input file to perform the required analysis or optimization.
-
-### Generating LLVM Intermediate Format: ./gen-ll.sh
+### 1. Generating LLVM Intermediate Format: ./gen-ll.sh
 
 Lowers .scaffold source file to .ll file (intermediary LLVM format).
 Creates &lt;algorithm&gt;.ll The .ll file is the main file in LLVM on
 which all transformations, optimizations and analysis are performed.
 
-### Critical Path Estimation: ./gen-cp.sh
+### 2. Critical Path Estimation: ./gen-cp.sh
 
 Finds critical path information for several different flattening
 thresholds by doing the following:
@@ -254,12 +260,12 @@ thresholds by doing the following:
 Divides modules into different buckets based on their size, to be used
 for flattening decision purposes.
 
-### Module Call Frequency Estimation: ./gen-freq-estimate.sh
+### 3. Module Call Frequency Estimation: ./gen-freq-estimate.sh
 
 Generates an estimate of how many times each module is called, which can
 guide flattening decisions.
 
-### Generate Longest-Path-First-Schedule (LPFS): ./gen-lpfs.sh
+### 4. Generate Longest-Path-First-Schedule (LPFS): ./gen-lpfs.sh
 
 Generates LPFS schedules with different options as specified below.
 
@@ -284,6 +290,15 @@ The main scheduler code for LPFS and RCP.
 Applies the communication penalty to timesteps.
 
 All output files are placed in a new directory to avoid cluttering.
+
+### 5. Rotation Generator: gen_rotation/
+
+jfwawwqkldw
+
+### 6. Test Correctness of RKQC Programs: RKQCVerifier/
+
+fqpowfjqo[q3dmo
+
 Built-in Quantum Applications 
 =============================
 
@@ -336,16 +351,16 @@ This section describes the apps provided with this software, in the
     in bits of the number to factor.
 
 QX: Quantum Computer Simulator
-===================================
+==============================
 
-New compatibility has been added to allow Scaffold to compile algorithms down to files with acceptable formatting to act as inputs to the QX Quantum Computer Simulator available at: 
+New compatibility has been added to allow Scaffold to compile algorithms down to files with acceptable formatting to act as inputs to the QX Quantum Computer Simulator by TU Delft. 
 
-	http://qutech.nl/qx-quantum-computer-simulator/	
+Available at: http://qutech.nl/qx-quantum-computer-simulator/	
 
 Using the "-s" compile flag will tell Scaffold to compile the desired algorithm to flat QASM, and transform that QASM output into an acceptable format for the QX Simulator. Note: the simulator only supports up to tens of qubits at the moment (~30), and does not support specific primitive gates built into Scaffold. The QX Transform flag will emit a notification if these parameters are not satisfied, and the algorithm is unsuitable for simulation.
 
 RKQC: RevKit For Quantum Computation 
-===================================
+====================================
 
 RKQC is a compiler for reversible logic circuitry. The framework has
 been developed to compile high level circuit descriptions down to
