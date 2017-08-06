@@ -6,7 +6,7 @@ ScaffCC enables researchers to compile quantum applications written in Scaffold 
 
 If you use ScaffCC in your publications, please cite this work as follows:
 
-Ali JavadiAbhari, Shruti Patil, Daniel Kudrow, Jeff Heckey, Alexey Lvov, Frederic Chong and Margaret Martonosi, ScaffCC: A Framework for Compilation and Analysis of Quantum Computing Programs, ACM International Conference on Computing Frontiers (CF 2014), Cagliari, Italy, May 2014
+> Ali JavadiAbhari, Shruti Patil, Daniel Kudrow, Jeff Heckey, Alexey Lvov, Frederic Chong and Margaret Martonosi, ScaffCC: A Framework for Compilation and Analysis of Quantum Computing Programs, ACM International Conference on Computing Frontiers (CF 2014), Cagliari, Italy, May 2014
 
 
 Release Information
@@ -32,7 +32,7 @@ ScaffCC currently offers support for the following operating systems:
 
 -   “Red Hat"
 
--	"OS X"
+-   "OS X"
 
 This list will continue to grow in the future!
 
@@ -48,7 +48,7 @@ Getting ScaffCC
 
            git clone https://github.com/epiqc/ScaffCC.git [dir]
 
-3.	For the **OS X build**, download the repository:
+3.  For the **OS X build**, download the repository:
 
            git clone -b ScaffCC_OSX https://github.com/epiqc/ScaffCC.git [dir]
 
@@ -181,7 +181,7 @@ the installation process completed successfully:
                 ./regression_test.sh
             
 
-This invokation will compile three small benchmarks, and verify that the
+This invocation will compile three small benchmarks, and verify that the
 generated files match those precompiled on an existing system, which are
 included in the test cases directory. If the three tests complete with a
 “Succeeded", the installation was successful.
@@ -207,19 +207,21 @@ To see a list of compiler options which can be passed as flags, run:
 
     ./scaffold.sh -h
 
-    Usage: ./scaffold.sh [-h] [-rqfRFcpd] [-L #] <filename>.scaffold
+    Usage: ./scaffold.sh [-hv] [-rqfRFckdso] [-l #] [-P #] <filename>.scaffold
         -r   Generate resource estimate (default)
         -q   Generate QASM
         -f   Generate flattened QASM
         -R   Disable rotation decomposition
         -T   Disable Toffoli decomposition
         -l   Levels of recursion to run (default=1)
+        -P   Set precision of rotation decomposition in decimal digits (default=10)
         -F   Force running all steps
         -c   Clean all files (no other actions)
-        -p   Purge all intermediate files (preserves specified output,
+        -k   Keep all intermediate files (default only keeps specified output,
              but requires recompilation for any new output)
         -d   Dry-run; show all commands to be run, but do not execute
-        -s 	 Generate QX Simulator input file 
+        -s   Generate QX Simulator input file 
+        -o   Generate optimized QASM
         -v   Show current ScaffCC version
 
 ### Basic Example:
@@ -291,13 +293,26 @@ Applies the communication penalty to timesteps.
 
 All output files are placed in a new directory to avoid cluttering.
 
-### 5. Rotation Generator: gen_rotation/
+### 5. Rotation Generator: gen\_rotation/
 
-jfwawwqkldw
+This is a C++ implemetation of the *library construction* method for generating *Rz* rotations. The main features of this generator include:
+  - Powered by [gridsynth](http://www.mathstat.dal.ca/~selinger/newsynth/), the package can generate rotation sequences that approximate arbitray *Rz* angles, up to given precision.
+  - Generate libraries of rotation sequences given use-defined precision and storage requirements, trading storage for execution time.
+  - Dynamically concatenate rotation sequences at run time using generated libraries.
+
+Detailed description and usage can be found in the subdirectory [scripts/gen_rotations/](https://github.com/epiqc/ScaffCC/tree/master/scripts/gen_rotations).
 
 ### 6. Test Correctness of RKQC Programs: RKQCVerifier/
 
-fqpowfjqo[q3dmo
+RKQCVerifier is a tool that helps verify the correctness of RKQC applications. For detailed description and usage, please refer to the subdirectory [scripts/RKQCVerifier/](https://github.com/epiqc/ScaffCC/tree/master/scripts/RKQCVerifier).
+
+### 7. Braidflash
+
+Braidflash is a software for efficient simulation of braids in the context of surface error correction of quantum applications. For further explanation and to cite this tool, please refer to the following publication:
+
+> A. Javadi-Abhari, P. Gokhale, A. Holmes, D. Franklin, K. R. Brown, M. R. Martonosi, F. T. Chong, “Optimized Surface Code Communication in Superconducting Quantum Computers,” IEEE/ACM MICRO, Cambridge, MA, 2017
+
+Detailed description and usage can be found in the subdirectory [braidflash/](https://github.com/epiqc/ScaffCC/tree/master/braidflash).
 
 Built-in Quantum Applications 
 =============================
@@ -355,7 +370,7 @@ QX: Quantum Computer Simulator
 
 New compatibility has been added to allow Scaffold to compile algorithms down to files with acceptable formatting to act as inputs to the QX Quantum Computer Simulator by TU Delft. 
 
-Available at: http://qutech.nl/qx-quantum-computer-simulator/	
+> Available at: http://qutech.nl/qx-quantum-computer-simulator/ 
 
 Using the "-s" compile flag will tell Scaffold to compile the desired algorithm to flat QASM, and transform that QASM output into an acceptable format for the QX Simulator. Note: the simulator only supports up to tens of qubits at the moment (~30), and does not support specific primitive gates built into Scaffold. The QX Transform flag will emit a notification if these parameters are not satisfied, and the algorithm is unsuitable for simulation.
 
@@ -384,7 +399,7 @@ can be used in this fashion. It was also developed as a full conversion
 of the RevKit platform. 
 
 The documentation describing installation and usage of RKQC is included
-in the docs/ directory, with the full documentation.
+in the [docs/](https://github.com/epiqc/ScaffCC/tree/master/docs) directory, with the full documentation.
 
 Expanding ScaffCC 
 =================
