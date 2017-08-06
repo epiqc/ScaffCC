@@ -1,0 +1,173 @@
+\documentclass{article}
+\usepackage{natbib}
+\usepackage{url}
+\usepackage[fleqn]{amsmath}
+\usepackage{mathtools}
+
+
+\begin{document}
+\title{Braidflash: Efficient Braid Simulation for Surface Code Quantum Error Correction}
+\author{Ali Javadi-Abhari}
+\date{\today}
+\maketitle
+
+This document describes the Braidflash software, which is a tool for efficient simulation of braids in the context of surface error correction of quantum applications. For further explanation and to cite this tool, please refer to the following publication:
+\\
+\\
+A. Javadi-Abhari, P. Gokhale, A. Holmes, D. Franklin, K. R. Brown, M. R. Martonosi, F. T. Chong, {\bf ``Optimized Surface Code Communication in Superconducting Quantum Computers,''} IEEE/ACM MICRO, Cambridge, MA, 2017
+
+\section{Installation}
+\begin{enumerate}
+
+\item Make sure you have the following dependencies installed:
+{\tt\\
+Clang/Clang++ 3.9 (or later)\\
+Boost 1.61 (or later)\\
+Python 2.7.9 (or later)\\
+Metis 5.1 (or later)\\
+libgmp 6.1 (or later)\\
+libffi 3.2 (or later)\\}
+
+\item Then from a terminal:
+{\tt\\
+cd braidflash\\
+make\\}
+\end{enumerate}
+
+The Braidflash simulator is now built and ready to use.
+
+
+
+\section{Overview}
+The braidflash software performs a physical-level simulation of the surface code operations, given information about a quantum application's logical-level characteristics. 
+
+\subsection{Inputs:} 
+The program requires the following inputs:
+\begin{itemize}
+\item Per-module logical schedule ({\tt.lpfs} file)
+\item Coarse-grain module composition ({\tt.cg} file)
+\item Module frequencies ({\tt.freq} file):
+\end{itemize}
+These are all easily obtained by running {\tt scripts/gen\_lpfs.sh} on a given {\tt .scaffold} application.
+
+
+\subsection{Outputs:}
+The outputs will be mainly reported in two files ending with {\tt .kq} and {\tt .br}. The following will be reported.
+\begin{itemize}
+\item Code distance used
+\item Num logical qubits
+\item Num physical qubits
+\item Num logical gates
+\item Num physical cycles
+\item Avg qubit manhattan cost.
+\item Network utilization factor. 
+\item Histogram of braid lengths. 
+\item Histogram of braid criticalities. 
+\item Visualization of network state during various time slices.
+\end{itemize}
+
+\subsection{Options:}
+\begin{itemize}
+\item  {\tt--opt:}      	optimize qubit layout
+\item  {\tt--p:}         	physical error rate (10\^-p) [int] (default: 5)
+\item  {\tt--yx:}       	stall threshold to switch DOR routing from xy to yx [int] (default: 8)
+\item  {\tt--drop:}    	stall threshold to drop entire operation and reinject [int] (default: 20)
+\item  {\tt--tech:}    	technology [sup, ion, qdot] (default: sup)
+\item  {\tt--pri:}       	braid priority policy [0-6] (default: 0)
+\item  {\tt--visualize:} show network state at each cycle [Warning: only use on small circuits] (default: none)
+\item  {\tt--help:}    	display this help and exit
+\item  {\tt--version:} output version information and exit
+\end{itemize}
+
+
+\section{Quick Start (Example)}
+Running a simulation is a two-step process. First, a logical schedule and logical-level information must be gathered. Then, the simulator can be called.
+\\
+\\
+{\tt
+cd braidflash\\
+\# Generate logical-level schedules and information\\
+../scripts/gen-lpfs.sh ../Algorithms/Square\_Root/square\_root.n10.scaffold\\
+\# Generate physical-level simulation metrics\\
+./braidflash ./square\_root.n10/square\_root.n10.flat100k --p 5 --yx 8 --drop 18 --tech sup --pri 3\\
+}
+
+The simulation outputs will be written to the directory:\\ 
+{\tt square\_root.n10/braid\_simulation}.
+
+\section{Code Explanation}
+The source code for the Braidflash simulator is written from scratch in C++ and Python. It is thoroughly commented and understandable by simple inspection. Below is a basic sketch of how it works.
+
+The logical schedules are read to create a trace of the program for each leaf module. The qubit interactions specify an interaction graph which can be used to optimize qubit placements (this step is done through the {\tt arrange.py} script). Similarly, the operation dependencies create a dependency graph which can be used to create a list of gate dependencies to simulate in order.
+
+Each logical gate is broken down into multiple events. For example, a logical CNOT constitutes the following events:
+\begin{enumerate}
+\item Event $cnot_1$: opening ancilla nodes/link to initialize
+\item Event $cnot_2$: closing ancilla link after 1 cycle
+\item Event $cnot_3$: opening $route_1$ from source to destination after 1 cycle
+\item Event $cnot_4$: closing $route_1$ after 1 cycle
+\item Event $cnot_5$: opening $route_2$ from destination to source after minimum d-1 cycles
+\item Event $cnot_6$: closing $route_2$ after 1 cycle
+\item Event $cnot_7$: closing ancillas after minimum d-1 cycles
+\end{enumerate}
+Each gate has its own queue of such events which need to be executed one by one. Globally, events may be interleaved (in effect, gates are not atomic---this breakdown of gates allows more efficient use of the lattice).
+
+Two timers are dedicated to ensuring that braids don't get delayed for very long times: {\tt attempt\_th\_yx}, {\tt attempt\_th\_drop}. 
+In these cases, the {\tt resolve\_cnot} function is called. This changes the route of the CNOT to (hopefully) allow it to complete without further delay.
+
+Priority policies are based on how to select a braid for execution among many eligible ones (those that have dependencies met). These policies are as follows:
+\begin{enumerate}
+\item $Policy_0$: no priorities. in program order.
+\item $Policy_1$: criticality only.
+\item $Policy_2$: braid length only. short2long.
+\item $Policy_3$: braid length only. long2short.
+\item $Policy_4$: close2open only.
+\item $Policy_5$: crticiality + short2long + close2open
+\item $Policy_6$: criticality + short2long (highest crit) + long2short (lower crit) + close2open
+\end{enumerate}
+
+
+\section{Visualizing Braids}
+
+{\bf Tip:} For better visualization, you can configure your editor to color {\tt .br} files, showing the actual braid occupancies on the network at each timestep. Below are steps to do this in the Vim editor:
+\begin{enumerate}
+\item Add the following to the your {\tt .vimrc} file:
+
+{\tt autocmd BufRead,BufNewFile  *.br set filetype=br}
+
+\item Create {\tt .vim/syntax/br.vim} with the following content:
+
+\begin{verbatim}
+" Vim syntax file
+" Language:     Braids on Quantum Surface Code
+
+if exists("b:current_syntax")
+  finish
+endif
+
+syn region	braidLink	start="-" end="-" keepend
+syn region	braidLink	start="|" end="|" keepend
+syn region	braidBusy	start="(\*" end=")" keepend
+syn region  braidQbit start="Q" end="\t"  keepend
+syn region  braidClock start="CLOCK" end="\n" keepend
+
+let b:current_syntax = "br"
+
+hi def link braidLink Comment
+hi def link braidBusy String
+hi def link braidClock Label
+hi def link braidQbit Type
+}
+\end{verbatim}
+\end{enumerate}
+
+Below is a sample screenshot to illustrate:
+
+\begin{figure*}[htbp]
+  \centering  
+  \includegraphics[width=0.8\textwidth]{braidflashScreenshot.png}
+  \caption{Visualization of braid occupancies on the network at a given timestep. Green (Qxx) indicates the locations of logical qubits; each logical qubit is implicitly a double hole. White numbers are network routers (qubit corners) and blue lines are network links. Red asterisks indicate occupied links and nodes, thus the path of a braid.}
+\end{figure*}
+
+\bibliographystyle{plainnat}
+\end{document}

@@ -52,16 +52,12 @@ rkqc XOR(qint target[32], qint in1[32], qint in2[32]){
     int i;
     for(i=0; i<32; i++) assign_value_of_b_to_a(temp1[i], in1[i], 1);
     for(i=0; i<32; i++) assign_value_of_b_to_a(temp2[i], in2[i], 1);
-    for(i=0; i<32; i++) NOT(temp2[i]);
 
     AND(temp3, temp1, temp2);
-    
-    for(i=0; i<32; i++){
-        NOT(temp1[i]);
-    }
+    for(i=0; i<32; i++) NOT(temp3[i]);
 
-    AND(temp4, temp1, temp2);
-    OR(target, temp3, temp4);
+    OR(temp4, temp1, temp2);
+    AND(target, temp3, temp4);
 }
 
 
@@ -89,7 +85,7 @@ rkqc leftRotate(qint a[32]){
     zero_to_garbage temp[1];
     int i;
     assign_value_of_b_to_a(temp[0], a[31],1);
-    for(i=0;i<31;i++){
+    for(i=30;i>=0;i--){
         assign_value_of_b_to_a(a[i+1], a[i], 1);
     }
     assign_value_of_b_to_a(a[0], temp[0], 1);
@@ -97,7 +93,7 @@ rkqc leftRotate(qint a[32]){
 
 rkqc leftshift(qint a[32]){
     int i;
-    for(i=0;i<31;i++){
+    for(i=30;i>=0;i--){
         assign_value_of_b_to_a(a[i+1],a[i], 1);
     }
     assign_value_of_0_to_a(a[0], 1);
@@ -185,6 +181,10 @@ rkqc encrypt(){
     zero_to_garbage k[32];
     
     zero_to_garbage Z[32];
+    zero_to_garbage temp_W1[32];
+    zero_to_garbage temp_W2[32];
+    zero_to_garbage temp_W3[32];
+    zero_to_garbage temp_W4[32];
 
     int i;
     int t;
@@ -511,17 +511,24 @@ rkqc encrypt(){
         }
 
     }            
-                 
     for(i=16; i<80; i++)
-    {            
-        XOR(temp2, W[(i-3)*32], W[(i-8)*32]);
-        XOR(temp3, temp2, W[(i-14)*32]);
-        XOR(target, W[(i-3)*32], W[(i-16)*32]);
+    {
+        for(j = 0; j < 32; j++){
+            temp_W1[j] = W[(i-3)*32 + j]
+            temp_W2[j] = W[(i-8)*32 + j]
+            temp_W3[j] = W[(i-14)*32 + j]
+            temp_W4[j] = W[(i-16)*32 + j]
+        }
+
+        XOR(temp2, temp_W1, temp_W2);
+        XOR(temp3, temp2, temp_W3);
+        XOR(target, temp3, temp_W4);
         leftRotate(target);
         for(j=0;j<32;j++){
             assign_value_of_b_to_a(W[i+j], target[j], 1);
         }
-    }            
+    } 
+             
                  
     //----Rounds of Hashing----//
 

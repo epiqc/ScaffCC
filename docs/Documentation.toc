@@ -1,0 +1,41 @@
+\contentsline {chapter}{\numberline {1}Release Information}{4}{chapter.1}
+\contentsline {section}{\numberline {1.1}Current Release}{4}{section.1.1}
+\contentsline {section}{\numberline {1.2}Supported Operating Systems}{4}{section.1.2}
+\contentsline {chapter}{\numberline {2}Installation}{5}{chapter.2}
+\contentsline {section}{\numberline {2.1}Getting ScaffCC}{5}{section.2.1}
+\contentsline {section}{\numberline {2.2}Building ScaffCC}{5}{section.2.2}
+\contentsline {subsection}{\numberline {2.2.1}Prerequisites}{5}{subsection.2.2.1}
+\contentsline {subsubsection}{For OS X build}{5}{section*.3}
+\contentsline {subsubsection}{For Unix build}{5}{section*.4}
+\contentsline {subsection}{\numberline {2.2.2}Installing}{7}{subsection.2.2.2}
+\contentsline {section}{\numberline {2.3}Verifying Installation}{7}{section.2.3}
+\contentsline {chapter}{\numberline {3}Using ScaffCC}{8}{chapter.3}
+\contentsline {section}{\numberline {3.1}Running the Compiler}{8}{section.3.1}
+\contentsline {subsection}{\numberline {3.1.1}Basic Example:}{8}{subsection.3.1.1}
+\contentsline {section}{\numberline {3.2}Compiler Options}{8}{section.3.2}
+\contentsline {section}{\numberline {3.3}Sample Scripts}{9}{section.3.3}
+\contentsline {subsection}{\numberline {3.3.1}Generating LLVM Intermediate Format: ./gen-ll.sh}{9}{subsection.3.3.1}
+\contentsline {subsection}{\numberline {3.3.2}Critical Path Estimation: ./gen-cp.sh}{9}{subsection.3.3.2}
+\contentsline {subsubsection}{flattening\_thresh.py}{9}{section*.5}
+\contentsline {subsection}{\numberline {3.3.3}Module Call Frequency Estimation: ./gen-freq-estimate.sh}{9}{subsection.3.3.3}
+\contentsline {subsection}{\numberline {3.3.4}Generate Longest-Path-First-Schedule (LPFS): ./gen-lpfs.sh}{9}{subsection.3.3.4}
+\contentsline {subsubsection}{./regress.sh}{9}{section*.6}
+\contentsline {subsubsection}{./sched.pl}{9}{section*.7}
+\contentsline {subsubsection}{./comm\_aware.pl}{10}{section*.8}
+\contentsline {subsection}{\numberline {3.3.5}Rotation Generator: gen\_rotation/}{10}{subsection.3.3.5}
+\contentsline {subsection}{\numberline {3.3.6}Test Correctness of RKQC Programs: RKQCVerifier/}{10}{subsection.3.3.6}
+\contentsline {subsection}{\numberline {3.3.7}Braidflash}{10}{subsection.3.3.7}
+\contentsline {chapter}{\numberline {4}Built-in Quantum Applications}{11}{chapter.4}
+\contentsline {chapter}{\numberline {5}RKQC:RevKit For Quantum Computation}{12}{chapter.5}
+\contentsline {section}{\numberline {5.1}Stand-Alone Installation}{12}{section.5.1}
+\contentsline {subsection}{\numberline {5.1.1}Obtain}{12}{subsection.5.1.1}
+\contentsline {subsection}{\numberline {5.1.2}Build and Compile}{12}{subsection.5.1.2}
+\contentsline {section}{\numberline {5.2}First Example}{13}{section.5.2}
+\contentsline {section}{\numberline {5.3}Declaration of Circuits}{13}{section.5.3}
+\contentsline {section}{\numberline {5.4}Signal Types}{14}{section.5.4}
+\contentsline {section}{\numberline {5.5}Creating and Using Modules}{14}{section.5.5}
+\contentsline {section}{\numberline {5.6}Arrays}{15}{section.5.6}
+\contentsline {section}{\numberline {5.7}Signals and Gates}{16}{section.5.7}
+\contentsline {section}{\numberline {5.8}Assign Value}{17}{section.5.8}
+\contentsline {section}{\numberline {5.9}Integer Arithmetic Modules}{17}{section.5.9}
+\contentsline {chapter}{\numberline {6}Expanding ScaffCC}{18}{chapter.6}

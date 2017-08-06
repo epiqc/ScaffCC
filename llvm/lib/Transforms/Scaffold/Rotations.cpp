@@ -59,9 +59,6 @@ namespace {
 			} // exec()
 			// public: 
 			void visitCallInst(CallInst &I) {
-        // Get Instruction iterator
-        BasicBlock::iterator ii(&I);
-        
 				// Determine whether this is an Rz gate
 				Function *CF = I.getCalledFunction();
 				// Is this an intrinsic?
@@ -86,56 +83,23 @@ namespace {
 					errs() << "Unknown rotation angle\n";
 					return;
 				}
-
 				// Extract the target qubit from the CallInst
+				// Using CallSite
+				// CallSite CS(&I);
+				// Value *Target = CS.getArgument(0);
+				// errs() << *Target << "\n";
+				// END CallSite
 				Value *Target = I.getArgOperand(0);
 				// Extract the rotation angle from the CallInst
 				double Angle = cast<ConstantFP>(I.getArgOperand(1))
 					->getValueAPF()
 					.convertToDouble();
-
-        // environment variables for rotation decomposition
-        char *prec = getenv("PRECISION");
-        char *path = getenv("ROTATIONPATH");
-        if (!path) {
-          errs() << "Rotation decomposer not found!\n";
-          return;
-        }
-
-        // especial cases of rotations: replace with single gates
 				// If the angle is 0, delete the rotation
-        double pi = 3.1415926535897932384626433;
-        // the rotation should be between 0 and 2pi
-        while (Angle > 2*pi) Angle -= 2*pi;
-        while (Angle < 0) Angle += 2*pi;
-        
-				if ( fabs(Angle - 0.0) < pow(10, -1.0 * atoi(prec)) ) {
-          errs() << "Removing near-zero rotation.\n";
+				if ( Angle == 0.0 || Angle == -0.0 ) {
+					errs() << "Rotation angle is " << Angle << " for " << Target->getName() << "\n";
 					I.eraseFromParent();
 					return;
 				}
-        if ( fabs(Angle - pi) < pow(10, -1.0 * atoi(prec)) ) {// pi rotation
-          errs() << "Synthesizing pi rotation (Z gate).\n";          
-		  		ReplaceInstWithInst(I.getParent()->getInstList(), ii,
-			  		  CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::Z, makeArrayRef(Target->getType())), 
-                ArrayRef<Value*>(Target)));
-          return;
-        }
-        if ( fabs(Angle - pi/2.0) < pow(10, -1.0 * atoi(prec)) ) {// pi/2 rotation
-          errs() << "Synthesizing pi/2 rotation (S gate).\n";                    
-		  		ReplaceInstWithInst(I.getParent()->getInstList(), ii,
-			  		  CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::S, makeArrayRef(Target->getType())), 
-                ArrayRef<Value*>(Target)));
-          return;
-        }
-        if ( fabs(Angle - pi/4.0) < pow(10, -1.0 * atoi(prec)) ) {// pi/4 rotation
-          errs() << "Synthesizing pi/4 rotation (T gate).\n";                              
-		  		ReplaceInstWithInst(I.getParent()->getInstList(), ii,
-			  		  CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::T, makeArrayRef(Target->getType())), 
-                ArrayRef<Value*>(Target)));
-          return;
-        }
-
 				// Create a unique function name (for lookup later)
 				std::string buf; raw_string_ostream ss(buf);
 				ss << "DecomposeRotation_" << Angle;
@@ -157,6 +121,7 @@ namespace {
 					false);
 				// Lookup the Function in the module
 				Function *DR = M->getFunction(FuncName);
+				// If it does not exist perform a decomposition
 				if (!DR) {
 					// Create the new function
 					DR = Function::Create(FuncType, GlobalVariable::ExternalLinkage,
@@ -170,7 +135,13 @@ namespace {
 					BasicBlock *BB = BasicBlock::Create(getGlobalContext(), "", DR, 0);
 					// Populate the BasicBlock
 					// Build rotation decomposition command
-					std::string buf; std::ostringstream ss2;        
+					std::string buf; std::ostringstream ss2;
+					char *path = getenv("ROTATIONPATH");
+					if (!path) {
+						errs() << "Rotation decomposer not found!\n";
+						return;
+					}          
+          char *prec = getenv("PRECISION");
           if (std::string(path).find("gridsynth") != std::string::npos) {
     			  ss2 << path << " \"(" << std::fixed << Angle << ")\"" << " -d " << prec;          
           }
@@ -184,11 +155,11 @@ namespace {
           
           buf = ss2.str();
           raw_string_ostream ss3(buf);          
-          std::string circuit;
-					// Capture result          
-					//errs() << "Calling '" << ss3.str() << "'\n";
-          errs() << "Decomposing " << Angle << " radian rotation.\n";
-					circuit = exec(ss3.str().c_str());
+					errs() << "Calling '" << ss3.str() << "'\n";
+					// Capture result
+          // if basic rotation angle, do not decompose
+          //if (Angle == 3.14 || Angle == 1.57 || Angle == 0) 
+					std::string circuit = exec(ss3.str().c_str());
 
 					// For each gate in decomposition:
           // (the decomposed string is given in the reverse order that ops must be applied)
@@ -225,7 +196,7 @@ namespace {
 						CallInst *newCallInst;
 						newCallInst = CallInst::Create(gate, ArrayRef<Value*>(DR->arg_begin()),
 								// Insert at front
-								 //"", BB->front());
+								// "", BB->front());
 								// Insert at end
 								"", BB);
 						//newCallInst->setTailCall();
@@ -233,6 +204,7 @@ namespace {
 					ReturnInst::Create(getGlobalContext(), 0, BB);
 				} // endif 'decomposition not found'
 				// Replace the old Rz call with the new call to Decomposed_Rotation
+				BasicBlock::iterator ii(&I);
 				ReplaceInstWithInst(I.getParent()->getInstList(), ii,
 					CallInst::Create(DR, ArrayRef<Value*>(Target)));
 				// } // endif 'found Rz'
@@ -252,5 +224,3 @@ namespace {
 
 char Rotations::ID = 0;
 static RegisterPass<Rotations> X("Rotations", "Rotation Decomposition", false, false);
-
-

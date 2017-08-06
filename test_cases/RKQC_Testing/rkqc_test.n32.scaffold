@@ -1,4 +1,4 @@
-rkqc reverseBits32(qbit a[32]){
+rkqc allLibraryFuncs(qbit a[32]){
     int i;
     for (i=0;i<2;i++){
 		assign_value_of_0_to_a(a[0], 1);
@@ -8,12 +8,12 @@ rkqc reverseBits32(qbit a[32]){
 		a_eq_a_plus_b(a[i+1],a[i],1);
     }
 }
-rkqc encrypt(){
+rkqc test1(){
     qbit h0[32];
-    reverseBits32(h0);
+    allLibraryFuncs(h0);
 }   
 
 int main() {
-    encrypt();
+    test1();
     return 0;
 }

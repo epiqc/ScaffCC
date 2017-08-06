@@ -500,7 +500,7 @@ void GenLPFSSched::lpfs(Function* F, int ts, int simd_l, int refill_simd, int op
                                     multimap<int, op>::iterator mit = map.find(ts);
                                     if(mit != map.end()){
                                         op curOp = (*mit).second;
-/*------Add Data Constraint---*/        if((myOp.name.qFunc == curOp.name.qFunc) ){//&& regionSizeMap[simdToSched] < (int) DATA_CONSTRAINT){
+/*------Add Data Constraint---*/        if(myOp.name.qFunc == curOp.name.qFunc){//&& regionSizeMap[simdToSched] < (int) DATA_CONSTRAINT){
                                             sched_op(myInst, ts, simdToSched);
                                             scheduled = true;
                                             sched_ops++;
@@ -1377,10 +1377,8 @@ void GenLPFSSched::cleanupCurrArrParGates(){
   vector<Function*>::iterator vit = find(isLeaf.begin(), isLeaf.end(), F);
   if(vit==isLeaf.end()) //not a leaf
     return true;
-
   //is Leaf
   //iterate over currArrParGates and check for 
-
   }*/
 
 void GenLPFSSched::save_blackbox_info(Function* F){
@@ -1579,8 +1577,16 @@ void GenLPFSSched::print_schedule(Function* F, int op_count){
                 while(oper != (*pit).second.end() && (*oper).first == ts){
                     errs() << (*oper).first << "," << (*oper).second.simd << " ";
                     string tmpName = (*oper).second.name.qFunc->getName();
-                    if( tmpName.find("llvm.") != string::npos) errs() << tmpName.substr(5);
-                    else errs() << tmpName;
+                    if( tmpName.find("llvm.") != string::npos) {
+                      unsigned firstDotPos = tmpName.find('.');
+                      unsigned secondDotPos = tmpName.find('.', firstDotPos+1);
+                      if (firstDotPos == secondDotPos)
+                        errs() << tmpName.substr(firstDotPos+1, string::npos);
+                      else
+                        errs() << tmpName.substr(firstDotPos+1, secondDotPos-firstDotPos-1);
+                    }
+                    else 
+                      errs() << tmpName;
 //                    errs() << "Args of this function: " << (*oper).second.name.numArgs << "\n";
                     for(int i = 0; i<(*oper).second.name.numArgs; i++){
                         errs() << " " << (*oper).second.name.args[i].name;
@@ -1625,7 +1631,6 @@ void GenLPFSSched::print_local_moves_schedule(Function* F, int op_count){
 void GenLPFSSched::print_schedule_metrics(Function* F, int op_count){
     int moves_count = move_schedule.size();
     int bmoves_count = local_move_schedule.size();
-    int ts = 0;    
     for(multimap<int, move>::iterator mit = move_schedule.begin(); mit != move_schedule.end(); mit = move_schedule.upper_bound(mit->first)){
         mts++;
     }
@@ -2227,7 +2232,6 @@ bool GenLPFSSched::runOnModule (Module &M) {
                 if(METRICS)
                     print_schedule_metrics(F,op_count);
                  if(FULL_SCHED)
-                    print_schedule_metrics(F,op_count);
                     print_schedule(F,op_count);
                  if(MOVES_SCHED)
                     print_moves_schedule(F,op_count);

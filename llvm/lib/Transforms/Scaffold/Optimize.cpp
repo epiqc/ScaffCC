@@ -1,14 +1,14 @@
-//===- GenQASM.cpp - Generate qasm output -------------------===//
+//===- Optimize.cpp - Optimize flattened circuit and produce QASM file-------------------===//
 //
 //                     The LLVM Scaffold Compiler Infrastructure
 //
 // This file was created by Scaffold Compiler Working Group
-//
 //===----------------------------------------------------------------------===//
 
 #include <sstream>
 #include <algorithm>
 #include <string>
+#include <climits>
 #include "llvm/Argument.h"
 #include "llvm/Pass.h"
 #include "llvm/Module.h"
@@ -26,13 +26,14 @@
 #include "llvm/Analysis/DebugInfo.h"
 #include "llvm/IntrinsicInst.h"
 
+
 using namespace llvm;
 using namespace std;
 
 #define MAX_BT_COUNT 15 //max backtrace allowed - to avoid infinite recursive loops
 #define MAX_QBIT_ARR_DIM 5 //max dimensions allowed for qbit arrays
-
-bool debugGenQASM = false;
+#define OPT_THRESHOLD 10
+bool debugOptimize = false;
 
 namespace {
 
@@ -60,33 +61,47 @@ namespace {
     std::vector<qGateArg> qArgs;
   };    
 
-  struct GenQASM : public ModulePass {
+  struct OpGate{
+    char gateTy;
+    int target;
+    int control1;
+    int control2;
+  };
+
+  struct Optimize : public ModulePass {
     static char ID;  // Pass identification, replacement for typeid
     std::vector<Value*> vectQbit;
 
     std::vector<qGateArg> tmpDepQbit;
     std::vector<qGateArg> allDepQbit;
 
-
     map<Function*, vector<qGateArg> > mapQbitsInit;
     map<Function*, vector<qGateArg> > mapFuncArgs;
     map<Function*, vector<FnCall> > mapMapFunc;
-
 
     vector<qGateArg> qbitsInFunc; //qbits in function
     vector<qGateArg> qbitsInFuncShort; //qbits in function
     vector<qGateArg> qbitsInitInFunc; //new qbits declared in function
     vector<qGateArg> funcArgList; //function arguments
     vector<FnCall> mapFunction; //trace sequence of qgate calls
+    vector<OpGate> gateList; //for optimizing gates
+    vector<string>  bitMap;
+    vector<unsigned> indMap;
     map<Value*, qGateArg> mapInstRtn;    //traces return cbits for Meas Inst
 
     int btCount; //backtrace count
 
-
-    GenQASM() : ModulePass(ID) {  }
+    Optimize() : ModulePass(ID) {  }
 
     bool getQbitArrDim(Type* instType, qGateArg* qa);
     bool backtraceOperand(Value* opd, int opOrIndex);
+    unsigned canSwap(vector<OpGate>& G, unsigned iInd, unsigned fInd);
+    bool ifCommute(OpGate G1, OpGate G2);
+    void optimal(vector<OpGate>& G, vector<unsigned>& M);
+    unsigned countGate(vector<OpGate>& G);
+    void erase_OpGate(OpGate& G);
+    bool shareBit(OpGate G1, OpGate G2);
+    void optimal_initial(Function* F, vector<string>& B, vector<OpGate>& G);
     void analyzeAllocInst(Function* F,Instruction* pinst);
     void analyzeAllocInstShort(Function* F,Instruction* pinst);
     void analyzeCallInst(Function* F,Instruction* pinst);
@@ -102,7 +117,6 @@ namespace {
     string printVarName(StringRef s)
     {
       std::string sName = s.str();
-      std::replace(sName.begin(), sName.end(), '.', '_');
 
       unsigned pos = sName.rfind("..");
 
@@ -125,7 +139,6 @@ namespace {
       }
     }
     
-
     void print_qgateArg(qGateArg qg)
     {
       errs()<< "Printing QGate Argument:\n";
@@ -142,7 +155,7 @@ namespace {
 	errs() << "     dimSize ["<<i<<"] = "<<qg.dimSize[i] << "\n";
     }
 
-    void genQASM(Function* F);
+    void genGateArray(Function* F);
     void getFunctionArguments(Function* F);
     bool DetermineQFunc(Function* F);
     
@@ -154,7 +167,6 @@ namespace {
       errs()<<"\n";      
     }
   
-
     // getAnalysisUsage - This pass requires the CallGraph.
     virtual void getAnalysisUsage(AnalysisUsage &AU) const {
       AU.setPreservesAll();
@@ -163,11 +175,11 @@ namespace {
   };
 }
 
-char GenQASM::ID = 0;
-static RegisterPass<GenQASM>
-X("gen-qasm", "Generate QASM output code"); //spatil: should be Z or X??
+char Optimize::ID = 0;
+static RegisterPass<Optimize>
+X("Optimize", "Optimize circuits"); //spatil: should be Z or X??
 
-bool GenQASM::backtraceOperand(Value* opd, int opOrIndex)
+bool Optimize::backtraceOperand(Value* opd, int opOrIndex)
 {
 
   if(opOrIndex == 0) //backtrace for operand
@@ -175,7 +187,7 @@ bool GenQASM::backtraceOperand(Value* opd, int opOrIndex)
     //search for opd in qbit/cbit vector
     std::vector<Value*>::iterator vIter=std::find(vectQbit.begin(),vectQbit.end(),opd);
     if(vIter != vectQbit.end()){
-      if(debugGenQASM)
+      if(debugOptimize)
         errs()<<"Found qubit associated: "<< opd->getName() << "\n";
 
       tmpDepQbit[0].argPtr = opd;
@@ -188,7 +200,7 @@ bool GenQASM::backtraceOperand(Value* opd, int opOrIndex)
 
     if(GetElementPtrInst *GEPI = dyn_cast<GetElementPtrInst>(opd))
 	{
-	  if(debugGenQASM)
+	  if(debugOptimize)
 	  {
 	      errs() << "Get Elem Ptr Inst Found: " << *GEPI <<"\n";
 	      errs() << GEPI->getPointerOperand()->getName();
@@ -199,7 +211,7 @@ bool GenQASM::backtraceOperand(Value* opd, int opOrIndex)
 	  if(GEPI->hasAllConstantIndices()){
 	    Instruction* pInst = dyn_cast<Instruction>(opd);
 	    unsigned numOps = pInst->getNumOperands();
-	    if(debugGenQASM)
+	    if(debugOptimize)
 	      errs() << " Has constant index. Num Operands: " << numOps << ": ";
 
 	    
@@ -222,7 +234,7 @@ bool GenQASM::backtraceOperand(Value* opd, int opOrIndex)
 	      ConstantInt *CI = dyn_cast<ConstantInt>(pInst->getOperand(numOps-1));
 	      if(tmpDepQbit.size()==1){
 		tmpDepQbit[0].dimSize[0] = CI->getZExtValue();
-		if(debugGenQASM)
+		if(debugOptimize)
 		  errs()<<" Found constant index = "<<CI->getValue()<<"\n";
 	      }
 	    }
@@ -231,7 +243,7 @@ bool GenQASM::backtraceOperand(Value* opd, int opOrIndex)
 	    ConstantInt *CI = dyn_cast<ConstantInt>(pInst->getOperand(numOps-1));
 	    if(tmpDepQbit.size()==1){
 	      tmpDepQbit[0].valOrIndex = CI->getZExtValue();
-	      if(debugGenQASM)
+	      if(debugOptimize)
 		errs()<<" Found constant index = "<<CI->getValue()<<"\n";
 	    }
 	    return foundOne;
@@ -242,7 +254,7 @@ bool GenQASM::backtraceOperand(Value* opd, int opOrIndex)
 	    errs() << "Oh no! I don't know how to handle this case..ABORT ABORT..\n";
 	    Instruction* pInst = dyn_cast<Instruction>(opd);
 	    unsigned numOps = pInst->getNumOperands();
-	    if(debugGenQASM)
+	    if(debugOptimize)
 	      errs() << " Has non-constant index. Num Operands: " << numOps << ": ";		
 	    bool foundOne = backtraceOperand(pInst->getOperand(0),0);
 
@@ -271,16 +283,14 @@ bool GenQASM::backtraceOperand(Value* opd, int opOrIndex)
 	if(tmpDepQbit[0].isQbit && !tmpDepQbit[0].isPtr){
 	  tmpDepQbit[0].numDim = 1;
 	  tmpDepQbit[0].dimSize[0] = 0;
-	  if(debugGenQASM)
+	  if(debugOptimize)
 	    errs()<<" Added default dim to qbit & not ptr variable.\n";
 	}
 	else if(tmpDepQbit[0].isAbit && !tmpDepQbit[0].isPtr){
 		tmpDepQbit[0].numDim = 1;
 		tmpDepQbit[0].dimSize[0] = 0;
 	}
-
       }
-
       if(Instruction* pInst = dyn_cast<Instruction>(opd)){
 	unsigned numOps = pInst->getNumOperands();
 	bool foundOne = false;
@@ -292,7 +302,7 @@ bool GenQASM::backtraceOperand(Value* opd, int opOrIndex)
 	return foundOne;
       }
       else{
-	if(debugGenQASM)
+	if(debugOptimize)
 	  errs() << "Ending Recursion\n";
 	return false;
       }
@@ -303,7 +313,7 @@ bool GenQASM::backtraceOperand(Value* opd, int opOrIndex)
 
     if(ConstantInt *CI = dyn_cast<ConstantInt>(opd)){
       tmpDepQbit[0].valOrIndex = CI->getZExtValue();
-      if(debugGenQASM)
+      if(debugOptimize)
 	errs()<<" Found constant index = "<<CI->getValue()<<"\n";
 
       return true;
@@ -321,14 +331,15 @@ bool GenQASM::backtraceOperand(Value* opd, int opOrIndex)
     }
 
   }
+
   else{ //opOrIndex == 2: backtracing to call inst MeasZ
-    if(debugGenQASM)
+    if(debugOptimize)
       errs()<<"backtracing for call inst: "<<*opd<<"\n";
     if(CallInst *endCI = dyn_cast<CallInst>(opd)){
       if(endCI->getCalledFunction()->getName().find("llvm.Meas") != string::npos){
 	tmpDepQbit[0].argPtr = opd;
 
-	if(debugGenQASM)
+	if(debugOptimize)
 	  errs()<<" Found call inst = "<<*endCI<<"\n";
 	return true;
       }
@@ -361,7 +372,7 @@ bool GenQASM::backtraceOperand(Value* opd, int opOrIndex)
   return false;
 }
 
-bool GenQASM::getQbitArrDim(Type *instType, qGateArg* qa)
+bool Optimize::getQbitArrDim(Type *instType, qGateArg* qa)
 {
   bool myRet = false;
 
@@ -396,7 +407,7 @@ bool GenQASM::getQbitArrDim(Type *instType, qGateArg* qa)
 
 }
 
-void GenQASM::analyzeAllocInstShort(Function* F, Instruction* pInst){
+void Optimize::analyzeAllocInstShort(Function* F, Instruction* pInst){
 
   if (AllocaInst *AI = dyn_cast<AllocaInst>(pInst)) {
     Type *allocatedType = AI->getAllocatedType();
@@ -407,13 +418,13 @@ void GenQASM::analyzeAllocInstShort(Function* F, Instruction* pInst){
       Type *elementType = arrayType->getElementType();
       uint64_t arraySize = arrayType->getNumElements();
       if (elementType->isIntegerTy(16)){
-	if(debugGenQASM)
+	if(debugOptimize)
 	  errs() << "New QBit Allocation Found: " << AI->getName() <<"\n";
 	qbitsInFuncShort.push_back(tmpQArg);
       }
       
       else if (elementType->isIntegerTy(1)){
-	if(debugGenQASM)
+	if(debugOptimize)
 	  errs() << "New CBit Allocation Found: " << AI->getName() <<"\n";
 	qbitsInFuncShort.push_back(tmpQArg);
       }
@@ -439,8 +450,7 @@ void GenQASM::analyzeAllocInstShort(Function* F, Instruction* pInst){
 
 }
 
-
-void GenQASM::analyzeAllocInst(Function* F, Instruction* pInst){
+void Optimize::analyzeAllocInst(Function* F, Instruction* pInst){
   if (AllocaInst *AI = dyn_cast<AllocaInst>(pInst)) {
     Type *allocatedType = AI->getAllocatedType();
     
@@ -450,7 +460,7 @@ void GenQASM::analyzeAllocInst(Function* F, Instruction* pInst){
 	  Type *elementType = arrayType->getElementType();
       uint64_t arraySize = arrayType->getNumElements();
       if (elementType->isIntegerTy(16)){
-	if(debugGenQASM)
+	if(debugOptimize)
 	  errs() << "New QBit Allocation Found: " << AI->getName() <<"\n";
 	vectQbit.push_back(AI);
 	tmpQArg.isQbit = true;
@@ -465,7 +475,7 @@ void GenQASM::analyzeAllocInst(Function* F, Instruction* pInst){
       }
       
       else if (elementType->isIntegerTy(1)){
-	if(debugGenQASM)
+	if(debugOptimize)
 	  errs() << "New CBit Allocation Found: " << AI->getName() <<"\n";
 	vectQbit.push_back(AI); //Cbit added here
 	tmpQArg.isCbit = true;
@@ -511,7 +521,7 @@ void GenQASM::analyzeAllocInst(Function* F, Instruction* pInst){
 	    //(qbitsInitInFunc.find(F))->second.push_back(tmpQArg);
 	    qbitsInitInFunc.push_back(tmpQArg);
 
-	    if(debugGenQASM)
+	    if(debugOptimize)
 	      print_qgateArg(tmpQArg);
 	  }	  
       }
@@ -519,7 +529,7 @@ void GenQASM::analyzeAllocInst(Function* F, Instruction* pInst){
     }
     else if(allocatedType->isIntegerTy(16)){
         qGateArg tmpQArg;
-        if(debugGenQASM) errs() << "Found New Qbit Allocation \n";
+        if(debugOptimize) errs() << "Found New Qbit Allocation \n";
         vectQbit.push_back(AI);
         tmpQArg.isQbit = true;
         tmpQArg.argPtr = AI;
@@ -596,10 +606,10 @@ void GenQASM::analyzeAllocInst(Function* F, Instruction* pInst){
 
 }
 
-void GenQASM::analyzeCallInst(Function* F, Instruction* pInst){
+void Optimize::analyzeCallInst(Function* F, Instruction* pInst){
   if(CallInst *CI = dyn_cast<CallInst>(pInst))
     {
-      if(debugGenQASM)      
+      if(debugOptimize)      
 	errs() << "Call inst: " << CI->getCalledFunction()->getName() << "\n";
 
       if(CI->getCalledFunction()->getName() == "store_cbit"){	//trace return values
@@ -631,7 +641,7 @@ void GenQASM::analyzeCallInst(Function* F, Instruction* pInst){
 	qGateArg tmpQGateArg;
 	btCount=0;
 	
-	if(debugGenQASM)
+	if(debugOptimize)
 	  errs() << "Call inst operand num: " << iop << "\n";
 	
 	tmpQGateArg.argNum = iop;
@@ -677,29 +687,27 @@ void GenQASM::analyzeCallInst(Function* F, Instruction* pInst){
 	//check if argument is constant int	
 	if(ConstantInt *CInt = dyn_cast<ConstantInt>(CI->getArgOperand(iop))){
 	  tmpQGateArg.valOrIndex = CInt->getZExtValue();
-	  if(debugGenQASM){
+	  if(debugOptimize){
 	    errs()<<" Found constant argument = "<<CInt->getValue()<<"\n";
 	  }
 	}
 	
-
 	//check if argument is constant float	
 	if(ConstantFP *CFP = dyn_cast<ConstantFP>(CI->getArgOperand(iop))){
 	  tmpQGateArg.val = CFP->getValueAPF().convertToDouble();
 	  tmpQGateArg.isDouble = true;
-	  if(debugGenQASM){
+	  if(debugOptimize){
 	    errs()<<" Call Inst = "<<*CI<<"\n";
 	    errs()<<" Found constant double argument = "<<tmpQGateArg.val<<"\n";
 	  }
 	}
-
 
 	tmpDepQbit.push_back(tmpQGateArg);
 	
 	tracked_all_operands &= backtraceOperand(CI->getArgOperand(iop),0);
 	
 	if(tmpDepQbit.size()>0){
-	  if(debugGenQASM)
+	  if(debugOptimize)
 	    print_qgateArg(tmpDepQbit[0]);
 	  
 	  allDepQbit.push_back(tmpDepQbit[0]);
@@ -715,7 +723,7 @@ void GenQASM::analyzeCallInst(Function* F, Instruction* pInst){
       qInfo.instPtr = CI;
       
       if(allDepQbit.size() > 0){
-	if(debugGenQASM)
+	if(debugOptimize)
 	  {
 	    errs() << "\nCall inst: " << CI->getCalledFunction()->getName();	    
 	    errs() << ": Found all arguments: ";       
@@ -742,15 +750,14 @@ void GenQASM::analyzeCallInst(Function* F, Instruction* pInst){
     }
 }
 
-
-void GenQASM::analyzeInst(Function* F, Instruction* pInst){
-  if(debugGenQASM)
+void Optimize::analyzeInst(Function* F, Instruction* pInst){
+  if(debugOptimize)
     errs() << "--Processing Inst: "<<*pInst << '\n';
 
   //analyzeAllocInst(F,pInst);
   analyzeCallInst(F,pInst);
     
-  if(debugGenQASM)
+  if(debugOptimize)
     {
       errs() << "Opcode: "<<pInst->getOpcodeName() << "\n";
       
@@ -767,13 +774,13 @@ void GenQASM::analyzeInst(Function* F, Instruction* pInst){
   return;
 }
 
-std::string GenQASM::to_string(int var){
+std::string Optimize::to_string(int var){
 	stringstream ss;
 	ss << var;
 	return ss.str();
 }
 
-void GenQASM::printFuncHeader(Function* F, bool lastFunc)
+void Optimize::printFuncHeader(Function* F, bool lastFunc)
 {
 
   //map<Function*, vector<qGateArg> >::iterator mpItr;
@@ -804,7 +811,7 @@ void GenQASM::printFuncHeader(Function* F, bool lastFunc)
       
       qGateArg tmpQA = funcArgList[tmp_i];
       
-      if(debugGenQASM)
+      if(debugOptimize)
 	print_qgateArg(tmpQA);
       
       if(tmpQA.isQbit)
@@ -828,14 +835,11 @@ void GenQASM::printFuncHeader(Function* F, bool lastFunc)
       if(tmpQA.isPtr)
 	errs()<<"*";	  
       
-      std::string tmpQAName = tmpQA.argPtr->getName();
-      std::replace(tmpQAName.begin(), tmpQAName.end(), '.','_');
-      errs()<<" "<<printVarName(tmpQAName)<<" , ";
+      errs()<<" "<<printVarName(tmpQA.argPtr->getName())<<" , ";
     }
     
-    if(debugGenQASM)
+    if(debugOptimize)
       print_qgateArg(funcArgList[tmp_num_elem-1]);
-    
     
     if((funcArgList[tmp_num_elem-1]).isQbit)
       errs()<<"qbit";
@@ -858,12 +862,8 @@ void GenQASM::printFuncHeader(Function* F, bool lastFunc)
     
     if((funcArgList[tmp_num_elem-1]).isPtr)
       errs()<<"*";
-
-      std::string qbName = (funcArgList[tmp_num_elem-1]).argPtr->getName();
-      std::replace(qbName.begin(), qbName.end(), '.','_');
-      errs()<<" "<<printVarName(qbName)<<" , ";
-   
-//    errs() <<" "<<printVarName((funcArgList[tmp_num_elem-1]).argPtr->getName());
+    
+    errs() <<" "<<printVarName((funcArgList[tmp_num_elem-1]).argPtr->getName());
   }
   
   errs()<<" ) {\n ";   
@@ -872,14 +872,12 @@ void GenQASM::printFuncHeader(Function* F, bool lastFunc)
   //mvpItr=qbitsInitInFunc.find(F);	    
   for(vector<qGateArg>::iterator vvit=qbitsInitInFunc.begin(),vvitE=qbitsInitInFunc.end();vvit!=vvitE;++vvit)
     {	
-      std::string qName = (*vvit).argPtr->getName();
-      std::replace(qName.begin(), qName.end(), '.','_');
       if((*vvit).isQbit)
-	errs()<<"\tqbit "<<printVarName(qName);
+	errs()<<"\tqbit "<<printVarName((*vvit).argPtr->getName());
       if((*vvit).isCbit)
-	errs()<<"\tcbit "<<printVarName(qName);
+	errs()<<"\tcbit "<<printVarName((*vvit).argPtr->getName());
 	  if((*vvit).isAbit)
-	errs() << "\tqbit "<<printVarName(qName);
+	errs() << "\tqbit "<<printVarName((*vvit).argPtr->getName());
 
       //if only single-dimensional qbit arrays expected
       //errs()<<"["<<(*vvit).valOrIndex<<"];\n ";
@@ -892,7 +890,7 @@ void GenQASM::printFuncHeader(Function* F, bool lastFunc)
   //errs() << "//--//-- Fn: " << F->getName() << " --//--//\n";
 }
   
-void GenQASM::genQASM(Function* F)
+void Optimize::genGateArray(Function* F)
 {
   //map<Function*, vector<qGateArg> >::iterator mpItr;
   //map<Function*, vector<qGateArg> >::iterator mpItr2;
@@ -1020,7 +1018,7 @@ void GenQASM::genQASM(Function* F)
 }
 
 
-bool GenQASM::DetermineQFunc(Function* F)
+bool Optimize::DetermineQFunc(Function* F)
 {
     for(inst_iterator instIb = inst_begin(F),instIe=inst_end(F); instIb!=instIe;++instIb){
         Instruction *pInst = &*instIb; // Grab pointer to instruction reference	      
@@ -1031,7 +1029,66 @@ bool GenQASM::DetermineQFunc(Function* F)
     return false;
 }
 
-void GenQASM::getFunctionArguments(Function* F)
+unsigned Optimize::canSwap(vector<OpGate>& G, unsigned iInd, unsigned fInd)
+{
+    if(iInd > fInd) {
+        errs()<<"initial index larger than final index.\n";
+        return UINT_MAX-1;
+    }
+    
+    unsigned iPos = iInd, fPos = fInd;
+    for(unsigned i = iInd + 1; i <= fInd; i++){
+        if(ifCommute(G[iInd], G[i])){ iPos = i; }
+        else { break; }
+    }
+    for(unsigned i = fInd - 1; i >= iInd; i--){
+        if(ifCommute(G[fInd], G[i])){fPos = i;}
+        else{break;}
+    } 
+    if(iPos >= fPos - 1 ){
+        return max(fPos - 1, iInd); 
+    }
+    else{
+        return UINT_MAX; 
+    }
+}
+
+bool Optimize::ifCommute(OpGate G1, OpGate G2){
+    bool G1st = false, G2st = false;
+    if(G1.gateTy == 't' || G1.gateTy == 's' || G1.gateTy =='S' || G1.gateTy == 'T') {G1st =true;}
+    if(G2.gateTy == 't' || G2.gateTy == 's' || G2.gateTy =='S' || G2.gateTy == 'T') {G2st =true;}
+
+    if(G1.gateTy =='\0' || G2.gateTy == '\0') {return true;}
+
+    if(G1.gateTy != 'c' && G1.gateTy != 'o' && G2.gateTy != 'c' && G2.gateTy != 'o'){
+        if(G1.target != G2.target) {return true;}
+        else if(G1st && G2st) {return true;}
+        else {return false;}
+    }
+
+    else if((G1.gateTy != 'c' && G1.gateTy != 'o')){
+        if(G1.target != G2.target && G1.target != G2.control1 && G1.target != G2.control2){return true;}
+        if(G1st && G1.target != G2.target){return true;}
+        return false;
+    }
+
+    else if((G2.gateTy != 'c' && G2.gateTy != 'o')){
+        if(G2.target != G1.target && G2.target != G1.control1 && G2.target != G1.control2){return true;}
+        if(G2st && G1.target != G2.target){return true;}
+        return false;
+    }
+
+    else if(G1.target != G2.control1 && G1.target != G2.control2 && G2.target != G1.control1 && G2.target != G1.control2){
+        return true; 
+    }
+    return false;
+}
+
+bool Optimize::shareBit(OpGate G1, OpGate G2){
+    if((G1.target == G2.target && G1.target != 0) || (G1.target == G2.control1 && G1.target != 0) || (G1.target == G2.control2 && G1.target != 0) || (G1.control1 == G2.control2 && G1.control1 != 0) || (G1.control1 == G2.control1 && G1.control1 != 0) || (G1.control1 == G2.target && G1.control1 != 0) || (G1.control2 == G2.target && G1.control2 != 0) || (G1.control2 == G2.control1 && G1.control2 != 0) || (G1.control2 == G2.control2 && G1.control2 != 0)){ return true;}
+    else {return false;}
+}
+void Optimize::getFunctionArguments(Function* F)
 {
   //std::vector<unsigned> qGateArgs;  
 
@@ -1046,7 +1103,7 @@ void GenQASM::getFunctionArguments(Function* F)
       tmpQArg.argNum = argNum;
 
       if(argType->isPointerTy()){
-	if(debugGenQASM)
+	if(debugOptimize)
 	  errs()<<"Argument Type: " << *argType <<"\n";
 
 	tmpQArg.isPtr = true;
@@ -1097,13 +1154,181 @@ void GenQASM::getFunctionArguments(Function* F)
       else if(argType->isDoubleTy())     
 	funcArgList.push_back(tmpQArg);
 
-      if(debugGenQASM)
+      if(debugOptimize)
 	print_qgateArg(tmpQArg);
     }
 }
 
+unsigned Optimize::countGate(vector<OpGate>& G){
+    unsigned rtvl = 0;
+    for(unsigned i = 0; i < G.size(); i++){
+        if(G[i].gateTy != '\0') rtvl++; 
+    }
+    return rtvl;
+}
+//Convert llvm internal data structure to OpGate for cleaner qubit argument(of gate) presentation
+//and easier qubit map later
+void Optimize::optimal_initial(Function * F, vector<string> &B, vector<OpGate> &G){
+             
+    mapFunction = mapMapFunc.find(F)->second;
+    
+    B.push_back(" ");
+
+    unsigned i = 1;
+    for(vector<qGateArg>::iterator vvit=qbitsInitInFunc.begin(),vvitE=qbitsInitInFunc.end();vvit!=vvitE;++vvit){
+        
+        string qName = printVarName((*vvit).argPtr->getName());
+        unsigned dMul = 1;
+        //flatten multi-array 
+        for(unsigned ndim = 0; ndim < (*vvit).numDim; ndim++){
+            dMul *= dMul * (*vvit).dimSize[ndim];
+         }
+        for(unsigned dimIter = 0; dimIter < dMul; dimIter++){
+            string newQ = qName + '_' + to_string(dimIter);
+            B.push_back(newQ);
+            i++;
+        }
+    }
+
+    for(unsigned mIndex=0;mIndex<mapFunction.size();mIndex++){
+        OpGate nxtGate = {'\0', 0, 0, 0};
+
+	    string fName = mapFunction[mIndex].func->getName();
+
+        if(fName.find("H.") !=string::npos){ nxtGate.gateTy = 'h';}
+        else if(fName.find("CNOT") !=string::npos){ nxtGate.gateTy = 'c';}
+        else if(fName.find("Tof") !=string::npos){ nxtGate.gateTy = 'o';}
+        else if(fName.find("MeasX") !=string::npos){ nxtGate.gateTy = 'X';}
+        else if(fName.find("MeasZ") !=string::npos){ nxtGate.gateTy = 'Z';}
+        else if(fName.find("PrepX") !=string::npos){ nxtGate.gateTy = 'n';}
+        else if(fName.find("PrepZ") !=string::npos){ nxtGate.gateTy = 'm';}
+        else if(fName.find("Sdag") !=string::npos){ nxtGate.gateTy = 'S';}
+        else if(fName.find("S.") !=string::npos){ nxtGate.gateTy = 's';}
+        else if(fName.find("T.") !=string::npos){ nxtGate.gateTy = 't';}
+        else if(fName.find("Tdag") !=string::npos){ nxtGate.gateTy = 'T';}
+        else if(fName.substr(0,2) == "Rz"){ nxtGate.gateTy = 'r';}
+        else if(fName.find("X.") !=string::npos){ nxtGate.gateTy = 'x';}
+        else if(fName.find("Z.") !=string::npos){ nxtGate.gateTy = 'z';}
+       
+        unsigned ToC = 0; //target or control
+        for(vector<qGateArg>::iterator vpIt=mapFunction[mIndex].qArgs.begin(), vpItE=mapFunction[mIndex].qArgs.end();vpIt!=vpItE;++vpIt){
+           string qName = printVarName((*vpIt).argPtr->getName()) ;
+           unsigned qInd = 0;
+           for(vector<qGateArg>::iterator vvit=qbitsInitInFunc.begin(),vvitE=qbitsInitInFunc.end();vvit!=vvitE;++vvit){
+                   if((*vvit).argPtr == (*vpIt).argPtr){
+                       for(unsigned ndim = 0; ndim < (*vpIt).numDim-1; ndim++){
+                            qInd += (*vpIt).dimSize[ndim]*(*vvit).dimSize[ndim+1];
+                       }
+                       qInd += (*vpIt).dimSize[(*vpIt).numDim-1];
+                   }
+           }
+           qName = qName + '_' + to_string(qInd);
+           bool foundGate = false;
+           for(unsigned i = 1; i < B.size(); i++){
+
+               if(qName.compare(B[i]) == 0){
+                   if(nxtGate.gateTy == 'c'){
+                      if(ToC == 0) 
+                        {nxtGate.control1 = i;}
+                      if(ToC == 1)
+                        {nxtGate.target = i;}
+                   }
+                   else if(nxtGate.gateTy == 'o'){
+                      if(ToC == 0) 
+                        {nxtGate.control1 = i;}
+                      if(ToC == 1)
+                        {nxtGate.control2 = i;}
+                      if(ToC == 2)
+                        {nxtGate.target = i;}
+                   }
+                   else{
+                      if(ToC == 0)
+                        {nxtGate.target = i;}
+                   }
+                   foundGate = true;
+                   break;
+               } 
+           }
+           ToC++;
+           if(!foundGate){errs()<<"can't find the gate.\n";}
+       }
+       G.push_back(nxtGate);
+   }
+    //errs()<<"Printing OpGate list"<<"\n";
+    //for(vector<OpGate>::iterator Git = G.begin(), GitE = G.end(); Git != GitE; ++Git){
+    //   errs()<< Git->gateTy<<" "<<Git->control1<<" "<<Git->control2<< " " << Git->target<<"\n";
+    // } 
+    for(unsigned i = 0; i < B.size()+1; i++){
+        indMap.push_back(i);
+    }
+
+} 
+void Optimize::erase_OpGate(OpGate& g){
+    g.gateTy = '\0';
+    g.target = 0;
+    g.control1 = 0;
+    g.control2 = 0;
+    return;
+}
+void Optimize::optimal(vector<OpGate>& G, vector<unsigned>& M){
+
+    if(G.size() == 0) return;
+
+    //templates
+    for(unsigned gInd = 0; gInd < G.size(); gInd++){
+        temp_begin:
+        if(G[gInd].gateTy == '\0') continue;
+        if(G[gInd].gateTy == 'c'){
+            unsigned gOff = 1;
+            unsigned gCount = 0; 
+            while(((gOff + gInd) < G.size()) && gCount < OPT_THRESHOLD){
+               if(G[gInd+gOff].gateTy == 'c' && G[gInd+gOff].target == G[gInd].target && G[gInd+gOff].control1 == G[gInd].control1){
+                  unsigned newPos =  canSwap(G, gInd, gInd + gOff);
+                  if(newPos != UINT_MAX) {
+                      erase_OpGate(G[gInd]);
+                      erase_OpGate(G[gInd+gOff]);
+                      break;
+                  }
+               }       
+               if(G[gInd+gOff].gateTy == 'c' && G[gInd+gOff].target == G[gInd].control1 && G[gInd+gOff].control1 == G[gInd].target){
+
+                  unsigned newPos =  canSwap(G, gInd, gInd + gOff);
+                  if(newPos == UINT_MAX) {break;}
+                  if(newPos != gInd){
+                      OpGate temp = G[gInd];
+                      for(unsigned i =  gInd; i < newPos; i++){
+                          G[i] = G[i+1];
+                      }
+                      G[newPos] = temp;
+                      goto temp_begin;
+                  }
+                  else{
+                      erase_OpGate(G[gInd]);
+                      unsigned tempUn = G[gInd + gOff].target;
+                      G[gInd + gOff].target = G[gInd + gOff].control1;
+                      G[gInd + gOff].control1 = tempUn;
+                      tempUn = M[G[gInd].target];
+                      M[G[gInd].target] = M[G[gInd].control1];
+                      M[G[gInd].control1] = tempUn;
+                      break;
+                  }
+                  
+               }
+               gOff++;
+               if(shareBit(G[gInd], G[gInd + gOff])) {gCount++;}
+            }
+        }
+        if(G[gInd].gateTy != '\0'){
+            G[gInd].control1 = M[G[gInd].control1];
+            G[gInd].target = M[G[gInd].target];
+        }
+        
+    }
+
+}
+
 // run - Find datapaths for qubits
-bool GenQASM::runOnModule(Module &M) {
+bool Optimize::runOnModule(Module &M) {
   vector<Function*> qFuncs;
 
   CallGraphNode* rootNode = getAnalysis<CallGraph>().getRoot();
@@ -1114,7 +1339,7 @@ bool GenQASM::runOnModule(Module &M) {
 //    {
 //      const std::vector<CallGraphNode*> &nextSCC = *sccIb;
 //
-//      if(debugGenQASM)
+//      if(debugOptimize)
 //	errs() << "\nSCC #" << ++sccNum << " : ";      
 //
 //      for (std::vector<CallGraphNode*>::const_iterator nsccI = nextSCC.begin(),
@@ -1140,9 +1365,7 @@ bool GenQASM::runOnModule(Module &M) {
 //    it--;
 //    (*it)->setName("main");
 //  }
-
    
-  errs() << "-------QASM Generation Pass:\n";
   CallGraphNode* rootNode1 = getAnalysis<CallGraph>().getRoot();
 
   sccNum = 0;
@@ -1152,16 +1375,16 @@ bool GenQASM::runOnModule(Module &M) {
     {
       const std::vector<CallGraphNode*> &nextSCC = *sccIb;
 
-      if(debugGenQASM)
+      if(debugOptimize)
 	errs() << "\nSCC #" << ++sccNum << " : ";      
-
+      
       for (std::vector<CallGraphNode*>::const_iterator nsccI = nextSCC.begin(),
 	     E = nextSCC.end(); nsccI != E; ++nsccI)
 	{
 	  Function *F=(*nsccI)->getFunction();	  
 	  
 	  if(F && !F->isDeclaration()){
-	    if(debugGenQASM)
+	    if(debugOptimize)
 	    errs() << "Processing Function:" << F->getName() <<" \n ";
 
 	    //initialize map structures for this function
@@ -1180,8 +1403,8 @@ bool GenQASM::runOnModule(Module &M) {
 	    for(inst_iterator instIb = inst_begin(F),instIe=inst_end(F); instIb!=instIe;++instIb){
 
 	      Instruction *pInst = &*instIb; // Grab pointer to instruction reference	      
-
-	      if(debugGenQASM)
+          
+	      if(debugOptimize)
 		errs() << "\n Processing Inst: "<<*pInst << "\n";
 
 	      analyzeAllocInst(F,pInst);
@@ -1198,7 +1421,7 @@ bool GenQASM::runOnModule(Module &M) {
 		Instruction *pInst = &*instIb; // Grab pointer to instruction reference	      
 		allDepQbit.clear();
 		
-		if(debugGenQASM)
+		if(debugOptimize)
 		  errs() << "\n Processing Inst: "<<*pInst << "\n";
 		
 		analyzeInst(F,pInst); //spatil: need a bool return type?
@@ -1206,11 +1429,9 @@ bool GenQASM::runOnModule(Module &M) {
 	      }
           mapMapFunc.insert( make_pair( F, mapFunction ) );
 	    }
-
-	    
 	  }
 	  else{
-	    if(debugGenQASM)
+	    if(debugOptimize)
 	      errs() << "WARNING: Ignoring external node or dummy function.";
 	  }
 	  
@@ -1231,36 +1452,92 @@ bool GenQASM::runOnModule(Module &M) {
         lastItPos--;
     }
 
-    for( vector<Function*>::iterator it = qFuncs.begin(); it != qFuncs.end(); it++){
-		std::string newName = (*it)->getName();
-		if(newName.find("CNOT") != string::npos) newName = "CNOT";
-		else if(newName.find("NOT.") != string::npos) newName = "X";
-		else if(newName.find("Toffoli.") != string::npos) newName = "Toffoli";
-		else if(newName.find("MeasX") != string::npos) newName = "MeasX";
-		else if(newName.find("MeasZ") != string::npos) newName = "MeasZ";
-		else if(newName.find("H.i") != string::npos) newName = "H";
-		else if(newName.find("Fredkin") != string::npos) newName = "Fredkin";
-		else if(newName.find("PrepX") != string::npos) newName = "PrepX";
-		else if(newName.find("PrepZ") != string::npos) newName = "PrepZ";
-		else if(newName.substr(0,2) == "Rz") newName = "Rz";
-		else if(newName.find("S.") != string::npos) newName = "S";
-		else if(newName.find("T.") != string::npos) newName = "T";
-		else if(newName.find("Sdag") != string::npos) newName = "Sdag";
-		else if(newName.find("Tdag") != string::npos) newName = "Tdag";
-		else if(newName.find("X.") != string::npos) newName = "X";
-		else if(newName.find("Z.") != string::npos) newName = "Z";
+    for(vector<Function*>::iterator it = qFuncs.begin(); it != qFuncs.end(); it++){
+        if((*it)->getName() == "main")   //assuming after flattening, the modules left are Toffoli and main, only care about main.
+        {
+            mapFunction = mapMapFunc.find(*it)->second;
+            //Convert llvm internal data structure to OpGate for cleaner qubit argument(of gate) presentation
+            //and easier qubit map later
+            optimal_initial((*it), bitMap, gateList);
+            
+            unsigned gNumBefore = 0;
+            unsigned gNumAfter = gateList.size();
+            while(gNumBefore != gNumAfter){
+                gNumBefore = gNumAfter;
+                optimal(gateList, indMap);
+                gNumAfter = countGate(gateList);
+                //errs()<<"Before:"<<gNumBefore<<" After:"<<gNumAfter<<"\n";
+            }
+            for(unsigned i = 1; i < bitMap.size();i++){
+                errs()<<"qubit "<<bitMap[i]<<"\n"; 
+            }
+            /*
+            for(unsigned i = 1; i < gateList.size();i++){
+                if(gateList[i].gateTy != '\0')
+                    errs()<<gateList[i].gateTy<<" "<<gateList[i].target<<"\n";
+            }*/
+            for(unsigned i = 0; i < gateList.size(); i++){
+                if(gateList[i].gateTy == '\0'){continue;}
+                if(gateList[i].gateTy == 'h'){errs()<<"H ";}
+                if(gateList[i].gateTy == 'c'){errs()<<"CNOT ";}
+                if(gateList[i].gateTy == 'o'){errs()<<"Tof ";}
+                if(gateList[i].gateTy == 'X'){errs()<<"MeasX ";}
+                if(gateList[i].gateTy == 'Z'){errs()<<"MeasZ ";}
+                if(gateList[i].gateTy == 'n'){errs()<<"PrepX ";}
+                if(gateList[i].gateTy == 'm'){errs()<<"PrepZ ";}
+                if(gateList[i].gateTy == 'S'){errs()<<"Sdag ";}
+                if(gateList[i].gateTy == 's'){errs()<<"S ";}
+                if(gateList[i].gateTy == 't'){errs()<<"T ";}
+                if(gateList[i].gateTy == 'T'){errs()<<"Tdag ";}
+                if(gateList[i].gateTy == 'r'){errs()<<"Rz "; }
+                if(gateList[i].gateTy == 'x'){ errs()<<"X ";}
+                if(gateList[i].gateTy == 'z'){ errs()<<"Z ";}
 
-		std::replace(newName.begin(), newName.end(), '.', '_');
+                if(gateList[i].control2 > 0)
+                    {errs()<<bitMap[gateList[i].control2]<<",";
+                    }
+                if(gateList[i].control1 > 0){
+                    errs()<<bitMap[gateList[i].control1]<<",";
+                }
+                if(gateList[i].target > 0)
+                    {errs()<<bitMap[gateList[i].target];} 
 
-		(*it)->setName(newName);
+                errs()<<"\n";
+
+            }
+            /*
+            for(unsigned mIndex=0;mIndex<mapFunction.size();mIndex++){
+                errs()<<mapFunction[mIndex].func->getName()<<" ";  
+
+                for(vector<qGateArg>::iterator vpIt=mapFunction[mIndex].qArgs.begin(), vpItE=mapFunction[mIndex].qArgs.end();vpIt!=vpItE;++vpIt){
+                   qbitsInitInFunc = mapQbitsInit.find((*it))->second;
+                   errs()<<(*vpIt).argPtr->getName();
+                   for(int ndim = 0; ndim < (*vpIt).numDim; ndim++)
+                       errs()<<"["<<(*vpIt).dimSize[ndim]<<"]\n";
+                   errs()<<" ";
+                }
+                errs()<<"\n";
+            } 
+            */
+        }
+        /*
         if(it == lastItPos) printFuncHeader((*it), true);
         else printFuncHeader((*it), false);
-        genQASM((*it));
+        genGateArray((*it));
+        mapFunction = mapMapFunc.find(*it)->second;
+        for(unsigned mIndex=0;mIndex<mapFunction.size();mIndex++){
+          if(mapFunction[mIndex].qArgs.size()>0){
+            errs()<<"func name: "<<mapFunction[mIndex].func->getName()<<" ";
+    
+          for(vector<qGateArg>::iterator vpIt=mapFunction[mIndex].qArgs.begin(), vpItE=mapFunction[mIndex].qArgs.end();vpIt!=vpItE;++vpIt){
+            errs()<<(*vpIt).argPtr->getName()<<" ";
+          }
+            errs()<<"\n";
+          }
+        }
+        */
+    
     }
 
-  errs()<<"\n--------End of QASM generation";
-  errs() << "\n";
-  
   return false;
 }
-

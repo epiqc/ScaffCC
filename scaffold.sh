@@ -9,7 +9,7 @@ if [ $(echo $PATH | grep ${RKQC_PATH} | wc -l) -eq 0 ]; then
 fi
 
 function show_help {
-    echo "Usage: $0 [-hv] [-rqfRFcpds] [-l #] [-P #] <filename>.scaffold"
+    echo "Usage: $0 [-hv] [-rqfRFckdso] [-l #] [-P #] <filename>.scaffold"
     echo "    -r   Generate resource estimate (default)"
     echo "    -q   Generate QASM"
     echo "    -f   Generate flattened QASM"
@@ -23,11 +23,12 @@ function show_help {
     echo "         but requires recompilation for any new output)"
     echo "    -d   Dry-run; show all commands to be run, but do not execute"
     echo "    -s   Generate QX Simulator input file"
+    echo "    -o   Generate optimized QASM"
     echo "    -v   Show current Scaffold version information"
 }
 
 function show_version {
-    echo "Scaffold - Release 2.2 (Feb 1, 2017) Beta"
+    echo "Scaffold - Release 3.0 (Aug 1, 2017) Alpha"
 }
 
 # Parse opts
@@ -42,9 +43,10 @@ rot=1
 toff=1
 flat=0
 qc=0
-precision="3"
+precision=4
 targets=""
-while getopts "h?vcdfsFkqrRT:l:P:" opt; do
+optimize=0
+while getopts "h?vcdfsFkqroRT:l:P:" opt; do
     case "$opt" in
     h|\?)
         show_help
@@ -56,12 +58,12 @@ while getopts "h?vcdfsFkqrRT:l:P:" opt; do
         ;;
     c) clean=1
         ;;
-	  d) dryrun="--dry-run"
-		    ;;
+    d) dryrun="--dry-run"
+        ;;
     F) force=1
         ;;
     f) flat=1
-		    ;;
+        ;;
     k) purge=0
         ;;
     q) targets="${targets} qasm"
@@ -73,7 +75,9 @@ while getopts "h?vcdfsFkqrRT:l:P:" opt; do
     T) toff=0
         ;;        
     s) qc=1
-    		;;
+        ;;
+    o) optimize=1
+        ;;
     l) targets="${targets} SQCT_LEVELS=${OPTARG}"
         ;;
     P) precision=${OPTARG}
@@ -88,6 +92,10 @@ fi
 
 if [ ${qc} -eq 1 ]; then
 	targets="${targets} qc"
+fi
+
+if [ ${optimize} -eq 1 ]; then
+	targets="${targets} optimize"
 fi
 
 # Put resources at the end so it is easy to read
@@ -132,6 +140,6 @@ if [ ${clean} -eq 1 ]; then
 	make -f $ROOT/scaffold/Scaffold.makefile ${dryrun} ROOT=$ROOT DIRNAME=${dir} FILENAME=${filename} FILE=${file} CFILE=${cfile} clean
     exit
 fi
-make -f $ROOT/scaffold/Scaffold.makefile ${dryrun} ROOT=$ROOT DIRNAME=${dir} FILENAME=${filename} FILE=${file} CFILE=${cfile} TOFF=${toff} RKQC=${rkqc} ROTATIONS=${rot} PRECISION=${precision} ${targets}
+make -f $ROOT/scaffold/Scaffold.makefile ${dryrun} ROOT=$ROOT DIRNAME=${dir} FILENAME=${filename} FILE=${file} CFILE=${cfile} TOFF=${toff} RKQC=${rkqc} ROTATIONS=${rot} PRECISION=${precision} OPTIMIZE=${optimize} ${targets}
 
 exit 0

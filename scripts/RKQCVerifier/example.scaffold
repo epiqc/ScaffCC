@@ -1,0 +1,37 @@
+#define n_qbit 4
+rkqc nToffoli(qint target[n_qbit], qint in1[n_qbit], qint in2[n_qbit]){
+    zero_to_garbage ancilla[n_qbit];
+    int i;
+    for (i=0; i<n_qbit; i++){
+        //toffoli(ancilla[i], in1[i], in2[i]);
+        toffoli(in1[i], in2[i], ancilla[i]);
+    }
+    for(i=0; i<n_qbit; i++){
+        assign_value_of_b_to_a(target[i], ancilla[i], 1);
+    }
+}
+
+rkqc AND(qint target[n_qbit], qint in1[n_qbit], qint in2[n_qbit]){
+    nToffoli(target, in1, in2);
+}
+
+rkqc NAND(qint target[n_qbit], qint in1[n_qbit], qint in2[n_qbit]){
+    int i;
+    AND(target, in1, in2);
+    for(i=0; i<n_qbit; i++){
+        NOT(target[i]);
+    }
+}
+
+int main(){
+  zero_to_garbage a[n_qbit];
+  zero_to_garbage b[n_qbit];
+  zero_to_garbage out[n_qbit];
+  int i;
+  for (i = 0; i < n_qbit; i++){
+    if (i%2) NOT(a[i]);
+    NOT(b[i]);
+  }
+  NAND(out, a, b);
+  return 0;
+}

@@ -18,6 +18,7 @@ GRIDSYNTHPATH=$(ROOT)/Rotations/gridsynth/gridsynth
 ROTATIONPATH=$(GRIDSYNTHPATH) # select rotation decomposition tool
 SCRIPTSPATH=$(ROOT)/scripts/ # select path to scripts
 PRECISION=""
+OPTIMIZE=0
 
 CC=$(BUILD)/bin/clang
 OPT=$(BUILD)/bin/opt
@@ -49,11 +50,17 @@ flat: $(FILE).qasmf
 qasm: $(FILE).qasmh
 
 ################################
+# QASM optimization
+################################
+optimize: $(FILE)_optimized.qasmf
+
+################################
 # QX Simulator Generation
 ################################
 qc: $(FILE).qc
 
-.PHONY: res_count qasm flat qc
+
+.PHONY: res_count qasm flat optimize qc
 
 ################################
 # Intermediate targets
@@ -178,11 +185,25 @@ $(FILE)_qasm.scaffold: $(FILE).qasmh
 $(FILE)_qasm: $(FILE)_qasm.scaffold
 	@$(CC) $(FILE)_qasm.scaffold -o $(FILE)_qasm
 
-# Execute hierchical QASM to flatten it
-$(FILE).qasmf: $(FILE)_qasm
+# Generate flattened QASM 
+$(FILE).qasmf: $(FILE)12.ll
+	@echo "[Scaffold.makefile] Flattening modules ..." 
+	@$(OPT) -S -load $(SCAFFOLD_LIB) -FlattenModule -all 1 $(FILE)12.ll -o $(FILE)12.inlined.ll 2> /dev/null
+	@$(OPT) -load $(SCAFFOLD_LIB) -gen-qasm $(FILE)12.inlined.ll 2> $(FILE).qasmh > /dev/null
+	@$(PYTHON) $(ROOT)/scaffold/flatten-qasm.py $(FILE).qasmh
+	@$(CC) $(FILE)_qasm.scaffold -o $(FILE)_qasm
 	@./$(FILE)_qasm > $(FILE).tmp
 	@cat fdecl.out $(FILE).tmp > $(FILE).qasmf
 	@echo "[Scaffold.makefile] Flat QASM written to $(FILE).qasmf ..."    
+
+# Generate optimized QASM
+$(FILE)_optimized.qasmf: $(FILE)12.ll
+	@if [ $(OPTIMIZE) -eq 1 ]; then \
+		echo "[Scaffold.makefile] Optimizing circuit ..."; \
+		$(OPT) -S -load $(SCAFFOLD_LIB) -FlattenModule -all 1 $(FILE)12.ll -o $(FILE)12.inlined.ll 2> /dev/null; \
+		$(OPT) -load $(SCAFFOLD_LIB) -Optimize $(FILE)12.inlined.ll 2> $(FILE)_optimized.qasmf > /dev/null; \
+		echo "[Scaffold.makefile] Optimized circuit written to $(FILE)_optimized.qasmf ..."; \
+	fi
 
 # Generate simulation input
 $(FILE).qc: $(FILE).qasmf
@@ -192,10 +213,10 @@ $(FILE).qc: $(FILE).qasmf
 
 # purge cleans temp files
 purge:
-	@rm -f $(FILE)_merged.scaffold $(FILE)_no.scaffold $(FILE).ll $(FILE)1.ll $(FILE)1a.ll $(FILE)1b.ll $(FILE)2.ll $(FILE)3.ll $(FILE)4.ll $(FILE)5.ll $(FILE)5a.ll $(FILE)6.ll $(FILE)6tmp.ll $(FILE)7.ll $(FILE)8.ll $(FILE)9.ll $(FILE)10.ll $(FILE)11.ll $(FILE)12.ll $(FILE)tmp.ll $(FILE)_qasm $(FILE)_qasm.scaffold fdecl.out $(CFILE).ctqg $(CFILE).c $(CFILE).signals $(FILE).tmp sim_$(CFILE) $(FILE).*.qasm
+	@rm -f $(FILE)_merged.scaffold $(FILE)_no.scaffold $(FILE).ll $(FILE)1.ll $(FILE)1a.ll $(FILE)1b.ll $(FILE)2.ll $(FILE)3.ll $(FILE)4.ll $(FILE)5.ll $(FILE)5a.ll $(FILE)6.ll $(FILE)6tmp.ll $(FILE)7.ll $(FILE)8.ll $(FILE)9.ll $(FILE)10.ll $(FILE)11.ll $(FILE)12.ll $(FILE)12.inlined.ll $(FILE)tmp.ll $(FILE)_qasm $(FILE)_qasm.scaffold fdecl.out $(CFILE).ctqg $(CFILE).c $(CFILE).signals $(FILE).tmp sim_$(CFILE) $(FILE).*.qasm
 
 # clean removes all completed files
 clean: purge
-	@rm -f $(FILE).resources $(FILE).qasmh $(FILE).qasmf $(FILE).qc
+	@rm -f $(FILE).resources $(FILE).qasmh $(FILE).qasmf $(FILE)_optimized.qasmf $(FILE).qc
 
 .PHONY: clean purge
