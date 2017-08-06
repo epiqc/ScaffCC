@@ -102,6 +102,7 @@ namespace {
     string printVarName(StringRef s)
     {
       std::string sName = s.str();
+      std::replace(sName.begin(), sName.end(), '.', '_');
 
       unsigned pos = sName.rfind("..");
 
@@ -827,7 +828,9 @@ void GenQASM::printFuncHeader(Function* F, bool lastFunc)
       if(tmpQA.isPtr)
 	errs()<<"*";	  
       
-      errs()<<" "<<printVarName(tmpQA.argPtr->getName())<<" , ";
+      std::string tmpQAName = tmpQA.argPtr->getName();
+      std::replace(tmpQAName.begin(), tmpQAName.end(), '.','_');
+      errs()<<" "<<printVarName(tmpQAName)<<" , ";
     }
     
     if(debugGenQASM)
@@ -855,8 +858,12 @@ void GenQASM::printFuncHeader(Function* F, bool lastFunc)
     
     if((funcArgList[tmp_num_elem-1]).isPtr)
       errs()<<"*";
-    
-    errs() <<" "<<printVarName((funcArgList[tmp_num_elem-1]).argPtr->getName());
+
+      std::string qbName = (funcArgList[tmp_num_elem-1]).argPtr->getName();
+      std::replace(qbName.begin(), qbName.end(), '.','_');
+      errs()<<" "<<printVarName(qbName)<<" , ";
+   
+//    errs() <<" "<<printVarName((funcArgList[tmp_num_elem-1]).argPtr->getName());
   }
   
   errs()<<" ) {\n ";   
@@ -865,12 +872,14 @@ void GenQASM::printFuncHeader(Function* F, bool lastFunc)
   //mvpItr=qbitsInitInFunc.find(F);	    
   for(vector<qGateArg>::iterator vvit=qbitsInitInFunc.begin(),vvitE=qbitsInitInFunc.end();vvit!=vvitE;++vvit)
     {	
+      std::string qName = (*vvit).argPtr->getName();
+      std::replace(qName.begin(), qName.end(), '.','_');
       if((*vvit).isQbit)
-	errs()<<"\tqbit "<<printVarName((*vvit).argPtr->getName());
+	errs()<<"\tqbit "<<printVarName(qName);
       if((*vvit).isCbit)
-	errs()<<"\tcbit "<<printVarName((*vvit).argPtr->getName());
+	errs()<<"\tcbit "<<printVarName(qName);
 	  if((*vvit).isAbit)
-	errs() << "\tqbit "<<printVarName((*vvit).argPtr->getName());
+	errs() << "\tqbit "<<printVarName(qName);
 
       //if only single-dimensional qbit arrays expected
       //errs()<<"["<<(*vvit).valOrIndex<<"];\n ";
@@ -1248,9 +1257,9 @@ bool GenQASM::runOnModule(Module &M) {
         else printFuncHeader((*it), false);
         genQASM((*it));
     }
+
   errs()<<"\n--------End of QASM generation";
   errs() << "\n";
-
   
   return false;
 }

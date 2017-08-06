@@ -19,18 +19,21 @@ To see a list of compiler options which can be passed as flags, run:
 \begin{lstlisting}
 ./scaffold.sh -h
 
-Usage: ./scaffold.sh [-h] [-rqfRFcpd] [-L #] <filename>.scaffold
+Usage: ./scaffold.sh [-hv] [-rqfRFckdso] [-l #] [-P #] <filename>.scaffold
     -r   Generate resource estimate (default)
     -q   Generate QASM
     -f   Generate flattened QASM
     -R   Disable rotation decomposition
     -T   Disable Toffoli decomposition
     -l   Levels of recursion to run (default=1)
+    -P   Set precision of rotation decomposition in decimal digits (default=10)
     -F   Force running all steps
     -c   Clean all files (no other actions)
-    -p   Purge all intermediate files (preserves specified output,
+    -k   Keep all intermediate files (default only keeps specified output,
          but requires recompilation for any new output)
     -d   Dry-run; show all commands to be run, but do not execute
+    -s   Generate QX Simulator input file 
+    -o   Generate optimized QASM
     -v   Show current ScaffCC version
 \end{lstlisting}
 
@@ -87,4 +90,27 @@ Calls the following scripts:
 
 All output files are placed in a new directory to avoid cluttering.
 
+\subsection{Rotation Generator: gen\_rotation/}
 
+This is a C++ implemetation of the library construction method for generating Rz rotations. The main features of this generator include: 
+\begin{itemize}
+\item Powered by gridsynth, the package can generate rotation sequences that approximate arbitrary $Rz$ angles, up to given precision. 
+\item Generate libraries of rotation sequences given use-defined precision and storage requirements, trading storage for execution time. 
+\item Dynamically concatenate rotation sequences at run time using generated libraries.
+\end{itemize}
+Detailed description and usage can be found in the subdirectory scripts/gen\_rotations/.
+
+
+\subsection{Test Correctness of RKQC Programs: RKQCVerifier/}
+
+RKQCVerifier is a tool that helps verify the correctness of RKQC applications. For detailed description and usage, please refer to the subdirectory scripts/RKQCVerifier/.
+
+\subsection{Braidflash}
+
+Braidflash is a software for efficient simulation of braids in the context of surface error correction of quantum applications. For further explanation and to cite this tool, please refer to the following publication:
+
+\begin{quote}
+A. Javadi-Abhari, P. Gokhale, A. Holmes, D. Franklin, K. R. Brown, M. R. Martonosi, F. T. Chong, {\em``Optimized Surface Code Communication in Superconducting Quantum Computers,"} IEEE/ACM MICRO, Cambridge, MA, 2017
+\end{quote}
+
+Detailed description and usage can be found in the subdirectory braidflash/.

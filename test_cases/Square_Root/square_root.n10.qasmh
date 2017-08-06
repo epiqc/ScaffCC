@@ -1,6 +1,6 @@
 -------QASM Generation Pass:
 
-module Sqr ( qbit* a , qbit* b ) {
+module Sqr ( qbit* a , qbit* b ,  ) {
  	CNOT ( b[0] , a[0] );
  	CNOT ( b[2] , a[1] );
  	CNOT ( b[4] , a[2] );
@@ -18,7 +18,7 @@ module Sqr ( qbit* a , qbit* b ) {
  	CNOT ( b[9] , a[9] );
  }
 
-module ToffoliImpl_Q_Q_Q ( qbit target , qbit control1 , qbit control2 ) {
+module ToffoliImpl_Q_Q_Q ( qbit target , qbit control1 , qbit control2 ,  ) {
  	H ( target );
  	Tdag ( control1 );
  	T ( control2 );
@@ -38,8 +38,8 @@ module ToffoliImpl_Q_Q_Q ( qbit target , qbit control1 , qbit control2 ) {
  	H ( target );
  }
 
-module EQxMark_IP0_IPx_IPx_IPx_DPx_DPx_DPx_DPx ( qbit* b ) {
- 	qbit x[9];
+module EQxMark_IP0_IPx_IPx_IPx_DPx_DPx_DPx_DPx ( qbit* b ,  ) {
+ 	qbit x_[9];
 	X ( b[0] );
  	X ( b[2] );
  	X ( b[3] );
@@ -49,34 +49,34 @@ module EQxMark_IP0_IPx_IPx_IPx_DPx_DPx_DPx_DPx ( qbit* b ) {
  	X ( b[7] );
  	X ( b[8] );
  	X ( b[9] );
- 	PrepZ ( x[0] , 0 );
- 	PrepZ ( x[1] , 0 );
- 	PrepZ ( x[2] , 0 );
- 	PrepZ ( x[3] , 0 );
- 	PrepZ ( x[4] , 0 );
- 	PrepZ ( x[5] , 0 );
- 	PrepZ ( x[6] , 0 );
- 	PrepZ ( x[7] , 0 );
- 	PrepZ ( x[8] , 0 );
- 	ToffoliImpl_Q_Q_Q ( x[0] , b[1] , b[0] );
- 	ToffoliImpl_Q_Q_Q ( x[1] , x[0] , b[2] );
- 	ToffoliImpl_Q_Q_Q ( x[2] , x[1] , b[3] );
- 	ToffoliImpl_Q_Q_Q ( x[3] , x[2] , b[4] );
- 	ToffoliImpl_Q_Q_Q ( x[4] , x[3] , b[5] );
- 	ToffoliImpl_Q_Q_Q ( x[5] , x[4] , b[6] );
- 	ToffoliImpl_Q_Q_Q ( x[6] , x[5] , b[7] );
- 	ToffoliImpl_Q_Q_Q ( x[7] , x[6] , b[8] );
- 	ToffoliImpl_Q_Q_Q ( x[8] , x[7] , b[9] );
- 	Z ( x[8] );
- 	ToffoliImpl_Q_Q_Q ( x[8] , x[7] , b[9] );
- 	ToffoliImpl_Q_Q_Q ( x[7] , x[6] , b[8] );
- 	ToffoliImpl_Q_Q_Q ( x[6] , x[5] , b[7] );
- 	ToffoliImpl_Q_Q_Q ( x[5] , x[4] , b[6] );
- 	ToffoliImpl_Q_Q_Q ( x[4] , x[3] , b[5] );
- 	ToffoliImpl_Q_Q_Q ( x[3] , x[2] , b[4] );
- 	ToffoliImpl_Q_Q_Q ( x[2] , x[1] , b[3] );
- 	ToffoliImpl_Q_Q_Q ( x[1] , x[0] , b[2] );
- 	ToffoliImpl_Q_Q_Q ( x[0] , b[1] , b[0] );
+ 	PrepZ ( x_[0] , 0 );
+ 	PrepZ ( x_[1] , 0 );
+ 	PrepZ ( x_[2] , 0 );
+ 	PrepZ ( x_[3] , 0 );
+ 	PrepZ ( x_[4] , 0 );
+ 	PrepZ ( x_[5] , 0 );
+ 	PrepZ ( x_[6] , 0 );
+ 	PrepZ ( x_[7] , 0 );
+ 	PrepZ ( x_[8] , 0 );
+ 	ToffoliImpl_Q_Q_Q ( x_[0] , b[1] , b[0] );
+ 	ToffoliImpl_Q_Q_Q ( x_[1] , x_[0] , b[2] );
+ 	ToffoliImpl_Q_Q_Q ( x_[2] , x_[1] , b[3] );
+ 	ToffoliImpl_Q_Q_Q ( x_[3] , x_[2] , b[4] );
+ 	ToffoliImpl_Q_Q_Q ( x_[4] , x_[3] , b[5] );
+ 	ToffoliImpl_Q_Q_Q ( x_[5] , x_[4] , b[6] );
+ 	ToffoliImpl_Q_Q_Q ( x_[6] , x_[5] , b[7] );
+ 	ToffoliImpl_Q_Q_Q ( x_[7] , x_[6] , b[8] );
+ 	ToffoliImpl_Q_Q_Q ( x_[8] , x_[7] , b[9] );
+ 	Z ( x_[8] );
+ 	ToffoliImpl_Q_Q_Q ( x_[8] , x_[7] , b[9] );
+ 	ToffoliImpl_Q_Q_Q ( x_[7] , x_[6] , b[8] );
+ 	ToffoliImpl_Q_Q_Q ( x_[6] , x_[5] , b[7] );
+ 	ToffoliImpl_Q_Q_Q ( x_[5] , x_[4] , b[6] );
+ 	ToffoliImpl_Q_Q_Q ( x_[4] , x_[3] , b[5] );
+ 	ToffoliImpl_Q_Q_Q ( x_[3] , x_[2] , b[4] );
+ 	ToffoliImpl_Q_Q_Q ( x_[2] , x_[1] , b[3] );
+ 	ToffoliImpl_Q_Q_Q ( x_[1] , x_[0] , b[2] );
+ 	ToffoliImpl_Q_Q_Q ( x_[0] , b[1] , b[0] );
  	X ( b[0] );
  	X ( b[2] );
  	X ( b[3] );
@@ -88,7 +88,7 @@ module EQxMark_IP0_IPx_IPx_IPx_DPx_DPx_DPx_DPx ( qbit* b ) {
  	X ( b[9] );
  }
 
-module diffuse ( qbit* q ) {
+module diffuse ( qbit* q ,  ) {
  	qbit x[9];
 	H ( q[0] );
  	H ( q[1] );
@@ -160,8 +160,8 @@ module diffuse ( qbit* q ) {
  	H ( q[9] );
  }
 
-module EQxMark_IP1_IPx_IPx_IPx_DPx_DPx_DPx_DPx ( qbit* b , qbit* t ) {
- 	qbit x[9];
+module EQxMark_IP1_IPx_IPx_IPx_DPx_DPx_DPx_DPx ( qbit* b , qbit* t ,  ) {
+ 	qbit x_[9];
 	X ( b[0] );
  	X ( b[2] );
  	X ( b[3] );
@@ -171,34 +171,34 @@ module EQxMark_IP1_IPx_IPx_IPx_DPx_DPx_DPx_DPx ( qbit* b , qbit* t ) {
  	X ( b[7] );
  	X ( b[8] );
  	X ( b[9] );
- 	PrepZ ( x[0] , 0 );
- 	PrepZ ( x[1] , 0 );
- 	PrepZ ( x[2] , 0 );
- 	PrepZ ( x[3] , 0 );
- 	PrepZ ( x[4] , 0 );
- 	PrepZ ( x[5] , 0 );
- 	PrepZ ( x[6] , 0 );
- 	PrepZ ( x[7] , 0 );
- 	PrepZ ( x[8] , 0 );
- 	ToffoliImpl_Q_Q_Q ( x[0] , b[1] , b[0] );
- 	ToffoliImpl_Q_Q_Q ( x[1] , x[0] , b[2] );
- 	ToffoliImpl_Q_Q_Q ( x[2] , x[1] , b[3] );
- 	ToffoliImpl_Q_Q_Q ( x[3] , x[2] , b[4] );
- 	ToffoliImpl_Q_Q_Q ( x[4] , x[3] , b[5] );
- 	ToffoliImpl_Q_Q_Q ( x[5] , x[4] , b[6] );
- 	ToffoliImpl_Q_Q_Q ( x[6] , x[5] , b[7] );
- 	ToffoliImpl_Q_Q_Q ( x[7] , x[6] , b[8] );
- 	ToffoliImpl_Q_Q_Q ( x[8] , x[7] , b[9] );
- 	CNOT ( t[0] , x[8] );
- 	ToffoliImpl_Q_Q_Q ( x[8] , x[7] , b[9] );
- 	ToffoliImpl_Q_Q_Q ( x[7] , x[6] , b[8] );
- 	ToffoliImpl_Q_Q_Q ( x[6] , x[5] , b[7] );
- 	ToffoliImpl_Q_Q_Q ( x[5] , x[4] , b[6] );
- 	ToffoliImpl_Q_Q_Q ( x[4] , x[3] , b[5] );
- 	ToffoliImpl_Q_Q_Q ( x[3] , x[2] , b[4] );
- 	ToffoliImpl_Q_Q_Q ( x[2] , x[1] , b[3] );
- 	ToffoliImpl_Q_Q_Q ( x[1] , x[0] , b[2] );
- 	ToffoliImpl_Q_Q_Q ( x[0] , b[1] , b[0] );
+ 	PrepZ ( x_[0] , 0 );
+ 	PrepZ ( x_[1] , 0 );
+ 	PrepZ ( x_[2] , 0 );
+ 	PrepZ ( x_[3] , 0 );
+ 	PrepZ ( x_[4] , 0 );
+ 	PrepZ ( x_[5] , 0 );
+ 	PrepZ ( x_[6] , 0 );
+ 	PrepZ ( x_[7] , 0 );
+ 	PrepZ ( x_[8] , 0 );
+ 	ToffoliImpl_Q_Q_Q ( x_[0] , b[1] , b[0] );
+ 	ToffoliImpl_Q_Q_Q ( x_[1] , x_[0] , b[2] );
+ 	ToffoliImpl_Q_Q_Q ( x_[2] , x_[1] , b[3] );
+ 	ToffoliImpl_Q_Q_Q ( x_[3] , x_[2] , b[4] );
+ 	ToffoliImpl_Q_Q_Q ( x_[4] , x_[3] , b[5] );
+ 	ToffoliImpl_Q_Q_Q ( x_[5] , x_[4] , b[6] );
+ 	ToffoliImpl_Q_Q_Q ( x_[6] , x_[5] , b[7] );
+ 	ToffoliImpl_Q_Q_Q ( x_[7] , x_[6] , b[8] );
+ 	ToffoliImpl_Q_Q_Q ( x_[8] , x_[7] , b[9] );
+ 	CNOT ( t[0] , x_[8] );
+ 	ToffoliImpl_Q_Q_Q ( x_[8] , x_[7] , b[9] );
+ 	ToffoliImpl_Q_Q_Q ( x_[7] , x_[6] , b[8] );
+ 	ToffoliImpl_Q_Q_Q ( x_[6] , x_[5] , b[7] );
+ 	ToffoliImpl_Q_Q_Q ( x_[5] , x_[4] , b[6] );
+ 	ToffoliImpl_Q_Q_Q ( x_[4] , x_[3] , b[5] );
+ 	ToffoliImpl_Q_Q_Q ( x_[3] , x_[2] , b[4] );
+ 	ToffoliImpl_Q_Q_Q ( x_[2] , x_[1] , b[3] );
+ 	ToffoliImpl_Q_Q_Q ( x_[1] , x_[0] , b[2] );
+ 	ToffoliImpl_Q_Q_Q ( x_[0] , b[1] , b[0] );
  	X ( b[0] );
  	X ( b[2] );
  	X ( b[3] );

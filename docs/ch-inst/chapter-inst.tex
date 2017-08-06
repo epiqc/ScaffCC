@@ -3,14 +3,33 @@
 \section{Getting ScaffCC}
 \begin{enumerate}
   \item Go to https://github.com/epiqc/ScaffCC
-  \item Download the repository:
+  \item For the \textbf{Unix build}, download the repository:
 \begin{lstlisting}
    git clone https://github.com/epiqc/ScaffCC.git [dir]
+\end{lstlisting}
+  \item For the \textbf{OS X build}, download the repository:
+\begin{lstlisting}
+   git clone -b ScaffCC_OSX https://github.com/epiqc/ScaffCC.git [dir]
 \end{lstlisting}
 \end{enumerate}
 
 
 \section{Building ScaffCC}
+
+\subsection{Prerequisites}
+
+\subsubsection{For OS X build}
+\begin{enumerate}
+  \item If not already installed, Xcode command line tool is required in order to build ScaffCC.
+  \begin{lstlisting}
+  xcode-select --install
+  \end{lstlisting}
+  
+  \item Python 2.7 (or later): Python is usually bundled with OS X. The built-in version should be sufficient.
+\end{enumerate}
+
+\subsubsection{For Unix build}
+
 First you need to install the following dependencies. For each one, you can either install by building from source,
 or use the package manager of your system (``yum" on Red Hat or ``apt-get" on Ubuntu).  
 
@@ -18,8 +37,7 @@ or use the package manager of your system (``yum" on Red Hat or ``apt-get" on Ub
   \item Static libraries for libstdc++ and glibc
 
   \begin{itemize}
-    \item ``Ubuntu" \\
-    Install GNU gold linker \\
+    \item ``Ubuntu": Install GNU gold linker \\
     You can check if you have this now by doing `ld -v' and if it says `GNU gold' you have it
     \begin{lstlisting}
     sudo apt-get install binutils-gold
@@ -54,8 +72,7 @@ or use the package manager of your system (``yum" on Red Hat or ``apt-get" on Ub
 
   \item The GNU Multiple Precision Arithmetic Library (gmp and gmpxx)    
   \begin{itemize}
-    \item ``Ubuntu"
-    Use tab-completion to verify the correct packages (e.g. libgmp\textless tab\textgreater \textless tab\textgreater)
+    \item ``Ubuntu": Use tab-completion to verify the correct packages (e.g. libgmp\textless tab\textgreater \textless tab\textgreater)
     \begin{lstlisting}
     sudo apt-get install libgmp-dev libgmpxx4ldbl
     \end{lstlisting}
@@ -99,13 +116,15 @@ or use the package manager of your system (``yum" on Red Hat or ``apt-get" on Ub
 
 \end{enumerate}
 
+\subsection{Installing}
+
 Once you have all of the required libraries, simply run 
 \begin{lstlisting}
-make
+    make
 \end{lstlisting} 
 or 
 \begin{lstlisting}
-make USE_GCC=1
+    make USE_GCC=1
 \end{lstlisting} 
 at the root of the repository. The $USE\_GCC$ flag will force the 
 Makefile to use GCC to compile instead, and this has been seen to be faster 
@@ -126,4 +145,4 @@ Included with ScaffCC is a suite of tests designed to verify the integrity of ne
     \end{lstlisting}
 \end{enumerate}
 
-This invokation will compile three small benchmarks, and verify that the generated files match those precompiled on an existing system, which are included in the test cases directory. If the three tests complete with a ``Succeeded", the installation was successful.
+This invocation will compile three small benchmarks, and verify that the generated files match those precompiled on an existing system, which are included in the test cases directory. If the three tests complete with a ``Succeeded", the installation was successful.

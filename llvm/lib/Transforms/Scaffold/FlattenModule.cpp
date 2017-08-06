@@ -30,11 +30,16 @@
 #include "llvm/Support/CFG.h"
 #include "llvm/Target/TargetData.h"
 #include "llvm/ADT/SCCIterator.h"
+#include "llvm/Support/CommandLine.h"
 
 // DEBUG switch
 bool debugFlattening = false;
 
 using namespace llvm;
+
+static cl::opt<unsigned>
+FLAT("all", cl::init(0), cl::Hidden,
+    cl::desc("Toggle for complete inlining"));
 
 // An anonymous namespace for the pass. Things declared inside it are
 // only visible to the current file.
@@ -82,9 +87,10 @@ bool FlattenModule::runOnModule( Module & M ) {
       leafNames.push_back(line);
     file.close();
   }
-  else
-    errs() << "Error: Could not open flat_info file.\n";
-
+  else{
+    if(debugFlattening) 
+        errs() << "Error: Could not open flat_info file.\n";
+  }
   for (std::vector<std::string>::iterator i = leafNames.begin(), e = leafNames.end();
       i!=e; ++i) {
     if (debugFlattening)
@@ -154,9 +160,11 @@ bool FlattenModule::runOnSCC( const std::vector<CallGraphNode *> &scc ) {
 bool FlattenModule::runOnFunction( Function & F ) {
   if (debugFlattening)  
     errs() << "run on function: " << F.getName() << "\n";
-  // only continue if this function is part of makeLeaf
-  if (std::find(makeLeaf.begin(), makeLeaf.end(), &F) == makeLeaf.end())
-    return false;
+  // only continue if this function is part of makeLeaf and complete inlining is not toggled on
+  if (FLAT == 0){
+    if (std::find(makeLeaf.begin(), makeLeaf.end(), &F) == makeLeaf.end())
+        return false;
+  }
   if (debugFlattening)  
     errs() << "makeLeaf: " << F.getName() << "\n";
   

@@ -1,6 +1,6 @@
 -------QASM Generation Pass:
 
-module catN_IP4_IPx_IPx_IPx_DPx_DPx_DPx_DPx ( qbit* bit ) {
+module catN_IP4_IPx_IPx_IPx_DPx_DPx_DPx_DPx ( qbit* bit ,  ) {
  	H ( bit[0] );
  	CNOT ( bit[1] , bit[0] );
  	CNOT ( bit[2] , bit[1] );
