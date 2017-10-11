@@ -7,11 +7,13 @@ CXX=g++
 CXXFLAGS=-fPIC -c -g -ggdb -O0 -std=c++0x
 CXXWARN=-Wextra -Wunreachable-code
 INC=-I/usr/include/boost
-LIB=-L/usr/lib/boost_1_48_0
+#LIB=-L/usr/lib/boost_1_48_0
 
-LDFLAGS=-static-libstdc++ -static-libgcc -static
-LDLIBS=-Wl,-Bstatic -lgomp -lpthread -lmpfr -lgmpxx -lgmp -lrt
-BOOST=-Wl,-Bstatic -lboost_program_options -lboost_timer -lboost_chrono -lboost_system
+#LDFLAGS=-static-libstdc++ -static-libgcc -static
+#LDLIBS=-Wl,-Bstatic -lgomp -lpthread -lmpfr -lgmpxx -lgmp -lrt
+LDLIBS=-lgomp -lpthread -lmpfr -lgmpxx -lgmp -lrt
+#BOOST=-Wl,-Bstatic -lboost_program_options -lboost_timer -lboost_chrono -lboost_system
+BOOST=-lboost_program_options -lboost_timer -lboost_chrono -lboost_system
 SO=-Wall -fPIC
 
 vpath %.cpp
