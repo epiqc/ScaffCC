@@ -19,10 +19,10 @@ for f in $*; do
   echo "[gen-ll.sh] $b: Compiling ..."
   if [ ! -e ${b}/${b}.ll ]; then
     # Generate compiled files
-    $ROOT/scaffold.sh -r $f
+    $ROOT/scaffold.sh -rk $f
     mv ${b}11.ll ${b}11.ll.keep_me
     # clean intermediary compilation files (comment out for speed)
-    $ROOT/scaffold.sh -c $f
+    $ROOT/scaffold.sh -ck $f
     # Keep the final output for the compilation
     mv ${b}11.ll.keep_me ${b}/${b}.ll
   fi
