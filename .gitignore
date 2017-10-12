@@ -17,6 +17,7 @@
 *.pyc
 # vim swap files
 .*.sw?
+*.ll
 
 #==============================================================================#
 # Explicit files to ignore (only matches one).
