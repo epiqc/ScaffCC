@@ -2,18 +2,19 @@
 .SUFFIXES: .cpp .o
 
 CXX=g++
-#CXXFLAGS=-Wall -fPIC -c -g -ggdb -O0 -std=c++0x
-#CXXWARN=-Wall -Wextra -Wunreachable-code
 CXXFLAGS=-fPIC -c -g -ggdb -O0 -std=c++0x
 CXXWARN=-Wextra -Wunreachable-code
 INC=-I/usr/include/boost
-#LIB=-L/usr/lib/boost_1_48_0
 
-#LDFLAGS=-static-libstdc++ -static-libgcc -static
-#LDLIBS=-Wl,-Bstatic -lgomp -lpthread -lmpfr -lgmpxx -lgmp -lrt
-LDLIBS=-lgomp -lpthread -lmpfr -lgmpxx -lgmp -lrt
-#BOOST=-Wl,-Bstatic -lboost_program_options -lboost_timer -lboost_chrono -lboost_system
-BOOST=-lboost_program_options -lboost_timer -lboost_chrono -lboost_system
+ifdef DISABLE_STATIC
+	LDLIBS=-lgomp -lpthread -lmpfr -lgmpxx -lgmp -lrt
+	BOOST=-lboost_program_options -lboost_timer -lboost_chrono -lboost_system
+else
+	LIB=-L/usr/lib/boost_1_48_0
+	LDFLAGS=-static-libstdc++ -static-libgcc -static
+	LDLIBS=-Wl,-Bstatic -lgomp -lpthread -lmpfr -lgmpxx -lgmp -lrt
+	BOOST=-Wl,-Bstatic -lboost_program_options -lboost_timer -lboost_chrono -lboost_system
+endif
 SO=-Wall -fPIC
 
 vpath %.cpp

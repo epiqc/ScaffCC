@@ -142,7 +142,11 @@ Scaffold:
 	@cd scaffold && make;
 
 Sqct:
+ifdef DISABLE_STATIC
+	@cd Rotations/sqct && make DISABLE_STATIC=1
+else
 	@cd Rotations/sqct && make
+endif
 
 clean:
 	@cd Rotations/sqct && make clean
