@@ -22,7 +22,7 @@ for f in $*; do
     $ROOT/scaffold.sh -rk $f
     mv ${b}11.ll ${b}11.ll.keep_me
     # clean intermediary compilation files (comment out for speed)
-    $ROOT/scaffold.sh -ck $f
+    $ROOT/scaffold.sh -c $f
     # Keep the final output for the compilation
     mv ${b}11.ll.keep_me ${b}/${b}.ll
   fi
