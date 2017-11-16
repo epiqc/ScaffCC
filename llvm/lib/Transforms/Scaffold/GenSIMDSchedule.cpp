@@ -983,7 +983,7 @@ void GenSIMDSched::calc_critical_time(Function* F, qGate qg, bool isLeafFunc){
 
   uint64_t first_step = 0;
 
-  if(isFirstMeas && (fname == "llvm.MeasX" || fname == "llvm.MeasZ")){
+  if(isFirstMeas && (fname.find("llvm.MeasX")!=std::string::npos || fname.find("llvm.MeasZ")!=std::string::npos)){
     uint64_t maxFQ = find_max_funcQbits();
     uint64_t max_ts_sched; 
 

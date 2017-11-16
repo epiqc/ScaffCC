@@ -10,7 +10,6 @@
 // Cleaned up the code
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "GenLPFSSched"
 #include <vector>
 #include <iostream> 
 #include <limits>
@@ -37,6 +36,7 @@
 #include "llvm/Support/CommandLine.h"
 //#include "llvm/ScheduleDAG.h"
 
+//#define _DEBUG_LPFS // Optional: debug flag
 
 using namespace llvm;
 using namespace std;
@@ -114,8 +114,6 @@ LOCAL_MOVES_SCHED("local_moves_sched", cl::init(0), cl::Hidden,
 #define _Toffoli 14
 #define _Fredkin 15
 #define _All 16
-
-bool debugGenLPFSSched = false; 
 
 namespace {
 
@@ -240,7 +238,7 @@ struct move{
     map<Instruction*, qGate> mapInstSet;
     vector<InstPri> priorityVector;
 
-    map<Instruction*, op> mapCalls; //map of between the instruction label and the operation attributes of each inst
+    map<Instruction*, op> mapCalls; //map between the instruction label and the operation attributes of each inst
     vector<Instruction*> longPath;      //longest path to be returned by find_lp
     vector<Instruction*> callList;  
     map<int, multimap<int, op> > schedule; //all the instructions in a given simd region
@@ -401,324 +399,330 @@ vector<Instruction*> longestPathList;
 
 void GenLPFSSched::lpfs(Function* F, int ts, int simd_l, int refill_simd, int opp_simd){
   //----------------Build Dependency Tree--------------------//
-    int op_count = priorityVector.size();
-    int sched_ops = 0;
-    int moves = 0;
-    int id_to_apply = 0;
-    int qbit_id = 0;
+  int op_count = priorityVector.size();
+  int sched_ops = 0;
+  int moves = 0;
+  int id_to_apply = 0;
+  int qbit_id = 0;
 
-    //Building Dependency Graph
-    
-	for(vector<Instruction*>::iterator fp1 = callList.begin(); fp1 != callList.end(); ++fp1){      //All function instructs
-        bool found_one = false;
-        map<Instruction*, op>::iterator mp1 = mapCalls.find(*fp1);
-//        errs() << "checking op " << (*mp1).second.name.qFunc->getName() << "\n";
-        (*mp1).second.id = id_to_apply++;
-        for(int i=0; i < (*mp1).second.name.numArgs; ++i){                                              //All function args
-            vector<Instruction*>::iterator fp2 = fp1;
-            if((*mp1).second.name.args[i].id == -1) {
-                (*mp1).second.name.args[i].id = qbit_id++;
-                qArgInfo arg = (*mp1).second.name.args[i];
-                stringstream ss;
-                ss << arg.index;
-                string name = arg.name + ss.str();
-                qubitMap.insert(make_pair(name, arg));
-            }
-            if(fp1 != callList.end()) ++fp2;
-            while(fp2 != callList.end()){                                                               //All later instructs
-                map<Instruction*, op>::iterator mp2 = mapCalls.find(*fp2);
-                found_one = false;
-//                errs() << "Checking dependency between: " << (*mp1).first << " and " << (*mp2).first << "\n";
-            	for(int j = 0; j < (*mp2).second.name.numArgs; ++j){                                    //All those inst args
-                    if((*mp1).second.name.args[i].id == -1) {
-                        (*mp1).second.name.args[i].id = qbit_id++;
-                        qArgInfo arg = (*mp1).second.name.args[i];
-                        stringstream ss;
-                        ss << arg.index;
-                        string name = arg.name + ss.str();
-                        qubitMap.insert(make_pair(name, arg));
-                    }
-                	if((*mp1).second.name.args[i] == (*mp2).second.name.args[j]){
-//                        errs() << "Checking args between: " << (*mp1).second.name.args[i].name << (*mp1).second.name.args[i].index << " and " << (*mp2).second.name.args[j].name << (*mp2).second.name.args[j].index << "\n";
-//                           errs() << "\t Found Dependency between " << (*mp1).first << " and " << (*mp2).first << "\n";
-                        	(*mp1).second.out_edges.push_back((*mp2).first);
-                       		(*mp2).second.in_edges.push_back((*mp1).first);
-							found_one = true;
-               		}
-                }
-                if(found_one){ 
-//                    errs() << "found dep " << "\n";
-                    break;
-                }
-                ++fp2; 
-            }
+  //Building Dependency Graph  
+  int counter = 0;
+	for(vector<Instruction*>::iterator fp1 = callList.begin(); fp1 != callList.end(); ++fp1){
+    counter++;
+#ifdef _DEBUG_LPFS
+    if (counter % 1000 == 0)
+      errs() << "Got up to instruction " << counter << "\n";
+#endif
+    bool found_one = false;
+    map<Instruction*, op>::iterator mp1 = mapCalls.find(*fp1);
+    (*mp1).second.id = id_to_apply++;
+    for(int i=0; i < (*mp1).second.name.numArgs; ++i) {
+      vector<Instruction*>::iterator fp2 = fp1;
+      if((*mp1).second.name.args[i].id == -1) {
+        (*mp1).second.name.args[i].id = qbit_id++;
+        qArgInfo arg = (*mp1).second.name.args[i];
+        stringstream ss;
+        ss << arg.index;
+        string name = arg.name + ss.str();
+        qubitMap.insert(make_pair(name, arg));
+      }
+      if(fp1 != callList.end()) ++fp2;
+      int counter2 = 0;
+      while(fp2 != callList.end()){
+        counter2++;  
+        map<Instruction*, op>::iterator mp2 = mapCalls.find(*fp2);
+        found_one = false;
+        for(int j = 0; j < (*mp2).second.name.numArgs; ++j){
+          if((*mp1).second.name.args[i].id == -1) {
+            (*mp1).second.name.args[i].id = qbit_id++;
+            qArgInfo arg = (*mp1).second.name.args[i];
+            stringstream ss;
+            ss << arg.index;
+            string name = arg.name + ss.str();
+            qubitMap.insert(make_pair(name, arg));
+          }
+          if((*mp1).second.name.args[i] == (*mp2).second.name.args[j]){
+            string zz = (*mp1).second.name.args[i].name;             
+            (*mp1).second.out_edges.push_back((*mp2).first);
+            (*mp2).second.in_edges.push_back((*mp1).first);
+            found_one = true;
+          }
+        }
+        if(found_one){ 
+          break;
+        }
+        ++fp2;
+      }
 		}
 	}
+#ifdef _DEBUG_LPFS
+  errs() << "Finished Building Dependency Graph" << "\n";
+#endif
+  
+  //-----Find the longest paths required for the simd_l constraint-----//
+  longestPathList.clear();
+  for(int i = 1; i <= simd_l; i++){
+    find_lp(F,i);
+    longestPathList[i] = longPath;
+    longPath.clear();
+  } 
+#ifdef _DEBUG_LPFS
+  errs() << "Finished Finding Longest Path(s)" << "\n";    
+#endif
 
-//   errs() << "Finished Building Dependency Graph" << "\n";
-
-    //-----Find the longest paths required for the simd_l constraint-----//
-    longestPathList.clear();
-    for(int i = 1; i <= simd_l; i++){
-        find_lp(F,i);
-        longestPathList[i] = longPath;
-        longPath.clear();
-//        errs() << "found long path" << "\n";
-    } 
-
-//    errs() << "Finished Finding Longest Path(s)" << "\n";    
-
-    //-------Assign the longest paths-------//
-        for(map<int, vector<Instruction*> >::iterator pathNumber = longestPathList.begin(); pathNumber != longestPathList.end(); pathNumber++){
-            for(vector<Instruction*>::reverse_iterator inst = (*pathNumber).second.rbegin(); inst != (*pathNumber).second.rend(); inst++){
-                Instruction* myInst = (*inst);
-                if(((*mapCalls.find(myInst)).second.simd) == -1)
-                    sched_op(myInst, ts++, (*pathNumber).first);
+  //-------Assign the longest paths-------//
+  for(map<int, vector<Instruction*> >::iterator pathNumber = longestPathList.begin(); pathNumber != longestPathList.end(); pathNumber++){
+    for(vector<Instruction*>::reverse_iterator inst = (*pathNumber).second.rbegin(); inst != (*pathNumber).second.rend(); inst++){
+      Instruction* myInst = (*inst);
+      if(((*mapCalls.find(myInst)).second.simd) == -1)
+        sched_op(myInst, ts++, (*pathNumber).first);
+      sched_ops++;
+    }   
+  }
+  ts = 0;
+  
+  while(sched_ops < op_count){ 
+#ifdef _DEBUG_LPFS    
+    errs() << "sched op = " << sched_ops << " op count = " << op_count << "\n";
+#endif
+    for(vector<InstPri>::reverse_iterator vit = priorityVector.rbegin(); vit!=priorityVector.rend(); ++vit){
+      Instruction* myInst = (*vit).first;
+      op myOp = (*mapCalls.find(myInst)).second;
+      bool scheduled = false;
+//#ifdef _DEBUG_LPFS      
+//      errs() << "scheduling op " << myOp.name.qFunc->getName() << " containing " << myOp.name.numArgs << " args\n";
+//      errs() << "ts = " << ts << " Checking op: " << myOp.id << " ";
+//      print_qgate(myOp.name);      
+//#endif
+      while((*mapCalls.find(myInst)).second.simd == -1) {
+        int simdToSched = 1;
+        if(depsMet(myInst, ts)) {
+          if(opp_simd == 1) {
+            while(simdToSched <= (int) RES_CONSTRAINT) { 
+              map<int, multimap<int, op> >::iterator it = schedule.find(simdToSched);
+              if(!(it == schedule.end())) {
+                multimap<int, op> map = (*it).second;
+                multimap<int, op>::iterator mit = map.find(ts);
+                if(mit != map.end()) {
+                  op curOp = (*mit).second;
+                  /*------Add Data Constraint---*/        
+                  if(myOp.name.qFunc == curOp.name.qFunc){
+                    sched_op(myInst, ts, simdToSched);
+                    scheduled = true;
                     sched_ops++;
-            }   
-        }
-        ts = 0;
-//        errs() << "sched op = " << sched_ops << " op count = " << op_count << "\n";
-        while(sched_ops < op_count){ 
-//            errs() << "sched op = " << sched_ops << " op count = " << op_count << "\n";
-            for(vector<InstPri>::reverse_iterator vit = priorityVector.rbegin(); vit!=priorityVector.rend(); ++vit){
-                Instruction* myInst = (*vit).first;
-                op myOp = (*mapCalls.find(myInst)).second;
-//                errs() << "scheduling op " << myOp.name.qFunc->getName() << "\n";
-//                errs() << "myOp has args: " << myOp.name.numArgs << "\n";
-                bool scheduled = false;
-//                errs() << "ts = " << ts << " Checking op: " << myOp.id << " ";
-//                print_qgate(myOp.name);
-                while((*mapCalls.find(myInst)).second.simd == -1){
-                    int simdToSched = 1;
-                    if(depsMet(myInst, ts)){
-                        if(opp_simd == 1){
-                            while(simdToSched <= (int) RES_CONSTRAINT){   
-                                map<int, multimap<int, op> >::iterator it = schedule.find(simdToSched);
-                                if(!(it == schedule.end())){
-                                    multimap<int, op> map = (*it).second;
-                                    multimap<int, op>::iterator mit = map.find(ts);
-                                    if(mit != map.end()){
-                                        op curOp = (*mit).second;
-/*------Add Data Constraint---*/        if(myOp.name.qFunc == curOp.name.qFunc){//&& regionSizeMap[simdToSched] < (int) DATA_CONSTRAINT){
-                                            sched_op(myInst, ts, simdToSched);
-                                            scheduled = true;
-                                            sched_ops++;
-                                            break;
-                                        }
-                                    }
-                                }
-                                simdToSched++;
-                            }
-                           if(!scheduled){
-                                int lowTS = std::numeric_limits<int>::max();
-                                int lowSD = 0;
-                                for(simdToSched = (int) RES_CONSTRAINT; simdToSched > 0; simdToSched--){
-                                    int tempTS = ts;
-                                    while(schedule[simdToSched].count(tempTS)) {
-                                        tempTS++;
-                                    }
-
-                                    if(tempTS <= lowTS){
-                                        lowTS = tempTS;
-                                        lowSD = simdToSched;
-                                    }
-                                }
-                                sched_op(myInst, lowTS, lowSD);
-                                scheduled = true;
-                                sched_ops++;  
-                            }
-                        }
-                        else{
-                            while(!schedule[simdToSched].count(ts)) ts++;
-                            sched_op(myInst, ts, simdToSched);
-                            scheduled = true;
-                            sched_ops++;
-                            break;
-                        }
-                    }
-                    ts++;
+                    break;
+                  }
                 }
-
-                ts = 0;
+              }
+              simdToSched++;
             }
+            if(!scheduled){
+              int lowTS = std::numeric_limits<int>::max();
+              int lowSD = 0;
+              for(simdToSched = (int) RES_CONSTRAINT; simdToSched > 0; simdToSched--){
+                int tempTS = ts;
+                while(schedule[simdToSched].count(tempTS)) {
+                  tempTS++;
+                }
+                if(tempTS <= lowTS){
+                  lowTS = tempTS;
+                  lowSD = simdToSched;
+                }
+              }
+              sched_op(myInst, lowTS, lowSD);
+              scheduled = true;
+              sched_ops++;  
+            }
+          }
+          else{
+            //while(!schedule[simdToSched].count(ts)) ts++; // FIXME: bug, causes infinite loop.
+            sched_op(myInst, ts, simdToSched);
+            scheduled = true;
+            sched_ops++;
+            break;
+          }
         }
-        while(schedule[1].count(ts)){
-            update_moves(moves, ts++);   
-        }
-        ots = ts;
-    
+        ts++;
+      }
+      ts = 0;
+    }
+  }
+  while(schedule[1].count(ts)){
+    update_moves(moves, ts++);   
+  }
+  ots = ts;  
 }
 
 void GenLPFSSched::update_moves(int moves, int ts ){
-
-    vector<qArgInfo> current;
-    vector<qArgInfo> next; 
-    map<int, int> simd_active;
-    bool added_move = false;
-
-       //----Get Current Qubits-----//
-    for(int simd = 1; simd <= (int) RES_CONSTRAINT; simd++){
-
-        map<int, multimap<int, op> >::iterator it = schedule.find(simd);
-        simd_active[simd] = 0;
-        if(it != schedule.end()){
-            multimap<int, op>::iterator mit = schedule[simd].find(ts);
-            if(mit != (*it).second.end()) {
-                simd_active[simd] = 1;
-                simds = max(simds, simd); 
+  vector<qArgInfo> current;
+  vector<qArgInfo> next; 
+  map<int, int> simd_active;
+  bool added_move = false;
+  
+  //----Get Current Qubits-----//
+  for(int simd = 1; simd <= (int) RES_CONSTRAINT; simd++){
+    map<int, multimap<int, op> >::iterator it = schedule.find(simd);
+    simd_active[simd] = 0;
+    if(it != schedule.end()){
+      multimap<int, op>::iterator mit = schedule[simd].find(ts);
+      if(mit != (*it).second.end()) {
+        simd_active[simd] = 1;
+        simds = max(simds, simd); 
+      }
+      while(mit != (*it).second.end() && (*mit).first == ts){
+        op myOp = (*mit).second;
+        for(int i = 0; i < myOp.name.numArgs; i++){
+          stringstream ss;
+          ss << myOp.name.args[i].index;
+          string name = myOp.name.args[i].name + ss.str();
+          qArgInfo arg = (*qubitMap.find(name)).second; 
+          arg.simd = myOp.simd;
+          arg.last_inst = myOp.label;
+          vector<qArgInfo>::iterator vit = current.begin();
+          while(vit != current.end()) { 
+            if((*vit) == arg){
+              break;
             }
-            while(mit != (*it).second.end() && (*mit).first == ts){
-                op myOp = (*mit).second;
-                for(int i = 0; i < myOp.name.numArgs; i++){
-                    stringstream ss;
-                    ss << myOp.name.args[i].index;
-                    string name = myOp.name.args[i].name + ss.str();
-                    qArgInfo arg = (*qubitMap.find(name)).second; 
-                    arg.simd = myOp.simd;
-                    arg.last_inst = myOp.label;
-                    vector<qArgInfo>::iterator vit = current.begin();
-                    while(vit != current.end()) { 
-                        if((*vit) == arg){
-                            break;
-                        }
-                        vit++;
-                    }
-                    if(vit == current.end()) {
-                        current.push_back(arg);
-                        (*qubitMap.find(name)).second.simd = arg.simd;
-                        (*qubitMap.find(name)).second.last_inst = arg.last_inst;
-                    }
-                }  
-                mit++;
-            }
-        }
+            vit++;
+          }
+          if(vit == current.end()) {
+            current.push_back(arg);
+            (*qubitMap.find(name)).second.simd = arg.simd;
+            (*qubitMap.find(name)).second.last_inst = arg.last_inst;
+          }
+        }  
+        mit++;
+      }
     }
+  }
+  
+#ifdef _DEBUG_LPFS
+  errs() << "# AT TIMESTEP: " << ts << "\n";
+#endif
 
-//    errs() << "# AT TIMESTEP: " << ts << "\n";
-    for(vector<qArgInfo>::iterator mapit = active_qubits.begin(); mapit != active_qubits.end(); mapit++){
-//        errs() << "Currently examining: " << (*mapit).name << (*mapit).index << "\n";
-        stringstream ss;
-        ss << (*mapit).index;
-        string name = (*mapit).name + ss.str();
-        qArgInfo thisQbit = (*qubitMap.find(name)).second;
-        int src = thisQbit.loc;         
-        int dest = 0; 
-        vector<qArgInfo>::iterator qit = current.begin();
-        while(qit != current.end()){
-            stringstream ss;
-            ss << (*qit).index;
-            string name2 = (*qit).name + ss.str();
-            qArgInfo currQbit = (*qubitMap.find(name)).second;
-            if((name == name2)&& (thisQbit.loc % 10 != 0)){       //If qubit is in current and active and not in memory
-                dest = (*qit).simd;
-                (*qubitMap.find(name)).second.simd = dest;
-                next.push_back((*qubitMap.find(name)).second);
-                current.erase(qit);
-                break;
-            }
-            qit++;
-        }
+  for(vector<qArgInfo>::iterator mapit = active_qubits.begin(); mapit != active_qubits.end(); mapit++){
+#ifdef _DEBUG_LPFS
+    errs() << "Currently examining: " << (*mapit).name << (*mapit).index << "\n";
+#endif
+    stringstream ss;
+    ss << (*mapit).index;
+    string name = (*mapit).name + ss.str();
+    qArgInfo thisQbit = (*qubitMap.find(name)).second;
+    int src = thisQbit.loc;         
+    int dest = 0; 
+    vector<qArgInfo>::iterator qit = current.begin();
+    while(qit != current.end()){
+      stringstream ss;
+      ss << (*qit).index;
+      string name2 = (*qit).name + ss.str();
+      qArgInfo currQbit = (*qubitMap.find(name)).second;
+      if((name == name2)&& (thisQbit.loc % 10 != 0)){       //If qubit is in current and active and not in memory
+        dest = (*qit).simd;
+        (*qubitMap.find(name)).second.simd = dest;
+        next.push_back((*qubitMap.find(name)).second);
+        current.erase(qit);
+        break;
+      }
+      qit++;
+    }
     
-        if(!(simd_active[src] ) && !(dest) ){ //Qbit doesn't need to move
-            next.push_back((*qubitMap.find(name)).second);
-        }
-        else if(!LOCAL_MEM){
-            if(((dest) && (dest != src)) || ((dest == 0) && (simd_active[src]))){
-                 //Moved into new location
-
-                move newMove;
-                newMove.src = src;
-                newMove.dest = dest;
-                newMove.arg = (*qubitMap.find(name)).second;
-                move_schedule.insert(make_pair(ts,newMove));
-                (*qubitMap.find(name)).second.loc = dest;
-//                regionSizeMap[src]--;
-//                regionSizeMap[dest]++;
-                added_move = true;
-            }
-        }
-        else if(LOCAL_MEM){
-            if((dest) && (dest != src)){
-                move newMove;
-                newMove.src = src;
-                newMove.dest = dest;
-                newMove.arg = (*qubitMap.find(name)).second;
-                move_schedule.insert(make_pair(ts,newMove));
-//                regionSizeMap[src]--;
-//                regionSizeMap[dest]++;
-                (*qubitMap.find(name)).second.loc = dest; 
-                added_move = true;
-            }
-            if(!(dest) && (simd_active[src])){
-                int lowNextTS = std::numeric_limits<int>::max();
-                int nextOpLoc = -1;
-                op myOp = (*mapCalls.find(thisQbit.last_inst)).second;
-                if(!myOp.out_edges.empty()){
-                    for(int i = 0; i < (int) myOp.out_edges.size(); i++){
-                        op nextOp = (*mapCalls.find(myOp.out_edges[i])).second;
-                        for(int j = 0; j < nextOp.name.numArgs; j++){
-                            qArgInfo arg = nextOp.name.args[j];
-                            if(arg == thisQbit){
-                                lowNextTS = nextOp.ts;
-                                nextOpLoc = nextOp.simd;
-                            }
-                        }
-                    }
-                }
-                (*qubitMap.find(name)).second.nextTS = lowNextTS;
-                if((lowNextTS <= ts + (int) LOCAL_WINDOW) && (myOp.ts != ts) && (nextOpLoc == myOp.simd)  && ((*qubitMap.find(name)).second.loc % 10 != 0)){
-                    if( (src) && (localMemSizeMap[src*10] >= (int) LOCAL_Q)){
-                        int maxTS = 0;
-                        string maxName;
-                        qArgInfo victim;
-                        for(map<string,qArgInfo>::iterator mit = qubitMap.begin(); mit != qubitMap.end(); mit++){
-                            if((*mit).second.loc == src*10){
-                                if(maxTS <= (*mit).second.nextTS){
-                                    maxTS = (*mit).second.nextTS;
-                                    maxName = (*mit).first;
-                                    victim = (*mit).second;
-                                }
-                            }
-                        }
-                        move newTMove;
-                        newTMove.src = src*10;
-                        newTMove.dest = 0;
-                        newTMove.arg = victim;
-                        stringstream ss;
-                        ss << victim.index;
-                        maxName = victim.name + ss.str();
-                        (*qubitMap.find(maxName)).second.loc = 0;
-                        move_schedule.insert(make_pair(ts, newTMove));
-                        added_move = true;
-                        localMemSizeMap[src*10]--;
-                    }
-                    move newMove;
-                    newMove.src = src;
-                    newMove.dest = src * 10;
-                    newMove.arg = (*qubitMap.find(name)).second;
-                    (*qubitMap.find(name)).second.loc = newMove.dest;
-                    next.push_back((*qubitMap.find(name)).second);
-                    local_move_schedule.insert(make_pair(ts,newMove));
-//                    regionSizeMap[src]--;
-                    localMemSizeMap[newMove.dest]++;
-//                    errs() << "TS: " << ts << " Added local mem: " << name <<" : " << (*qubitMap.find(name)).second.loc << "\n";
-                }
-                else if(myOp.ts != ts) {
-                    move newMove;
-                    newMove.src = src;
-                    newMove.dest = dest;
-                    newMove.arg = (*qubitMap.find(name)).second;
-                    (*qubitMap.find(name)).second.loc = newMove.dest;
-                    move_schedule.insert(make_pair(ts,newMove));
-//                    regionSizeMap[src]--;
-                    added_move = true;
-                }
-            }
-        }
+    if(!(simd_active[src] ) && !(dest)) { //Qbit doesn't need to move
+      next.push_back((*qubitMap.find(name)).second);
     }
- 
-   
+    else if(!LOCAL_MEM){
+      if(((dest) && (dest != src)) || ((dest == 0) && (simd_active[src]))){
+        //Moved into new location
+        move newMove;
+        newMove.src = src;
+        newMove.dest = dest;
+        newMove.arg = (*qubitMap.find(name)).second;
+        move_schedule.insert(make_pair(ts,newMove));
+        (*qubitMap.find(name)).second.loc = dest;
+        //regionSizeMap[src]--;
+        //regionSizeMap[dest]++;
+        added_move = true;
+      }
+    }
+    else if(LOCAL_MEM){
+      if((dest) && (dest != src)){
+        move newMove;
+        newMove.src = src;
+        newMove.dest = dest;
+        newMove.arg = (*qubitMap.find(name)).second;
+        move_schedule.insert(make_pair(ts,newMove));
+        //regionSizeMap[src]--;
+        //regionSizeMap[dest]++;
+        (*qubitMap.find(name)).second.loc = dest; 
+        added_move = true;
+      }
+      if(!(dest) && (simd_active[src])){
+        int lowNextTS = std::numeric_limits<int>::max();
+        int nextOpLoc = -1;
+        op myOp = (*mapCalls.find(thisQbit.last_inst)).second;
+        if(!myOp.out_edges.empty()){
+          for(int i = 0; i < (int) myOp.out_edges.size(); i++){
+            op nextOp = (*mapCalls.find(myOp.out_edges[i])).second;
+            for(int j = 0; j < nextOp.name.numArgs; j++){
+              qArgInfo arg = nextOp.name.args[j];
+              if(arg == thisQbit){
+                lowNextTS = nextOp.ts;
+                nextOpLoc = nextOp.simd;
+              }
+            }
+          }
+        }
+        (*qubitMap.find(name)).second.nextTS = lowNextTS;
+        if((lowNextTS <= ts + (int) LOCAL_WINDOW) && (myOp.ts != ts) && (nextOpLoc == myOp.simd)  && ((*qubitMap.find(name)).second.loc % 10 != 0)){
+          if( (src) && (localMemSizeMap[src*10] >= (int) LOCAL_Q)){
+            int maxTS = 0;
+            string maxName;
+            qArgInfo victim;
+            for(map<string,qArgInfo>::iterator mit = qubitMap.begin(); mit != qubitMap.end(); mit++){
+              if((*mit).second.loc == src*10){
+                if(maxTS <= (*mit).second.nextTS){
+                  maxTS = (*mit).second.nextTS;
+                  maxName = (*mit).first;
+                  victim = (*mit).second;
+                }
+              }
+            }
+            move newTMove;
+            newTMove.src = src*10;
+            newTMove.dest = 0;
+            newTMove.arg = victim;
+            stringstream ss;
+            ss << victim.index;
+            maxName = victim.name + ss.str();
+            (*qubitMap.find(maxName)).second.loc = 0;
+            move_schedule.insert(make_pair(ts, newTMove));
+            added_move = true;
+            localMemSizeMap[src*10]--;
+          }
+          move newMove;
+          newMove.src = src;
+          newMove.dest = src * 10;
+          newMove.arg = (*qubitMap.find(name)).second;
+          (*qubitMap.find(name)).second.loc = newMove.dest;
+          next.push_back((*qubitMap.find(name)).second);
+          local_move_schedule.insert(make_pair(ts,newMove));
+          // regionSizeMap[src]--;
+          localMemSizeMap[newMove.dest]++;
+          //errs() << "TS: " << ts << " Added local mem: " << name <<" : " << (*qubitMap.find(name)).second.loc << "\n";
+        }
+        else if(myOp.ts != ts) {
+          move newMove;
+          newMove.src = src;
+          newMove.dest = dest;
+          newMove.arg = (*qubitMap.find(name)).second;
+          (*qubitMap.find(name)).second.loc = newMove.dest;
+          move_schedule.insert(make_pair(ts,newMove));
+          //regionSizeMap[src]--;
+          added_move = true;
+        }
+      }
+    }
+  }
+  
  /*  
    errs() << "Current qubits after deletion: " << current.size() << "TIME: " << ts <<  "\n";
     for(vector<qArgInfo>::iterator mit = current.begin(); mit != current.end(); mit++){
@@ -727,41 +731,37 @@ void GenLPFSSched::update_moves(int moves, int ts ){
 */
 
   
-    for(vector<qArgInfo>::iterator mapit = current.begin(); mapit != current.end(); mapit++){
-        stringstream ss;
-        ss << (*mapit).index;
-        string name = (*mapit).name + ss.str();
+  for(vector<qArgInfo>::iterator mapit = current.begin(); mapit != current.end(); mapit++){
+    stringstream ss;
+    ss << (*mapit).index;
+    string name = (*mapit).name + ss.str();
         
-        qArgInfo curQbit = (*qubitMap.find(name)).second; 
-        int dest = curQbit.simd;    //Region where qubit is needed for operation at current timestep
-        next.push_back(curQbit);
+    qArgInfo curQbit = (*qubitMap.find(name)).second; 
+    int dest = curQbit.simd;    //Region where qubit is needed for operation at current timestep
+    next.push_back(curQbit);
 
-        if(curQbit.loc == 0 || !LOCAL_MEM){   //Memory location qubit is stored in
-            move newMove;
-            newMove.src = 0;
-            newMove.dest = dest;
-            newMove.arg = curQbit;
-            (*qubitMap.find(name)).second.loc = dest;
-            move_schedule.insert(make_pair(ts,newMove));
-            added_move = true;
-        }
-        else{
-            move newMove;
-            newMove.src = curQbit.loc;
-            newMove.dest = dest;
-            newMove.arg = curQbit;
-            (*qubitMap.find(name)).second.loc = dest;
-            local_move_schedule.insert(make_pair(ts,newMove));
-            localMemSizeMap[curQbit.loc]--;
-//            errs() << "TS: " << ts << " Grabbed from local: " << name << " : " << curQbit.loc << "\n";
-        }
+    if(curQbit.loc == 0 || !LOCAL_MEM){   //Memory location qubit is stored in
+      move newMove;
+      newMove.src = 0;
+      newMove.dest = dest;
+      newMove.arg = curQbit;
+      (*qubitMap.find(name)).second.loc = dest;
+      move_schedule.insert(make_pair(ts,newMove));
+      added_move = true;
     }
-    active_qubits = next;
-
-
-
+    else{
+      move newMove;
+      newMove.src = curQbit.loc;
+      newMove.dest = dest;
+      newMove.arg = curQbit;
+      (*qubitMap.find(name)).second.loc = dest;
+      local_move_schedule.insert(make_pair(ts,newMove));
+      localMemSizeMap[curQbit.loc]--;
+      //errs() << "TS: " << ts << " Grabbed from local: " << name << " : " << curQbit.loc << "\n";
+    }
+  }
+  active_qubits = next;
 }
-
 
 bool GenLPFSSched::depsMet(Instruction* currentOp, int currentTime){
     op myOp = (*mapCalls.find(currentOp)).second;
@@ -776,8 +776,8 @@ bool GenLPFSSched::depsMet(Instruction* currentOp, int currentTime){
     return answer;
 }
 
+// Schedule at given timestep and simd region
 void GenLPFSSched::sched_op(Instruction* currentOp, int timeStep, int simd){
-//    errs() << "trying to schedule \n";
     if((*mapCalls.find(currentOp)).second.simd == -1){
         (*mapCalls.find(currentOp)).second.ts = timeStep;
         (*mapCalls.find(currentOp)).second.simd = simd;
@@ -785,12 +785,9 @@ void GenLPFSSched::sched_op(Instruction* currentOp, int timeStep, int simd){
         (*mapCalls.find(currentOp)).second.label = currentOp;
         schedule[simd].insert(make_pair(timeStep, ((*mapCalls.find(currentOp)).second)));
         regionSizeMap[simd]++;
-        if(((*mapCalls.find(currentOp)).second.name.qFunc->getName() == "llvm.T")||((*mapCalls.find(currentOp)).second.name.qFunc->getName() == "llvm.Tdag" )) { 
+        if(((*mapCalls.find(currentOp)).second.name.qFunc->getName().find("llvm.T") != std::string::npos)||((*mapCalls.find(currentOp)).second.name.qFunc->getName().find("llvm.Tdag") != std::string::npos )) { 
             tgates_cnt++;
         }
-
-//        errs() << "scheduled! \n";
-//        errs() << "Added to path " << currentOp << " at timestep " << timeStep << " in region " << simd << " || " << (*mapCalls.find(currentOp)).second.simd << "\n";
     }
 }
 
@@ -996,7 +993,7 @@ bool GenLPFSSched::backtraceOperand(Value* opd, int opOrIndex)
   }
   else{ //opOrIndex == 2: backtracing to call inst MeasZ
     if(CallInst *endCI = dyn_cast<CallInst>(opd)){
-      if(endCI->getCalledFunction()->getName().find("llvm.Meas") != string::npos){
+      if(endCI->getCalledFunction()->getName().find("llvm.Meas") != std::string::npos){
         tmpDepQbit[0].argPtr = opd;
 
         return true;
@@ -1236,7 +1233,7 @@ uint64_t GenLPFSSched::get_ts_to_schedule_leaf(Function* F, uint64_t ts, Functio
   //F is leaf. Treat all incoming functions with respect  
   int funcIndex = -1;
 
-  assert(funcToSched->getName().str().find("llvm.")!=string::npos &&  "Non-Intrinsic Func Found in Leaf Function"); 
+  assert(funcToSched->getName().str().find("llvm.")!=std::string::npos &&  "Non-Intrinsic Func Found in Leaf Function"); 
   
   map<string, int>::iterator gidx = gate_index.find(funcToSched->getName().str().substr(5));
   assert(gidx!=gate_index.end() && "No Gate Index Found for this Intrinsic Function");
@@ -1462,7 +1459,7 @@ void GenLPFSSched::memset_funcQbits(uint64_t val){
 
 void GenLPFSSched::print_scheduled_gate(qGate qg, uint64_t ts){
   string tmpGateName = qg.qFunc->getName();
-  if(tmpGateName.find("llvm.")!=string::npos)
+  if(tmpGateName.find("llvm.")!=std::string::npos)
     tmpGateName = tmpGateName.substr(5);
   errs() << ts << " " << tmpGateName;
   for(int i = 0; i<qg.numArgs; i++){
@@ -1577,11 +1574,11 @@ void GenLPFSSched::print_schedule(Function* F, int op_count){
                 while(oper != (*pit).second.end() && (*oper).first == ts){
                     errs() << (*oper).first << "," << (*oper).second.simd << " ";
                     string tmpName = (*oper).second.name.qFunc->getName();
-                    if( tmpName.find("llvm.") != string::npos) {
+                    if( tmpName.find("llvm.") != std::string::npos) {
                       unsigned firstDotPos = tmpName.find('.');
                       unsigned secondDotPos = tmpName.find('.', firstDotPos+1);
                       if (firstDotPos == secondDotPos)
-                        errs() << tmpName.substr(firstDotPos+1, string::npos);
+                        errs() << tmpName.substr(firstDotPos+1, std::string::npos);
                       else
                         errs() << tmpName.substr(firstDotPos+1, secondDotPos-firstDotPos-1);
                     }
@@ -1651,10 +1648,8 @@ void GenLPFSSched::calc_critical_time(Function* F, qGate qg, bool isLeafFunc){
 
   //print_qgate(qg);
   uint64_t max_ts_of_all_args = 0;
-
   uint64_t first_step = 0;
-
-  if(isFirstMeas && (fname == "llvm.MeasX" || fname == "llvm.MeasZ")){
+  if(isFirstMeas && (fname.find("llvm.MeasX") != std::string::npos || fname.find("llvm.MeasZ") != std::string::npos)){
     uint64_t maxFQ = find_max_funcQbits();
     uint64_t max_ts_sched; 
 
@@ -1724,11 +1719,6 @@ void GenLPFSSched::calc_critical_time(Function* F, qGate qg, bool isLeafFunc){
         }
     }
     
-    if(debugGenLPFSSched){
-      errs() << "Before Scheduling: \n";
-      print_funcQbits();
-    }
-    
     //errs() << "Max timestep for all args = " << max_ts_of_all_args << "\n";
     
     //find timestep from max_ts_of_all_args where type of gate is same as this gate or no gate has been scheduled.
@@ -1774,23 +1764,10 @@ void GenLPFSSched::calc_critical_time(Function* F, qGate qg, bool isLeafFunc){
       }
       //}
       } // not first MeasX gate
-  
-  if(debugGenLPFSSched){   
-    errs() << "\nAfter Scheduling: \n";
-    print_funcQbits();
-    print_critical_info();
-    errs() << "\n";
-  }
-  
 }
 
 uint64_t GenLPFSSched::calc_critical_time_unbounded(Function* F, qGate qg){
   string fname = qg.qFunc->getName();
-
-  if(debugGenLPFSSched){   
-    print_qgate(qg);    
-    print_tableFuncQbits();
-  }
 
   uint64_t max_ts_of_all_args = 0;
   
@@ -1826,11 +1803,6 @@ uint64_t GenLPFSSched::calc_critical_time_unbounded(Function* F, qGate qg){
       }
     }
     
-    if(debugGenLPFSSched){
-      errs() << "Before Scheduling: \n";
-      print_funcQbits();
-      }
-    
     //errs() << "Max timestep for all args = " << max_ts_of_all_args << "\n";
       
       //schedule gate in max_ts_of_all_args + 1th timestep
@@ -1859,14 +1831,6 @@ uint64_t GenLPFSSched::calc_critical_time_unbounded(Function* F, qGate qg){
             (*indexIter).second = max_ts_of_all_args + 1;
         }  
       }
-
-  
-  if(debugGenLPFSSched)
-  {   
-    errs() << "\nAfter Scheduling: \n";
-    print_funcQbits();
-    errs() << "\n";
-  }
 
   return max_ts_of_all_args+1;
   
@@ -1901,9 +1865,6 @@ bool GenLPFSSched::checkIfIntrinsic(Function* CF){
 void GenLPFSSched::analyzeCallInst(Function* F, Instruction* pInst){
   if(CallInst *CI = dyn_cast<CallInst>(pInst))
     {      
-      if(debugGenLPFSSched)
-        errs() << "Call inst: " << CI->getCalledFunction()->getName() << "\n";
-
       if(CI->getCalledFunction()->getName() == "store_cbit"){   //trace return values
         return;
       }      
@@ -1975,22 +1936,6 @@ void GenLPFSSched::analyzeCallInst(Function* F, Instruction* pInst){
       }
       
       if(allDepQbit.size() > 0){
-        if(debugGenLPFSSched)
-        {
-            errs() << "\nCall inst: " << CI->getCalledFunction()->getName();        
-            errs() << ": Found all arguments: ";       
-            for(unsigned int vb=0; vb<allDepQbit.size(); vb++){
-              if(allDepQbit[vb].argPtr)
-                errs() << allDepQbit[vb].argPtr->getName() <<" Index: ";
-                                
-              //else
-                errs() << allDepQbit[vb].valOrIndex <<" ";
-            }
-            errs()<<"\n";
-            
-        }
-
-
         //check if Intrinsic
         bool thisFuncIsIntrinsic = checkIfIntrinsic(CI->getCalledFunction());
         if(!thisFuncIsIntrinsic) {
@@ -2088,10 +2033,9 @@ bool GenLPFSSched::DetermineLeafFunction (Function *F) {
 
 
 void GenLPFSSched::CountCriticalFunctionResources (Function *F) {
-      // Traverse instruction by instruction
+  // Traverse instruction by instruction
   init_critical_path_algo(F);
   
-
   //get qbits in function
   for (inst_iterator I = inst_begin(*F), E = inst_end(*F); I != E; ++I) {
     Instruction *Inst = &*I;                            // Grab pointer to instruction reference
@@ -2100,7 +2044,7 @@ void GenLPFSSched::CountCriticalFunctionResources (Function *F) {
       break;
   }
 
-//  errs() << "Finding priorities--- \n";
+  //  errs() << "Finding priorities--- \n";
   //find priorities for instructions
   for (inst_iterator I = inst_begin(*F), E = inst_end(*F); I != E; ++I) {
     Instruction *Inst = &*I;
@@ -2109,15 +2053,15 @@ void GenLPFSSched::CountCriticalFunctionResources (Function *F) {
       string called_func_name = CI->getCalledFunction()->getName();
       mapCalls.insert(make_pair(Inst, newOp));
       callList.push_back(Inst);
-//      errs() << "Added instruction: " << Inst << ": " << called_func_name << "\n";
+      // errs() << "Added instruction: " << Inst << ": " << called_func_name << "\n";
       if(F->getName() == "measure") {
-//          errs() << "Added Inst " << called_func_name << " : " << Inst << " to call list for measure \n";
+      // errs() << "Added Inst " << called_func_name << " : " << Inst << " to call list for measure \n";
       }
     }
   } 
 
   //traverse in reverse sequence
-//  errs() << "Beginning analysis" << "\n";
+  //  errs() << "Beginning analysis" << "\n";
   for(vector<Instruction*>::reverse_iterator rit = callList.rbegin(); rit!=callList.rend(); ++rit){
 //        errs() << "Analyzing: " << mapCalls.find(*rit)->second.name.qFunc->getName() << "\n";
 //        errs() << "Analyzing: " << dyn_cast<CallInst>(*rit)->getCalledFunction()->getName() << "\n";
@@ -2140,9 +2084,6 @@ void GenLPFSSched::CountCriticalFunctionResources (Function *F) {
 //    errs() << "priority scheduling..." << "\n";
     map<Instruction*, op>::iterator mit = mapCalls.find((*vit).first);
     assert(mit!=mapCalls.end() && "Instruction Not Found in MapInstSet.");
-    
-
-
     qGate thisGate = (*mit).second.name;
 //    if(!(F->getName() == "main")) { 
 //        errs() << "CHECK: " << thisGate.qFunc->getName() << "\n";
@@ -2152,24 +2093,16 @@ void GenLPFSSched::CountCriticalFunctionResources (Function *F) {
 //        calc_critical_time(F,thisGate,false);
 //    }
   }
-
-
-
-
 }
 
 
 void GenLPFSSched::init_gates_as_functions(){
-    
-    //add blackbox entry for each of these ??
-    
+  //add blackbox entry for each of these ??
   for(int  i =0; i< NUM_QGATES ; i++){
     string gName = gate_name[i];
     string fName = "llvm.";
     fName.append(gName);
-    
   }
-
 }
 
 
@@ -2178,7 +2111,6 @@ bool GenLPFSSched::runOnModule (Module &M) {
   init_gates_as_functions();
   int timeStep = 0; 
   errs() << "M: $::SIMD_K=" << RES_CONSTRAINT <<"; $::SIMD_D=" << DATA_CONSTRAINT << "; $::SIMD_L=" << SIMD_L << "\n"; 
- 
   
   // iterate over all functions, and over all instructions in those functions
   CallGraphNode* rootNode = getAnalysis<CallGraph>().getRoot();
@@ -2188,7 +2120,7 @@ bool GenLPFSSched::runOnModule (Module &M) {
     for (std::vector<CallGraphNode*>::const_iterator nsccI = nextSCC.begin(), E = nextSCC.end(); nsccI != E; ++nsccI) {
       Function *F = (*nsccI)->getFunction();      
       if(F && !F->isDeclaration()){
-
+        
         funcQbits.clear();
         funcArgs.clear();
         mapCalls.clear();
@@ -2213,45 +2145,41 @@ bool GenLPFSSched::runOnModule (Module &M) {
         }
 
         // count the critical resources for this function
-       if (DetermineLeafFunction(F)){
+        if (DetermineLeafFunction(F)){
           CountCriticalFunctionResources(F);
         }
-
-
-       vector<Function*>::iterator vit = find(isLeaf.begin(), isLeaf.end(), F);
-       if(vit != isLeaf.end()){
-            errs() << "\nLPFS:\n";
-            errs() << "Function: " << F->getName() << " (sched: lpfs, k: " << RES_CONSTRAINT << ", d: " << DATA_CONSTRAINT << " l: " << SIMD_L << ", opp: " << OPP_SIMD << ", refill: " << REFILL << ") \n"; 
+        vector<Function*>::iterator vit = find(isLeaf.begin(), isLeaf.end(), F);
+        if(vit != isLeaf.end()){
+          errs() << "\nLPFS:\n";
+          errs() << "Function: " << F->getName() 
+            << " (sched: lpfs, k: " << RES_CONSTRAINT 
+            << ", d: " << DATA_CONSTRAINT 
+            << " l: " << SIMD_L 
+            << ", opp: " << OPP_SIMD 
+            << ", refill: " << REFILL 
+            << ") \n"; 
             errs() << "==================================================================\n";
             lpfs(F, timeStep, SIMD_L, REFILL, OPP_SIMD);
         }
-
-
-            int op_count = callList.size();
-            if(!(schedule.empty())) {
-                if(METRICS)
-                    print_schedule_metrics(F,op_count);
-                 if(FULL_SCHED)
-                    print_schedule(F,op_count);
-                 if(MOVES_SCHED)
-                    print_moves_schedule(F,op_count);
-                 if(LOCAL_MOVES_SCHED)
-                    print_local_moves_schedule(F, op_count);
-            }
-            schedule.clear();
-            move_schedule.clear();
-            local_move_schedule.clear();
-            active_qubits.clear();
-
-            cleanupCurrArrParGates();
- 
-      }
-      else  {
-            if(debugGenLPFSSched)
-              errs() << "WARNING: Ignoring external node or dummy function.\n";
+        
+        int op_count = callList.size();
+        if(!(schedule.empty())) {
+          if(METRICS)
+            print_schedule_metrics(F,op_count);
+          if(FULL_SCHED)
+            print_schedule(F,op_count);
+          if(MOVES_SCHED)
+            print_moves_schedule(F,op_count);
+          if(LOCAL_MOVES_SCHED)
+            print_local_moves_schedule(F, op_count);
+        }
+        schedule.clear();
+        move_schedule.clear();
+        local_move_schedule.clear();
+        active_qubits.clear();
+        cleanupCurrArrParGates();
       }
     }
   }
-
   return false;
 } // End runOnModule

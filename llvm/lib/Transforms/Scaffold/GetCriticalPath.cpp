@@ -861,7 +861,7 @@ void GetCriticalPath::calc_critical_time(Function* F, qGate qg){
 
   //print_qgate(qg);
 
-  if(isFirstMeas && (fname == "llvm.MeasX" || fname == "llvm.MeasZ")){
+  if(isFirstMeas && (fname.find("llvm.MeasX")!=string::npos || fname.find("llvm.MeasZ")!=string::npos)){
     uint64_t maxFQ = find_max_funcQbits();
     memset_funcQbits(maxFQ);
 

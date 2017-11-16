@@ -1,659 +1,673 @@
 
 /*--------- SHA-1 Hash Algorithm and Helper Functions -------------*/
 rkqc nToffoli(qint target[32], qint in1[32], qint in2[32]){
-    zero_to_garbage ancilla[32];
-    int i;
-    for (i=0; i<32; i++){
-        toffoli(in1[i], in2[i], ancilla[i]);
-    }
-    for(i=0; i<32; i++){
-        assign_value_of_b_to_a(target[i], ancilla[i], 1);
-    }
+  zero_to_garbage ancilla[32];
+  int i;
+  for (i=0; i<32; i++){
+    toffoli(in1[i], in2[i], ancilla[i]);
+  }
+  for(i=0; i<32; i++){
+    assign_value_of_b_to_a(target[i], ancilla[i], 1);
+  }
 }
 
 rkqc AND(qint target[32], qint in1[32], qint in2[32]){
-    nToffoli(target, in1, in2);
+  nToffoli(target, in1, in2);
 }
 
 rkqc NAND(qint target[32], qint in1[32], qint in2[32]){
-    int i;
-    AND(target, in1, in2);
-    for(i=0; i<32; i++){
-        NOT(target[i]);
-    }
+  int i;
+  AND(target, in1, in2);
+  for(i=0; i<32; i++){
+    NOT(target[i]);
+  }
 }
 
 rkqc NOR(qint target[32], qint in1[32], qint in2[32]){
-    int i;
-    zero_to_garbage temp1[32];
-    zero_to_garbage temp2[32];
-    for(i=0; i<32; i++) assign_value_of_b_to_a(temp1[i], in1[i], 1);
-    for(i=0; i<32; i++) assign_value_of_b_to_a(temp2[i], in2[i], 1);
-    for(i=0; i<32; i++){
-        NOT(temp1[i]);
-        NOT(temp2[i]);
-    }
-    AND(target, temp1, temp2);
+  int i;
+  zero_to_garbage temp1[32];
+  zero_to_garbage temp2[32];
+  for(i=0; i<32; i++) assign_value_of_b_to_a(temp1[i], in1[i], 1);
+  for(i=0; i<32; i++) assign_value_of_b_to_a(temp2[i], in2[i], 1);
+  for(i=0; i<32; i++){
+    NOT(temp1[i]);
+    NOT(temp2[i]);
+  }
+  AND(target, temp1, temp2);
 }
 
 rkqc OR(qint target[32], qint in1[32], qint in2[32]){
-    int i;
-    NOR(target, in1, in2);
-    for(i=0; i<32; i++){
-        NOT(target[i]);
-    }
+  int i;
+  NOR(target, in1, in2);
+  for(i=0; i<32; i++){
+    NOT(target[i]);
+  }
 }
 
 rkqc XOR(qint target[32], qint in1[32], qint in2[32]){
-    zero_to_garbage temp1[32];
-    zero_to_garbage temp2[32];
-    zero_to_garbage temp3[32];
-    zero_to_garbage temp4[32];
-    int i;
-    for(i=0; i<32; i++) assign_value_of_b_to_a(temp1[i], in1[i], 1);
-    for(i=0; i<32; i++) assign_value_of_b_to_a(temp2[i], in2[i], 1);
+  zero_to_garbage temp1[32];
+  zero_to_garbage temp2[32];
+  zero_to_garbage temp3[32];
+  zero_to_garbage temp4[32];
+  int i;
+  for(i=0; i<32; i++) assign_value_of_b_to_a(temp1[i], in1[i], 1);
+  for(i=0; i<32; i++) assign_value_of_b_to_a(temp2[i], in2[i], 1);
 
-    AND(temp3, temp1, temp2);
-    for(i=0; i<32; i++) NOT(temp3[i]);
+  AND(temp3, temp1, temp2);
+  for(i=0; i<32; i++) NOT(temp3[i]);
 
-    OR(temp4, temp1, temp2);
-    AND(target, temp3, temp4);
+  OR(temp4, temp1, temp2);
+  AND(target, temp3, temp4);
 }
 
 
 rkqc reverseBits32(qint a[32]){
-    zero_to_garbage ancilla[32];
-    int i;
-    for (i=0;i<32;i++){
-        assign_value_of_b_to_a(ancilla[32-i-1],a[i],1);
-    }
-    for (i=0;i<32;i++){
-        assign_value_of_b_to_a(a[i], ancilla[i], 1);
-    }
+  zero_to_garbage ancilla[32];
+  int i;
+  for (i=0;i<32;i++){
+    assign_value_of_b_to_a(ancilla[32-i-1],a[i],1);
+  }
+  for (i=0;i<32;i++){
+    assign_value_of_b_to_a(a[i], ancilla[i], 1);
+  }
 }
 rkqc reverseBits384(qint a[384]){
-    zero_to_garbage ancilla[384];
-    int i;
-    for (i=0;i<384;i++){
-        assign_value_of_b_to_a(ancilla[384-i-1],a[i],1);
-    }
-    for (i=0;i<384;i++){
-        assign_value_of_b_to_a(a[i], ancilla[i], 1);
-    }
+  zero_to_garbage ancilla[384];
+  int i;
+  for (i=0;i<384;i++){
+    assign_value_of_b_to_a(ancilla[384-i-1],a[i],1);
+  }
+  for (i=0;i<384;i++){
+    assign_value_of_b_to_a(a[i], ancilla[i], 1);
+  }
 }
 rkqc leftRotate(qint a[32]){
-    zero_to_garbage temp[1];
-    int i;
-    assign_value_of_b_to_a(temp[0], a[31],1);
-    for(i=30;i>=0;i--){
-        assign_value_of_b_to_a(a[i+1], a[i], 1);
-    }
-    assign_value_of_b_to_a(a[0], temp[0], 1);
+  zero_to_garbage temp[1];
+  int i;
+  assign_value_of_b_to_a(temp[0], a[31],1);
+  for(i=30;i>=0;i--){
+    assign_value_of_b_to_a(a[i+1], a[i], 1);
+  }
+  assign_value_of_b_to_a(a[0], temp[0], 1);
 }
 
 rkqc leftshift(qint a[32]){
-    int i;
-    for(i=30;i>=0;i--){
-        assign_value_of_b_to_a(a[i+1],a[i], 1);
-    }
-    assign_value_of_0_to_a(a[0], 1);
+  int i;
+  for(i=30;i>=0;i--){
+    assign_value_of_b_to_a(a[i+1],a[i], 1);
+  }
+  assign_value_of_0_to_a(a[0], 1);
 }
 
 rkqc pad(qint a[512], qint input[128], qint padding[384]){
-//    assign_value_of_b_to_a(padding, "100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000000", 384);
-    int j;
-    for ( j = 0; j < 384; j++ ){
-        if( j == 7 || j == 383 ) assign_value_of_1_to_a(padding[j], 1);
-        else assign_value_of_0_to_a(padding[j], 1);
-    }
-    reverseBits384(padding);
-    int i;
-    for(i=511;i>383;i--){
-        assign_value_of_b_to_a(a[i], input[i-384], 1);
-    }
-    for(i=383;i>=0;i--){
-       assign_value_of_b_to_a(a[i], padding[i], 1); 
-    }
+  //    assign_value_of_b_to_a(padding, "100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000000", 384);
+  int j;
+  for ( j = 0; j < 384; j++ ){
+    if( j == 7 || j == 383 ) assign_value_of_1_to_a(padding[j], 1);
+    else assign_value_of_0_to_a(padding[j], 1);
+  }
+  reverseBits384(padding);
+  int i;
+  for(i=511;i>383;i--){
+    assign_value_of_b_to_a(a[i], input[i-384], 1);
+  }
+  for(i=383;i>=0;i--){
+    assign_value_of_b_to_a(a[i], padding[i], 1); 
+  }
 }
 
 rkqc finalHash(qint a[32], qint h0[32], qint h1[32], qint h2[32], qint h3[32], qint h4[32]){
-    int i;
-    for(i=0; i<32; i++)
-    {
-        assign_value_of_b_to_a(a[i], h4[i], 1);
+  int i;
+  for(i=0; i<32; i++)
+  {
+    assign_value_of_b_to_a(a[i], h4[i], 1);
+  }
+
+  for(i=32; i<64; i++)
+  {
+    assign_value_of_b_to_a(a[i], h3[i-32], 1);
+  }
+
+  for(i=64; i<96; i++)
+  {
+    assign_value_of_b_to_a(a[i], h2[i-64], 1);
+  }
+
+  for(i=96; i<128; i++)
+  {
+    assign_value_of_b_to_a(a[i], h1[i-96], 1);
+  }
+
+  for(i=128; i<160; i++)
+  {
+    assign_value_of_b_to_a(a[i], h0[i-128], 1);
+  }
+
+}
+
+rkqc initializer_1 () {
+  int i;  
+  // assign_value_of_b_to_a(h0, "01100111010001010010001100000001", 32);
+  for( i=0; i<32; i++){
+    if( i == 0 ||
+        i == 8 ||
+        i == 9 ||
+        i == 13 ||
+        i == 16 || 
+        i == 18 || 
+        i == 22 || 
+        i == 24 || 
+        i == 25 || 
+        i == 26 || 
+        i == 29 || 
+        i == 30  ) 
+      assign_value_of_1_to_a(h0[i], 1);
+    else 
+      assign_value_of_0_to_a(h0[i], 1);
+  }
+  reverseBits32(h0);
+
+
+  // assign_value_of_b_to_a(h1, "11101111110011011010101110001001", 32);
+  for( i=0; i<32; i++){
+    if( i == 1 || 
+        i == 2 || 
+        i == 4 || 
+        i == 5 || 
+        i == 6 || 
+        i == 10 || 
+        i == 12 || 
+        i == 14 || 
+        i == 17 || 
+        i == 20 || 
+        i == 21 || 
+        i == 28  ) 
+      assign_value_of_0_to_a(h1[i], 1);
+    else    
+      assign_value_of_1_to_a(h1[i], 1);
+  }
+  reverseBits32(h1);
+
+
+  // assign_value_of_b_to_a(h2, "10011000101110101101110011111110", 32);
+  for( i=0; i<32; i++){
+    if( i == 0 || 
+        i == 8 || 
+        i == 9 || 
+        i == 13 || 
+        i == 16 || 
+        i == 18 || 
+        i == 22 || 
+        i == 24 || 
+        i == 25 || 
+        i == 26 || 
+        i == 29 || 
+        i == 30  ) 
+      assign_value_of_0_to_a(h2[i], 1);
+    else    
+      assign_value_of_1_to_a(h2[i], 1);
+  }
+  reverseBits32(h2);
+
+  // assign_value_of_b_to_a(h3, "00010000001100100101010001110110", 32);
+  for( i=0; i<32; i++){
+    if( i == 1 || 
+        i == 2 || 
+        i == 4 || 
+        i == 5 || 
+        i == 6 || 
+        i == 10 || 
+        i == 12 || 
+        i == 14 || 
+        i == 17 || 
+        i == 20 || 
+        i == 21 || 
+        i == 28  ) 
+      assign_value_of_1_to_a(h3[i], 1);
+    else    
+      assign_value_of_0_to_a(h3[i], 1);
+  }
+  reverseBits32(h3);
+
+  // assign_value_of_b_to_a(h4, "11000011110100101110000111110000", 32);
+  for( i=0; i<32; i++){
+    if( i == 0 || 
+        i == 1 || 
+        i == 2 || 
+        i == 3 || 
+        i == 9 || 
+        i == 10 || 
+        i == 11 || 
+        i == 12 || 
+        i == 16 || 
+        i == 18 || 
+        i == 19 || 
+        i == 21 || 
+        i == 26 || 
+        i == 27 || 
+        i == 28 || 
+        i == 29  ) 
+      assign_value_of_0_to_a(h4[i], 1);
+    else    
+      assign_value_of_1_to_a(h4[i], 1);
+  }
+  reverseBits32(h4);
+
+  // assign_value_of_b_to_a(A, "01100111010001010010001100000001", 32);
+  for( i=0; i<32; i++){
+    if( i == 0 || 
+        i == 8 || 
+        i == 9 || 
+        i == 13 || 
+        i == 16 || 
+        i == 18 || 
+        i == 22 || 
+        i == 24 || 
+        i == 25 || 
+        i == 26 || 
+        i == 29 || 
+        i == 30  ) 
+      assign_value_of_1_to_a(A[i], 1);
+    else    
+      assign_value_of_0_to_a(A[i], 1);
+  }
+  reverseBits32(A);
+
+  // assign_value_of_b_to_a(B, "11101111110011011010101110001001", 32);
+  for( i=0; i<32; i++){
+    if( i == 1 || 
+        i == 2 || 
+        i == 4 || 
+        i == 5 || 
+        i == 6 || 
+        i == 10 || 
+        i == 12 || 
+        i == 14 || 
+        i == 17 || 
+        i == 20 || 
+        i == 21 || 
+        i == 28  ) 
+      assign_value_of_0_to_a(B[i], 1);
+    else    
+      assign_value_of_1_to_a(B[i], 1);
+  }
+  reverseBits32(B);
+
+  // assign_value_of_b_to_a(C, "10011000101110101101110011111110", 32);
+  for( i=0; i<32; i++){
+    if( i == 0 || 
+        i == 8 || 
+        i == 9 || 
+        i == 13 || 
+        i == 16 || 
+        i == 18 || 
+        i == 22 || 
+        i == 24 || 
+        i == 25 || 
+        i == 26 || 
+        i == 29 || 
+        i == 30  ) 
+      assign_value_of_0_to_a(C[i], 1);
+    else    
+      assign_value_of_1_to_a(C[i], 1);
+  }
+  reverseBits32(C);
+
+  // assign_value_of_b_to_a(D, "00010000001100100101010001110110", 32);
+  for( i=0; i<32; i++){
+    if( i == 1 || 
+        i == 2 || 
+        i == 4 || 
+        i == 5 || 
+        i == 6 || 
+        i == 10 || 
+        i == 12 || 
+        i == 14 || 
+        i == 17 || 
+        i == 20 || 
+        i == 21 || 
+        i == 28  ) 
+      assign_value_of_1_to_a(D[i], 1);
+    else    
+      assign_value_of_0_to_a(D[i], 1);
+  }
+  reverseBits32(D);
+
+  // assign_value_of_b_to_a(E, "11000011110100101110000111110000", 32);
+  for( i=0; i<32; i++){
+    if( i == 0 || 
+        i == 1 || 
+        i == 2 || 
+        i == 3 || 
+        i == 9 || 
+        i == 10 || 
+        i == 11 || 
+        i == 12 || 
+        i == 16 || 
+        i == 18 || 
+        i == 19 || 
+        i == 21 || 
+        i == 26 || 
+        i == 27 || 
+        i == 28 || 
+        i == 29  ) 
+      assign_value_of_0_to_a(E[i], 1);
+    else    
+      assign_value_of_1_to_a(E[i], 1);
+  }
+  reverseBits32(E);
+
+  // assign_value_of_b_to_a(K1, "01011010100000100111100110011001", 32);
+  for( i=0; i<32; i++){
+    if( i == 1 || 
+        i == 2 || 
+        i == 5 || 
+        i == 6 || 
+        i == 9 || 
+        i == 10 || 
+        i == 15 || 
+        i == 16 || 
+        i == 18 || 
+        i == 19 || 
+        i == 20 || 
+        i == 21 || 
+        i == 22 || 
+        i == 24 || 
+        i == 26 || 
+        i == 29 || 
+        i == 31  ) 
+      assign_value_of_0_to_a(K1[i], 1);
+    else    
+      assign_value_of_1_to_a(K1[i], 1);
+  }
+  reverseBits32(K1);
+
+  // assign_value_of_b_to_a(K2, "01101110110110011110101110100001", 32);
+  for( i=0; i<32; i++){
+    if( i == 0 || 
+        i == 5 || 
+        i == 7 || 
+        i == 8 || 
+        i == 9 || 
+        i == 11 || 
+        i == 13 || 
+        i == 14 || 
+        i == 15 || 
+        i == 16 || 
+        i == 19 || 
+        i == 20 || 
+        i == 22 || 
+        i == 23 || 
+        i == 25 || 
+        i == 26 || 
+        i == 27 || 
+        i == 29 || 
+        i == 30  ) 
+      assign_value_of_1_to_a(K2[i], 1);
+    else    
+      assign_value_of_0_to_a(K2[i], 1);
+  }
+  reverseBits32(K2);
+
+  // assign_value_of_b_to_a(K3, "10001111000110111011110011011100", 32);
+  for( i=0; i<32; i++){
+    if( i == 0 || 
+        i == 1 || 
+        i == 5 || 
+        i == 8 || 
+        i == 9 || 
+        i == 14 || 
+        i == 18 || 
+        i == 22 || 
+        i == 22 || 
+        i == 23 || 
+        i == 28 || 
+        i == 29 || 
+        i == 30  ) 
+      assign_value_of_0_to_a(K3[i], 1);
+    else    
+      assign_value_of_1_to_a(K3[i], 1);
+  }
+  reverseBits32(K3);
+
+  // assign_value_of_b_to_a(K4, "11001010011000101100000111010110", 32);
+  for( i=0; i<32; i++){
+    if( i == 0 || 
+        i == 3 || 
+        i == 5 || 
+        i == 9 || 
+        i == 10 || 
+        i == 11 || 
+        i == 12 || 
+        i == 13 || 
+        i == 16 || 
+        i == 18 || 
+        i == 19 || 
+        i == 20 || 
+        i == 23 || 
+        i == 24 || 
+        i == 26 || 
+        i == 28 || 
+        i == 29  ) 
+      assign_value_of_0_to_a(K4[i], 1);
+    else    
+      assign_value_of_1_to_a(K4[i], 1);
+  }
+  reverseBits32(K4);  
+}
+
+rkq initializer_2 () {
+  for(i=0; i<16; i++)
+  {            
+    for( j=0; j<32; j++){
+      int k = i + (32*(15-i));
+      assign_value_of_b_to_a(W[i*32+j], paddedInput[j], 1);
     }
 
-    for(i=32; i<64; i++)
-    {
-        assign_value_of_b_to_a(a[i], h3[i-32], 1);
+  }
+  for(i=16; i<80; i++)
+  {
+    for(j = 0; j < 32; j++){
+      temp_W1[j] = W[(i-3)*32 + j];
+      temp_W2[j] = W[(i-8)*32 + j];
+      temp_W3[j] = W[(i-14)*32 + j];
+      temp_W4[j] = W[(i-16)*32 + j];
     }
 
-    for(i=64; i<96; i++)
-    {
-        assign_value_of_b_to_a(a[i], h2[i-64], 1);
+    XOR(temp2, temp_W1, temp_W2);
+    XOR(temp3, temp2, temp_W3);
+    XOR(target, temp3, temp_W4);
+    leftRotate(target);
+    for(j=0;j<32;j++){
+      assign_value_of_b_to_a(W[i+j], target[j], 1);
     }
+  } 
+}
 
-    for(i=96; i<128; i++)
-    {
-        assign_value_of_b_to_a(a[i], h1[i-96], 1);
-    }
+rkqc initializer_3 () {
+}
 
-    for(i=128; i<160; i++)
-    {
-        assign_value_of_b_to_a(a[i], h0[i-128], 1);
-    }
+rkqc hash_rounds () {
+}
 
+rkqc final_hash () {
 }
 
 
 rkqc encrypt(){
-    qbit input[128];
-    qbit hash[160];
+  qbit input[128];
+  qbit hash[160];
 
-    zero_to_garbage padding[384];
-    zero_to_garbage paddedInput[512];
+  zero_to_garbage padding[384];
+  zero_to_garbage paddedInput[512];
 
-    zero_to_garbage h0[32];
-    zero_to_garbage h1[32];
-    zero_to_garbage h2[32];
-    zero_to_garbage h3[32];
-    zero_to_garbage h4[32];
-    zero_to_garbage A[32];
-    zero_to_garbage B[32];
-    zero_to_garbage C[32];
-    zero_to_garbage D[32];
-    zero_to_garbage E[32];
-    zero_to_garbage K1[32];
-    zero_to_garbage K2[32];
-    zero_to_garbage K3[32];
-    zero_to_garbage K4[32];
-    zero_to_garbage f[32];
-    zero_to_garbage a[32];
-    zero_to_garbage b[32];
+  zero_to_garbage h0[32];
+  zero_to_garbage h1[32];
+  zero_to_garbage h2[32];
+  zero_to_garbage h3[32];
+  zero_to_garbage h4[32];
+  zero_to_garbage A[32];
+  zero_to_garbage B[32];
+  zero_to_garbage C[32];
+  zero_to_garbage D[32];
+  zero_to_garbage E[32];
+  zero_to_garbage K1[32];
+  zero_to_garbage K2[32];
+  zero_to_garbage K3[32];
+  zero_to_garbage K4[32];
+  zero_to_garbage f[32];
+  zero_to_garbage a[32];
+  zero_to_garbage b[32];
 
-    zero_to_garbage temp[32];
-    zero_to_garbage temp1[32];
-    zero_to_garbage temp2[32];
-    zero_to_garbage temp3[32];
-    zero_to_garbage temp4[32];
-    zero_to_garbage temp5[32];
-    zero_to_garbage target[32];
-    zero_to_garbage k[32];
-    
-    zero_to_garbage Z[32];
-    zero_to_garbage temp_W1[32];
-    zero_to_garbage temp_W2[32];
-    zero_to_garbage temp_W3[32];
-    zero_to_garbage temp_W4[32];
+  zero_to_garbage temp[32];
+  zero_to_garbage temp1[32];
+  zero_to_garbage temp2[32];
+  zero_to_garbage temp3[32];
+  zero_to_garbage temp4[32];
+  zero_to_garbage temp5[32];
+  zero_to_garbage target[32];
+  zero_to_garbage k[32];
 
-    int i;
-    int t;
+  zero_to_garbage Z[32];
+  zero_to_garbage temp_W1[32];
+  zero_to_garbage temp_W2[32];
+  zero_to_garbage temp_W3[32];
+  zero_to_garbage temp_W4[32];
 
-    // assign_value_of_b_to_a(h0, "01100111010001010010001100000001", 32);
-    for( i=0; i<32; i++){
-        if( i == 0 ||
-            i == 8 ||
-            i == 9 ||
-            i == 13 ||
-            i == 16 || 
-            i == 18 || 
-            i == 22 || 
-            i == 24 || 
-            i == 25 || 
-            i == 26 || 
-            i == 29 || 
-            i == 30  ) 
-            assign_value_of_1_to_a(h0[i], 1);
-        else 
-            assign_value_of_0_to_a(h0[i], 1);
-    }
-    reverseBits32(h0);
+  zero_to_garbage W[2560];  
 
+  int i, j, t;
 
-    // assign_value_of_b_to_a(h1, "11101111110011011010101110001001", 32);
-    for( i=0; i<32; i++){
-        if( i == 1 || 
-            i == 2 || 
-            i == 4 || 
-            i == 5 || 
-            i == 6 || 
-            i == 10 || 
-            i == 12 || 
-            i == 14 || 
-            i == 17 || 
-            i == 20 || 
-            i == 21 || 
-            i == 28  ) 
-            assign_value_of_0_to_a(h1[i], 1);
-        else    
-            assign_value_of_1_to_a(h1[i], 1);
-    }
-    reverseBits32(h1);
+  initializer_1(h0, h1, h2, h3, h4, A, B, C, D, E, K1, K2, K3, K4);
 
+  pad(paddedInput, input, padding);
 
-    // assign_value_of_b_to_a(h2, "10011000101110101101110011111110", 32);
-    for( i=0; i<32; i++){
-        if( i == 0 || 
-            i == 8 || 
-            i == 9 || 
-            i == 13 || 
-            i == 16 || 
-            i == 18 || 
-            i == 22 || 
-            i == 24 || 
-            i == 25 || 
-            i == 26 || 
-            i == 29 || 
-            i == 30  ) 
-            assign_value_of_0_to_a(h2[i], 1);
-        else    
-            assign_value_of_1_to_a(h2[i], 1);
-    }
-    reverseBits32(h2);
-    // assign_value_of_b_to_a(h3, "00010000001100100101010001110110", 32);
-    for( i=0; i<32; i++){
-        if( i == 1 || 
-            i == 2 || 
-            i == 4 || 
-            i == 5 || 
-            i == 6 || 
-            i == 10 || 
-            i == 12 || 
-            i == 14 || 
-            i == 17 || 
-            i == 20 || 
-            i == 21 || 
-            i == 28  ) 
-            assign_value_of_1_to_a(h3[i], 1);
-        else    
-            assign_value_of_0_to_a(h3[i], 1);
-    }
+  initializer_2(W, paddedInput, temp_W1, temp_W2, temp_W3, temp_W4, tmp2, tmp3, target);
 
-    reverseBits32(h3);
-    // assign_value_of_b_to_a(h4, "11000011110100101110000111110000", 32);
-    for( i=0; i<32; i++){
-        if( i == 0 || 
-            i == 1 || 
-            i == 2 || 
-            i == 3 || 
-            i == 9 || 
-            i == 10 || 
-            i == 11 || 
-            i == 12 || 
-            i == 16 || 
-            i == 18 || 
-            i == 19 || 
-            i == 21 || 
-            i == 26 || 
-            i == 27 || 
-            i == 28 || 
-            i == 29  ) 
-            assign_value_of_0_to_a(h4[i], 1);
-        else    
-            assign_value_of_1_to_a(h4[i], 1);
-    }
+  //----Rounds of Hashing----//
 
-    reverseBits32(h4);
-    // assign_value_of_b_to_a(A, "01100111010001010010001100000001", 32);
-    for( i=0; i<32; i++){
-        if( i == 0 || 
-            i == 8 || 
-            i == 9 || 
-            i == 13 || 
-            i == 16 || 
-            i == 18 || 
-            i == 22 || 
-            i == 24 || 
-            i == 25 || 
-            i == 26 || 
-            i == 29 || 
-            i == 30  ) 
-            assign_value_of_1_to_a(A[i], 1);
-        else    
-            assign_value_of_0_to_a(A[i], 1);
-    }
+  for(t=0; t<80; t++)
+  {
 
-    reverseBits32(A);
-    // assign_value_of_b_to_a(B, "11101111110011011010101110001001", 32);
-    for( i=0; i<32; i++){
-        if( i == 1 || 
-            i == 2 || 
-            i == 4 || 
-            i == 5 || 
-            i == 6 || 
-            i == 10 || 
-            i == 12 || 
-            i == 14 || 
-            i == 17 || 
-            i == 20 || 
-            i == 21 || 
-            i == 28  ) 
-            assign_value_of_0_to_a(B[i], 1);
-        else    
-            assign_value_of_1_to_a(B[i], 1);
-    }
-
-    reverseBits32(B);
-    // assign_value_of_b_to_a(C, "10011000101110101101110011111110", 32);
-    for( i=0; i<32; i++){
-        if( i == 0 || 
-            i == 8 || 
-            i == 9 || 
-            i == 13 || 
-            i == 16 || 
-            i == 18 || 
-            i == 22 || 
-            i == 24 || 
-            i == 25 || 
-            i == 26 || 
-            i == 29 || 
-            i == 30  ) 
-            assign_value_of_0_to_a(C[i], 1);
-        else    
-            assign_value_of_1_to_a(C[i], 1);
-    }
-
-    reverseBits32(C);
-    // assign_value_of_b_to_a(D, "00010000001100100101010001110110", 32);
-    for( i=0; i<32; i++){
-        if( i == 1 || 
-            i == 2 || 
-            i == 4 || 
-            i == 5 || 
-            i == 6 || 
-            i == 10 || 
-            i == 12 || 
-            i == 14 || 
-            i == 17 || 
-            i == 20 || 
-            i == 21 || 
-            i == 28  ) 
-            assign_value_of_1_to_a(D[i], 1);
-        else    
-            assign_value_of_0_to_a(D[i], 1);
-    }
-
-    reverseBits32(D);
-    // assign_value_of_b_to_a(E, "11000011110100101110000111110000", 32);
-    for( i=0; i<32; i++){
-        if( i == 0 || 
-            i == 1 || 
-            i == 2 || 
-            i == 3 || 
-            i == 9 || 
-            i == 10 || 
-            i == 11 || 
-            i == 12 || 
-            i == 16 || 
-            i == 18 || 
-            i == 19 || 
-            i == 21 || 
-            i == 26 || 
-            i == 27 || 
-            i == 28 || 
-            i == 29  ) 
-            assign_value_of_0_to_a(E[i], 1);
-        else    
-            assign_value_of_1_to_a(E[i], 1);
-    }
-
-    reverseBits32(E);
-    // assign_value_of_b_to_a(K1, "01011010100000100111100110011001", 32);
-    for( i=0; i<32; i++){
-        if( i == 1 || 
-            i == 2 || 
-            i == 5 || 
-            i == 6 || 
-            i == 9 || 
-            i == 10 || 
-            i == 15 || 
-            i == 16 || 
-            i == 18 || 
-            i == 19 || 
-            i == 20 || 
-            i == 21 || 
-            i == 22 || 
-            i == 24 || 
-            i == 26 || 
-            i == 29 || 
-            i == 31  ) 
-            assign_value_of_0_to_a(K1[i], 1);
-        else    
-            assign_value_of_1_to_a(K1[i], 1);
-    }
-
-    reverseBits32(K1);
-    // assign_value_of_b_to_a(K2, "01101110110110011110101110100001", 32);
-     for( i=0; i<32; i++){
-        if( i == 0 || 
-            i == 5 || 
-            i == 7 || 
-            i == 8 || 
-            i == 9 || 
-            i == 11 || 
-            i == 13 || 
-            i == 14 || 
-            i == 15 || 
-            i == 16 || 
-            i == 19 || 
-            i == 20 || 
-            i == 22 || 
-            i == 23 || 
-            i == 25 || 
-            i == 26 || 
-            i == 27 || 
-            i == 29 || 
-            i == 30  ) 
-            assign_value_of_1_to_a(K2[i], 1);
-        else    
-            assign_value_of_0_to_a(K2[i], 1);
-    }
-
-    reverseBits32(K2);
-    // assign_value_of_b_to_a(K3, "10001111000110111011110011011100", 32);
-    for( i=0; i<32; i++){
-        if( i == 0 || 
-            i == 1 || 
-            i == 5 || 
-            i == 8 || 
-            i == 9 || 
-            i == 14 || 
-            i == 18 || 
-            i == 22 || 
-            i == 22 || 
-            i == 23 || 
-            i == 28 || 
-            i == 29 || 
-            i == 30  ) 
-            assign_value_of_0_to_a(K3[i], 1);
-        else    
-            assign_value_of_1_to_a(K3[i], 1);
-    }
-
-    reverseBits32(K3);
-    // assign_value_of_b_to_a(K4, "11001010011000101100000111010110", 32);
-    for( i=0; i<32; i++){
-        if( i == 0 || 
-            i == 3 || 
-            i == 5 || 
-            i == 9 || 
-            i == 10 || 
-            i == 11 || 
-            i == 12 || 
-            i == 13 || 
-            i == 16 || 
-            i == 18 || 
-            i == 19 || 
-            i == 20 || 
-            i == 23 || 
-            i == 24 || 
-            i == 26 || 
-            i == 28 || 
-            i == 29  ) 
-            assign_value_of_0_to_a(K4[i], 1);
-        else    
-            assign_value_of_1_to_a(K4[i], 1);
-    }
-
-    reverseBits32(K4);
-                 
-    pad(paddedInput, input, padding);
-                 
-    zero_to_garbage W[2560];  
-    int j;
-                 
-    for(i=0; i<16; i++)
-    {            
-//        map(W[i*32], paddedInput, i);
-        for( j=0; j<32; j++){
-            int k = i + (32*(15-i));
-            assign_value_of_b_to_a(W[i*32+j], paddedInput[j], 1);
-        }
-
-    }            
-    for(i=16; i<80; i++)
+    if(t<20)
     {
-        for(j = 0; j < 32; j++){
-            temp_W1[j] = W[(i-3)*32 + j]
-            temp_W2[j] = W[(i-8)*32 + j]
-            temp_W3[j] = W[(i-14)*32 + j]
-            temp_W4[j] = W[(i-16)*32 + j]
-        }
-
-        XOR(temp2, temp_W1, temp_W2);
-        XOR(temp3, temp2, temp_W3);
-        XOR(target, temp3, temp_W4);
-        leftRotate(target);
-        for(j=0;j<32;j++){
-            assign_value_of_b_to_a(W[i+j], target[j], 1);
-        }
-    } 
-             
-                 
-    //----Rounds of Hashing----//
-
-    for(t=0; t<80; t++)
-    {
-
-        if(t<20)
-        {
-            for(j=0;j<32;j++){
-                assign_value_of_b_to_a(temp3[j], B[j], 1);
-            }
-            AND(temp, B, C);
-            for(i=0; i<32; i++)
-            {
-                NOT(temp3[i]);
-            }
-            AND(temp1, temp3, D);
-            XOR(f, temp, temp1);
-            for(j=0;j<32;j++){
-                assign_value_of_b_to_a(k[j], K1[j], 1);
-            }
-        }
-
-        else if(t<40 && t>=20)
-        {
-            XOR(temp, B, C);
-            XOR(f, temp, D);
-            for(j=0;j<32;j++){
-                assign_value_of_b_to_a(k[j], K2[j], 1);
-            }
-        }
-
-        else if(t<60 && t>=40)
-        {
-            AND(temp1, B, C);
-            AND(temp2, B, D);
-            XOR(temp3, temp1, temp2);
-            AND(temp4, C, D);
-            XOR(f, temp3, temp4);
-            for(j=0;j<32;j++){
-                assign_value_of_b_to_a(k[j], K3[j], 1);
-            }
-        }
-
-        else if(t<80 && t>=60)
-        {
-            XOR(temp, B, C);
-            XOR(f, temp, D);
-            for(j=0;j<32;j++){
-                assign_value_of_b_to_a(k[j], K4[j], 1);
-            }
-        }
-        
-        for(j=0;j<32;j++){
-            assign_value_of_b_to_a(temp1[j], A[j], 1);
-        }
-        for(j=0;j<32;j++){
-            assign_value_of_b_to_a(temp2[j], B[j], 1);
-        }
-        for(i=0; i<5; i++)
-        {
-            leftRotate(temp1);
-        }
-
-        for(j=0;j<32;j++){
-            assign_value_of_b_to_a(temp[j], temp1[j], 1);
-        }
-
-      	for(j=0;j<32;j++) a_eq_a_plus_b(temp[j], f[j], 32);
-      	for(j=0;j<32;j++) a_eq_a_plus_b(temp[j], E[j], 32);
-      	for(j=0;j<32;j++) a_eq_a_plus_b(temp[j], k[j], 32);
-
-//        a_eq_a_plus_b(temp, f, 32);
-//        a_eq_a_plus_b(temp, E, 32);
-//        a_eq_a_plus_b(temp, k, 32);
-
-        for(j=0;j<32;j++){
-            assign_value_of_b_to_a(Z[j], W[t+j], 1);
-        }
-
-      	for(j=0;j<32;j++) a_eq_a_plus_b(temp[j], Z[j], 32);
-//        a_eq_a_plus_b(temp, Z, 32);
-
-        for(j=0;j<32;j++){
-            assign_value_of_b_to_a(E[j], D[j], 1);
-        }
-        for(j=0;j<32;j++){
-            assign_value_of_b_to_a(D[j], C[j], 1);
-        }
-
-        for(i=0; i<30; i++)
-        {
-            leftRotate(temp2);
-        }
-
-        for(j=0;j<32;j++){
-            assign_value_of_b_to_a(C[j], temp2[j], 1);
-        }
-        for(j=0;j<32;j++){
-            assign_value_of_b_to_a(B[j], A[j], 1);
-        }
-        for(j=0;j<32;j++){
-            assign_value_of_b_to_a(A[j], temp[j], 1);
-        }
-		
+      for(j=0;j<32;j++){
+        assign_value_of_b_to_a(temp3[j], B[j], 1);
+      }
+      AND(temp, B, C);
+      for(i=0; i<32; i++)
+      {
+        NOT(temp3[i]);
+      }
+      AND(temp1, temp3, D);
+      XOR(f, temp, temp1);
+      for(j=0;j<32;j++){
+        assign_value_of_b_to_a(k[j], K1[j], 1);
+      }
     }
 
+    else if(t<40 && t>=20)
+    {
+      XOR(temp, B, C);
+      XOR(f, temp, D);
+      for(j=0;j<32;j++){
+        assign_value_of_b_to_a(k[j], K2[j], 1);
+      }
+    }
 
-      	for(j=0;j<32;j++) a_eq_a_plus_b(h0[j], A[j], 32);
-      	for(j=0;j<32;j++) a_eq_a_plus_b(h1[j], B[j], 32);
-      	for(j=0;j<32;j++) a_eq_a_plus_b(h2[j], C[j], 32);
-      	for(j=0;j<32;j++) a_eq_a_plus_b(h3[j], D[j], 32);
-      	for(j=0;j<32;j++) a_eq_a_plus_b(h4[j], E[j], 32);
-//    a_eq_a_plus_b(h0, A, 32);
-//    a_eq_a_plus_b(h1, B, 32);
-//    a_eq_a_plus_b(h2, C, 32);
-//    a_eq_a_plus_b(h3, D, 32);
-//    a_eq_a_plus_b(h4, E, 32);
-//    
-    finalHash( hash, h0, h1, h2, h3, h4);
+    else if(t<60 && t>=40)
+    {
+      AND(temp1, B, C);
+      AND(temp2, B, D);
+      XOR(temp3, temp1, temp2);
+      AND(temp4, C, D);
+      XOR(f, temp3, temp4);
+      for(j=0;j<32;j++){
+        assign_value_of_b_to_a(k[j], K3[j], 1);
+      }
+    }
+
+    else if(t<80 && t>=60)
+    {
+      XOR(temp, B, C);
+      XOR(f, temp, D);
+      for(j=0;j<32;j++){
+        assign_value_of_b_to_a(k[j], K4[j], 1);
+      }
+    }
+
+    for(j=0;j<32;j++){
+      assign_value_of_b_to_a(temp1[j], A[j], 1);
+    }
+    for(j=0;j<32;j++){
+      assign_value_of_b_to_a(temp2[j], B[j], 1);
+    }
+    for(i=0; i<5; i++)
+    {
+      leftRotate(temp1);
+    }
+
+    for(j=0;j<32;j++){
+      assign_value_of_b_to_a(temp[j], temp1[j], 1);
+    }
+
+    for(j=0;j<32;j++) a_eq_a_plus_b(temp[j], f[j], 32);
+    for(j=0;j<32;j++) a_eq_a_plus_b(temp[j], E[j], 32);
+    for(j=0;j<32;j++) a_eq_a_plus_b(temp[j], k[j], 32);
+
+    //        a_eq_a_plus_b(temp, f, 32);
+    //        a_eq_a_plus_b(temp, E, 32);
+    //        a_eq_a_plus_b(temp, k, 32);
+
+    for(j=0;j<32;j++){
+      assign_value_of_b_to_a(Z[j], W[t+j], 1);
+    }
+
+    for(j=0;j<32;j++) a_eq_a_plus_b(temp[j], Z[j], 32);
+    //        a_eq_a_plus_b(temp, Z, 32);
+
+    for(j=0;j<32;j++){
+      assign_value_of_b_to_a(E[j], D[j], 1);
+    }
+    for(j=0;j<32;j++){
+      assign_value_of_b_to_a(D[j], C[j], 1);
+    }
+
+    for(i=0; i<30; i++)
+    {
+      leftRotate(temp2);
+    }
+
+    for(j=0;j<32;j++){
+      assign_value_of_b_to_a(C[j], temp2[j], 1);
+    }
+    for(j=0;j<32;j++){
+      assign_value_of_b_to_a(B[j], A[j], 1);
+    }
+    for(j=0;j<32;j++){
+      assign_value_of_b_to_a(A[j], temp[j], 1);
+    }
+
+  }
+
+
+  for(j=0;j<32;j++) a_eq_a_plus_b(h0[j], A[j], 32);
+  for(j=0;j<32;j++) a_eq_a_plus_b(h1[j], B[j], 32);
+  for(j=0;j<32;j++) a_eq_a_plus_b(h2[j], C[j], 32);
+  for(j=0;j<32;j++) a_eq_a_plus_b(h3[j], D[j], 32);
+  for(j=0;j<32;j++) a_eq_a_plus_b(h4[j], E[j], 32);
+  //    a_eq_a_plus_b(h0, A, 32);
+  //    a_eq_a_plus_b(h1, B, 32);
+  //    a_eq_a_plus_b(h2, C, 32);
+  //    a_eq_a_plus_b(h3, D, 32);
+  //    a_eq_a_plus_b(h4, E, 32);
+  //    
+  finalHash( hash, h0, h1, h2, h3, h4);
 
 }   
 
 
 int main() {
-    encrypt();
-    return 0;
+  encrypt();
+  return 0;
 }

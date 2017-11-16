@@ -23,8 +23,8 @@ def genFlattenModules(benchName):
     numVals = len(vals)
     print '\t[flattening_thresh.py] Total Num of Functions = ',numVals
 
-    names = ['000k','001k','010k','100k','2M','25M']
-    buckets = [(0,0),(0,1000),(1000,10000),(10000,100000),(100000,2000000),(2000000,25000000)]
+    names = ['000k','001k','010k','125k', '250k','2M','25M']
+    buckets = [(0,0),(0,1000),(1000,10000),(10000,125000),(125000,250000),(250000,2000000),(2000000,25000000)]
 
     numBuckets = len(buckets)
     

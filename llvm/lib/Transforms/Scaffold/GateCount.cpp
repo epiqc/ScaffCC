@@ -49,25 +49,23 @@ namespace {
         if (CallInst *CI = dyn_cast<CallInst>(Inst)) {      // Filter Call Instructions
           Function *callee = CI->getCalledFunction();
           if (callee->isIntrinsic()) {                      // Intrinsic (Gate) Functions calls
-            if (callee->getName().str() == "llvm.X") 
+            if (callee->getName().str().find("llvm.X") != std::string::npos) 
               FunctionGates[F][0]++;
-            else if (callee->getName().str() == "llvm.Z") 
+            else if (callee->getName().str().find("llvm.Z") != std::string::npos) 
               FunctionGates[F][1]++;
-            else if (callee->getName().str() == "llvm.H") 
+            else if (callee->getName().str().find("llvm.H") != std::string::npos) 
               FunctionGates[F][2]++;
-            else if (callee->getName().str() == "llvm.T") 
+            else if (callee->getName().str().find("llvm.T") != std::string::npos) 
               FunctionGates[F][3]++;
-            else if (callee->getName().str() == "llvm.CNOT")
-              //std::vector<int> x = FunctionGates[F];
-              //x.insert(x.begin(),1);
+            else if (callee->getName().str().find("llvm.CNOT") != std::string::npos)
               FunctionGates[F][4]++;
-            else if (callee->getName().str() == "llvm.Toffoli") 
+            else if (callee->getName().str().find("llvm.Toffoli") != std::string::npos) 
               FunctionGates[F][5]++;
-            else if (callee->getName().str() == "llvm.RZ") 
+            else if (callee->getName().str().find("llvm.RZ") != std::string::npos) 
               FunctionGates[F][6]++;
-            else if (callee->getName().str() == "llvm.PrepZ") 
+            else if (callee->getName().str().find("llvm.PrepZ") != std::string::npos) 
               FunctionGates[F][7]++;
-            else if (callee->getName().str() == "llvm.MeasZ") 
+            else if (callee->getName().str().find("llvm.MeasZ") != std::string::npos) 
               FunctionGates[F][8]++;
           }
 
