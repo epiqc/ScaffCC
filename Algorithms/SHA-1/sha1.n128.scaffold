@@ -100,7 +100,6 @@ rkqc leftshift(qint a[32]){
 }
 
 rkqc pad(qint a[512], qint input[128], qint padding[384]){
-  //    assign_value_of_b_to_a(padding, "100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000000", 384);
   int j;
   for ( j = 0; j < 384; j++ ){
     if( j == 7 || j == 383 ) assign_value_of_1_to_a(padding[j], 1);
@@ -116,36 +115,46 @@ rkqc pad(qint a[512], qint input[128], qint padding[384]){
   }
 }
 
-rkqc finalHash(qint a[32], qint h0[32], qint h1[32], qint h2[32], qint h3[32], qint h4[32]){
-  int i;
+rkqc finalHash(qint hash[128], 
+               qint h0[32], qint h1[32], qint h2[32], qint h3[32], qint h4[32],
+               qint A[32], qint B[32], qint C[32], qint D[32], qint E[32]){
+  int i, j;
+
+  for(j=0;j<32;j++) a_eq_a_plus_b(h0[j], A[j], 32);
+  for(j=0;j<32;j++) a_eq_a_plus_b(h1[j], B[j], 32);
+  for(j=0;j<32;j++) a_eq_a_plus_b(h2[j], C[j], 32);
+  for(j=0;j<32;j++) a_eq_a_plus_b(h3[j], D[j], 32);
+  for(j=0;j<32;j++) a_eq_a_plus_b(h4[j], E[j], 32);
+  
   for(i=0; i<32; i++)
   {
-    assign_value_of_b_to_a(a[i], h4[i], 1);
+    assign_value_of_b_to_a(hash[i], h4[i], 1);
   }
 
   for(i=32; i<64; i++)
   {
-    assign_value_of_b_to_a(a[i], h3[i-32], 1);
+    assign_value_of_b_to_a(hash[i], h3[i-32], 1);
   }
 
   for(i=64; i<96; i++)
   {
-    assign_value_of_b_to_a(a[i], h2[i-64], 1);
+    assign_value_of_b_to_a(hash[i], h2[i-64], 1);
   }
 
   for(i=96; i<128; i++)
   {
-    assign_value_of_b_to_a(a[i], h1[i-96], 1);
+    assign_value_of_b_to_a(hash[i], h1[i-96], 1);
   }
 
   for(i=128; i<160; i++)
   {
-    assign_value_of_b_to_a(a[i], h0[i-128], 1);
+    assign_value_of_b_to_a(hash[i], h0[i-128], 1);
   }
-
 }
 
-rkqc initializer_1 () {
+rkqc initializer_1 (qint h0[32], qint h1[32], qint h2[32], qint h3[32], qint h4[32], 
+                    qint A[32], qint B[32], qint C[32], qint D[32], qint E[32],
+                    qint K1[32], qint K2[32], qint K3[32], qint K4[32]) {
   int i;  
   // assign_value_of_b_to_a(h0, "01100111010001010010001100000001", 32);
   for( i=0; i<32; i++){
@@ -456,7 +465,10 @@ rkqc initializer_1 () {
   reverseBits32(K4);  
 }
 
-rkq initializer_2 () {
+rkqc initializer_2 (qint W[2560], qint paddedInput[512],
+                    qint temp_W1[32], qint temp_W2[32], qint temp_W3[32], qint temp_W4[32], 
+                    qint temp2[32], qint temp3[32], qint target[32]) {
+  int i, j;
   for(i=0; i<16; i++)
   {            
     for( j=0; j<32; j++){
@@ -484,69 +496,14 @@ rkq initializer_2 () {
   } 
 }
 
-rkqc initializer_3 () {
-}
-
-rkqc hash_rounds () {
-}
-
-rkqc final_hash () {
-}
-
-
-rkqc encrypt(){
-  qbit input[128];
-  qbit hash[160];
-
-  zero_to_garbage padding[384];
-  zero_to_garbage paddedInput[512];
-
-  zero_to_garbage h0[32];
-  zero_to_garbage h1[32];
-  zero_to_garbage h2[32];
-  zero_to_garbage h3[32];
-  zero_to_garbage h4[32];
-  zero_to_garbage A[32];
-  zero_to_garbage B[32];
-  zero_to_garbage C[32];
-  zero_to_garbage D[32];
-  zero_to_garbage E[32];
-  zero_to_garbage K1[32];
-  zero_to_garbage K2[32];
-  zero_to_garbage K3[32];
-  zero_to_garbage K4[32];
-  zero_to_garbage f[32];
-  zero_to_garbage a[32];
-  zero_to_garbage b[32];
-
-  zero_to_garbage temp[32];
-  zero_to_garbage temp1[32];
-  zero_to_garbage temp2[32];
-  zero_to_garbage temp3[32];
-  zero_to_garbage temp4[32];
-  zero_to_garbage temp5[32];
-  zero_to_garbage target[32];
-  zero_to_garbage k[32];
-
-  zero_to_garbage Z[32];
-  zero_to_garbage temp_W1[32];
-  zero_to_garbage temp_W2[32];
-  zero_to_garbage temp_W3[32];
-  zero_to_garbage temp_W4[32];
-
-  zero_to_garbage W[2560];  
-
+rkqc hash_rounds (qint temp[32], qint temp1[32], qint temp2[32], qint temp3[32], qint temp4[32],
+                  qint A[32], qint B[32], qint C[32], qint D[32], qint E[32],
+                  qint K1[32], qint K2[32], qint K3[32], qint K4[32],
+                  qint k[32], qint f[32], qint W[2560], qint Z[32], int version) {
   int i, j, t;
-
-  initializer_1(h0, h1, h2, h3, h4, A, B, C, D, E, K1, K2, K3, K4);
-
-  pad(paddedInput, input, padding);
-
-  initializer_2(W, paddedInput, temp_W1, temp_W2, temp_W3, temp_W4, tmp2, tmp3, target);
-
-  //----Rounds of Hashing----//
-
-  for(t=0; t<80; t++)
+  int start = version*20;
+  int finish = (version+1)*20;
+  for(t=start; t<finish; t++)
   {
 
     if(t<20)
@@ -615,16 +572,11 @@ rkqc encrypt(){
     for(j=0;j<32;j++) a_eq_a_plus_b(temp[j], E[j], 32);
     for(j=0;j<32;j++) a_eq_a_plus_b(temp[j], k[j], 32);
 
-    //        a_eq_a_plus_b(temp, f, 32);
-    //        a_eq_a_plus_b(temp, E, 32);
-    //        a_eq_a_plus_b(temp, k, 32);
-
     for(j=0;j<32;j++){
       assign_value_of_b_to_a(Z[j], W[t+j], 1);
     }
 
     for(j=0;j<32;j++) a_eq_a_plus_b(temp[j], Z[j], 32);
-    //        a_eq_a_plus_b(temp, Z, 32);
 
     for(j=0;j<32;j++){
       assign_value_of_b_to_a(E[j], D[j], 1);
@@ -647,23 +599,63 @@ rkqc encrypt(){
     for(j=0;j<32;j++){
       assign_value_of_b_to_a(A[j], temp[j], 1);
     }
+  }  
+}
 
-  }
+rkqc encrypt(){
+  qbit input[128];
+  qbit hash[160];
 
+  zero_to_garbage padding[384];
+  zero_to_garbage paddedInput[512];
 
-  for(j=0;j<32;j++) a_eq_a_plus_b(h0[j], A[j], 32);
-  for(j=0;j<32;j++) a_eq_a_plus_b(h1[j], B[j], 32);
-  for(j=0;j<32;j++) a_eq_a_plus_b(h2[j], C[j], 32);
-  for(j=0;j<32;j++) a_eq_a_plus_b(h3[j], D[j], 32);
-  for(j=0;j<32;j++) a_eq_a_plus_b(h4[j], E[j], 32);
-  //    a_eq_a_plus_b(h0, A, 32);
-  //    a_eq_a_plus_b(h1, B, 32);
-  //    a_eq_a_plus_b(h2, C, 32);
-  //    a_eq_a_plus_b(h3, D, 32);
-  //    a_eq_a_plus_b(h4, E, 32);
-  //    
-  finalHash( hash, h0, h1, h2, h3, h4);
+  zero_to_garbage h0[32];
+  zero_to_garbage h1[32];
+  zero_to_garbage h2[32];
+  zero_to_garbage h3[32];
+  zero_to_garbage h4[32];
+  zero_to_garbage A[32];
+  zero_to_garbage B[32];
+  zero_to_garbage C[32];
+  zero_to_garbage D[32];
+  zero_to_garbage E[32];
+  zero_to_garbage K1[32];
+  zero_to_garbage K2[32];
+  zero_to_garbage K3[32];
+  zero_to_garbage K4[32];
+  zero_to_garbage f[32];
+  zero_to_garbage a[32];
+  zero_to_garbage b[32];
 
+  zero_to_garbage temp[32];
+  zero_to_garbage temp1[32];
+  zero_to_garbage temp2[32];
+  zero_to_garbage temp3[32];
+  zero_to_garbage temp4[32];
+  zero_to_garbage temp5[32];
+  zero_to_garbage target[32];
+  zero_to_garbage k[32];
+
+  zero_to_garbage Z[32];
+  zero_to_garbage temp_W1[32];
+  zero_to_garbage temp_W2[32];
+  zero_to_garbage temp_W3[32];
+  zero_to_garbage temp_W4[32];
+
+  zero_to_garbage W[2560];  
+
+  initializer_1(h0, h1, h2, h3, h4, A, B, C, D, E, K1, K2, K3, K4);
+
+  pad(paddedInput, input, padding);
+
+  initializer_2(W, paddedInput, temp_W1, temp_W2, temp_W3, temp_W4, temp2, temp3, target);
+
+  hash_rounds(temp, temp1, temp2, temp3, temp4, A, B, C, D, E, K1, K2, K3, K4, k, f, W, Z, 0);
+  hash_rounds(temp, temp1, temp2, temp3, temp4, A, B, C, D, E, K1, K2, K3, K4, k, f, W, Z, 1);
+  hash_rounds(temp, temp1, temp2, temp3, temp4, A, B, C, D, E, K1, K2, K3, K4, k, f, W, Z, 2);
+  hash_rounds(temp, temp1, temp2, temp3, temp4, A, B, C, D, E, K1, K2, K3, K4, k, f, W, Z, 3);
+
+  finalHash(hash, h0, h1, h2, h3, h4, A, B, C, D, E);
 }   
 
 

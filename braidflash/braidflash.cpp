@@ -39,7 +39,7 @@
 #include <boost/graph/copy.hpp>
 #include <boost/graph/graphviz.hpp>
 
-//#define _DEBUG    // optional: debug flag
+#define _DEBUG    // optional: debug flag
 #define _PROGRESS   // optional: progress flag
 
 using namespace std;
@@ -66,14 +66,15 @@ int P_error_rate;           // device error rate parameter = 10^-(P_error_rate)
 int code_distance;          // coding distance of the surface code
 
 // magic state distillation
+bool periphery = true;
 // places Y state factories (for S gates) on the left and right lattice periphery
 #define short_Y_error 0.005
-unsigned int rows_to_Y_factory_ratio;  // ratio of Y state factories to data qubits
+unsigned int rows_to_Y_factory_ratio = 1;  // ratio of Y state factories to data qubits
 unsigned int distillation_level_Y = 0;
 map< string, unsigned int > num_Y_factories;
 // places A state factories (for T gates) on the top and bottom lattice periphery
 #define short_A_error 0.005
-unsigned int cols_to_A_factory_ratio;  // ratio of A state factories to data qubits
+unsigned int cols_to_A_factory_ratio = 1;  // ratio of A state factories to data qubits
 unsigned int distillation_level_A = 0;
 map< string, unsigned int > num_A_factories;
 
@@ -92,10 +93,7 @@ unsigned int num_cols;
 
 // global clock cycle
 unsigned long long clk;
-unsigned long long total_serial_cycles;
-unsigned long long total_parallel_cycles;
-unsigned long long total_critical_cycles;
-unsigned long long gate_complete_count;
+unsigned long long total_cycles;
 
 // Mesh:
 struct Node {
@@ -892,19 +890,6 @@ unsigned int manhattan_cost(unsigned int src_qubit, unsigned int dest_qubit) {
   return (row_dist + col_dist); 
 }
 
-unsigned int find_closest_magic (unsigned int data_qid, vector<unsigned int> magic_qids) {
-  unsigned int mcost, d = numeric_limits<unsigned int>::max();
-  unsigned int result = 0;
-  for (auto &m : magic_qids) {
-    d = manhattan_cost(data_qid, m);
-    if (d < mcost) { 
-      mcost = d;
-      result = m;
-    }
-  }
-  return result;
-}
-
 pair< pair<int,int>, pair<int,int> > compare_manhattan_costs () {
   pair< pair<int,int>, pair<int,int> > result;
   unsigned int mcost = 0;
@@ -1042,6 +1027,22 @@ void parse_LPFS (const string file_path) {
           Gate g = Gate(seq++, op_type, qid); 
           module_gates.push_back(g);        
         }
+        /*
+        // for simplicity (not having 2 factory types)
+        // replace S gates with two T gates
+        if (op_type == "S") {
+          Gate tg1 = Gate(seq++, "T", qid);
+          Gate tg2 = Gate(seq++, "T", qid);          
+          module_gates.push_back(tg1);        
+          module_gates.push_back(tg2);                  
+        }
+        if (op_type == "Sdag") {
+          Gate tg1 = Gate(seq++, "Tdag", qid);
+          Gate tg2 = Gate(seq++, "Tdag", qid);          
+          module_gates.push_back(tg1);        
+          module_gates.push_back(tg2);                  
+        }
+        */        
       }
     }
     // save result of last iteration
@@ -1266,8 +1267,6 @@ void increment_clock() {
 int main (int argc, char *argv[]) {
 
   bool opt=false;
-  rows_to_Y_factory_ratio = 1;
-  cols_to_A_factory_ratio = 1;
   P_error_rate = 5; 
   attempt_th_yx = 8;
   attempt_th_drop = 20;
@@ -1286,24 +1285,6 @@ int main (int argc, char *argv[]) {
         return 1;
       }
     }  
-    if (strcmp(argv[i],"--yratio")==0) {
-      if (argc > (i+1)) {
-        rows_to_Y_factory_ratio = atoi(argv[i+1]);
-      }
-      else {
-        cerr<<"Usage: braidflash <benchmark> --yratio <rows_to_Y_factory_ratio>";
-        return 1;
-      }
-    }    
-    if (strcmp(argv[i],"--aratio")==0) {
-      if (argc > (i+1)) {
-        cols_to_A_factory_ratio = atoi(argv[i+1]);
-      }
-      else {
-        cerr<<"Usage: braidflash <benchmark> --aratio <cols_to_A_factory_ratio>";
-        return 1;
-      }
-    }        
     if (strcmp(argv[i],"--yx")==0) {
       if (argc > (i+1)) {
         attempt_th_yx = atoi(argv[i+1]);
@@ -1313,7 +1294,7 @@ int main (int argc, char *argv[]) {
         return 1;
       }
     }    
-    if (strcmp(argv[i],"--drop")==0) {
+     if (strcmp(argv[i],"--drop")==0) {
       if (argc > (i+1)) {
         attempt_th_drop = atoi(argv[i+1]);
       }
@@ -1349,8 +1330,6 @@ int main (int argc, char *argv[]) {
 R"(Usage: braidflash [FILE] [OPTIONS]
 Simulate braid space occupancies on the surface code mesh.
   --opt       optimize qubit layout (default: none)
-  --yratio    ratio of lattice rows to Y state factories
-  --aratio    ratio of lattice cols to A state factories
   --p         physical error rate (10^-p) [int] (default: 5)
   --yx        stall threshold to switch DOR routing from xy to yx [int] (default: 8)
   --drop      stall threshold to drop entire operation and reinject [int] (default: 20)
@@ -1461,11 +1440,17 @@ Simulate braid space occupancies on the surface code mesh.
     total_S_gates += module_S_size * module_freq;      
     total_T_gates += module_T_size * module_freq;   
 
-    unsigned int module_num_rows = (unsigned int)ceil( sqrt( (double)all_q_counts[module_name] ) );
-    unsigned int module_num_cols = (module_num_rows*(module_num_rows-1) < all_q_counts[module_name]) 
-      ? module_num_rows : module_num_rows-1;
-    num_Y_factories[module_name] = 2 * (module_num_rows) / rows_to_Y_factory_ratio;
-    num_A_factories[module_name] = 2 * (module_num_cols+2) / cols_to_A_factory_ratio;    
+    if (periphery) {
+      unsigned int module_num_rows = (unsigned int)ceil( sqrt( (double)all_q_counts[module_name] ) );
+      unsigned int module_num_cols = (module_num_rows*(module_num_rows-1) < all_q_counts[module_name]) 
+        ? module_num_rows : module_num_rows-1;
+      num_Y_factories[module_name] = module_num_rows / rows_to_Y_factory_ratio;
+      num_A_factories[module_name] = module_num_cols / cols_to_A_factory_ratio;    
+    }
+    else {
+      num_Y_factories[module_name] = K;
+      num_A_factories[module_name] = K;
+    }
   }
   cerr << "\ntotal logical gates: " << total_logical_gates << endl;
   cerr << "total logical S gates: " << total_S_gates << endl;    
@@ -1583,8 +1568,6 @@ Simulate braid space occupancies on the surface code mesh.
   string br_file_path;  
   ofstream br_file;      
   br_file_path = output_dir+benchmark_name
-                    +".yratio."+(to_string(rows_to_Y_factory_ratio))
-                    +".aratio."+(to_string(cols_to_A_factory_ratio))        
                     +".p."+(to_string(P_error_rate))
                     +".yx."+to_string(attempt_th_yx)
                     +".drop."+to_string(attempt_th_drop)                             
@@ -1596,8 +1579,6 @@ Simulate braid space occupancies on the surface code mesh.
   // visualization file: print network states
   string vis_file_path; 
   vis_file_path = output_dir+benchmark_name
-                    +".yratio."+(to_string(rows_to_Y_factory_ratio))
-                    +".aratio."+(to_string(cols_to_A_factory_ratio))        
                     +".p."+(to_string(P_error_rate))
                     +".yx."+to_string(attempt_th_yx)
                     +".drop."+to_string(attempt_th_drop)    
@@ -1610,9 +1591,7 @@ Simulate braid space occupancies on the surface code mesh.
 
   // braidflash for each module of the benchmark
   all_gates = (opt) ? all_gates_opt : all_gates;
-  total_serial_cycles = 0;
-  total_parallel_cycles = 0;
-  total_critical_cycles = 0;  
+  total_cycles = 0;
   for (auto const &map_it : all_gates) {
     // reset clock, mesh and dag
     clk = 0;
@@ -1627,7 +1606,6 @@ Simulate braid space occupancies on the surface code mesh.
     unique_dropped_gates.clear();
     attempts_hist.clear();
     avg_module_mesh_utility = 0.0;
-    gate_complete_count = 0;
 
     // retrieve parsed gates and q_count for this module
     string module_name = map_it.first;
@@ -1636,69 +1614,58 @@ Simulate braid space occupancies on the surface code mesh.
     unsigned long long module_q_count = all_q_counts[module_name];
     num_rows = (unsigned int)ceil( sqrt( (double)module_q_count ) );
     num_cols = (num_rows*(num_rows-1) < module_q_count) ? num_rows : num_rows-1;
-#ifdef _PROGRESS
+#ifdef _DEBUG    
     cout << "\nModule: " << module_name << endl;    
-    cout << "Size: " << num_rows << " X " << num_cols << endl;
+    cout << "Size: " << num_rows << "X" << num_cols << endl;
 #endif
     if (num_rows == 1 && num_cols == 1) continue;
 
     // augment mesh for factory outputs: 2 rows for A states and 2 columns for Y states
     num_rows = num_rows + 2;
     num_cols = num_cols + 2;
-#ifdef _PROGRESS
-    cerr << "Size (after factories): " << num_rows << " X " << num_cols << endl;
-#endif        
-    vector<unsigned int> Y_state_ids, A_state_ids;
-    for (int i = 1; i < num_rows-1; i+=rows_to_Y_factory_ratio) {
-      Y_state_ids.push_back( i * num_cols );
-      Y_state_ids.push_back( (i+1) * num_cols - 1);
-    }
-    for (int j = 0; j < num_cols; j+=cols_to_A_factory_ratio) {
-      A_state_ids.push_back( j );
-      A_state_ids.push_back( (num_rows-1) * num_cols + j);
-    }
+
+    /*
+    // S gate (Fowler et al., Figure 29)
+    // 1. CNOT data, factory_output
+    // 2. H factory_output
+    // 3. CNOT data, factory_output
+    // 4. H factory_output
+
+    // T gate (Fowler et al., Figure 30)
+    // 1. CNOT factory_output, data
+    // 2. CNOT data, factory_output
+    // 3. CNOT factory_output, data
+    // 4. CNOT data, factory_output
+    // (last 3 specify a swap)
+    */
 
     // update gate list to be simulated:
     // 1. update data indices in light of added rows/columns
     // 2. replace S and T gates by appropriate CNOTs (Fowler et al. Figure 29 & 30)
-#ifdef _PROGRESS
-    cerr << "Updating gate list for S/T magic state interactions..." << endl;
-#endif    
-    unsigned int seq = module_gates.size();
-    vector<Gate> to_push_gates;
-    for (auto g_it = module_gates.begin(); g_it != module_gates.end(); ++g_it) {
-      for (auto &arg : g_it->qid) {
-        arg = arg + num_cols + 2 * (int)( (arg) / (num_cols - 2) ) + 1;
+    cout << num_rows << " X " << num_cols << endl;
+    for (auto &g : module_gates) {
+      for (auto &arg : g.qid) {
+        cout << "changing #" << arg 
+          << " to #" << arg + num_cols + 2 * ( (arg-1) % (num_cols - 2) ) << "\t";
+        arg = arg + num_cols + 2 * ( (arg-1) % (num_cols - 2) );
       }   
-      if (g_it->op_type == "S" || g_it->op_type == "Sdag") {
-        unsigned int closest_Y = find_closest_magic(g_it->qid[0], Y_state_ids);
-        Gate cx1 = Gate(++seq, "CNOT", (const vector<unsigned int>){g_it->qid[0], closest_Y});
-        Gate h1 = Gate(++seq, "H", (const vector<unsigned int>){closest_Y});
-        Gate cx2 = Gate(++seq, "CNOT", (const vector<unsigned int>){g_it->qid[0], closest_Y});
-        Gate h2 = Gate(++seq, "H", (const vector<unsigned int>){closest_Y});
-        to_push_gates.push_back(cx1);
-        to_push_gates.push_back(h1);
-        to_push_gates.push_back(cx2);
-        to_push_gates.push_back(h2);
+      /*
+      if (g.op_type == "S" || g.op_type == "Sdag") {
+        unsigned int closest_Y = ;
+        Gate gcx1 = Gate(g.seq, "CNOT", {closest_Y, g.qid});
+        Gate gcx2 = Gate(g.seq, "CNOT", {g.qid, closest_Y});
+        Gate gcx3 = Gate(g.seq, "CNOT", {closest_Y, g.qid});
+        Gate gcx4 = Gate(g.seq, "CNOT", {g.qid, closest_Y});        
+        module_gates.insert (gcx1);
+        module_gates.insert (gcx2);
+        module_gates.insert (gcx3);
+        module_gates.insert (gcx4);        
+        module_gates.erase(g);
       }
-      if (g_it->op_type == "T" || g_it->op_type == "Tdag") {
-        unsigned int closest_A = find_closest_magic(g_it->qid[0], A_state_ids);
-        Gate cx1 = Gate(++seq, "CNOT", (const vector<unsigned int>){closest_A, g_it->qid[0]});
-        Gate cx2 = Gate(++seq, "CNOT", (const vector<unsigned int>){g_it->qid[0], closest_A});
-        Gate cx3 = Gate(++seq, "CNOT", (const vector<unsigned int>){closest_A, g_it->qid[0]});
-        Gate cx4 = Gate(++seq, "CNOT", (const vector<unsigned int>){g_it->qid[0], closest_A});
-        to_push_gates.push_back(cx1);
-        to_push_gates.push_back(cx2);
-        to_push_gates.push_back(cx3);
-        to_push_gates.push_back(cx4);        
+      if (g.op_type == "T" || g.op_type == "Tdag") {
       }
+      */
     }
-    for (auto t : to_push_gates)
-      module_gates.push_back(t);
-    module_gates.erase( remove_if(module_gates.begin(), module_gates.end(), 
-          [](const Gate &g) {
-          return (g.op_type=="S" || g.op_type=="Sdag" || g.op_type=="T" || g.op_type=="Tdag");
-          }), module_gates.end() );
 
     // build mesh
     // add all nodes   
@@ -1890,12 +1857,6 @@ Simulate braid space occupancies on the surface code mesh.
 #ifdef _DEBUG
             cout << "\tgate " << dag[g].seq << " completed." << endl;
 #endif
-
-#ifdef _PROGRESS
-            gate_complete_count++;
-            if (gate_complete_count % 1000 == 0) 
-              cout << gate_complete_count << " gates completed." << endl;
-#endif            
             event_queues.erase(g);
             dag_t::adjacency_iterator neighborIt, neighborEnd;
             boost::tie(neighborIt, neighborEnd) = adjacent_vertices(g, dag);
@@ -1980,9 +1941,7 @@ Simulate braid space occupancies on the surface code mesh.
       module_freq = module_freqs[module_name];
       cerr << "module_freq: " << module_freq << endl;
     }
-    total_serial_cycles += serial_clk * module_freq;    
-    total_parallel_cycles += clk * module_freq;    
-    total_critical_cycles += critical_clk * module_freq;
+    total_cycles += clk*module_freq;
     cerr << "avg_module_mesh_utility: " << avg_module_mesh_utility << endl;
 
     avg_mesh_utility[module_name] = avg_module_mesh_utility;
@@ -2054,8 +2013,8 @@ Simulate braid space occupancies on the surface code mesh.
     + sqrt(max_q_count)*(width_channel*(width_channel+length_tile))
     + sqrt(max_q_count)*(width_channel*(width_channel+width_tile)) 
     + width_channel*width_channel
-    + max_Y_factories*pow(8,distillation_level_Y)*area_tile_plus
-    + max_A_factories*pow(16,distillation_level_A)*area_tile_plus;
+    + max_Y_factories*pow(8,distillation_level_Y);
+    + max_A_factories*pow(16,distillation_level_A);
   br_file << "code_distance(d): " << code_distance << endl;
   br_file << "num_logical_qubits: " << max_q_count << endl;
   br_file << "num_physical_qubits: " << num_physical_qubits << endl;
@@ -2066,8 +2025,6 @@ Simulate braid space occupancies on the surface code mesh.
   string kq_file_path; 
   ofstream kq_file;      
   kq_file_path = output_dir+benchmark_name
-                    +".yratio."+(to_string(rows_to_Y_factory_ratio))
-                    +".aratio."+(to_string(cols_to_A_factory_ratio))    
                     +".p."+(to_string(P_error_rate))
                     +".yx."+to_string(attempt_th_yx)
                     +".drop."+to_string(attempt_th_drop)    
@@ -2076,17 +2033,11 @@ Simulate braid space occupancies on the surface code mesh.
                     +(opt ? ".opt.kq" : ".kq");
   kq_file.open(kq_file_path);
   kq_file << "error rate: " << "10^-" << P_error_rate << endl;
-  kq_file << "Y-row ratio: " << rows_to_Y_factory_ratio << endl;
-  kq_file << "A-col ratio: " << cols_to_A_factory_ratio << endl;    
   kq_file << "code distance: " << code_distance << endl;
-  kq_file << "Y distillation: " << distillation_level_Y << endl;
-  kq_file << "A distillation: " << distillation_level_A << endl;
-  kq_file << "serial cycles: " << surface_code_cycle * total_serial_cycles << endl;  
-  kq_file << "critical cycles: " << surface_code_cycle * total_critical_cycles << endl;  
-  kq_file << "parallel cycles: " << surface_code_cycle * total_parallel_cycles << endl;  
+  kq_file << "total cycles: " << surface_code_cycle * total_cycles << endl;
   kq_file << "max qubits: " << num_physical_qubits << endl;
   kq_file << "logical KQ: " << total_logical_gates << endl;
-  kq_file << "physical kq: " << (surface_code_cycle*total_parallel_cycles) * num_physical_qubits << endl;  
+  kq_file << "physical kq: " << (surface_code_cycle*total_cycles) * num_physical_qubits << endl;  
   kq_file.close();  
 
   cerr << "kq report written to:\n" << " \t" << kq_file_path << endl; 
