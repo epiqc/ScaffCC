@@ -13,7 +13,7 @@
 #include "ARMSubtarget.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/ScheduleDAG.h"
-#include "llvm/Target/TargetRegisterInfo.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
 using namespace llvm;
 
 static bool hasRAWHazard(MachineInstr *DefMI, MachineInstr *MI,
@@ -44,21 +44,24 @@ ARMHazardRecognizer::getHazardType(SUnit *SU, int Stalls) {
     if (LastMI && (MCID.TSFlags & ARMII::DomainMask) != ARMII::DomainGeneral) {
       MachineInstr *DefMI = LastMI;
       const MCInstrDesc &LastMCID = LastMI->getDesc();
+      const MachineFunction *MF = MI->getParent()->getParent();
+      const ARMBaseInstrInfo &TII = *static_cast<const ARMBaseInstrInfo *>(
+                                        MF->getSubtarget().getInstrInfo());
+
       // Skip over one non-VFP / NEON instruction.
       if (!LastMI->isBarrier() &&
-          // On A9, AGU and NEON/FPU are muxed.
-          !(STI.isCortexA9() && (LastMI->mayLoad() || LastMI->mayStore())) &&
+          !(TII.getSubtarget().hasMuxedUnits() && LastMI->mayLoadOrStore()) &&
           (LastMCID.TSFlags & ARMII::DomainMask) == ARMII::DomainGeneral) {
         MachineBasicBlock::iterator I = LastMI;
         if (I != LastMI->getParent()->begin()) {
-          I = llvm::prior(I);
+          I = std::prev(I);
           DefMI = &*I;
         }
       }
 
       if (TII.isFpMLxInstruction(DefMI->getOpcode()) &&
           (TII.canCauseFpMLxStall(MI->getOpcode()) ||
-           hasRAWHazard(DefMI, MI, TRI))) {
+           hasRAWHazard(DefMI, MI, TII.getRegisterInfo()))) {
         // Try to schedule another instruction for the next 4 cycles.
         if (FpMLxStalls == 0)
           FpMLxStalls = 4;
@@ -71,7 +74,7 @@ ARMHazardRecognizer::getHazardType(SUnit *SU, int Stalls) {
 }
 
 void ARMHazardRecognizer::Reset() {
-  LastMI = 0;
+  LastMI = nullptr;
   FpMLxStalls = 0;
   ScoreboardHazardRecognizer::Reset();
 }
@@ -89,7 +92,7 @@ void ARMHazardRecognizer::EmitInstruction(SUnit *SU) {
 void ARMHazardRecognizer::AdvanceCycle() {
   if (FpMLxStalls && --FpMLxStalls == 0)
     // Stalled for 4 cycles but still can't schedule any other instructions.
-    LastMI = 0;
+    LastMI = nullptr;
   ScoreboardHazardRecognizer::AdvanceCycle();
 }
 

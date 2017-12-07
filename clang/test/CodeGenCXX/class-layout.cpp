@@ -14,7 +14,7 @@ namespace Test2 {
 
 namespace Test3 {
   // C should have a vtable pointer.
-  // CHECK: %"struct.Test3::A" = type { i32 (...)**, i32 }
+  // CHECK: %"struct.Test3::A" = type <{ i32 (...)**, i32, [4 x i8] }>
   struct A { virtual void f(); int a; } *a;
 }
 
@@ -39,7 +39,7 @@ namespace Test5 {
     char a;
   };
 
-  // CHECK: %"struct.Test5::B" = type { [9 x i8], i8, i8, [5 x i8] }
+  // CHECK: %"struct.Test5::B" = type {  %"struct.Test5::A.base", i8, i8, [5 x i8] }
   struct B : A {
     char b : 1;
     char c;
@@ -76,4 +76,27 @@ namespace Test6 {
   // provoke the original assertion.
   class E : public B {};
   E *e;
+}
+
+// <rdar://problem/11324125>: Make sure this doesn't crash.  (It's okay
+// if we start rejecting it at some point.)
+namespace Test7 {
+  #pragma pack (1)
+  class A {};
+  // CHECK: %"class.Test7::B" = type <{ i32 (...)**, %"class.Test7::A" }>
+  class B {
+     virtual ~B();
+     A a;
+  };
+  B* b;
+  #pragma pack ()
+}
+
+// Shouldn't crash.
+namespace Test8 {
+  struct A {};
+  struct D { int a; };
+  struct B : virtual D, A { };
+  struct C : B, A { void f() {} };
+  C c;
 }

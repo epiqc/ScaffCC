@@ -1,21 +1,21 @@
 ; RUN: opt -simplifycfg -S < %s | FileCheck %s
 
-define i32 @foo(i32 %i) nounwind ssp {
-  call void @llvm.dbg.value(metadata !{i32 %i}, i64 0, metadata !6), !dbg !7
-  call void @llvm.dbg.value(metadata !8, i64 0, metadata !9), !dbg !11
+define i32 @foo(i32 %i) nounwind ssp !dbg !0 {
+  call void @llvm.dbg.value(metadata i32 %i, metadata !6, metadata !DIExpression()), !dbg !7
+  call void @llvm.dbg.value(metadata i32 0, metadata !9, metadata !DIExpression()), !dbg !11
   %1 = icmp ne i32 %i, 0, !dbg !12
-;CHECK: call i32 (...)* @bar()
+;CHECK: call i32 (...) @bar()
 ;CHECK-NEXT: llvm.dbg.value
   br i1 %1, label %2, label %4, !dbg !12
 
 ; <label>:2                                       ; preds = %0
-  %3 = call i32 (...)* @bar(), !dbg !13
-  call void @llvm.dbg.value(metadata !{i32 %3}, i64 0, metadata !9), !dbg !13
+  %3 = call i32 (...) @bar(), !dbg !13
+  call void @llvm.dbg.value(metadata i32 %3, metadata !9, metadata !DIExpression()), !dbg !13
   br label %6, !dbg !15
 
 ; <label>:4                                       ; preds = %0
-  %5 = call i32 (...)* @bar(), !dbg !16
-  call void @llvm.dbg.value(metadata !{i32 %5}, i64 0, metadata !9), !dbg !16
+  %5 = call i32 (...) @bar(), !dbg !16
+  call void @llvm.dbg.value(metadata i32 %5, metadata !9, metadata !DIExpression()), !dbg !16
   br label %6, !dbg !18
 
 ; <label>:6                                       ; preds = %4, %2
@@ -23,31 +23,33 @@ define i32 @foo(i32 %i) nounwind ssp {
   ret i32 %k.0, !dbg !19
 }
 
-declare void @llvm.dbg.declare(metadata, metadata) nounwind readnone
+declare void @llvm.dbg.declare(metadata, metadata, metadata) nounwind readnone
 
 declare i32 @bar(...)
 
-declare void @llvm.dbg.value(metadata, i64, metadata) nounwind readnone
+declare void @llvm.dbg.value(metadata, metadata, metadata) nounwind readnone
 
-!llvm.dbg.sp = !{!0}
+!llvm.module.flags = !{!21}
+!llvm.dbg.cu = !{!2}
 
-!0 = metadata !{i32 589870, i32 0, metadata !1, metadata !"foo", metadata !"foo", metadata !"", metadata !1, i32 2, metadata !3, i1 false, i1 true, i32 0, i32 0, i32 0, i32 256, i1 false, i32 (i32)* @foo} ; [ DW_TAG_subprogram ]
-!1 = metadata !{i32 589865, metadata !"b.c", metadata !"/private/tmp", metadata !2} ; [ DW_TAG_file_type ]
-!2 = metadata !{i32 589841, i32 0, i32 12, metadata !"b.c", metadata !"/private/tmp", metadata !"clang", i1 true, i1 false, metadata !"", i32 0} ; [ DW_TAG_compile_unit ]
-!3 = metadata !{i32 589845, metadata !1, metadata !"", metadata !1, i32 0, i64 0, i64 0, i32 0, i32 0, i32 0, metadata !4, i32 0, i32 0} ; [ DW_TAG_subroutine_type ]
-!4 = metadata !{metadata !5}
-!5 = metadata !{i32 589860, metadata !2, metadata !"int", null, i32 0, i64 32, i64 32, i64 0, i32 0, i32 5} ; [ DW_TAG_base_type ]
-!6 = metadata !{i32 590081, metadata !0, metadata !"i", metadata !1, i32 16777218, metadata !5, i32 0} ; [ DW_TAG_arg_variable ]
-!7 = metadata !{i32 2, i32 13, metadata !0, null}
-!8 = metadata !{i32 0}
-!9 = metadata !{i32 590080, metadata !10, metadata !"k", metadata !1, i32 3, metadata !5, i32 0} ; [ DW_TAG_auto_variable ]
-!10 = metadata !{i32 589835, metadata !0, i32 2, i32 16, metadata !1, i32 0} ; [ DW_TAG_lexical_block ]
-!11 = metadata !{i32 3, i32 12, metadata !10, null}
-!12 = metadata !{i32 4, i32 3, metadata !10, null}
-!13 = metadata !{i32 5, i32 5, metadata !14, null}
-!14 = metadata !{i32 589835, metadata !10, i32 4, i32 10, metadata !1, i32 1} ; [ DW_TAG_lexical_block ]
-!15 = metadata !{i32 6, i32 3, metadata !14, null}
-!16 = metadata !{i32 7, i32 5, metadata !17, null}
-!17 = metadata !{i32 589835, metadata !10, i32 6, i32 10, metadata !1, i32 2} ; [ DW_TAG_lexical_block ]
-!18 = metadata !{i32 8, i32 3, metadata !17, null}
-!19 = metadata !{i32 9, i32 3, metadata !10, null}
+!0 = distinct !DISubprogram(name: "foo", line: 2, isLocal: false, isDefinition: true, virtualIndex: 6, flags: DIFlagPrototyped, isOptimized: false, unit: !2, file: !20, scope: !1, type: !3)
+!1 = !DIFile(filename: "b.c", directory: "/private/tmp")
+!2 = distinct !DICompileUnit(language: DW_LANG_C99, producer: "clang", isOptimized: true, emissionKind: FullDebug, file: !20)
+!3 = !DISubroutineType(types: !4)
+!4 = !{!5}
+!5 = !DIBasicType(tag: DW_TAG_base_type, name: "int", size: 32, align: 32, encoding: DW_ATE_signed)
+!6 = !DILocalVariable(name: "i", line: 2, arg: 1, scope: !0, file: !1, type: !5)
+!7 = !DILocation(line: 2, column: 13, scope: !0)
+!9 = !DILocalVariable(name: "k", line: 3, scope: !10, file: !1, type: !5)
+!10 = distinct !DILexicalBlock(line: 2, column: 16, file: !20, scope: !0)
+!11 = !DILocation(line: 3, column: 12, scope: !10)
+!12 = !DILocation(line: 4, column: 3, scope: !10)
+!13 = !DILocation(line: 5, column: 5, scope: !14)
+!14 = distinct !DILexicalBlock(line: 4, column: 10, file: !20, scope: !10)
+!15 = !DILocation(line: 6, column: 3, scope: !14)
+!16 = !DILocation(line: 7, column: 5, scope: !17)
+!17 = distinct !DILexicalBlock(line: 6, column: 10, file: !20, scope: !10)
+!18 = !DILocation(line: 8, column: 3, scope: !17)
+!19 = !DILocation(line: 9, column: 3, scope: !10)
+!20 = !DIFile(filename: "b.c", directory: "/private/tmp")
+!21 = !{i32 1, !"Debug Info Version", i32 3}

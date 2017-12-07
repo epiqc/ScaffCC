@@ -1,4 +1,5 @@
 ; RUN: opt -licm -basicaa < %s -S | FileCheck %s
+; RUN: opt -aa-pipeline=basic-aa -passes='require<aa>,require<targetir>,require<scalar-evolution>,require<opt-remark-emit>,loop(licm)' < %s -S | FileCheck %s
 
 define void @dgefa() nounwind ssp {
 entry:
@@ -15,7 +16,7 @@ if.then:                                          ; preds = %for.body
 
 if.then27:                                        ; preds = %if.then
 ; CHECK: tail call void @llvm.dbg.value
-  tail call void @llvm.dbg.value(metadata !18, i64 0, metadata !19), !dbg !21
+  tail call void @llvm.dbg.value(metadata double undef, metadata !19, metadata !DIExpression()), !dbg !21
   br label %for.body61.us
 
 if.end.if.end.split_crit_edge.critedge:           ; preds = %if.then
@@ -31,32 +32,34 @@ for.end104:                                       ; preds = %for.cond.backedge
   ret void, !dbg !24
 }
 
-declare void @llvm.dbg.value(metadata, i64, metadata) nounwind readnone
+declare void @llvm.dbg.value(metadata, metadata, metadata) nounwind readnone
 
-!llvm.dbg.sp = !{!0, !6, !9, !10}
+!llvm.module.flags = !{!26}
+!llvm.dbg.cu = !{!2}
 
-!0 = metadata !{i32 589870, i32 0, metadata !1, metadata !"idamax", metadata !"idamax", metadata !"", metadata !1, i32 112, metadata !3, i1 false, i1 true, i32 0, i32 0, i32 0, i32 256, i1 false, null} ; [ DW_TAG_subprogram ]
-!1 = metadata !{i32 589865, metadata !"/Volumes/Lalgate/work/llvm/projects/llvm-test/SingleSource/Benchmarks/CoyoteBench/lpbench.c", metadata !"/private/tmp", metadata !2} ; [ DW_TAG_file_type ]
-!2 = metadata !{i32 589841, i32 0, i32 12, metadata !"/Volumes/Lalgate/work/llvm/projects/llvm-test/SingleSource/Benchmarks/CoyoteBench/lpbench.c", metadata !"/private/tmp", metadata !"clang version 2.9 (trunk 127169)", i1 true, i1 false, metadata !"", i32 0} ; [ DW_TAG_compile_unit ]
-!3 = metadata !{i32 589845, metadata !1, metadata !"", metadata !1, i32 0, i64 0, i64 0, i32 0, i32 0, i32 0, metadata !4, i32 0, i32 0} ; [ DW_TAG_subroutine_type ]
-!4 = metadata !{metadata !5}
-!5 = metadata !{i32 589860, metadata !2, metadata !"int", null, i32 0, i64 32, i64 32, i64 0, i32 0, i32 5} ; [ DW_TAG_base_type ]
-!6 = metadata !{i32 589870, i32 0, metadata !1, metadata !"dscal", metadata !"dscal", metadata !"", metadata !1, i32 206, metadata !7, i1 false, i1 true, i32 0, i32 0, i32 0, i32 256, i1 false, null} ; [ DW_TAG_subprogram ]
-!7 = metadata !{i32 589845, metadata !1, metadata !"", metadata !1, i32 0, i64 0, i64 0, i32 0, i32 0, i32 0, metadata !8, i32 0, i32 0} ; [ DW_TAG_subroutine_type ]
-!8 = metadata !{null}
-!9 = metadata !{i32 589870, i32 0, metadata !1, metadata !"daxpy", metadata !"daxpy", metadata !"", metadata !1, i32 230, metadata !7, i1 false, i1 true, i32 0, i32 0, i32 0, i32 256, i1 false, null} ; [ DW_TAG_subprogram ]
-!10 = metadata !{i32 589870, i32 0, metadata !1, metadata !"dgefa", metadata !"dgefa", metadata !"", metadata !1, i32 267, metadata !7, i1 false, i1 true, i32 0, i32 0, i32 0, i32 256, i1 false, null} ; [ DW_TAG_subprogram ]
-!11 = metadata !{i32 281, i32 9, metadata !12, null}
-!12 = metadata !{i32 589835, metadata !13, i32 272, i32 5, metadata !1, i32 32} ; [ DW_TAG_lexical_block ]
-!13 = metadata !{i32 589835, metadata !14, i32 271, i32 5, metadata !1, i32 31} ; [ DW_TAG_lexical_block ]
-!14 = metadata !{i32 589835, metadata !10, i32 267, i32 1, metadata !1, i32 30} ; [ DW_TAG_lexical_block ]
-!15 = metadata !{i32 271, i32 5, metadata !14, null}
-!16 = metadata !{i32 284, i32 10, metadata !17, null}
-!17 = metadata !{i32 589835, metadata !12, i32 282, i32 9, metadata !1, i32 33} ; [ DW_TAG_lexical_block ]
-!18 = metadata !{double undef}
-!19 = metadata !{i32 590080, metadata !14, metadata !"temp", metadata !1, i32 268, metadata !20, i32 0} ; [ DW_TAG_auto_variable ]
-!20 = metadata !{i32 589860, metadata !2, metadata !"double", null, i32 0, i64 64, i64 64, i64 0, i32 0, i32 4} ; [ DW_TAG_base_type ]
-!21 = metadata !{i32 286, i32 14, metadata !22, null}
-!22 = metadata !{i32 589835, metadata !17, i32 285, i32 13, metadata !1, i32 34} ; [ DW_TAG_lexical_block ]
-!23 = metadata !{i32 296, i32 13, metadata !17, null}
-!24 = metadata !{i32 313, i32 1, metadata !14, null}
+!0 = distinct !DISubprogram(name: "idamax", line: 112, isLocal: false, isDefinition: true, virtualIndex: 6, flags: DIFlagPrototyped, isOptimized: false, unit: !2, file: !25, scope: !1, type: !3)
+!1 = !DIFile(filename: "/Volumes/Lalgate/work/llvm/projects/llvm-test/SingleSource/Benchmarks/CoyoteBench/lpbench.c", directory: "/private/tmp")
+!2 = distinct !DICompileUnit(language: DW_LANG_C99, producer: "clang version 2.9 (trunk 127169)", isOptimized: true, emissionKind: FullDebug, file: !25)
+!3 = !DISubroutineType(types: !4)
+!4 = !{!5}
+!5 = !DIBasicType(tag: DW_TAG_base_type, name: "int", size: 32, align: 32, encoding: DW_ATE_signed)
+!6 = distinct !DISubprogram(name: "dscal", line: 206, isLocal: false, isDefinition: true, virtualIndex: 6, flags: DIFlagPrototyped, isOptimized: false, unit: !2, file: !25, scope: !1, type: !7)
+!7 = !DISubroutineType(types: !{null})
+!9 = distinct !DISubprogram(name: "daxpy", line: 230, isLocal: false, isDefinition: true, virtualIndex: 6, flags: DIFlagPrototyped, isOptimized: false, unit: !2, file: !25, scope: !1, type: !7)
+!10 = distinct !DISubprogram(name: "dgefa", line: 267, isLocal: false, isDefinition: true, virtualIndex: 6, flags: DIFlagPrototyped, isOptimized: false, unit: !2, file: !25, scope: !1, type: !7)
+!11 = !DILocation(line: 281, column: 9, scope: !12)
+!12 = distinct !DILexicalBlock(line: 272, column: 5, file: !25, scope: !13)
+!13 = distinct !DILexicalBlock(line: 271, column: 5, file: !25, scope: !14)
+!14 = distinct !DILexicalBlock(line: 267, column: 1, file: !25, scope: !10)
+!15 = !DILocation(line: 271, column: 5, scope: !14)
+!16 = !DILocation(line: 284, column: 10, scope: !17)
+!17 = distinct !DILexicalBlock(line: 282, column: 9, file: !25, scope: !12)
+!18 = !{double undef}
+!19 = !DILocalVariable(name: "temp", line: 268, scope: !14, file: !1, type: !20)
+!20 = !DIBasicType(tag: DW_TAG_base_type, name: "double", size: 64, align: 64, encoding: DW_ATE_float)
+!21 = !DILocation(line: 286, column: 14, scope: !22)
+!22 = distinct !DILexicalBlock(line: 285, column: 13, file: !25, scope: !17)
+!23 = !DILocation(line: 296, column: 13, scope: !17)
+!24 = !DILocation(line: 313, column: 1, scope: !14)
+!25 = !DIFile(filename: "/Volumes/Lalgate/work/llvm/projects/llvm-test/SingleSource/Benchmarks/CoyoteBench/lpbench.c", directory: "/private/tmp")
+!26 = !{i32 1, !"Debug Info Version", i32 3}

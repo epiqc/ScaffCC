@@ -1,4 +1,4 @@
-; RUN: llc < %s -march=x86 -mtriple=i386-apple-darwin | FileCheck %s
+; RUN: llc < %s -mtriple=i386-apple-darwin | FileCheck %s
 ; PR8297
 ;
 ; On i386, i64 cmpxchg is lowered during legalize types to extract the
@@ -16,9 +16,9 @@ define void @foo(i64* %ptr) nounwind inlinehint {
 entry:
   br label %loop
 loop:
-; CHECK: lock
-; CHECK-NEXT: cmpxchg8b
-  %r = cmpxchg i64* %ptr, i64 0, i64 1 monotonic
+; CHECK: lock cmpxchg8b
+  %pair = cmpxchg i64* %ptr, i64 0, i64 1 monotonic monotonic
+  %r = extractvalue { i64, i1 } %pair, 0
   %stored1  = icmp eq i64 %r, 0
   br i1 %stored1, label %loop, label %continue
 continue:

@@ -1,4 +1,5 @@
 // RUN: %clang_cc1 -triple thumbv7-apple-darwin10 -target-cpu cortex-a8 -fsyntax-only -Wvector-conversion -ffreestanding -verify %s
+#ifndef INCLUDE
 
 #include <arm_neon.h>
 
@@ -16,7 +17,7 @@ float32x2_t test2(uint32x2_t x) {
 float32x2_t test3(uint32x2_t x) {
   // FIXME: The "incompatible result type" error is due to pr10112 and should be
   // removed when that is fixed.
-  return vcvt_n_f32_u32(x, 0); // expected-error {{argument should be a value from 1 to 32}} expected-error {{incompatible result type}}
+  return vcvt_n_f32_u32(x, 0); // expected-error {{argument should be a value from 1 to 32}}
 }
 
 typedef signed int vSInt32 __attribute__((__vector_size__(16)));
@@ -33,3 +34,14 @@ int16x8_t test5(int *p) {
 void test6(float *p, int32x2_t v) {
   return vst1_s32(p, v); // expected-warning {{incompatible pointer types}}
 }
+
+#define INCLUDE
+#include "arm-neon-types.c"
+#else
+
+// Make sure we don't get a warning about using a static function in an
+// extern inline function from a header.
+extern inline uint8x8_t test7(uint8x8_t a, uint8x8_t b) {
+  return vadd_u8(a, b);
+}
+#endif

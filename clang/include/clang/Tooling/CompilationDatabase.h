@@ -25,18 +25,14 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_CLANG_TOOLING_COMPILATION_DATABASE_H
-#define LLVM_CLANG_TOOLING_COMPILATION_DATABASE_H
+#ifndef LLVM_CLANG_TOOLING_COMPILATIONDATABASE_H
+#define LLVM_CLANG_TOOLING_COMPILATIONDATABASE_H
 
 #include "clang/Basic/LLVM.h"
 #include "llvm/ADT/ArrayRef.h"
-#include "llvm/ADT/OwningPtr.h"
-#include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
-#include "llvm/Support/MemoryBuffer.h"
-#include "llvm/Support/SourceMgr.h"
-#include "llvm/Support/YAMLParser.h"
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -46,22 +42,34 @@ namespace tooling {
 /// \brief Specifies the working directory and command of a compilation.
 struct CompileCommand {
   CompileCommand() {}
-  CompileCommand(Twine Directory, ArrayRef<std::string> CommandLine)
-    : Directory(Directory.str()), CommandLine(CommandLine) {}
+  CompileCommand(Twine Directory, Twine Filename,
+                 std::vector<std::string> CommandLine, Twine Output)
+      : Directory(Directory.str()),
+        Filename(Filename.str()),
+        CommandLine(std::move(CommandLine)),
+        Output(Output.str()){}
 
   /// \brief The working directory the command was executed from.
   std::string Directory;
 
+  /// The source file associated with the command.
+  std::string Filename;
+
   /// \brief The command line that was executed.
   std::vector<std::string> CommandLine;
+
+  /// The output file associated with the command.
+  std::string Output;
 };
 
 /// \brief Interface for compilation databases.
 ///
-/// A compilation database allows the user to retrieve all compile command lines
-/// that a specified file is compiled with in a project.
-/// The retrieved compile command lines can be used to run clang tools over
-/// a subset of the files in a project.
+/// A compilation database allows the user to retrieve compile command lines
+/// for the files in a project.
+///
+/// Many implementations are enumerable, allowing all command lines to be
+/// retrieved. These can be used to run clang tools over a subset of the files
+/// in a project.
 class CompilationDatabase {
 public:
   virtual ~CompilationDatabase();
@@ -78,13 +86,27 @@ public:
   /// FIXME: Currently only supports JSON compilation databases, which
   /// are named 'compile_commands.json' in the given directory. Extend this
   /// for other build types (like ninja build files).
-  static CompilationDatabase *loadFromDirectory(StringRef BuildDirectory,
-                                                std::string &ErrorMessage);
+  static std::unique_ptr<CompilationDatabase>
+  loadFromDirectory(StringRef BuildDirectory, std::string &ErrorMessage);
+
+  /// \brief Tries to detect a compilation database location and load it.
+  ///
+  /// Looks for a compilation database in all parent paths of file 'SourceFile'
+  /// by calling loadFromDirectory.
+  static std::unique_ptr<CompilationDatabase>
+  autoDetectFromSource(StringRef SourceFile, std::string &ErrorMessage);
+
+  /// \brief Tries to detect a compilation database location and load it.
+  ///
+  /// Looks for a compilation database in directory 'SourceDir' and all
+  /// its parent paths by calling loadFromDirectory.
+  static std::unique_ptr<CompilationDatabase>
+  autoDetectFromDirectory(StringRef SourceDir, std::string &ErrorMessage);
 
   /// \brief Returns all compile commands in which the specified file was
   /// compiled.
   ///
-  /// This includes compile comamnds that span multiple source files.
+  /// This includes compile commands that span multiple source files.
   /// For example, consider a project with the following compilations:
   /// $ clang++ -o test a.cc b.cc t.cc
   /// $ clang++ -o production a.cc b.cc -DPRODUCTION
@@ -92,11 +114,50 @@ public:
   /// lines for a.cc and b.cc and only the first command line for t.cc.
   virtual std::vector<CompileCommand> getCompileCommands(
     StringRef FilePath) const = 0;
+
+  /// \brief Returns the list of all files available in the compilation database.
+  ///
+  /// By default, returns nothing. Implementations should override this if they
+  /// can enumerate their source files.
+  virtual std::vector<std::string> getAllFiles() const { return {}; }
+
+  /// \brief Returns all compile commands for all the files in the compilation
+  /// database.
+  ///
+  /// FIXME: Add a layer in Tooling that provides an interface to run a tool
+  /// over all files in a compilation database. Not all build systems have the
+  /// ability to provide a feasible implementation for \c getAllCompileCommands.
+  ///
+  /// By default, this is implemented in terms of getAllFiles() and
+  /// getCompileCommands(). Subclasses may override this for efficiency.
+  virtual std::vector<CompileCommand> getAllCompileCommands() const;
+};
+
+/// \brief Interface for compilation database plugins.
+///
+/// A compilation database plugin allows the user to register custom compilation
+/// databases that are picked up as compilation database if the corresponding
+/// library is linked in. To register a plugin, declare a static variable like:
+///
+/// \code
+/// static CompilationDatabasePluginRegistry::Add<MyDatabasePlugin>
+/// X("my-compilation-database", "Reads my own compilation database");
+/// \endcode
+class CompilationDatabasePlugin {
+public:
+  virtual ~CompilationDatabasePlugin();
+
+  /// \brief Loads a compilation database from a build directory.
+  ///
+  /// \see CompilationDatabase::loadFromDirectory().
+  virtual std::unique_ptr<CompilationDatabase>
+  loadFromDirectory(StringRef Directory, std::string &ErrorMessage) = 0;
 };
 
 /// \brief A compilation database that returns a single compile command line.
 ///
 /// Useful when we want a tool to behave more like a compiler invocation.
+/// This compilation database is not enumerable: getAllFiles() returns {}.
 class FixedCompilationDatabase : public CompilationDatabase {
 public:
   /// \brief Creates a FixedCompilationDatabase from the arguments after "--".
@@ -114,7 +175,7 @@ public:
   /// The argument list is meant to be compatible with normal llvm command line
   /// parsing in main methods.
   /// int main(int argc, char **argv) {
-  ///   llvm::OwningPtr<FixedCompilationDatabase> Compilations(
+  ///   std::unique_ptr<FixedCompilationDatabase> Compilations(
   ///     FixedCompilationDatabase::loadFromCommandLine(argc, argv));
   ///   cl::ParseCommandLineOptions(argc, argv);
   ///   ...
@@ -124,10 +185,16 @@ public:
   /// the number of arguments before "--", if "--" was found in the argument
   /// list.
   /// \param Argv Points to the command line arguments.
+  /// \param ErrorMsg Contains error text if the function returns null pointer.
   /// \param Directory The base directory used in the FixedCompilationDatabase.
-  static FixedCompilationDatabase *loadFromCommandLine(int &Argc,
-                                                       const char **Argv,
-                                                       Twine Directory = ".");
+  static std::unique_ptr<FixedCompilationDatabase> loadFromCommandLine(
+      int &Argc, const char *const *Argv, std::string &ErrorMsg,
+      Twine Directory = ".");
+
+  /// Reads flags from the given file, one-per line.
+  /// Returns nullptr and sets ErrorMessage if we can't read the file.
+  static std::unique_ptr<FixedCompilationDatabase>
+  loadFromFile(StringRef Path, std::string &ErrorMsg);
 
   /// \brief Constructs a compilation data base from a specified directory
   /// and command line.
@@ -138,8 +205,8 @@ public:
   /// Will always return a vector with one entry that contains the directory
   /// and command line specified at construction with "clang-tool" as argv[0]
   /// and 'FilePath' as positional argument.
-  virtual std::vector<CompileCommand> getCompileCommands(
-    StringRef FilePath) const;
+  std::vector<CompileCommand>
+  getCompileCommands(StringRef FilePath) const override;
 
 private:
   /// This is built up to contain a single entry vector to be returned from
@@ -147,72 +214,7 @@ private:
   std::vector<CompileCommand> CompileCommands;
 };
 
-/// \brief A JSON based compilation database.
-///
-/// JSON compilation database files must contain a list of JSON objects which
-/// provide the command lines in the attributes 'directory', 'command' and
-/// 'file':
-/// [
-///   { "directory": "<working directory of the compile>",
-///     "command": "<compile command line>",
-///     "file": "<path to source file>"
-///   },
-///   ...
-/// ]
-/// Each object entry defines one compile action. The specified file is
-/// considered to be the main source file for the translation unit.
-///
-/// JSON compilation databases can for example be generated in CMake projects
-/// by setting the flag -DCMAKE_EXPORT_COMPILE_COMMANDS.
-class JSONCompilationDatabase : public CompilationDatabase {
-public:
-  /// \brief Loads a JSON compilation database from the specified file.
-  ///
-  /// Returns NULL and sets ErrorMessage if the database could not be
-  /// loaded from the given file.
-  static JSONCompilationDatabase *loadFromFile(StringRef FilePath,
-                                               std::string &ErrorMessage);
-
-  /// \brief Loads a JSON compilation database from a data buffer.
-  ///
-  /// Returns NULL and sets ErrorMessage if the database could not be loaded.
-  static JSONCompilationDatabase *loadFromBuffer(StringRef DatabaseString,
-                                                 std::string &ErrorMessage);
-
-  /// \brief Returns all compile comamnds in which the specified file was
-  /// compiled.
-  ///
-  /// FIXME: Currently FilePath must be an absolute path inside the
-  /// source directory which does not have symlinks resolved.
-  virtual std::vector<CompileCommand> getCompileCommands(
-    StringRef FilePath) const;
-
-private:
-  /// \brief Constructs a JSON compilation database on a memory buffer.
-  JSONCompilationDatabase(llvm::MemoryBuffer *Database)
-    : Database(Database), YAMLStream(Database->getBuffer(), SM) {}
-
-  /// \brief Parses the database file and creates the index.
-  ///
-  /// Returns whether parsing succeeded. Sets ErrorMessage if parsing
-  /// failed.
-  bool parse(std::string &ErrorMessage);
-
-  // Tuple (directory, commandline) where 'commandline' pointing to the
-  // corresponding nodes in the YAML stream.
-  typedef std::pair<llvm::yaml::ScalarNode*,
-                    llvm::yaml::ScalarNode*> CompileCommandRef;
-
-  // Maps file paths to the compile command lines for that file.
-  llvm::StringMap< std::vector<CompileCommandRef> > IndexByFile;
-
-  llvm::OwningPtr<llvm::MemoryBuffer> Database;
-  llvm::SourceMgr SM;
-  llvm::yaml::Stream YAMLStream;
-};
-
 } // end namespace tooling
 } // end namespace clang
 
-#endif // LLVM_CLANG_TOOLING_COMPILATION_DATABASE_H
-
+#endif

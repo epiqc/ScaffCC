@@ -115,5 +115,42 @@ int array2[recurse2]; // expected-warning {{variable length array}} expected-war
 namespace FloatConvert {
   typedef int a[(int)42.3];
   typedef int a[(int)42.997];
-  typedef int b[(int)4e10]; // expected-warning {{variable length}} expected-error {{variable length}}
+  typedef int b[(long long)4e20]; // expected-warning {{variable length}} expected-error {{variable length}} expected-warning {{'long long' is a C++11 extension}}
+}
+
+// PR12626
+namespace test3 {
+  struct X; // expected-note {{forward declaration of 'test3::X'}}
+  struct Y { bool b; X x; }; // expected-error {{field has incomplete type 'test3::X'}}
+  int f() { return Y().b; }
+}
+
+// PR18283
+namespace test4 {
+  template <int> struct A {};
+  int const i = { 42 };
+  // i can be used as non-type template-parameter as "const int x = { 42 };" is
+  // equivalent to "const int x = 42;" as per C++03 8.5/p13.
+  typedef A<i> Ai; // ok
+}
+
+// rdar://16064952
+namespace rdar16064952 {
+  template < typename T > void fn1() {
+   T b;
+   unsigned w = ({int a = b.val[sizeof(0)]; 0; }); // expected-warning {{use of GNU statement expression extension}}
+  }
+}
+
+char PR17381_ice = 1000000 * 1000000; // expected-warning {{overflow}} expected-warning {{changes value}}
+
+namespace PR31701 {
+  struct C {
+    template<int i> static int n; // expected-warning {{extension}}
+  };
+  template <int M> class D;
+  template <int M>
+  template<int i> void D<M>::set() { // expected-error {{from class 'D<M>' without definition}}
+    const C c = C::n<i>;
+  }
 }

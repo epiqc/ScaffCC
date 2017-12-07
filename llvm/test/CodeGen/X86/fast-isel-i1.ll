@@ -1,10 +1,10 @@
-; RUN: llc < %s -mtriple=i686-apple-darwin10 -fast-isel -fast-isel-abort | FileCheck %s
-; RUN: llc < %s -mtriple=x86_64-apple-darwin10 -fast-isel -fast-isel-abort | FileCheck %s
+; RUN: llc < %s -mtriple=i686-apple-darwin10 -fast-isel -fast-isel-abort=1 | FileCheck %s
+; RUN: llc < %s -mtriple=x86_64-apple-darwin10 -fast-isel -fast-isel-abort=1 | FileCheck %s
 
 declare i32 @test1a(i32)
 
 define i32 @test1(i32 %x) nounwind {
-; CHECK: test1:
+; CHECK-LABEL: test1:
 ; CHECK: andb $1, %
 	%y = add i32 %x, -3
 	%t = call i32 @test1a(i32 %y)
@@ -23,14 +23,15 @@ exit:		; preds = %next
 
 define void @test2(i8* %a) nounwind {
 entry:
-; CHECK: test2:
+; clang uses i8 constants for booleans, so we test with an i8 1.
+; CHECK-LABEL: test2:
 ; CHECK: movb {{.*}} %al
 ; CHECK-NEXT: xorb $1, %al
 ; CHECK-NEXT: testb $1
-  %tmp = load i8* %a, align 1
-  %tobool = trunc i8 %tmp to i1
-  %tobool2 = xor i1 %tobool, true
-  br i1 %tobool2, label %if.then, label %if.end
+  %tmp = load i8, i8* %a, align 1
+  %xor = xor i8 %tmp, 1
+  %tobool = trunc i8 %xor to i1
+  br i1 %tobool, label %if.then, label %if.end
 
 if.then:
   call void @test2(i8* null)

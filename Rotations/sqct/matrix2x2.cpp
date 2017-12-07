@@ -319,10 +319,16 @@ matrix2x2hpr::matrix2x2hpr( const matrix2x2cd& val )
 }
 
 matrix2x2hpr::matrix2x2hpr() :
+#if defined(__clang__)
+    d{
+{scalar(mpclass(0),mpclass(0)),scalar(mpclass(0),mpclass(0))},
+{scalar(mpclass(0),mpclass(0)),scalar(mpclass(0),mpclass(0))}}
+#else
     d( {
 {scalar(mpclass(0),mpclass(0)),scalar(mpclass(0),mpclass(0))},
 {scalar(mpclass(0),mpclass(0)),scalar(mpclass(0),mpclass(0))}}
        )
+#endif
 {
 }
 

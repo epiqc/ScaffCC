@@ -1,6 +1,4 @@
-; RUN: opt < %s -indvars -S > %t
-; RUN: grep {\[%\]tmp7 = icmp eq i8 -28, -28} %t
-; RUN: grep {\[%\]tmp8 = icmp eq i8 63, 63} %t
+; RUN: opt < %s -indvars -S | FileCheck %s
 ; PR4477
 ; Indvars should compute the exit values in loop.
 ;
@@ -16,6 +14,10 @@ target triple = "i386-pc-linux-gnu"
 @.str = internal constant [13 x i8] c"fc70a00.adb\00\00", align 1		; <[13 x i8]*> [#uses=1]
 
 define void @_ada_cc70a02() {
+; CHECK-LABEL: @_ada_cc70a02(
+; CHECK: [%]tmp7 = icmp eq i8 -28, -28
+; CHECK: [%]tmp8 = icmp eq i8 63, 63
+
 entry:
 	br label %bb1.i
 
@@ -28,7 +30,7 @@ bb1.i:		; preds = %bb2.i, %entry
 	br i1 %tmp1, label %bb.i.i, label %bb1.i.i
 
 bb.i.i:		; preds = %bb1.i
-	tail call void @__gnat_rcheck_12(i8* getelementptr ([13 x i8]* @.str, i32 0, i32 0), i32 24) noreturn
+	tail call void @__gnat_rcheck_12(i8* getelementptr ([13 x i8], [13 x i8]* @.str, i32 0, i32 0), i32 24) noreturn
 	unreachable
 
 bb1.i.i:		; preds = %bb1.i
@@ -39,7 +41,7 @@ bb1.i.i:		; preds = %bb1.i
 	br i1 %tmp3, label %bb2.i.i, label %cc70a02__complex_integers__Oadd.153.exit.i
 
 bb2.i.i:		; preds = %bb1.i.i
-	tail call void @__gnat_rcheck_12(i8* getelementptr ([13 x i8]* @.str, i32 0, i32 0), i32 24) noreturn
+	tail call void @__gnat_rcheck_12(i8* getelementptr ([13 x i8], [13 x i8]* @.str, i32 0, i32 0), i32 24) noreturn
 	unreachable
 
 cc70a02__complex_integers__Oadd.153.exit.i:		; preds = %bb1.i.i

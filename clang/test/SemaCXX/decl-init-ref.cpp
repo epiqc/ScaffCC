@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -fsyntax-only -verify -std=c++11 %s
+// RUN: %clang_cc1 -fsyntax-only -verify -std=c++11 %s -Wno-uninitialized
 
 struct A {};
 
@@ -26,4 +26,13 @@ int main() {
 }
 
 struct PR6139 { A (&x)[1]; };
-PR6139 x = {{A()}}; // expected-error{{non-const lvalue reference to type 'A [1]' cannot bind to a temporary of type 'A'}}
+PR6139 x = {{A()}}; // expected-error{{non-const lvalue reference to type 'A [1]' cannot bind to an initializer list temporary}}
+
+struct PR6139b { A (&x)[1]; };
+PR6139b y = {A()}; // expected-error{{non-const lvalue reference to type 'A [1]' cannot bind to a temporary of type 'A'}}
+
+namespace PR16502 {
+  struct A { int &&temporary; int x, y; };
+  int f();
+  const A &c = { 10, ++c.temporary };
+}

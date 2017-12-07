@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -fsyntax-only -verify -Wvla %s
+// RUN: %clang_cc1 -fsyntax-only -verify -Wvla-extension %s
 struct NonPOD {
   NonPOD();
 };
@@ -16,8 +16,8 @@ struct POD {
 void vla(int N) {
   int array1[N]; // expected-warning{{variable length arrays are a C99 feature}}
   POD array2[N]; // expected-warning{{variable length arrays are a C99 feature}}
-  NonPOD array3[N]; // expected-error{{variable length array of non-POD element type 'NonPOD'}}
-  NonPOD2 array4[N][3]; // expected-error{{variable length array of non-POD element type 'NonPOD2'}}
+  NonPOD array3[N]; // expected-warning{{variable length arrays are a C99 feature}}
+  NonPOD2 array4[N][3]; // expected-warning{{variable length arrays are a C99 feature}}
 }
 
 /// Warn about VLAs in templates.
@@ -64,8 +64,9 @@ X1<HasConstantValue> x1a;
 X1<HasNonConstantValue> x1b; // expected-note{{in instantiation of}}
 
 // Template argument deduction does not allow deducing a size from a VLA.
+// FIXME: This diagnostic should make it clear that the two 'N's are different entities!
 template<typename T, unsigned N>
-void accept_array(T (&array)[N]); // expected-note{{candidate template ignored: failed template argument deduction}}
+void accept_array(T (&array)[N]); // expected-note{{candidate template ignored: could not match 'T [N]' against 'int [N]'}}
 
 void test_accept_array(int N) {
   int array[N]; // expected-warning{{variable length arrays are a C99 feature}}
@@ -138,4 +139,25 @@ namespace PR11744 {
     return 3;
   }
   int test = f<int>(0); // expected-note {{instantiation of}}
+}
+
+namespace pr18633 {
+  struct A1 {
+    static const int sz;
+    static const int sz2;
+  };
+  const int A1::sz2 = 11;
+  template<typename T>
+  void func () {
+    int arr[A1::sz]; // expected-warning{{variable length arrays are a C99 feature}}
+  }
+  template<typename T>
+  void func2 () {
+    int arr[A1::sz2];
+  }
+  const int A1::sz = 12;
+  void func2() {
+    func<int>();
+    func2<int>();
+  }
 }

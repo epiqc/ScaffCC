@@ -2,9 +2,9 @@
 
 DIR=$(dirname $0)
 ROOT=$DIR/..
-BIN=$ROOT/build/Release+Asserts/bin
-LIB=$ROOT/build/Release+Asserts/lib
-SCAF=$LIB/Scaffold.so
+BIN=$ROOT/build/bin
+LIB=$ROOT/build/lib
+SCAF=$LIB/LLVMScaffold.so
 OPT=$BIN/opt
 CLANG=$BIN/clang
 LLVM_LINK=$BIN/llvm-link

@@ -2,11 +2,11 @@
 
 ;; Check that FP_TO_SINT and FP_TO_UINT generate convert with truncate
 
-; CHECK: test1:
-; CHECK: vcvttpd2dqy
+; CHECK-LABEL: test1:
+; CHECK: vcvttpd2dq
 ; CHECK: ret
-; CHECK: test2:
-; CHECK: vcvttpd2dqy
+; CHECK-LABEL: test2:
+; CHECK: vcvttpd2dq
 ; CHECK: ret
 
 define <4 x i8> @test1(<4 x double> %d) {

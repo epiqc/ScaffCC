@@ -12,19 +12,20 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "postrapseudos"
-#include "llvm/CodeGen/Passes.h"
-#include "llvm/Function.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
-#include "llvm/Target/TargetRegisterInfo.h"
-#include "llvm/Target/TargetInstrInfo.h"
-#include "llvm/Target/TargetMachine.h"
+#include "llvm/CodeGen/Passes.h"
+#include "llvm/CodeGen/TargetInstrInfo.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
+#include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
+
 using namespace llvm;
+
+#define DEBUG_TYPE "postrapseudos"
 
 namespace {
 struct ExpandPostRA : public MachineFunctionPass {
@@ -36,7 +37,7 @@ public:
   static char ID; // Pass identification, replacement for typeid
   ExpandPostRA() : MachineFunctionPass(ID) {}
 
-  virtual void getAnalysisUsage(AnalysisUsage &AU) const {
+  void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.setPreservesCFG();
     AU.addPreservedID(MachineLoopInfoID);
     AU.addPreservedID(MachineDominatorsID);
@@ -44,53 +45,32 @@ public:
   }
 
   /// runOnMachineFunction - pass entry point
-  bool runOnMachineFunction(MachineFunction&);
+  bool runOnMachineFunction(MachineFunction&) override;
 
 private:
   bool LowerSubregToReg(MachineInstr *MI);
   bool LowerCopy(MachineInstr *MI);
 
-  void TransferDeadFlag(MachineInstr *MI, unsigned DstReg,
-                        const TargetRegisterInfo *TRI);
-  void TransferImplicitDefs(MachineInstr *MI);
+  void TransferImplicitOperands(MachineInstr *MI);
 };
 } // end anonymous namespace
 
 char ExpandPostRA::ID = 0;
 char &llvm::ExpandPostRAPseudosID = ExpandPostRA::ID;
 
-INITIALIZE_PASS(ExpandPostRA, "postrapseudos",
+INITIALIZE_PASS(ExpandPostRA, DEBUG_TYPE,
                 "Post-RA pseudo instruction expansion pass", false, false)
 
-/// TransferDeadFlag - MI is a pseudo-instruction with DstReg dead,
-/// and the lowered replacement instructions immediately precede it.
-/// Mark the replacement instructions with the dead flag.
-void
-ExpandPostRA::TransferDeadFlag(MachineInstr *MI, unsigned DstReg,
-                               const TargetRegisterInfo *TRI) {
-  for (MachineBasicBlock::iterator MII =
-        prior(MachineBasicBlock::iterator(MI)); ; --MII) {
-    if (MII->addRegisterDead(DstReg, TRI))
-      break;
-    assert(MII != MI->getParent()->begin() &&
-           "copyPhysReg output doesn't reference destination register!");
-  }
-}
-
-/// TransferImplicitDefs - MI is a pseudo-instruction, and the lowered
-/// replacement instructions immediately precede it.  Copy any implicit-def
+/// TransferImplicitOperands - MI is a pseudo-instruction, and the lowered
+/// replacement instructions immediately precede it.  Copy any implicit
 /// operands from MI to the replacement instruction.
-void
-ExpandPostRA::TransferImplicitDefs(MachineInstr *MI) {
+void ExpandPostRA::TransferImplicitOperands(MachineInstr *MI) {
   MachineBasicBlock::iterator CopyMI = MI;
   --CopyMI;
 
-  for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
-    MachineOperand &MO = MI->getOperand(i);
-    if (!MO.isReg() || !MO.isImplicit() || MO.isUse())
-      continue;
-    CopyMI->addOperand(MachineOperand::CreateReg(MO.getReg(), true, true));
-  }
+  for (const MachineOperand &MO : MI->implicit_operands())
+    if (MO.isReg())
+      CopyMI->addOperand(MO);
 }
 
 bool ExpandPostRA::LowerSubregToReg(MachineInstr *MI) {
@@ -115,11 +95,17 @@ bool ExpandPostRA::LowerSubregToReg(MachineInstr *MI) {
 
   DEBUG(dbgs() << "subreg: CONVERTING: " << *MI);
 
+  if (MI->allDefsAreDead()) {
+    MI->setDesc(TII->get(TargetOpcode::KILL));
+    DEBUG(dbgs() << "subreg: replaced by: " << *MI);
+    return true;
+  }
+
   if (DstSubReg == InsReg) {
-    // No need to insert an identify copy instruction.
+    // No need to insert an identity copy instruction.
     // Watch out for case like this:
-    // %RAX<def> = SUBREG_TO_REG 0, %EAX<kill>, 3
-    // We must leave %RAX live.
+    // %rax<def> = SUBREG_TO_REG 0, %eax<kill>, 3
+    // We must leave %rax live.
     if (DstReg != InsReg) {
       MI->setDesc(TII->get(TargetOpcode::KILL));
       MI->RemoveOperand(3);     // SubIdx
@@ -131,13 +117,12 @@ bool ExpandPostRA::LowerSubregToReg(MachineInstr *MI) {
   } else {
     TII->copyPhysReg(*MBB, MI, MI->getDebugLoc(), DstSubReg, InsReg,
                      MI->getOperand(2).isKill());
-    // Transfer the kill/dead flags, if needed.
-    if (MI->getOperand(0).isDead())
-      TransferDeadFlag(MI, DstSubReg, TRI);
-    DEBUG({
-        MachineBasicBlock::iterator dMI = MI;
-        dbgs() << "subreg: " << *(--dMI);
-      });
+
+    // Implicitly define DstReg for subsequent uses.
+    MachineBasicBlock::iterator CopyMI = MI;
+    --CopyMI;
+    CopyMI->addRegisterDefined(DstReg);
+    DEBUG(dbgs() << "subreg: " << *CopyMI);
   }
 
   DEBUG(dbgs() << '\n');
@@ -146,14 +131,23 @@ bool ExpandPostRA::LowerSubregToReg(MachineInstr *MI) {
 }
 
 bool ExpandPostRA::LowerCopy(MachineInstr *MI) {
+
+  if (MI->allDefsAreDead()) {
+    DEBUG(dbgs() << "dead copy: " << *MI);
+    MI->setDesc(TII->get(TargetOpcode::KILL));
+    DEBUG(dbgs() << "replaced by: " << *MI);
+    return true;
+  }
+
   MachineOperand &DstMO = MI->getOperand(0);
   MachineOperand &SrcMO = MI->getOperand(1);
 
-  if (SrcMO.getReg() == DstMO.getReg()) {
-    DEBUG(dbgs() << "identity copy: " << *MI);
+  bool IdentityCopy = (SrcMO.getReg() == DstMO.getReg());
+  if (IdentityCopy || SrcMO.isUndef()) {
+    DEBUG(dbgs() << (IdentityCopy ? "identity copy: " : "undef copy:    ") << *MI);
     // No need to insert an identity copy instruction, but replace with a KILL
     // if liveness is changed.
-    if (DstMO.isDead() || SrcMO.isUndef() || MI->getNumOperands() > 2) {
+    if (SrcMO.isUndef() || MI->getNumOperands() > 2) {
       // We must make sure the super-register gets killed. Replace the
       // instruction with KILL.
       MI->setDesc(TII->get(TargetOpcode::KILL));
@@ -169,10 +163,8 @@ bool ExpandPostRA::LowerCopy(MachineInstr *MI) {
   TII->copyPhysReg(*MI->getParent(), MI, MI->getDebugLoc(),
                    DstMO.getReg(), SrcMO.getReg(), SrcMO.isKill());
 
-  if (DstMO.isDead())
-    TransferDeadFlag(MI, DstMO.getReg(), TRI);
   if (MI->getNumOperands() > 2)
-    TransferImplicitDefs(MI);
+    TransferImplicitOperands(MI);
   DEBUG({
     MachineBasicBlock::iterator dMI = MI;
     dbgs() << "replaced by: " << *(--dMI);
@@ -187,10 +179,9 @@ bool ExpandPostRA::LowerCopy(MachineInstr *MI) {
 bool ExpandPostRA::runOnMachineFunction(MachineFunction &MF) {
   DEBUG(dbgs() << "Machine Function\n"
                << "********** EXPANDING POST-RA PSEUDO INSTRS **********\n"
-               << "********** Function: "
-               << MF.getFunction()->getName() << '\n');
-  TRI = MF.getTarget().getRegisterInfo();
-  TII = MF.getTarget().getInstrInfo();
+               << "********** Function: " << MF.getName() << '\n');
+  TRI = MF.getSubtarget().getRegisterInfo();
+  TII = MF.getSubtarget().getInstrInfo();
 
   bool MadeChange = false;
 
@@ -198,12 +189,12 @@ bool ExpandPostRA::runOnMachineFunction(MachineFunction &MF) {
        mbbi != mbbe; ++mbbi) {
     for (MachineBasicBlock::iterator mi = mbbi->begin(), me = mbbi->end();
          mi != me;) {
-      MachineInstr *MI = mi;
+      MachineInstr &MI = *mi;
       // Advance iterator here because MI may be erased.
       ++mi;
 
       // Only expand pseudos.
-      if (!MI->isPseudo())
+      if (!MI.isPseudo())
         continue;
 
       // Give targets a chance to expand even standard pseudos.
@@ -213,12 +204,12 @@ bool ExpandPostRA::runOnMachineFunction(MachineFunction &MF) {
       }
 
       // Expand standard pseudos.
-      switch (MI->getOpcode()) {
+      switch (MI.getOpcode()) {
       case TargetOpcode::SUBREG_TO_REG:
-        MadeChange |= LowerSubregToReg(MI);
+        MadeChange |= LowerSubregToReg(&MI);
         break;
       case TargetOpcode::COPY:
-        MadeChange |= LowerCopy(MI);
+        MadeChange |= LowerCopy(&MI);
         break;
       case TargetOpcode::DBG_VALUE:
         continue;

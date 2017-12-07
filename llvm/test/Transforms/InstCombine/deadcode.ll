@@ -1,4 +1,4 @@
-; RUN: opt < %s -instcombine -S | grep {ret i32 %A}
+; RUN: opt < %s -instcombine -S | grep "ret i32 %A"
 ; RUN: opt < %s -die -S | not grep call.*llvm
 
 define i32 @test(i32 %A) {
@@ -22,12 +22,12 @@ define i32* @test2(i32 %width) {
 
 declare i8* @llvm.stacksave()
 
-declare void @llvm.lifetime.start(i64, i8*)
-declare void @llvm.lifetime.end(i64, i8*)
+declare void @llvm.lifetime.start.p0i8(i64, i8*)
+declare void @llvm.lifetime.end.p0i8(i64, i8*)
 
 define void @test3() {
-  call void @llvm.lifetime.start(i64 -1, i8* undef)
-  call void @llvm.lifetime.end(i64 -1, i8* undef)
+  call void @llvm.lifetime.start.p0i8(i64 -1, i8* undef)
+  call void @llvm.lifetime.end.p0i8(i64 -1, i8* undef)
   ret void
 }
 

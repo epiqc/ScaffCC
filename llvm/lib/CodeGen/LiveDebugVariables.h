@@ -1,4 +1,4 @@
-//===- LiveDebugVariables.h - Tracking debug info variables ----*- c++ -*--===//
+//===- LiveDebugVariables.h - Tracking debug info variables -----*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -18,24 +18,26 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_CODEGEN_LIVEDEBUGVARIABLES_H
-#define LLVM_CODEGEN_LIVEDEBUGVARIABLES_H
+#ifndef LLVM_LIB_CODEGEN_LIVEDEBUGVARIABLES_H
+#define LLVM_LIB_CODEGEN_LIVEDEBUGVARIABLES_H
 
-#include "llvm/ADT/ArrayRef.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
+#include "llvm/Support/Compiler.h"
 
 namespace llvm {
 
-class LiveInterval;
+template <typename T> class ArrayRef;
+class LiveIntervals;
 class VirtRegMap;
 
-class LiveDebugVariables : public MachineFunctionPass {
-  void *pImpl;
+class LLVM_LIBRARY_VISIBILITY LiveDebugVariables : public MachineFunctionPass {
+  void *pImpl = nullptr;
+
 public:
   static char ID; // Pass identification, replacement for typeid
 
   LiveDebugVariables();
-  ~LiveDebugVariables();
+  ~LiveDebugVariables() override;
 
   /// renameRegister - Move any user variables in OldReg to NewReg:SubIdx.
   /// @param OldReg Old virtual register that is going away.
@@ -47,7 +49,8 @@ public:
   /// splitRegister - Move any user variables in OldReg to the live ranges in
   /// NewRegs where they are live. Mark the values as unavailable where no new
   /// register is live.
-  void splitRegister(unsigned OldReg, ArrayRef<LiveInterval*> NewRegs);
+  void splitRegister(unsigned OldReg, ArrayRef<unsigned> NewRegs,
+                     LiveIntervals &LIS);
 
   /// emitDebugValues - Emit new DBG_VALUE instructions reflecting the changes
   /// that happened during register allocation.
@@ -55,16 +58,15 @@ public:
   void emitDebugValues(VirtRegMap *VRM);
 
   /// dump - Print data structures to dbgs().
-  void dump();
+  void dump() const;
 
 private:
-
-  virtual bool runOnMachineFunction(MachineFunction &);
-  virtual void releaseMemory();
-  virtual void getAnalysisUsage(AnalysisUsage &) const;
-
+  bool runOnMachineFunction(MachineFunction &) override;
+  void releaseMemory() override;
+  void getAnalysisUsage(AnalysisUsage &) const override;
+  bool doInitialization(Module &) override;
 };
 
-} // namespace llvm
+} // end namespace llvm
 
-#endif // LLVM_CODEGEN_LIVEDEBUGVARIABLES_H
+#endif // LLVM_LIB_CODEGEN_LIVEDEBUGVARIABLES_H

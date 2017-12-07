@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -fsyntax-only -verify %s 
+// RUN: %clang_cc1 -fsyntax-only -verify -std=c++11 %s 
 class X { };
 
 X operator+(X, X);
@@ -387,8 +387,8 @@ void test_lookup_through_using() {
 
 namespace rdar9136502 {
   struct X {
-    int i();
-    int i(int);
+    int i(); // expected-note{{possible target for call}}
+    int i(int); // expected-note{{possible target for call}}
   };
 
   struct Y {
@@ -396,7 +396,8 @@ namespace rdar9136502 {
   };
 
   void f(X x, Y y) {
-    y << x.i; // expected-error{{reference to non-static member function must be called}}
+    y << x
+      .i; // expected-error{{reference to non-static member function must be called; did you mean to call it with no arguments?}}
   }
 }
 
@@ -414,4 +415,173 @@ namespace PR11784 {
   void f();
   void f(int);
   void g() { A x; x = f; }
+}
+
+namespace test10 {
+  struct A {
+    void operator[](float (*fn)(int)); // expected-note 2 {{not viable: no overload of 'bar' matching 'float (*)(int)'}}
+  };
+
+  float foo(int);
+  float foo(float);
+
+  template <class T> T bar(T);
+  template <class T, class U> T bar(U);
+
+  void test(A &a) {
+    a[&foo];
+    a[foo];
+
+    a[&bar<int>]; // expected-error {{no viable overloaded operator[]}}
+    a[bar<int>]; // expected-error {{no viable overloaded operator[]}}
+
+    // If these fail, it's because we're not letting the overload
+    // resolution for operator| resolve the overload of 'bar'.
+    a[&bar<float>];
+    a[bar<float>];
+  }
+}
+
+struct InvalidOperatorEquals {
+  InvalidOperatorEquals operator=() = delete; // expected-error {{overloaded 'operator=' must be a binary operator}}
+};
+
+namespace PR7681 {
+  template <typename PT1, typename PT2> class PointerUnion;
+  void foo(PointerUnion<int*, float*> &Result) {
+    Result = 1; // expected-error {{no viable overloaded '='}} // expected-note {{type 'PointerUnion<int *, float *>' is incomplete}}
+  }
+}
+
+namespace PR14995 {
+  struct B {};
+  template<typename ...T> void operator++(B, T...) {}
+
+  void f() {
+    B b;
+    b++;  // ok
+    ++b;  // ok
+  }
+
+  template<typename... T>
+  struct C {
+    void operator-- (T...) {}
+  };
+
+  void g() {
+    C<int> postfix;
+    C<> prefix;
+    postfix--;  // ok
+    --prefix;  // ok
+  }
+
+  struct D {};
+  template<typename T> void operator++(D, T) {}
+
+  void h() {
+    D d;
+    d++;  // ok
+    ++d; // expected-error{{cannot increment value of type 'PR14995::D'}}
+  }
+
+  template<typename...T> struct E {
+    void operator++(T...) {} // expected-error{{parameter of overloaded post-increment operator must have type 'int' (not 'char')}}
+  };
+
+  E<char> e; // expected-note {{in instantiation of template class 'PR14995::E<char>' requested here}}
+  
+  struct F {
+    template<typename... T>
+    int operator++ (T...) {}
+  };
+
+  int k1 = F().operator++(0, 0);
+  int k2 = F().operator++('0');
+  // expected-error@-5 {{overloaded 'operator++' must be a unary or binary operator}}
+  // expected-note@-3 {{in instantiation of function template specialization 'PR14995::F::operator++<int, int>' requested here}}
+  // expected-error@-4 {{no matching member function for call to 'operator++'}}
+  // expected-note@-8 {{candidate template ignored: substitution failure}}
+  // expected-error@-9 {{parameter of overloaded post-increment operator must have type 'int' (not 'char')}}
+  // expected-note@-6 {{in instantiation of function template specialization 'PR14995::F::operator++<char>' requested here}}
+  // expected-error@-7 {{no matching member function for call to 'operator++'}}
+  // expected-note@-12 {{candidate template ignored: substitution failure}}
+} // namespace PR14995
+
+namespace ConversionVersusTemplateOrdering {
+  struct A {
+    operator short() = delete;
+    template <typename T> operator T();
+  } a;
+  struct B {
+    template <typename T> operator T();
+    operator short() = delete;
+  } b;
+  int x = a;
+  int y = b;
+}
+
+namespace NoADLForMemberOnlyOperators {
+  template<typename T> struct A { typename T::error e; }; // expected-error {{type 'char' cannot be used prior to '::'}}
+  template<typename T> struct B { int n; };
+
+  void f(B<A<void> > b1, B<A<int> > b2, B<A<char> > b3) {
+    b1 = b1; // ok, does not instantiate A<void>.
+    (void)b1->n; // expected-error {{is not a pointer}}
+    b2[3]; // expected-error {{does not provide a subscript}}
+    b3 / 0; // expected-note {{in instantiation of}} expected-error {{invalid operands to}}
+  }
+}
+
+
+namespace PR27027 {
+  template <class T> void operator+(T, T) = delete; // expected-note 4 {{candidate}}
+  template <class T> void operator+(T) = delete; // expected-note 4 {{candidate}}
+
+  struct A {} a_global;
+  void f() {
+    A a;
+    +a; // expected-error {{overload resolution selected deleted operator '+'}}
+    a + a; // expected-error {{overload resolution selected deleted operator '+'}}
+    bool operator+(A);
+    extern bool operator+(A, A);
+    +a; // OK
+    a + a;
+  }
+  bool test_global_1 = +a_global; // expected-error {{overload resolution selected deleted operator '+'}}
+  bool test_global_2 = a_global + a_global; // expected-error {{overload resolution selected deleted operator '+'}}
+}
+
+namespace LateADLInNonDependentExpressions {
+  struct A {};
+  struct B : A {};
+  int &operator+(A, A);
+  int &operator!(A);
+  int &operator+=(A, A);
+  int &operator<<(A, A);
+  int &operator++(A);
+  int &operator++(A, int);
+  int &operator->*(A, A);
+
+  template<typename T> void f() {
+    // An instantiation-dependent value of type B.
+    // These are all non-dependent operator calls of type int&.
+#define idB ((void()), B())
+    int &a = idB + idB,
+        &b = !idB,
+        &c = idB += idB,
+        &d = idB << idB,
+        &e = ++idB,
+        &f = idB++,
+        &g = idB ->* idB;
+  }
+
+  // These should not be found by ADL in the template instantiation.
+  float &operator+(B, B);
+  float &operator!(B);
+  float &operator+=(B, B);
+  float &operator<<(B, B);
+  float &operator++(B);
+  float &operator++(B, int);
+  float &operator->*(B, B);
+  template void f<int>();
 }

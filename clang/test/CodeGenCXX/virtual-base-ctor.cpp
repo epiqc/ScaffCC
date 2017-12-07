@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 %s -emit-llvm -o - -O2 | FileCheck %s
+// RUN: %clang_cc1 %s -emit-llvm -triple %itanium_abi_triple -o - -O2 | opt - -S -globalopt -o - | FileCheck %s
 
 struct B;
 extern B x;
@@ -8,4 +8,4 @@ struct A { int a; A() { y = ((size_t)this - (size_t)&x) / sizeof(void*); } };
 struct B : virtual A { void* x; };    
 B x;
 
-// CHECK: @y = global i8 2
+// CHECK: @y = local_unnamed_addr global i8 2

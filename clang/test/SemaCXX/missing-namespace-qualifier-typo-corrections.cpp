@@ -19,7 +19,7 @@ namespace fizbin {
                                                           // expected-note{{'fizbin::nested::lessFoobar' declared here}}
   class dummy { // expected-note 2 {{'fizbin::dummy' declared here}}
    public:
-    static bool moreFoobar() { return false; } // expected-note{{'moreFoobar' declared here}}
+    static bool morebar() { return false; } // expected-note{{'morebar' declared here}}
   };
 }
 void Check() { // expected-note{{'Check' declared here}}
@@ -29,9 +29,9 @@ void Check() { // expected-note{{'Check' declared here}}
   if (lessFoobar()) Double(7); // expected-error{{use of undeclared identifier 'lessFoobar'; did you mean 'fizbin::nested::lessFoobar'?}}
   if (baztool::toFoobar()) Double(7); // expected-error{{use of undeclared identifier 'baztool'; did you mean 'fizbin::baztool'?}}
   if (nested::moreFoobar()) Double(7); // expected-error{{use of undeclared identifier 'nested'; did you mean 'fizbin::nested'?}}
-  if (dummy::moreFoobar()) Double(7); // expected-error{{use of undeclared identifier 'dummy'; did you mean 'fizbin::dummy'?}}
-  if (dummy::mreFoobar()) Double(7); // expected-error{{use of undeclared identifier 'dummy'; did you mean 'fizbin::dummy'?}} \
-                                     // expected-error{{no member named 'mreFoobar' in 'fizbin::dummy'; did you mean 'moreFoobar'?}}
+  if (dummy::morebar()) Double(7); // expected-error{{use of undeclared identifier 'dummy'; did you mean 'fizbin::dummy'?}}
+  if (dummy::mrebar()) Double(7); // expected-error{{use of undeclared identifier 'dummy'; did you mean 'fizbin::dummy'?}} \
+                                     // expected-error{{no member named 'mrebar' in 'fizbin::dummy'; did you mean 'morebar'?}}
   if (moFoobin()) Double(7); // expected-error{{use of undeclared identifier 'moFoobin'}}
 }
 
@@ -70,7 +70,7 @@ namespace llvm {
 struct S {};
 void bar() {
  GraphWriter<S> x; //expected-error{{no template named 'GraphWriter'; did you mean 'llvm::GraphWriter'?}}
- (void)new llvm::GraphWriter; // expected-error {{use of class template llvm::GraphWriter requires template arguments}}
+ (void)new llvm::GraphWriter; // expected-error {{use of class template 'llvm::GraphWriter' requires template arguments}}
  (void)new llvm::Graphwriter<S>; // expected-error {{no template named 'Graphwriter' in namespace 'llvm'; did you mean 'GraphWriter'?}}
 }
 

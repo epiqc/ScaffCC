@@ -11,57 +11,65 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CLANG_CODEGEN_CGBLOCKS_H
-#define CLANG_CODEGEN_CGBLOCKS_H
+#ifndef LLVM_CLANG_LIB_CODEGEN_CGBLOCKS_H
+#define LLVM_CLANG_LIB_CODEGEN_CGBLOCKS_H
 
+#include "CGBuilder.h"
+#include "CGCall.h"
+#include "CGValue.h"
+#include "CodeGenFunction.h"
 #include "CodeGenTypes.h"
-#include "clang/AST/Type.h"
-#include "llvm/Module.h"
-#include "clang/Basic/TargetInfo.h"
 #include "clang/AST/CharUnits.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/ExprObjC.h"
-
-#include "CodeGenFunction.h"
-#include "CGBuilder.h"
-#include "CGCall.h"
-#include "CGValue.h"
+#include "clang/AST/Type.h"
+#include "clang/Basic/TargetInfo.h"
 
 namespace llvm {
-  class Module;
-  class Constant;
-  class Function;
-  class GlobalValue;
-  class TargetData;
-  class FunctionType;
-  class PointerType;
-  class Value;
-  class LLVMContext;
+class Constant;
+class Function;
+class GlobalValue;
+class DataLayout;
+class FunctionType;
+class PointerType;
+class Value;
+class LLVMContext;
 }
 
 namespace clang {
-
 namespace CodeGen {
 
-class CodeGenModule;
 class CGBlockInfo;
 
-enum BlockFlag_t {
+// Flags stored in __block variables.
+enum BlockByrefFlags {
+  BLOCK_BYREF_HAS_COPY_DISPOSE         = (1   << 25), // compiler
+  BLOCK_BYREF_LAYOUT_MASK              = (0xF << 28), // compiler
+  BLOCK_BYREF_LAYOUT_EXTENDED          = (1   << 28),
+  BLOCK_BYREF_LAYOUT_NON_OBJECT        = (2   << 28),
+  BLOCK_BYREF_LAYOUT_STRONG            = (3   << 28),
+  BLOCK_BYREF_LAYOUT_WEAK              = (4   << 28),
+  BLOCK_BYREF_LAYOUT_UNRETAINED        = (5   << 28)
+};
+
+enum BlockLiteralFlags {
   BLOCK_HAS_COPY_DISPOSE =  (1 << 25),
   BLOCK_HAS_CXX_OBJ =       (1 << 26),
   BLOCK_IS_GLOBAL =         (1 << 28),
   BLOCK_USE_STRET =         (1 << 29),
-  BLOCK_HAS_SIGNATURE  =    (1 << 30)
+  BLOCK_HAS_SIGNATURE  =    (1 << 30),
+  BLOCK_HAS_EXTENDED_LAYOUT = (1 << 31)
 };
 class BlockFlags {
   uint32_t flags;
 
-  BlockFlags(uint32_t flags) : flags(flags) {}
 public:
+  BlockFlags(uint32_t flags) : flags(flags) {}
   BlockFlags() : flags(0) {}
-  BlockFlags(BlockFlag_t flag) : flags(flag) {}
-
+  BlockFlags(BlockLiteralFlags flag) : flags(flag) {}
+  BlockFlags(BlockByrefFlags flag) : flags(flag) {}
+  
   uint32_t getBitMask() const { return flags; }
   bool empty() const { return flags == 0; }
 
@@ -75,8 +83,11 @@ public:
   friend bool operator&(BlockFlags l, BlockFlags r) {
     return (l.flags & r.flags);
   }
+  bool operator==(BlockFlags r) {
+    return (flags == r.flags);
+  }
 };
-inline BlockFlags operator|(BlockFlag_t l, BlockFlag_t r) {
+inline BlockFlags operator|(BlockLiteralFlags l, BlockLiteralFlags r) {
   return BlockFlags(l) | BlockFlags(r);
 }
 
@@ -125,11 +136,20 @@ inline BlockFieldFlags operator|(BlockFieldFlag_t l, BlockFieldFlag_t r) {
   return BlockFieldFlags(l) | BlockFieldFlags(r);
 }
 
+/// Information about the layout of a __block variable.
+class BlockByrefInfo {
+public:
+  llvm::StructType *Type;
+  unsigned FieldIndex;
+  CharUnits ByrefAlignment;
+  CharUnits FieldOffset;
+};
+
 /// CGBlockInfo - Information to generate a block literal.
 class CGBlockInfo {
 public:
   /// Name - The name of the block, kindof.
-  llvm::StringRef Name;
+  StringRef Name;
 
   /// The field index of 'this' within the block, if there is one.
   unsigned CXXThisIndex;
@@ -137,14 +157,24 @@ public:
   class Capture {
     uintptr_t Data;
     EHScopeStack::stable_iterator Cleanup;
+    CharUnits::QuantityType Offset;
+
+    /// Type of the capture field. Normally, this is identical to the type of
+    /// the capture's VarDecl, but can be different if there is an enclosing
+    /// lambda.
+    QualType FieldType;
 
   public:
     bool isIndex() const { return (Data & 1) != 0; }
     bool isConstant() const { return !isIndex(); }
-    unsigned getIndex() const { assert(isIndex()); return Data >> 1; }
-    llvm::Value *getConstant() const {
-      assert(isConstant());
-      return reinterpret_cast<llvm::Value*>(Data);
+
+    unsigned getIndex() const {
+      assert(isIndex());
+      return Data >> 1;
+    }
+    CharUnits getOffset() const {
+      assert(isIndex());
+      return CharUnits::fromQuantity(Offset);
     }
     EHScopeStack::stable_iterator getCleanup() const {
       assert(isIndex());
@@ -155,9 +185,21 @@ public:
       Cleanup = cleanup;
     }
 
-    static Capture makeIndex(unsigned index) {
+    llvm::Value *getConstant() const {
+      assert(isConstant());
+      return reinterpret_cast<llvm::Value*>(Data);
+    }
+
+    QualType fieldType() const {
+      return FieldType;
+    }
+
+    static Capture makeIndex(unsigned index, CharUnits offset,
+                             QualType FieldType) {
       Capture v;
       v.Data = (index << 1) | 1;
+      v.Offset = offset.getQuantity();
+      v.FieldType = FieldType;
       return v;
     }
 
@@ -182,16 +224,29 @@ public:
   /// UsesStret : True if the block uses an stret return.  Mutable
   /// because it gets set later in the block-creation process.
   mutable bool UsesStret : 1;
+  
+  /// HasCapturedVariableLayout : True if block has captured variables
+  /// and their layout meta-data has been generated.
+  bool HasCapturedVariableLayout : 1;
 
   /// The mapping of allocated indexes within the block.
   llvm::DenseMap<const VarDecl*, Capture> Captures;  
 
-  llvm::AllocaInst *Address;
+  Address LocalAddress;
   llvm::StructType *StructureType;
   const BlockDecl *Block;
   const BlockExpr *BlockExpression;
   CharUnits BlockSize;
   CharUnits BlockAlign;
+  CharUnits CXXThisOffset;
+  
+  // Offset of the gap caused by block header having a smaller
+  // alignment than the alignment of the block descriptor. This
+  // is the gap offset before the first capturued field.
+  CharUnits BlockHeaderForcedGapOffset;
+  // Gap size caused by aligning first field after block header.
+  // This could be zero if no forced alignment is required.
+  CharUnits BlockHeaderForcedGapSize;
 
   /// An instruction which dominates the full-expression that the
   /// block is inside.
@@ -220,7 +275,7 @@ public:
     return BlockExpression;
   }
 
-  CGBlockInfo(const BlockDecl *blockDecl, llvm::StringRef Name);
+  CGBlockInfo(const BlockDecl *blockDecl, StringRef Name);
 };
 
 }  // end namespace CodeGen

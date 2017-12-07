@@ -1,11 +1,5 @@
 // RUN: %clang_cc1 -Wno-error=return-type %s -emit-llvm-only
-
-void test1(int x) {
-switch (x) {
-case 111111111111111111111111111111111111111:
-bar();
-}
-}
+// REQUIRES: LP64
 
 // Mismatched type between return and function result.
 int test2() { return; }

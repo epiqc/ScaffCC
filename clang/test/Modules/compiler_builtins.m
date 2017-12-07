@@ -1,10 +1,13 @@
 // RUN: rm -rf %t
-// RUN: %clang -fsyntax-only -fmodules -fmodule-cache-path %t -D__need_wint_t %s -Xclang -verify
+// RUN: %clang_cc1 -fsyntax-only -fmodules -fimplicit-module-maps -fmodules-cache-path=%t %s -I%S/Inputs/System/usr/include -verify
+// RUN: %clang_cc1 -fsyntax-only -std=c99 -fmodules -fimplicit-module-maps -fmodules-cache-path=%t %s -I%S/Inputs/System/usr/include -verify
+// RUN: %clang_cc1 -fsyntax-only -fmodules -fmodule-map-file=%resource_dir/module.modulemap -fmodules-cache-path=%t %s -I%S/Inputs/System/usr/include -verify
+// expected-no-diagnostics
 
 #ifdef __SSE__
-@__experimental_modules_import _Builtin_intrinsics.intel.sse;
+@import _Builtin_intrinsics.intel.sse;
 #endif
 
 #ifdef __AVX2__
-@__experimental_modules_import _Builtin_intrinsics.intel.avx2;
+@import _Builtin_intrinsics.intel.avx2;
 #endif

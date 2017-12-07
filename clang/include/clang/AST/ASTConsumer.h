@@ -16,15 +16,17 @@
 
 namespace clang {
   class ASTContext;
+  class CXXMethodDecl;
   class CXXRecordDecl;
+  class Decl;
   class DeclGroupRef;
-  class HandleTagDeclDefinition;
   class ASTMutationListener;
   class ASTDeserializationListener; // layering violation because void* is ugly
   class SemaConsumer; // layering violation required for safe SemaConsumer
   class TagDecl;
   class VarDecl;
   class FunctionDecl;
+  class ImportDecl;
 
 /// ASTConsumer - This is an abstract interface that should be implemented by
 /// clients that read ASTs.  This abstraction layer allows the client to be
@@ -46,12 +48,14 @@ public:
   virtual void Initialize(ASTContext &Context) {}
 
   /// HandleTopLevelDecl - Handle the specified top-level declaration.  This is
-  /// called by the parser to process every top-level Decl*. Note that D can be
-  /// the head of a chain of Decls (e.g. for `int a, b` the chain will have two
-  /// elements). Use Decl::getNextDeclarator() to walk the chain.
+  /// called by the parser to process every top-level Decl*.
   ///
   /// \returns true to continue parsing, or false to abort parsing.
   virtual bool HandleTopLevelDecl(DeclGroupRef D);
+
+  /// \brief This callback is invoked each time an inline (method or friend)
+  /// function definition in a class is completed.
+  virtual void HandleInlineFunctionDefinition(FunctionDecl *D) {}
 
   /// HandleInterestingDecl - Handle the specified interesting declaration. This
   /// is called by the AST reader when deserializing things that might interest
@@ -68,6 +72,10 @@ public:
   /// can be defined in declspecs).
   virtual void HandleTagDeclDefinition(TagDecl *D) {}
 
+  /// \brief This callback is invoked the first time each TagDecl is required to
+  /// be complete.
+  virtual void HandleTagDeclRequiredDefinition(const TagDecl *D) {}
+
   /// \brief Invoked when a function is implicitly instantiated.
   /// Note that at this point point it does not have a body, its body is
   /// instantiated at the end of the translation unit and passed to
@@ -78,6 +86,11 @@ public:
   /// and ObjC container.
   /// The default implementation ignored them.
   virtual void HandleTopLevelDeclInObjCContainer(DeclGroupRef D);
+
+  /// \brief Handle an ImportDecl that was implicitly created due to an
+  /// inclusion directive.
+  /// The default implementation passes it to HandleTopLevelDecl.
+  virtual void HandleImplicitImportDecl(ImportDecl *D);
 
   /// CompleteTentativeDefinition - Callback invoked at the end of a translation
   /// unit to notify the consumer that the given tentative definition should be
@@ -90,6 +103,10 @@ public:
   /// modified by the introduction of an implicit zero initializer.
   virtual void CompleteTentativeDefinition(VarDecl *D) {}
 
+  /// \brief Callback invoked when an MSInheritanceAttr has been attached to a
+  /// CXXRecordDecl.
+  virtual void AssignInheritanceModel(CXXRecordDecl *RD) {}
+
   /// HandleCXXStaticMemberVarInstantiation - Tell the consumer that this
   // variable has been instantiated.
   virtual void HandleCXXStaticMemberVarInstantiation(VarDecl *D) {}
@@ -99,28 +116,29 @@ public:
   /// required.
   ///
   /// \param RD The class whose vtable was used.
-  ///
-  /// \param DefinitionRequired Whether a definition of this vtable is
-  /// required in this translation unit; otherwise, it is only needed if
-  /// it was actually used.
-  virtual void HandleVTable(CXXRecordDecl *RD, bool DefinitionRequired) {}
+  virtual void HandleVTable(CXXRecordDecl *RD) {}
 
   /// \brief If the consumer is interested in entities getting modified after
   /// their initial creation, it should return a pointer to
   /// an ASTMutationListener here.
-  virtual ASTMutationListener *GetASTMutationListener() { return 0; }
+  virtual ASTMutationListener *GetASTMutationListener() { return nullptr; }
 
   /// \brief If the consumer is interested in entities being deserialized from
   /// AST files, it should return a pointer to a ASTDeserializationListener here
   virtual ASTDeserializationListener *GetASTDeserializationListener() {
-    return 0;
+    return nullptr;
   }
 
   /// PrintStats - If desired, print any statistics.
   virtual void PrintStats() {}
 
-  // Support isa/cast/dyn_cast
-  static bool classof(const ASTConsumer *) { return true; }
+  /// \brief This callback is called for each function if the Parser was
+  /// initialized with \c SkipFunctionBodies set to \c true.
+  ///
+  /// \return \c true if the function's body should be skipped. The function
+  /// body may be parsed anyway if it is needed (for instance, if it contains
+  /// the code completion point or is constexpr).
+  virtual bool shouldSkipFunctionBody(Decl *D) { return true; }
 };
 
 } // end namespace clang.

@@ -21,7 +21,7 @@ can be:
 and then "merge" mul and mov:
 
         mul r4, r4, lr
-        str lr, [sp, #+52]
+        str r4, [sp, #+52]
         ldr lr, [r1, #+32]
         sxth r3, r3
         mla r4, r3, lr, r4
@@ -33,7 +33,7 @@ It also increase the likelihood the store may become dead.
 bb27 ...
         ...
         %reg1037 = ADDri %reg1039, 1
-        %reg1038 = ADDrs %reg1032, %reg1039, %NOREG, 10
+        %reg1038 = ADDrs %reg1032, %reg1039, %noreg, 10
     Successors according to CFG: 0x8b03bf0 (#5)
 
 bb76 (0x8b03bf0, LLVM BB @0x8b032d0, ID#5):

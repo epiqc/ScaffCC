@@ -1,5 +1,6 @@
-// RUN: %clang_cc1 -analyze -analyzer-checker=core -analyzer-store region -analyzer-inline-call -cfg-add-initializers -verify %s
-// XFAIL: *
+// RUN: %clang_analyze_cc1 -analyzer-checker=core,debug.ExprInspection -analyzer-config c++-inlining=constructors -verify %s
+
+void clang_analyzer_eval(bool);
 
 class A {
   int x;
@@ -24,8 +25,5 @@ B::B() {
 
 void f() {
   B b;
-  if (b.getx() != 0) {
-    int *p = 0;
-    *p = 0; // no-warning
-  }
+  clang_analyzer_eval(b.getx() == 0); // expected-warning{{TRUE}}
 }

@@ -1,7 +1,15 @@
-#include "llvm/Support/DataTypes.h"
+//===- unittests/Support/BlockFrequencyTest.cpp - BlockFrequency tests ----===//
+//
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
+//
+//===----------------------------------------------------------------------===//
+
 #include "llvm/Support/BlockFrequency.h"
 #include "llvm/Support/BranchProbability.h"
-
+#include "llvm/Support/DataTypes.h"
 #include "gtest/gtest.h"
 #include <climits>
 
@@ -11,7 +19,11 @@ namespace {
 
 TEST(BlockFrequencyTest, OneToZero) {
   BlockFrequency Freq(1);
-  BranchProbability Prob(UINT32_MAX - 1, UINT32_MAX);
+  BranchProbability Prob(UINT32_MAX / 3, UINT32_MAX);
+  Freq *= Prob;
+  EXPECT_EQ(Freq.getFrequency(), 0u);
+
+  Freq = BlockFrequency(1);
   Freq *= Prob;
   EXPECT_EQ(Freq.getFrequency(), 0u);
 }
@@ -21,11 +33,19 @@ TEST(BlockFrequencyTest, OneToOne) {
   BranchProbability Prob(UINT32_MAX, UINT32_MAX);
   Freq *= Prob;
   EXPECT_EQ(Freq.getFrequency(), 1u);
+
+  Freq = BlockFrequency(1);
+  Freq *= Prob;
+  EXPECT_EQ(Freq.getFrequency(), 1u);
 }
 
 TEST(BlockFrequencyTest, ThreeToOne) {
   BlockFrequency Freq(3);
   BranchProbability Prob(3000000, 9000000);
+  Freq *= Prob;
+  EXPECT_EQ(Freq.getFrequency(), 1u);
+
+  Freq = BlockFrequency(3);
   Freq *= Prob;
   EXPECT_EQ(Freq.getFrequency(), 1u);
 }
@@ -34,7 +54,11 @@ TEST(BlockFrequencyTest, MaxToHalfMax) {
   BlockFrequency Freq(UINT64_MAX);
   BranchProbability Prob(UINT32_MAX / 2, UINT32_MAX);
   Freq *= Prob;
-  EXPECT_EQ(Freq.getFrequency(), 9223372034707292159LLu);
+  EXPECT_EQ(Freq.getFrequency(), 9223372036854775807ULL);
+
+  Freq = BlockFrequency(UINT64_MAX);
+  Freq *= Prob;
+  EXPECT_EQ(Freq.getFrequency(), 9223372036854775807ULL);
 }
 
 TEST(BlockFrequencyTest, BigToBig) {
@@ -44,6 +68,10 @@ TEST(BlockFrequencyTest, BigToBig) {
   BranchProbability Prob(P, P);
   Freq *= Prob;
   EXPECT_EQ(Freq.getFrequency(), Big);
+
+  Freq = BlockFrequency(Big);
+  Freq *= Prob;
+  EXPECT_EQ(Freq.getFrequency(), Big);
 }
 
 TEST(BlockFrequencyTest, MaxToMax) {
@@ -51,35 +79,50 @@ TEST(BlockFrequencyTest, MaxToMax) {
   BranchProbability Prob(UINT32_MAX, UINT32_MAX);
   Freq *= Prob;
   EXPECT_EQ(Freq.getFrequency(), UINT64_MAX);
+
+  // This additionally makes sure if we have a value equal to our saturating
+  // value, we do not signal saturation if the result equals said value, but
+  // saturating does not occur.
+  Freq = BlockFrequency(UINT64_MAX);
+  Freq *= Prob;
+  EXPECT_EQ(Freq.getFrequency(), UINT64_MAX);
 }
 
-TEST(BlockFrequencyTest, ProbabilityCompare) {
-  BranchProbability A(4, 5);
-  BranchProbability B(4U << 29, 5U << 29);
-  BranchProbability C(3, 4);
+TEST(BlockFrequencyTest, Subtract) {
+  BlockFrequency Freq1(0), Freq2(1);
+  EXPECT_EQ((Freq1 - Freq2).getFrequency(), 0u);
+  EXPECT_EQ((Freq2 - Freq1).getFrequency(), 1u);
+}
 
-  EXPECT_TRUE(A == B);
-  EXPECT_FALSE(A != B);
-  EXPECT_FALSE(A < B);
-  EXPECT_FALSE(A > B);
-  EXPECT_TRUE(A <= B);
-  EXPECT_TRUE(A >= B);
+TEST(BlockFrequency, Divide) {
+  BlockFrequency Freq(0x3333333333333333ULL);
+  Freq /= BranchProbability(1, 2);
+  EXPECT_EQ(Freq.getFrequency(), 0x6666666666666666ULL);
+}
 
-  EXPECT_FALSE(B == C);
-  EXPECT_TRUE(B != C);
-  EXPECT_FALSE(B < C);
-  EXPECT_TRUE(B > C);
-  EXPECT_FALSE(B <= C);
-  EXPECT_TRUE(B >= C);
+TEST(BlockFrequencyTest, Saturate) {
+  BlockFrequency Freq(0x3333333333333333ULL);
+  Freq /= BranchProbability(100, 300);
+  EXPECT_EQ(Freq.getFrequency(), 0x9999999866666668ULL);
+  Freq /= BranchProbability(1, 2);
+  EXPECT_EQ(Freq.getFrequency(), UINT64_MAX);
 
-  BranchProbability BigZero(0, UINT32_MAX);
-  BranchProbability BigOne(UINT32_MAX, UINT32_MAX);
-  EXPECT_FALSE(BigZero == BigOne);
-  EXPECT_TRUE(BigZero != BigOne);
-  EXPECT_TRUE(BigZero < BigOne);
-  EXPECT_FALSE(BigZero > BigOne);
-  EXPECT_TRUE(BigZero <= BigOne);
-  EXPECT_FALSE(BigZero >= BigOne);
+  Freq = 0x1000000000000000ULL;
+  Freq /= BranchProbability(10000, 170000);
+  EXPECT_EQ(Freq.getFrequency(), UINT64_MAX);
+
+  // Try to cheat the multiplication overflow check.
+  Freq = 0x00000001f0000001ull;
+  Freq /= BranchProbability(1000, 0xf000000f);
+  EXPECT_EQ(33527736066704712ULL, Freq.getFrequency());
+}
+
+TEST(BlockFrequencyTest, SaturatingRightShift) {
+  BlockFrequency Freq(0x10080ULL);
+  Freq >>= 2;
+  EXPECT_EQ(Freq.getFrequency(), 0x4020ULL);
+  Freq >>= 20;
+  EXPECT_EQ(Freq.getFrequency(), 0x1ULL);
 }
 
 }

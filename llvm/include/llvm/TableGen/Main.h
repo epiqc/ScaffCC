@@ -16,11 +16,15 @@
 
 namespace llvm {
 
-class TableGenAction;
+class raw_ostream;
+class RecordKeeper;
 
-/// Run the table generator, performing the specified Action on parsed records.
-int TableGenMain(char *argv0, TableGenAction &Action);
+/// Perform the action using Records, and write output to OS.
+/// Returns true on error, false otherwise.
+using TableGenMainFn = bool (raw_ostream &OS, RecordKeeper &Records);
 
-}
+int TableGenMain(char *argv0, TableGenMainFn *MainFn);
 
-#endif
+} // end namespace llvm
+
+#endif // LLVM_TABLEGEN_MAIN_H

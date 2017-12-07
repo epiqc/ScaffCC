@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -fsyntax-only -verify %s
+// RUN: %clang_cc1 -fsyntax-only -verify -std=c++11 %s
 
 template<typename A> class s0 {
 
@@ -52,8 +52,43 @@ namespace PR7239 {
 }
 
 namespace PR7904 {
-  struct Foo {
-    template <int i> ~Foo() {} // expected-error{{destructor cannot be declared as a template}}
-  };
+  struct Foo {};
+  template <class T>
+  Foo::~Foo() { // expected-error{{destructor cannot be declared as a template}}
+    T t;
+    T &pT = t;
+    pT;
+  }
   Foo f;
 }
+
+namespace rdar13140795 {
+  template <class T> class shared_ptr {};
+
+  template <typename T> struct Marshal {
+    static int gc();
+  };
+
+
+  template <typename T> int Marshal<T>::gc() {
+    shared_ptr<T> *x;
+    x->template shared_ptr<T>::~shared_ptr();
+    return 0;
+  }
+
+  void test() {
+    Marshal<int>::gc();
+  }
+}
+
+namespace PR16852 {
+  template<typename T> struct S { int a; T x; };
+  template<typename T> decltype(S<T>().~S()) f(); // expected-note {{candidate template ignored: couldn't infer template argument 'T'}}
+  void g() { f(); } // expected-error {{no matching function for call to 'f'}}
+}
+
+class PR33189
+{
+  template <class T>
+  ~PR33189() { } // expected-error{{destructor cannot be declared as a template}}
+};

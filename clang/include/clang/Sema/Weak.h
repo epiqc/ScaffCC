@@ -21,14 +21,14 @@ namespace clang {
 
 class IdentifierInfo;
 
-/// \brief Captures information about a #pragma weak directive.
+/// \brief Captures information about a \#pragma weak directive.
 class WeakInfo {
   IdentifierInfo *alias;  // alias (optional)
   SourceLocation loc;     // for diagnostics
   bool used;              // identifier later declared?
 public:
   WeakInfo()
-    : alias(0), loc(SourceLocation()), used(false) {}
+    : alias(nullptr), loc(SourceLocation()), used(false) {}
   WeakInfo(IdentifierInfo *Alias, SourceLocation Loc)
     : alias(Alias), loc(Loc), used(false) {}
   inline IdentifierInfo * getAlias() const { return alias; }

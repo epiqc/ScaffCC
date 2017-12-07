@@ -1,41 +1,7 @@
 //===- README.txt - Notes for improving PowerPC-specific code gen ---------===//
 
 TODO:
-* gpr0 allocation
-* implement do-loop -> bdnz transform
 * lmw/stmw pass a la arm load store optimizer for prolog/epilog
-
-===-------------------------------------------------------------------------===
-
-On PPC64, this:
-
-long f2 (long x) { return 0xfffffff000000000UL; }
-long f3 (long x) { return 0x1ffffffffUL; }
-
-could compile into:
-
-_f2:
-	li r3,-1
-	rldicr r3,r3,0,27
-	blr
-_f3:
-	li r3,-1
-	rldicl r3,r3,0,31
-	blr
-
-we produce:
-
-_f2:
-	lis r2, 4095
-	ori r2, r2, 65535
-	sldi r3, r2, 36
-	blr 
-_f3:
-	li r2, 1
-	sldi r2, r2, 32
-	oris r2, r2, 65535
-	ori r3, r2, 65535
-	blr 
 
 ===-------------------------------------------------------------------------===
 
@@ -65,40 +31,6 @@ Ick.
 
 ===-------------------------------------------------------------------------===
 
-Support 'update' load/store instructions.  These are cracked on the G5, but are
-still a codesize win.
-
-With preinc enabled, this:
-
-long *%test4(long *%X, long *%dest) {
-        %Y = getelementptr long* %X, int 4
-        %A = load long* %Y
-        store long %A, long* %dest
-        ret long* %Y
-}
-
-compiles to:
-
-_test4:
-        mr r2, r3
-        lwzu r5, 32(r2)
-        lwz r3, 36(r3)
-        stw r5, 0(r4)
-        stw r3, 4(r4)
-        mr r3, r2
-        blr 
-
-with -sched=list-burr, I get:
-
-_test4:
-        lwz r2, 36(r3)
-        lwzu r5, 32(r3)
-        stw r2, 4(r4)
-        stw r5, 0(r4)
-        blr 
-
-===-------------------------------------------------------------------------===
-
 We compile the hottest inner loop of viterbi to:
 
         li r6, 0
@@ -125,25 +57,6 @@ loop:
 
 This could be much better (bdnz instead of bdz) but it still beats us.  If we
 produced this with bdnz, the loop would be a single dispatch group.
-
-===-------------------------------------------------------------------------===
-
-Compile:
-
-void foo(int *P) {
- if (P)  *P = 0;
-}
-
-into:
-
-_foo:
-        cmpwi cr0,r3,0
-        beqlr cr0
-        li r0,0
-        stw r0,0(r3)
-        blr
-
-This is effectively a simple form of predication.
 
 ===-------------------------------------------------------------------------===
 
@@ -205,39 +118,6 @@ http://gcc.gnu.org/ml/gcc-patches/2006-02/msg00133.html
 
 ===-------------------------------------------------------------------------===
 
-Implement Newton-Rhapson method for improving estimate instructions to the
-correct accuracy, and implementing divide as multiply by reciprocal when it has
-more than one use.  Itanium would want this too.
-
-===-------------------------------------------------------------------------===
-
-Compile offsets from allocas:
-
-int *%test() {
-        %X = alloca { int, int }
-        %Y = getelementptr {int,int}* %X, int 0, uint 1
-        ret int* %Y
-}
-
-into a single add, not two:
-
-_test:
-        addi r2, r1, -8
-        addi r3, r2, 4
-        blr
-
---> important for C++.
-
-===-------------------------------------------------------------------------===
-
-No loads or stores of the constants should be needed:
-
-struct foo { double X, Y; };
-void xxx(struct foo F);
-void bar() { struct foo R = { 1.0, 2.0 }; xxx(R); }
-
-===-------------------------------------------------------------------------===
-
 Darwin Stub removal:
 
 We still generate calls to foo$stub, and stubs, on Darwin.  This is not
@@ -296,57 +176,6 @@ just fastcc.
 
 ===-------------------------------------------------------------------------===
 
-Compile this:
-
-int foo(int a) {
-  int b = (a < 8);
-  if (b) {
-    return b * 3;     // ignore the fact that this is always 3.
-  } else {
-    return 2;
-  }
-}
-
-into something not this:
-
-_foo:
-1)      cmpwi cr7, r3, 8
-        mfcr r2, 1
-        rlwinm r2, r2, 29, 31, 31
-1)      cmpwi cr0, r3, 7
-        bgt cr0, LBB1_2 ; UnifiedReturnBlock
-LBB1_1: ; then
-        rlwinm r2, r2, 0, 31, 31
-        mulli r3, r2, 3
-        blr
-LBB1_2: ; UnifiedReturnBlock
-        li r3, 2
-        blr
-
-In particular, the two compares (marked 1) could be shared by reversing one.
-This could be done in the dag combiner, by swapping a BR_CC when a SETCC of the
-same operands (but backwards) exists.  In this case, this wouldn't save us 
-anything though, because the compares still wouldn't be shared.
-
-===-------------------------------------------------------------------------===
-
-We should custom expand setcc instead of pretending that we have it.  That
-would allow us to expose the access of the crbit after the mfcr, allowing
-that access to be trivially folded into other ops.  A simple example:
-
-int foo(int a, int b) { return (a < b) << 4; }
-
-compiles into:
-
-_foo:
-        cmpw cr7, r3, r4
-        mfcr r2, 1
-        rlwinm r2, r2, 29, 31, 31
-        slwi r3, r2, 4
-        blr
-
-===-------------------------------------------------------------------------===
-
 Fold add and sub with constant into non-extern, non-weak addresses so this:
 
 static int a;
@@ -371,48 +200,6 @@ _foo:
         lbz r2, lo16(_a+3)(r2)
         stb r2, 0(r3)
         blr
-
-===-------------------------------------------------------------------------===
-
-We generate really bad code for this:
-
-int f(signed char *a, _Bool b, _Bool c) {
-   signed char t = 0;
-  if (b)  t = *a;
-  if (c)  *a = t;
-}
-
-===-------------------------------------------------------------------------===
-
-This:
-int test(unsigned *P) { return *P >> 24; }
-
-Should compile to:
-
-_test:
-        lbz r3,0(r3)
-        blr
-
-not:
-
-_test:
-        lwz r2, 0(r3)
-        srwi r3, r2, 24
-        blr
-
-===-------------------------------------------------------------------------===
-
-On the G5, logical CR operations are more expensive in their three
-address form: ops that read/write the same register are half as expensive as
-those that read from two registers that are different from their destination.
-
-We should model this with two separate instructions.  The isel should generate
-the "two address" form of the instructions.  When the register allocator 
-detects that it needs to insert a copy due to the two-addresness of the CR
-logical op, it will invoke PPCInstrInfo::convertToThreeAddress.  At this point
-we can convert to the "three address" instruction, to save code space.
-
-This only matters when we start generating cr logical ops.
 
 ===-------------------------------------------------------------------------===
 
@@ -469,7 +256,7 @@ _clamp0g:
         cmpwi cr0, r3, 0
         li r2, 0
         blt cr0, LBB1_2
-; BB#1:                                                     ; %entry
+; %bb.1:                                                    ; %entry
         mr r2, r3
 LBB1_2:                                                     ; %entry
         mr r3, r2
@@ -501,27 +288,6 @@ http://www.lcs.mit.edu/pubs/pdf/MIT-LCS-TM-600.pdf
 
 ===-------------------------------------------------------------------------===
 
-float foo(float X) { return (int)(X); }
-
-Currently produces:
-
-_foo:
-        fctiwz f0, f1
-        stfd f0, -8(r1)
-        lwz r2, -4(r1)
-        extsw r2, r2
-        std r2, -16(r1)
-        lfd f0, -16(r1)
-        fcfid f0, f0
-        frsp f1, f0
-        blr
-
-We could use a target dag combine to turn the lwz/extsw into an lwa when the 
-lwz has a single use.  Since LWA is cracked anyway, this would be a codesize
-win only.
-
-===-------------------------------------------------------------------------===
-
 We generate ugly code for this:
 
 void func(unsigned int *ret, float dx, float dy, float dz, float dw) {
@@ -534,20 +300,6 @@ void func(unsigned int *ret, float dx, float dy, float dz, float dw) {
   if(dz > dw)  code |= 32;
   *ret = code;
 }
-
-===-------------------------------------------------------------------------===
-
-Complete the signed i32 to FP conversion code using 64-bit registers
-transformation, good for PI.  See PPCISelLowering.cpp, this comment:
-
-     // FIXME: disable this lowered code.  This generates 64-bit register values,
-     // and we don't model the fact that the top part is clobbered by calls.  We
-     // need to flag these together so that the value isn't live across a call.
-     //setOperationAction(ISD::SINT_TO_FP, MVT::i32, Custom);
-
-Also, if the registers are spilled to the stack, we have to ensure that all
-64-bits of them are save/restored, otherwise we will miscompile the code.  It
-sounds like we need to get the 64-bit register classes going.
 
 ===-------------------------------------------------------------------------===
 
@@ -590,32 +342,6 @@ _foo:
         or r2, r2, r4
         stw r2, 0(r3)
         blr
-
-===-------------------------------------------------------------------------===
-
-We compile:
-
-unsigned test6(unsigned x) { 
-  return ((x & 0x00FF0000) >> 16) | ((x & 0x000000FF) << 16);
-}
-
-into:
-
-_test6:
-        lis r2, 255
-        rlwinm r3, r3, 16, 0, 31
-        ori r2, r2, 255
-        and r3, r3, r2
-        blr
-
-GCC gets it down to:
-
-_test6:
-        rlwinm r0,r3,16,8,15
-        rlwinm r3,r3,16,24,31
-        or r3,r3,r0
-        blr
-
 
 ===-------------------------------------------------------------------------===
 
@@ -712,48 +438,6 @@ _bar:
         addic r3,r3,-1
         subfe r3,r3,r3
         blr
-
-===-------------------------------------------------------------------------===
-
-We currently compile 32-bit bswap:
-
-declare i32 @llvm.bswap.i32(i32 %A)
-define i32 @test(i32 %A) {
-        %B = call i32 @llvm.bswap.i32(i32 %A)
-        ret i32 %B
-}
-
-to:
-
-_test:
-        rlwinm r2, r3, 24, 16, 23
-        slwi r4, r3, 24
-        rlwimi r2, r3, 8, 24, 31
-        rlwimi r4, r3, 8, 8, 15
-        rlwimi r4, r2, 0, 16, 31
-        mr r3, r4
-        blr 
-
-it would be more efficient to produce:
-
-_foo:   mr r0,r3
-        rlwinm r3,r3,8,0xffffffff
-        rlwimi r3,r0,24,0,7
-        rlwimi r3,r0,24,16,23
-        blr
-
-===-------------------------------------------------------------------------===
-
-test/CodeGen/PowerPC/2007-03-24-cntlzd.ll compiles to:
-
-__ZNK4llvm5APInt17countLeadingZerosEv:
-        ld r2, 0(r3)
-        cntlzd r2, r2
-        or r2, r2, r2     <<-- silly.
-        addi r3, r2, -64
-        blr 
-
-The dead or is a 'truncate' from 64- to 32-bits.
 
 ===-------------------------------------------------------------------------===
 
@@ -905,6 +589,17 @@ entry:
 	%tmp34 = zext i1 %tmp3 to i32		; <i32> [#uses=1]
 	ret i32 %tmp34
 }
+
+//===---------------------------------------------------------------------===//
+for the following code:
+
+void foo (float *__restrict__ a, int *__restrict__ b, int n) {
+      a[n] = b[n]  * 2.321;
+}
+
+we load b[n] to GPR, then move it VSX register and convert it float. We should 
+use vsx scalar integer load instructions to avoid direct moves
+
 //===----------------------------------------------------------------------===//
 ; RUN: llvm-as < %s | llc -march=ppc32 | not grep fneg
 
@@ -937,3 +632,34 @@ void foo() {
   bar(x);
   __asm__("" ::: "cr2");
 }
+
+//===-------------------------------------------------------------------------===
+Naming convention for instruction formats is very haphazard.
+We have agreed on a naming scheme as follows:
+
+<INST_form>{_<OP_type><OP_len>}+
+
+Where:
+INST_form is the instruction format (X-form, etc.)
+OP_type is the operand type - one of OPC (opcode), RD (register destination),
+                              RS (register source),
+                              RDp (destination register pair),
+                              RSp (source register pair), IM (immediate),
+                              XO (extended opcode)
+OP_len is the length of the operand in bits
+
+VSX register operands would be of length 6 (split across two fields),
+condition register fields of length 3.
+We would not need denote reserved fields in names of instruction formats.
+
+//===----------------------------------------------------------------------===//
+
+Instruction fusion was introduced in ISA 2.06 and more opportunities added in
+ISA 2.07.  LLVM needs to add infrastructure to recognize fusion opportunities
+and force instruction pairs to be scheduled together.
+
+-----------------------------------------------------------------------------
+
+More general handling of any_extend and zero_extend:
+
+See https://reviews.llvm.org/D24924#555306

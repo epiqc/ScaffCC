@@ -11,14 +11,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_CLANG_TOKEN_H
-#define LLVM_CLANG_TOKEN_H
+#ifndef LLVM_CLANG_LEX_TOKEN_H
+#define LLVM_CLANG_LEX_TOKEN_H
 
-#include "clang/Basic/TemplateKinds.h"
-#include "clang/Basic/TokenKinds.h"
 #include "clang/Basic/SourceLocation.h"
-#include "clang/Basic/OperatorKinds.h"
-#include <cstdlib>
+#include "clang/Basic/TokenKinds.h"
+#include "llvm/ADT/StringRef.h"
+#include <cassert>
 
 namespace clang {
 
@@ -34,8 +33,8 @@ class IdentifierInfo;
 /// can be represented by a single typename annotation token that carries
 /// information about the SourceRange of the tokens and the type object.
 class Token {
-  /// The location of the token.
-  SourceLocation Loc;
+  /// The location of the token. This is actually a SourceLocation.
+  unsigned Loc;
 
   // Conceptually these next two fields could be in a union.  However, this
   // causes gcc 4.2 to pessimize LexTokenInternal, a very performance critical
@@ -57,70 +56,80 @@ class Token {
   ///    may be dirty (have trigraphs / escaped newlines).
   ///  Annotations (resolved type names, C++ scopes, etc): isAnnotation().
   ///    This is a pointer to sema-specific data for the annotation token.
+  ///  Eof:
+  //     This is a pointer to a Decl.
   ///  Other:
   ///    This is null.
   void *PtrData;
 
   /// Kind - The actual flavor of token this is.
-  ///
-  unsigned short Kind;
+  tok::TokenKind Kind;
 
   /// Flags - Bits we track about this token, members of the TokenFlags enum.
-  unsigned char Flags;
-public:
+  unsigned short Flags;
 
+public:
   // Various flags set per token:
   enum TokenFlags {
-    StartOfLine   = 0x01,  // At start of line or only after whitespace.
-    LeadingSpace  = 0x02,  // Whitespace exists before this token.
+    StartOfLine   = 0x01,  // At start of line or only after whitespace
+                           // (considering the line after macro expansion).
+    LeadingSpace  = 0x02,  // Whitespace exists before this token (considering 
+                           // whitespace after macro expansion).
     DisableExpand = 0x04,  // This identifier may never be macro expanded.
-    NeedsCleaning = 0x08,   // Contained an escaped newline or trigraph.
+    NeedsCleaning = 0x08,  // Contained an escaped newline or trigraph.
     LeadingEmptyMacro = 0x10, // Empty macro exists before this token.
-    HasUDSuffix = 0x20     // This string or character literal has a ud-suffix.
+    HasUDSuffix = 0x20,    // This string or character literal has a ud-suffix.
+    HasUCN = 0x40,         // This identifier contains a UCN.
+    IgnoredComma = 0x80,   // This comma is not a macro argument separator (MS).
+    StringifiedInMacro = 0x100, // This string or character literal is formed by
+                                // macro stringizing or charizing operator.
+    CommaAfterElided = 0x200, // The comma following this token was elided (MS).
+    IsEditorPlaceholder = 0x400, // This identifier is a placeholder.
   };
 
-  tok::TokenKind getKind() const { return (tok::TokenKind)Kind; }
+  tok::TokenKind getKind() const { return Kind; }
   void setKind(tok::TokenKind K) { Kind = K; }
 
   /// is/isNot - Predicates to check if this token is a specific kind, as in
   /// "if (Tok.is(tok::l_brace)) {...}".
-  bool is(tok::TokenKind K) const { return Kind == (unsigned) K; }
-  bool isNot(tok::TokenKind K) const { return Kind != (unsigned) K; }
+  bool is(tok::TokenKind K) const { return Kind == K; }
+  bool isNot(tok::TokenKind K) const { return Kind != K; }
+  bool isOneOf(tok::TokenKind K1, tok::TokenKind K2) const {
+    return is(K1) || is(K2);
+  }
+  template <typename... Ts>
+  bool isOneOf(tok::TokenKind K1, tok::TokenKind K2, Ts... Ks) const {
+    return is(K1) || isOneOf(K2, Ks...);
+  }
 
-  /// isAnyIdentifier - Return true if this is a raw identifier (when lexing
+  /// \brief Return true if this is a raw identifier (when lexing
   /// in raw mode) or a non-keyword identifier (when lexing in non-raw mode).
   bool isAnyIdentifier() const {
-    return is(tok::identifier) || is(tok::raw_identifier);
+    return tok::isAnyIdentifier(getKind());
   }
 
-  /// isLiteral - Return true if this is a "literal", like a numeric
+  /// \brief Return true if this is a "literal", like a numeric
   /// constant, string, etc.
   bool isLiteral() const {
-    return is(tok::numeric_constant) || is(tok::char_constant) ||
-           is(tok::wide_char_constant) || is(tok::utf16_char_constant) ||
-           is(tok::utf32_char_constant) || is(tok::string_literal) ||
-           is(tok::wide_string_literal) || is(tok::utf8_string_literal) ||
-           is(tok::utf16_string_literal) || is(tok::utf32_string_literal) ||
-           is(tok::angle_string_literal);
+    return tok::isLiteral(getKind());
   }
 
+  /// \brief Return true if this is any of tok::annot_* kind tokens.
   bool isAnnotation() const {
-#define ANNOTATION(NAME) \
-    if (is(tok::annot_##NAME)) \
-      return true;
-#include "clang/Basic/TokenKinds.def"
-    return false;
+    return tok::isAnnotation(getKind());
   }
 
-  /// getLocation - Return a source location identifier for the specified
+  /// \brief Return a source location identifier for the specified
   /// offset in the current file.
-  SourceLocation getLocation() const { return Loc; }
+  SourceLocation getLocation() const {
+    return SourceLocation::getFromRawEncoding(Loc);
+  }
   unsigned getLength() const {
     assert(!isAnnotation() && "Annotation tokens have no length field");
     return UintData;
   }
 
-  void setLocation(SourceLocation L) { Loc = L; }
+  void setLocation(SourceLocation L) { Loc = L.getRawEncoding(); }
   void setLength(unsigned Len) {
     assert(!isAnnotation() && "Annotation tokens have no length field");
     UintData = Len;
@@ -128,7 +137,7 @@ public:
 
   SourceLocation getAnnotationEndLoc() const {
     assert(isAnnotation() && "Used AnnotEndLocID on non-annotation token");
-    return SourceLocation::getFromRawEncoding(UintData);
+    return SourceLocation::getFromRawEncoding(UintData ? UintData : Loc);
   }
   void setAnnotationEndLoc(SourceLocation L) {
     assert(isAnnotation() && "Used AnnotEndLocID on non-annotation token");
@@ -139,8 +148,13 @@ public:
     return isAnnotation() ? getAnnotationEndLoc() : getLocation();
   }
 
-  /// getAnnotationRange - SourceRange of the group of tokens that this
-  /// annotation token represents.
+  SourceLocation getEndLoc() const {
+    return isAnnotation() ? getAnnotationEndLoc()
+                          : getLocation().getLocWithOffset(getLength());
+  }
+
+  /// \brief SourceRange of the group of tokens that this annotation token
+  /// represents.
   SourceRange getAnnotationRange() const {
     return SourceRange(getLocation(), getAnnotationEndLoc());
   }
@@ -149,18 +163,15 @@ public:
     setAnnotationEndLoc(R.getEnd());
   }
 
-  const char *getName() const {
-    return tok::getTokenName( (tok::TokenKind) Kind);
-  }
+  const char *getName() const { return tok::getTokenName(Kind); }
 
-  /// startToken - Reset all flags to cleared.
-  ///
+  /// \brief Reset all flags to cleared.
   void startToken() {
     Kind = tok::unknown;
     Flags = 0;
-    PtrData = 0;
+    PtrData = nullptr;
     UintData = 0;
-    Loc = SourceLocation();
+    Loc = SourceLocation().getRawEncoding();
   }
 
   IdentifierInfo *getIdentifierInfo() const {
@@ -168,19 +179,30 @@ public:
            "getIdentifierInfo() on a tok::raw_identifier token!");
     assert(!isAnnotation() &&
            "getIdentifierInfo() on an annotation token!");
-    if (isLiteral()) return 0;
+    if (isLiteral()) return nullptr;
+    if (is(tok::eof)) return nullptr;
     return (IdentifierInfo*) PtrData;
   }
   void setIdentifierInfo(IdentifierInfo *II) {
     PtrData = (void*) II;
   }
 
-  /// getRawIdentifierData - For a raw identifier token (i.e., an identifier
-  /// lexed in raw mode), returns a pointer to the start of it in the text
-  /// buffer if known, null otherwise.
-  const char *getRawIdentifierData() const {
+  const void *getEofData() const {
+    assert(is(tok::eof));
+    return reinterpret_cast<const void *>(PtrData);
+  }
+  void setEofData(const void *D) {
+    assert(is(tok::eof));
+    assert(!PtrData);
+    PtrData = const_cast<void *>(D);
+  }
+
+  /// getRawIdentifier - For a raw identifier token (i.e., an identifier
+  /// lexed in raw mode), returns a reference to the text substring in the
+  /// buffer if known.
+  StringRef getRawIdentifier() const {
     assert(is(tok::raw_identifier));
-    return reinterpret_cast<const char*>(PtrData);
+    return StringRef(reinterpret_cast<const char *>(PtrData), getLength());
   }
   void setRawIdentifierData(const char *Ptr) {
     assert(is(tok::raw_identifier));
@@ -208,24 +230,30 @@ public:
     PtrData = val;
   }
 
-  /// setFlag - Set the specified flag.
+  /// \brief Set the specified flag.
   void setFlag(TokenFlags Flag) {
     Flags |= Flag;
   }
 
-  /// clearFlag - Unset the specified flag.
+  /// \brief Get the specified flag.
+  bool getFlag(TokenFlags Flag) const {
+    return (Flags & Flag) != 0;
+  }
+
+  /// \brief Unset the specified flag.
   void clearFlag(TokenFlags Flag) {
     Flags &= ~Flag;
   }
 
-  /// getFlags - Return the internal represtation of the flags.
-  ///  Only intended for low-level operations such as writing tokens to
-  //   disk.
+  /// \brief Return the internal represtation of the flags.
+  ///
+  /// This is only intended for low-level operations such as writing tokens to
+  /// disk.
   unsigned getFlags() const {
     return Flags;
   }
 
-  /// setFlagValue - Set a flag to either true or false.
+  /// \brief Set a flag to either true or false.
   void setFlagValue(TokenFlags Flag, bool Val) {
     if (Val)
       setFlag(Flag);
@@ -235,65 +263,75 @@ public:
 
   /// isAtStartOfLine - Return true if this token is at the start of a line.
   ///
-  bool isAtStartOfLine() const { return (Flags & StartOfLine) ? true : false; }
+  bool isAtStartOfLine() const { return getFlag(StartOfLine); }
 
-  /// hasLeadingSpace - Return true if this token has whitespace before it.
+  /// \brief Return true if this token has whitespace before it.
   ///
-  bool hasLeadingSpace() const { return (Flags & LeadingSpace) ? true : false; }
+  bool hasLeadingSpace() const { return getFlag(LeadingSpace); }
 
-  /// isExpandDisabled - Return true if this identifier token should never
+  /// \brief Return true if this identifier token should never
   /// be expanded in the future, due to C99 6.10.3.4p2.
-  bool isExpandDisabled() const {
-    return (Flags & DisableExpand) ? true : false;
-  }
+  bool isExpandDisabled() const { return getFlag(DisableExpand); }
 
-  /// isObjCAtKeyword - Return true if we have an ObjC keyword identifier.
+  /// \brief Return true if we have an ObjC keyword identifier.
   bool isObjCAtKeyword(tok::ObjCKeywordKind objcKey) const;
 
-  /// getObjCKeywordID - Return the ObjC keyword kind.
+  /// \brief Return the ObjC keyword kind.
   tok::ObjCKeywordKind getObjCKeywordID() const;
 
-  /// needsCleaning - Return true if this token has trigraphs or escaped
-  /// newlines in it.
-  ///
-  bool needsCleaning() const { return (Flags & NeedsCleaning) ? true : false; }
+  /// \brief Return true if this token has trigraphs or escaped newlines in it.
+  bool needsCleaning() const { return getFlag(NeedsCleaning); }
 
   /// \brief Return true if this token has an empty macro before it.
   ///
-  bool hasLeadingEmptyMacro() const {
-    return (Flags & LeadingEmptyMacro) ? true : false;
-  }
+  bool hasLeadingEmptyMacro() const { return getFlag(LeadingEmptyMacro); }
 
   /// \brief Return true if this token is a string or character literal which
   /// has a ud-suffix.
-  bool hasUDSuffix() const { return (Flags & HasUDSuffix) ? true : false; }
+  bool hasUDSuffix() const { return getFlag(HasUDSuffix); }
+
+  /// Returns true if this token contains a universal character name.
+  bool hasUCN() const { return getFlag(HasUCN); }
+
+  /// Returns true if this token is formed by macro by stringizing or charizing
+  /// operator.
+  bool stringifiedInMacro() const { return getFlag(StringifiedInMacro); }
+
+  /// Returns true if the comma after this token was elided.
+  bool commaAfterElided() const { return getFlag(CommaAfterElided); }
+
+  /// Returns true if this token is an editor placeholder.
+  ///
+  /// Editor placeholders are produced by the code-completion engine and are
+  /// represented as characters between '<#' and '#>' in the source code. The
+  /// lexer uses identifier tokens to represent placeholders.
+  bool isEditorPlaceholder() const { return getFlag(IsEditorPlaceholder); }
 };
 
-/// PPConditionalInfo - Information about the conditional stack (#if directives)
+/// \brief Information about the conditional stack (\#if directives)
 /// currently active.
 struct PPConditionalInfo {
-  /// IfLoc - Location where the conditional started.
-  ///
+  /// \brief Location where the conditional started.
   SourceLocation IfLoc;
 
-  /// WasSkipping - True if this was contained in a skipping directive, e.g.
-  /// in a "#if 0" block.
+  /// \brief True if this was contained in a skipping directive, e.g.,
+  /// in a "\#if 0" block.
   bool WasSkipping;
 
-  /// FoundNonSkip - True if we have emitted tokens already, and now we're in
-  /// an #else block or something.  Only useful in Skipping blocks.
+  /// \brief True if we have emitted tokens already, and now we're in
+  /// an \#else block or something.  Only useful in Skipping blocks.
   bool FoundNonSkip;
 
-  /// FoundElse - True if we've seen a #else in this block.  If so,
-  /// #elif/#else directives are not allowed.
+  /// \brief True if we've seen a \#else in this block.  If so,
+  /// \#elif/\#else directives are not allowed.
   bool FoundElse;
 };
 
-}  // end namespace clang
+} // end namespace clang
 
 namespace llvm {
   template <>
   struct isPodLike<clang::Token> { static const bool value = true; };
-}  // end namespace llvm
+} // end namespace llvm
 
-#endif
+#endif // LLVM_CLANG_LEX_TOKEN_H

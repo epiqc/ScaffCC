@@ -1,19 +1,23 @@
 ; RUN: llc -mtriple x86_64-pc-linux-gnu < %s | FileCheck %s
 
+; CHECK:      .long   .Lline_table_start0          # DW_AT_stmt_list
+
 ; CHECK:      .section        .debug_line,"",@progbits
-; CHECK-NEXT: .Lsection_line:
+; CHECK-NEXT: .Lline_table_start0:
 
-; CHECK:      .long   .Lsection_line          # DW_AT_stmt_list
-
-define void @f() {
+define void @f() !dbg !0 {
 entry:
   ret void
 }
 
-!llvm.dbg.sp = !{!0}
+!llvm.dbg.cu = !{!2}
+!llvm.module.flags = !{!7}
+!5 = !{!0}
 
-!0 = metadata !{i32 589870, i32 0, metadata !1, metadata !"f", metadata !"f", metadata !"", metadata !1, i32 1, metadata !3, i1 false, i1 true, i32 0, i32 0, i32 0, i32 256, i1 true, void ()* @f, null, null} ; [ DW_TAG_subprogram ]
-!1 = metadata !{i32 589865, metadata !"test2.c", metadata !"/home/espindola/llvm", metadata !2} ; [ DW_TAG_file_type ]
-!2 = metadata !{i32 589841, i32 0, i32 12, metadata !"test2.c", metadata !"/home/espindola/llvm", metadata !"clang version 3.0 ()", i1 true, i1 true, metadata !"", i32 0} ; [ DW_TAG_compile_unit ]
-!3 = metadata !{i32 589845, metadata !1, metadata !"", metadata !1, i32 0, i64 0, i64 0, i32 0, i32 0, i32 0, metadata !4, i32 0, i32 0} ; [ DW_TAG_subroutine_type ]
-!4 = metadata !{null}
+!0 = distinct !DISubprogram(name: "f", line: 1, isLocal: false, isDefinition: true, virtualIndex: 6, flags: DIFlagPrototyped, isOptimized: true, unit: !2, scopeLine: 1, file: !6, scope: !1, type: !3)
+!1 = !DIFile(filename: "test2.c", directory: "/home/espindola/llvm")
+!2 = distinct !DICompileUnit(language: DW_LANG_C99, producer: "clang version 3.0 ()", isOptimized: true, emissionKind: FullDebug, file: !6, enums: !{}, retainedTypes: !{})
+!3 = !DISubroutineType(types: !4)
+!4 = !{null}
+!6 = !DIFile(filename: "test2.c", directory: "/home/espindola/llvm")
+!7 = !{i32 1, !"Debug Info Version", i32 3}

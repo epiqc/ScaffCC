@@ -1,4 +1,5 @@
-; RUN: opt < %s -loop-unswitch -stats -disable-output |& grep "1 loop-unswitch - Number of branches unswitched" | count 1
+; REQUIRES: asserts
+; RUN: opt < %s -loop-unswitch -stats -disable-output 2>&1 | grep "1 loop-unswitch - Number of branches unswitched" | count 1
 ; PR 3170
 define i32 @a(i32 %x, i32 %y) nounwind {
 entry:
@@ -14,7 +15,7 @@ bb:		; preds = %bb.nph, %bb3
 	br i1 %1, label %bb2, label %bb1
 
 bb1:		; preds = %bb
-	%2 = tail call i32 (...)* @b() nounwind		; <i32> [#uses=0]
+	%2 = tail call i32 (...) @b() nounwind		; <i32> [#uses=0]
 	br label %bb2
 
 bb2:		; preds = %bb, %bb1

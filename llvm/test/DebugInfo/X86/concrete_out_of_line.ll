@@ -1,5 +1,4 @@
-; RUN: llc -mtriple=x86_64-linux %s -o %t -filetype=obj
-; RUN: llvm-dwarfdump %t | FileCheck %s
+; RUN: llc -mtriple=x86_64-linux < %s -filetype=obj | llvm-dwarfdump -v -debug-info - | FileCheck %s
 
 ; test that we add DW_AT_inline even when we only have concrete out of line
 ; instances.
@@ -7,90 +6,130 @@
 ; first check that we have a TAG_subprogram at a given offset and it has
 ; AT_inline.
 
-; CHECK: 0x00000134:   DW_TAG_subprogram [18]
-; CHECK-NEXT:     DW_AT_MIPS_linkage_name
-; CHECK-NEXT:     DW_AT_specification
-; CHECK-NEXT:     DW_AT_inline
+; CHECK: DW_TAG_class_type
+; CHECK:   DW_TAG_subprogram
+; CHECK:   DW_TAG_subprogram
+; CHECK:     DW_AT_linkage_name {{.*}} "_ZN12nsAutoRefCntaSEi"
 
+; CHECK: DW_TAG_class_type
+; CHECK:   DW_TAG_subprogram
+; CHECK:     DW_AT_linkage_name {{.*}} "_ZN17nsAutoRefCnt7ReleaseEv"
+; CHECK:   DW_TAG_subprogram
+; CHECK:     DW_AT_name {{.*}} "~nsAutoRefCnt"
+
+; CHECK: DW_TAG_subprogram
+; CHECK-NEXT:     DW_AT_decl_line {{.*}}18
+; CHECK-NEXT:     DW_AT_{{.*}}linkage_name {{.*}}D2
+; CHECK-NEXT:     DW_AT_specification {{.*}} "~nsAutoRefCnt"
+; CHECK-NEXT:     DW_AT_inline
+; CHECK-NOT:      DW_AT
+; CHECK: DW_TAG
+; CHECK: DW_TAG_subprogram
+; CHECK-NEXT:     DW_AT_decl_line {{.*}}18
+; CHECK-NEXT:     DW_AT_{{.*}}linkage_name {{.*}}D1
+; CHECK-NEXT:     DW_AT_specification {{.*}} "~nsAutoRefCnt"
+; CHECK-NEXT:     DW_AT_inline
+; CHECK-NOT:     DW_AT
+; CHECK: [[D1_THIS_ABS:.*]]: DW_TAG_formal_parameter
+
+; CHECK: DW_TAG_subprogram
+; CHECK:     DW_AT_specification {{.*}} "_ZN17nsAutoRefCnt7ReleaseEv"
+; CHECK: DW_TAG_formal_parameter
+; CHECK-NOT: NULL
+; CHECK-NOT: DW_TAG
+; CHECK: DW_TAG_inlined_subroutine
+; CHECK-NEXT: DW_AT_abstract_origin {{.*}} "_ZN12nsAutoRefCntaSEi"
+; CHECK-NOT: NULL
+; CHECK-NOT: DW_TAG
+; CHECK: DW_TAG_inlined_subroutine
+; CHECK-NEXT: DW_AT_abstract_origin {{.*}} "_ZN17nsAutoRefCntD1Ev"
+; CHECK-NOT: NULL
+; CHECK-NOT: DW_TAG
+; CHECK: DW_TAG_inlined_subroutine
+; CHECK-NEXT: DW_AT_abstract_origin {{.*}} "_ZN17nsAutoRefCntD2Ev"
 
 ; and then that a TAG_subprogram refers to it with AT_abstract_origin.
 
-; CHECK: 0x00000184:   DW_TAG_subprogram [20]
-; CHECK-NEXT: DW_AT_abstract_origin [DW_FORM_ref4]    (cu + 0x0134 => {0x00000134})
+; CHECK: DW_TAG_subprogram
+; CHECK-NOT: DW_TAG
+; CHECK: DW_AT_abstract_origin {{.*}} "_ZN17nsAutoRefCntD1Ev"
+; CHECK: DW_TAG_formal_parameter
+; CHECK-NOT: DW_TAG
+; CHECK: DW_AT_abstract_origin {{.*}} {[[D1_THIS_ABS]]} "this"
+; CHECK: DW_TAG_inlined_subroutine
+; CHECK-NEXT: DW_AT_abstract_origin {{.*}} "_ZN17nsAutoRefCntD2Ev"
 
-define i32 @_ZN17nsAutoRefCnt7ReleaseEv() {
+source_filename = "test/DebugInfo/X86/concrete_out_of_line.ll"
+
+define i32 @_ZN17nsAutoRefCnt7ReleaseEv() !dbg !19 {
 entry:
-  store i32 1, i32* null, align 4, !dbg !50
-  tail call void @_Z8moz_freePv(i8* null) nounwind, !dbg !54
+  store i32 1, i32* null, align 4, !dbg !32
+  tail call void @_Z8moz_freePv(i8* null) #0, !dbg !40
   ret i32 0
 }
 
-define void @_ZN17nsAutoRefCntD1Ev() {
+define void @_ZN17nsAutoRefCntD1Ev() !dbg !46 {
 entry:
-  tail call void @_Z8moz_freePv(i8* null) nounwind, !dbg !57
+  tail call void @_Z8moz_freePv(i8* null) #0, !dbg !49
   ret void
 }
 
 declare void @_Z8moz_freePv(i8*)
 
-!llvm.dbg.cu = !{!0}
+attributes #0 = { nounwind }
 
-!0 = metadata !{i32 720913, i32 0, i32 4, metadata !"nsAutoRefCnt.cpp", metadata !"/Users/espindola/mozilla-central/obj-x86_64-apple-darwin11.2.0/netwerk/base/src", metadata !"clang version 3.1 ()", i1 true, i1 true, metadata !"", i32 0, metadata !1, metadata !1, metadata !3, metadata !47} ; [ DW_TAG_compile_unit ]
-!1 = metadata !{metadata !2}
-!2 = metadata !{i32 0}
-!3 = metadata !{metadata !4}
-!4 = metadata !{metadata !5, metadata !23, metadata !27, metadata !31}
-!5 = metadata !{i32 720942, i32 0, null, metadata !"Release", metadata !"Release", metadata !"_ZN17nsAutoRefCnt7ReleaseEv", metadata !6, i32 14, metadata !7, i1 false, i1 true, i32 0, i32 0, i32 0, i32 256, i1 true, i32* null, null, metadata !12, metadata !20} ; [ DW_TAG_subprogram ]
-!6 = metadata !{i32 720937, metadata !"nsAutoRefCnt.ii", metadata !"/Users/espindola/mozilla-central/obj-x86_64-apple-darwin11.2.0/netwerk/base/src", null} ; [ DW_TAG_file_type ]
-!7 = metadata !{i32 720917, i32 0, metadata !"", i32 0, i32 0, i64 0, i64 0, i32 0, i32 0, i32 0, metadata !8, i32 0, i32 0} ; [ DW_TAG_subroutine_type ]
-!8 = metadata !{metadata !9, metadata !10}
-!9 = metadata !{i32 720932, null, metadata !"int", null, i32 0, i64 32, i64 32, i64 0, i32 0, i32 5} ; [ DW_TAG_base_type ]
-!10 = metadata !{i32 720911, i32 0, metadata !"", i32 0, i32 0, i64 64, i64 64, i64 0, i32 64, metadata !11} ; [ DW_TAG_pointer_type ]
-!11 = metadata !{i32 720915, null, metadata !"nsAutoRefCnt", metadata !6, i32 10, i64 0, i64 0, i32 0, i32 4, i32 0, null, i32 0, i32 0} ; [ DW_TAG_structure_type ]
-!12 = metadata !{i32 720942, i32 0, metadata !13, metadata !"Release", metadata !"Release", metadata !"_ZN17nsAutoRefCnt7ReleaseEv", metadata !6, i32 11, metadata !7, i1 false, i1 false, i32 0, i32 0, null, i32 256, i1 true, null, null, i32 0, metadata !18} ; [ DW_TAG_subprogram ]
-!13 = metadata !{i32 720898, null, metadata !"nsAutoRefCnt", metadata !6, i32 10, i64 8, i64 8, i32 0, i32 0, null, metadata !14, i32 0, null, null} ; [ DW_TAG_class_type ]
-!14 = metadata !{metadata !12, metadata !15}
-!15 = metadata !{i32 720942, i32 0, metadata !13, metadata !"~nsAutoRefCnt", metadata !"~nsAutoRefCnt", metadata !"", metadata !6, i32 12, metadata !16, i1 false, i1 false, i32 0, i32 0, null, i32 256, i1 true, null, null, i32 0, metadata !18} ; [ DW_TAG_subprogram ]
-!16 = metadata !{i32 720917, i32 0, metadata !"", i32 0, i32 0, i64 0, i64 0, i32 0, i32 0, i32 0, metadata !17, i32 0, i32 0} ; [ DW_TAG_subroutine_type ]
-!17 = metadata !{null, metadata !10}
-!18 = metadata !{metadata !19}
-!19 = metadata !{i32 720932}                      ; [ DW_TAG_base_type ]
-!20 = metadata !{metadata !21}
-!21 = metadata !{metadata !22}
-!22 = metadata !{i32 721153, metadata !5, metadata !"this", metadata !6, i32 16777230, metadata !10, i32 64, i32 0} ; [ DW_TAG_arg_variable ]
-!23 = metadata !{i32 720942, i32 0, null, metadata !"~nsAutoRefCnt", metadata !"~nsAutoRefCnt", metadata !"_ZN17nsAutoRefCntD1Ev", metadata !6, i32 18, metadata !16, i1 false, i1 true, i32 0, i32 0, i32 0, i32 256, i1 true, i32* null, null, metadata !15, metadata !24} ; [ DW_TAG_subprogram ]
-!24 = metadata !{metadata !25}
-!25 = metadata !{metadata !26}
-!26 = metadata !{i32 721153, metadata !23, metadata !"this", metadata !6, i32 16777234, metadata !10, i32 64, i32 0} ; [ DW_TAG_arg_variable ]
-!27 = metadata !{i32 720942, i32 0, null, metadata !"~nsAutoRefCnt", metadata !"~nsAutoRefCnt", metadata !"_ZN17nsAutoRefCntD2Ev", metadata !6, i32 18, metadata !16, i1 false, i1 true, i32 0, i32 0, i32 0, i32 256, i1 true, i32* null, null, metadata !15, metadata !28} ; [ DW_TAG_subprogram ]
-!28 = metadata !{metadata !29}
-!29 = metadata !{metadata !30}
-!30 = metadata !{i32 721153, metadata !27, metadata !"this", metadata !6, i32 16777234, metadata !10, i32 64, i32 0} ; [ DW_TAG_arg_variable ]
-!31 = metadata !{i32 720942, i32 0, null, metadata !"operator=", metadata !"operator=", metadata !"_ZN12nsAutoRefCntaSEi", metadata !6, i32 4, metadata !32, i1 false, i1 true, i32 0, i32 0, i32 0, i32 256, i1 true, null, null, metadata !36, metadata !43} ; [ DW_TAG_subprogram ]
-!32 = metadata !{i32 720917, i32 0, metadata !"", i32 0, i32 0, i64 0, i64 0, i32 0, i32 0, i32 0, metadata !33, i32 0, i32 0} ; [ DW_TAG_subroutine_type ]
-!33 = metadata !{metadata !9, metadata !34, metadata !9}
-!34 = metadata !{i32 720911, i32 0, metadata !"", i32 0, i32 0, i64 64, i64 64, i64 0, i32 64, metadata !35} ; [ DW_TAG_pointer_type ]
-!35 = metadata !{i32 720915, null, metadata !"nsAutoRefCnt", metadata !6, i32 2, i64 0, i64 0, i32 0, i32 4, i32 0, null, i32 0, i32 0} ; [ DW_TAG_structure_type ]
-!36 = metadata !{i32 720942, i32 0, metadata !37, metadata !"operator=", metadata !"operator=", metadata !"_ZN12nsAutoRefCntaSEi", metadata !6, i32 4, metadata !32, i1 false, i1 false, i32 0, i32 0, null, i32 256, i1 true, null, null, i32 0, metadata !18} ; [ DW_TAG_subprogram ]
-!37 = metadata !{i32 720898, null, metadata !"nsAutoRefCnt", metadata !6, i32 2, i64 32, i64 32, i32 0, i32 0, null, metadata !38, i32 0, null, null} ; [ DW_TAG_class_type ]
-!38 = metadata !{metadata !39, metadata !40, metadata !36}
-!39 = metadata !{i32 720909, metadata !37, metadata !"mValue", metadata !6, i32 7, i64 32, i64 32, i64 0, i32 0, metadata !9} ; [ DW_TAG_member ]
-!40 = metadata !{i32 720942, i32 0, metadata !37, metadata !"nsAutoRefCnt", metadata !"nsAutoRefCnt", metadata !"", metadata !6, i32 3, metadata !41, i1 false, i1 false, i32 0, i32 0, null, i32 256, i1 true, null, null, i32 0, metadata !18} ; [ DW_TAG_subprogram ]
-!41 = metadata !{i32 720917, i32 0, metadata !"", i32 0, i32 0, i64 0, i64 0, i32 0, i32 0, i32 0, metadata !42, i32 0, i32 0} ; [ DW_TAG_subroutine_type ]
-!42 = metadata !{null, metadata !34}
-!43 = metadata !{metadata !44}
-!44 = metadata !{metadata !45, metadata !46}
-!45 = metadata !{i32 721153, metadata !31, metadata !"this", metadata !6, i32 16777220, metadata !34, i32 64, i32 0} ; [ DW_TAG_arg_variable ]
-!46 = metadata !{i32 721153, metadata !31, metadata !"aValue", metadata !6, i32 33554436, metadata !9, i32 0, i32 0} ; [ DW_TAG_arg_variable ]
-!47 = metadata !{metadata !48}
-!48 = metadata !{metadata !49}
-!49 = metadata !{i32 720948, i32 0, null, metadata !"mRefCnt", metadata !"mRefCnt", metadata !"", metadata !6, i32 9, metadata !37, i32 0, i32 1, i32* null} ; [ DW_TAG_variable ]
-!50 = metadata !{i32 5, i32 5, metadata !51, metadata !52}
-!51 = metadata !{i32 720907, metadata !31, i32 4, i32 29, metadata !6, i32 2} ; [ DW_TAG_lexical_block ]
-!52 = metadata !{i32 15, i32 0, metadata !53, null}
-!53 = metadata !{i32 720907, metadata !5, i32 14, i32 34, metadata !6, i32 0} ; [ DW_TAG_lexical_block ]
-!54 = metadata !{i32 19, i32 3, metadata !55, metadata !56}
-!55 = metadata !{i32 720907, metadata !27, i32 18, i32 41, metadata !6, i32 1} ; [ DW_TAG_lexical_block ]
-!56 = metadata !{i32 18, i32 41, metadata !23, metadata !52}
-!57 = metadata !{i32 19, i32 3, metadata !55, metadata !58}
-!58 = metadata !{i32 18, i32 41, metadata !23, null}
+!llvm.dbg.cu = !{!0}
+!llvm.module.flags = !{!18}
+
+!0 = distinct !DICompileUnit(language: DW_LANG_C_plus_plus, file: !1, producer: "clang version 3.1 ()", isOptimized: true, runtimeVersion: 0, emissionKind: FullDebug, enums: !2, retainedTypes: !2, globals: !3, imports: !2)
+!1 = !DIFile(filename: "nsAutoRefCnt.ii", directory: "/Users/espindola/mozilla-central/obj-x86_64-apple-darwin11.2.0/netwerk/base/src")
+!2 = !{}
+!3 = !{!4}
+!4 = !DIGlobalVariableExpression(var: !5, expr: !DIExpression())
+!5 = !DIGlobalVariable(name: "mRefCnt", scope: null, file: !1, line: 9, type: !6, isLocal: false, isDefinition: true)
+!6 = !DICompositeType(tag: DW_TAG_class_type, name: "nsAutoRefCnt", file: !1, line: 2, size: 32, align: 32, elements: !7)
+!7 = !{!8, !10, !15}
+!8 = !DIDerivedType(tag: DW_TAG_member, name: "mValue", scope: !6, file: !1, line: 7, baseType: !9, size: 32, align: 32)
+!9 = !DIBasicType(name: "int", size: 32, align: 32, encoding: DW_ATE_signed)
+!10 = !DISubprogram(name: "nsAutoRefCnt", scope: !6, file: !1, line: 3, type: !11, isLocal: false, isDefinition: false, scopeLine: 3, virtualIndex: 6, flags: DIFlagPrototyped, isOptimized: true, variables: !2)
+!11 = !DISubroutineType(types: !12)
+!12 = !{null, !13}
+!13 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !14, size: 64, align: 64, flags: DIFlagArtificial)
+!14 = !DICompositeType(tag: DW_TAG_structure_type, name: "nsAutoRefCnt", file: !1, line: 2, flags: DIFlagFwdDecl)
+!15 = !DISubprogram(name: "operator=", linkageName: "_ZN12nsAutoRefCntaSEi", scope: !6, file: !1, line: 4, type: !16, isLocal: false, isDefinition: false, scopeLine: 4, virtualIndex: 6, flags: DIFlagPrototyped, isOptimized: true, variables: !2)
+!16 = !DISubroutineType(types: !17)
+!17 = !{!9, !13, !9}
+!18 = !{i32 1, !"Debug Info Version", i32 3}
+!19 = distinct !DISubprogram(name: "Release", linkageName: "_ZN17nsAutoRefCnt7ReleaseEv", scope: null, file: !1, line: 14, type: !20, isLocal: false, isDefinition: true, scopeLine: 14, virtualIndex: 6, flags: DIFlagPrototyped, isOptimized: true, unit: !0, declaration: !24, variables: !30)
+!20 = !DISubroutineType(types: !21)
+!21 = !{!9, !22}
+!22 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !23, size: 64, align: 64, flags: DIFlagArtificial)
+!23 = !DICompositeType(tag: DW_TAG_structure_type, name: "nsAutoRefCnt", file: !1, line: 10, flags: DIFlagFwdDecl)
+!24 = !DISubprogram(name: "Release", linkageName: "_ZN17nsAutoRefCnt7ReleaseEv", scope: !25, file: !1, line: 11, type: !20, isLocal: false, isDefinition: false, scopeLine: 11, virtualIndex: 6, flags: DIFlagPrototyped, isOptimized: true, variables: !2)
+!25 = !DICompositeType(tag: DW_TAG_class_type, name: "nsAutoRefCnt", file: !1, line: 10, size: 8, align: 8, elements: !26)
+!26 = !{!24, !27}
+!27 = !DISubprogram(name: "~nsAutoRefCnt", scope: !25, file: !1, line: 12, type: !28, isLocal: false, isDefinition: false, scopeLine: 12, virtualIndex: 6, flags: DIFlagPrototyped, isOptimized: true, variables: !2)
+!28 = !DISubroutineType(types: !29)
+!29 = !{null, !22}
+!30 = !{!31}
+!31 = !DILocalVariable(name: "this", arg: 1, scope: !19, file: !1, line: 14, type: !22, flags: DIFlagArtificial)
+!32 = !DILocation(line: 5, column: 5, scope: !33, inlinedAt: !38)
+!33 = distinct !DILexicalBlock(scope: !34, file: !1, line: 4, column: 29)
+!34 = distinct !DISubprogram(name: "operator=", linkageName: "_ZN12nsAutoRefCntaSEi", scope: null, file: !1, line: 4, type: !16, isLocal: false, isDefinition: true, scopeLine: 4, virtualIndex: 6, flags: DIFlagPrototyped, isOptimized: true, unit: !0, declaration: !15, variables: !35)
+!35 = !{!36, !37}
+!36 = !DILocalVariable(name: "this", arg: 1, scope: !34, file: !1, line: 4, type: !13, flags: DIFlagArtificial)
+!37 = !DILocalVariable(name: "aValue", arg: 2, scope: !34, file: !1, line: 4, type: !9)
+!38 = !DILocation(line: 15, scope: !39)
+!39 = distinct !DILexicalBlock(scope: !19, file: !1, line: 14, column: 34)
+!40 = !DILocation(line: 19, column: 3, scope: !41, inlinedAt: !45)
+!41 = distinct !DILexicalBlock(scope: !42, file: !1, line: 18, column: 41)
+!42 = distinct !DISubprogram(name: "~nsAutoRefCnt", linkageName: "_ZN17nsAutoRefCntD2Ev", scope: null, file: !1, line: 18, type: !28, isLocal: false, isDefinition: true, scopeLine: 18, virtualIndex: 6, flags: DIFlagPrototyped, isOptimized: true, unit: !0, declaration: !27, variables: !43)
+!43 = !{!44}
+!44 = !DILocalVariable(name: "this", arg: 1, scope: !42, file: !1, line: 18, type: !22, flags: DIFlagArtificial)
+!45 = !DILocation(line: 18, column: 41, scope: !46, inlinedAt: !38)
+!46 = distinct !DISubprogram(name: "~nsAutoRefCnt", linkageName: "_ZN17nsAutoRefCntD1Ev", scope: null, file: !1, line: 18, type: !28, isLocal: false, isDefinition: true, scopeLine: 18, virtualIndex: 6, flags: DIFlagPrototyped, isOptimized: true, unit: !0, declaration: !27, variables: !47)
+!47 = !{!48}
+!48 = !DILocalVariable(name: "this", arg: 1, scope: !46, file: !1, line: 18, type: !22, flags: DIFlagArtificial)
+!49 = !DILocation(line: 19, column: 3, scope: !41, inlinedAt: !50)
+!50 = !DILocation(line: 18, column: 41, scope: !46)
+

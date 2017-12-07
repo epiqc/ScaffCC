@@ -31,7 +31,7 @@ void rdar11040133() {
 }
 
 // RUN: rm -f %t
-// RUN: %clang -Wall -fsyntax-only %s --serialize-diagnostics %t.diag > /dev/null 2>&1 || true
+// RUN: not %clang -Wall -fsyntax-only %s --serialize-diagnostics %t.diag > /dev/null 2>&1
 // RUN: c-index-test -read-diagnostics %t.diag > %t 2>&1
 // RUN: FileCheck --input-file=%t %s
 
@@ -55,7 +55,6 @@ void rdar11040133() {
 // CHECK: Range: {{.*[/\\]}}serialized-diags.c:22:3 {{.*[/\\]}}serialized-diags.c:22:6
 // CHECK: Range: {{.*[/\\]}}serialized-diags.c:22:13 {{.*[/\\]}}serialized-diags.c:22:18
 // CHECK: +-{{.*[/\\]}}serialized-diags.c:20:15: note: expanded from macro 'false' []
-// CHECK: +-Range: {{.*[/\\]}}serialized-diags.c:22:3 {{.*[/\\]}}serialized-diags.c:22:6
 // CHECK: +-Range: {{.*[/\\]}}serialized-diags.c:20:15 {{.*[/\\]}}serialized-diags.c:20:16
 // CHECK: +-{{.*[/\\]}}serialized-diags.c:19:1: note: 'taz' declared here []
 // CHECK: {{.*[/\\]}}serialized-diags.h:5:7: warning: incompatible integer to pointer conversion initializing 'char *' with an expression of type 'int' [-Wint-conversion]

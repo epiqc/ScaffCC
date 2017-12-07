@@ -11,27 +11,43 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_SYSTEM_HOST_H
-#define LLVM_SYSTEM_HOST_H
+#ifndef LLVM_SUPPORT_HOST_H
+#define LLVM_SUPPORT_HOST_H
 
 #include "llvm/ADT/StringMap.h"
+
+#if defined(__linux__) || defined(__GNU__) || defined(__HAIKU__)
+#include <endian.h>
+#elif defined(_AIX)
+#include <sys/machine.h>
+#elif defined(__sun)
+/* Solaris provides _BIG_ENDIAN/_LITTLE_ENDIAN selector in sys/types.h */
+#include <sys/types.h>
+#define BIG_ENDIAN 4321
+#define LITTLE_ENDIAN 1234
+#if defined(_BIG_ENDIAN)
+#define BYTE_ORDER BIG_ENDIAN
+#else
+#define BYTE_ORDER LITTLE_ENDIAN
+#endif
+#else
+#if !defined(BYTE_ORDER) && !defined(LLVM_ON_WIN32)
+#include <machine/endian.h>
+#endif
+#endif
+
 #include <string>
 
 namespace llvm {
 namespace sys {
 
-  inline bool isLittleEndianHost() {
-    union {
-      int i;
-      char c;
-    };
-    i = 1;
-    return c;
-  }
+#if defined(BYTE_ORDER) && defined(BIG_ENDIAN) && BYTE_ORDER == BIG_ENDIAN
+constexpr bool IsBigEndianHost = true;
+#else
+constexpr bool IsBigEndianHost = false;
+#endif
 
-  inline bool isBigEndianHost() {
-    return !isLittleEndianHost();
-  }
+  static const bool IsLittleEndianHost = !IsBigEndianHost;
 
   /// getDefaultTargetTriple() - Return the default target triple the compiler
   /// has been configured to produce code for.
@@ -42,12 +58,16 @@ namespace sys {
   ///   CPU_TYPE-VENDOR-KERNEL-OPERATING_SYSTEM
   std::string getDefaultTargetTriple();
 
+  /// getProcessTriple() - Return an appropriate target triple for generating
+  /// code to be loaded into the current process, e.g. when using the JIT.
+  std::string getProcessTriple();
+
   /// getHostCPUName - Get the LLVM name for the host CPU. The particular format
   /// of the name is target dependent, and suitable for passing as -mcpu to the
   /// target which matches the host.
   ///
   /// \return - The host CPU name, or empty if the CPU could not be determined.
-  std::string getHostCPUName();
+  StringRef getHostCPUName();
 
   /// getHostCPUFeatures - Get the LLVM names for the host CPU features.
   /// The particular format of the names are target dependent, and suitable for
@@ -60,6 +80,19 @@ namespace sys {
   ///
   /// \return - True on success.
   bool getHostCPUFeatures(StringMap<bool> &Features);
+
+  /// Get the number of physical cores (as opposed to logical cores returned
+  /// from thread::hardware_concurrency(), which includes hyperthreads).
+  /// Returns -1 if unknown for the current host system.
+  int getHostNumPhysicalCores();
+
+  namespace detail {
+  /// Helper functions to extract HostCPUName from /proc/cpuinfo on linux.
+  StringRef getHostCPUNameForPowerPC(const StringRef &ProcCpuinfoContent);
+  StringRef getHostCPUNameForARM(const StringRef &ProcCpuinfoContent);
+  StringRef getHostCPUNameForS390x(const StringRef &ProcCpuinfoContent);
+  StringRef getHostCPUNameForBPF();
+  }
 }
 }
 

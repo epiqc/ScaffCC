@@ -12,24 +12,17 @@
 //===----------------------------------------------------------------------===//
 
 #include "CIndexer.h"
-
-#include "clang/AST/Decl.h"
-#include "clang/AST/DeclVisitor.h"
-#include "clang/AST/StmtVisitor.h"
-#include "clang/Basic/FileManager.h"
-#include "clang/Basic/SourceManager.h"
+#include "CXString.h"
+#include "clang/Basic/LLVM.h"
 #include "clang/Basic/Version.h"
-#include "clang/Sema/CodeCompleteConsumer.h"
-#include "llvm/ADT/StringExtras.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallString.h"
 #include "llvm/Config/llvm-config.h"
-#include "llvm/Support/Compiler.h"
-#include "llvm/Support/MemoryBuffer.h"
-#include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/MD5.h"
+#include "llvm/Support/MutexGuard.h"
+#include "llvm/Support/Path.h"
 #include "llvm/Support/Program.h"
-
 #include <cstdio>
-#include <vector>
-#include <sstream>
 
 #ifdef __CYGWIN__
 #include <cygwin/version.h>
@@ -45,11 +38,13 @@
 
 using namespace clang;
 
-std::string CIndexer::getClangResourcesPath() {
+const std::string &CIndexer::getClangResourcesPath() {
   // Did we already compute the path?
   if (!ResourcesPath.empty())
-    return ResourcesPath.str();
-  
+    return ResourcesPath;
+
+  SmallString<128> LibClangPath;
+
   // Find the location where this library lives (libclang.dylib).
 #ifdef LLVM_ON_WIN32
   MEMORY_BASIC_INFORMATION mbi;
@@ -68,85 +63,91 @@ std::string CIndexer::getClangResourcesPath() {
 #endif
 #endif
 
-  llvm::sys::Path LibClangPath(path);
-  LibClangPath.eraseComponent();
+  LibClangPath += llvm::sys::path::parent_path(path);
 #else
   // This silly cast below avoids a C++ warning.
   Dl_info info;
   if (dladdr((void *)(uintptr_t)clang_createTranslationUnit, &info) == 0)
     llvm_unreachable("Call to dladdr() failed");
-  
-  llvm::sys::Path LibClangPath(info.dli_fname);
-  
+
   // We now have the CIndex directory, locate clang relative to it.
-  LibClangPath.eraseComponent();
+  LibClangPath += llvm::sys::path::parent_path(info.dli_fname);
 #endif
-  
-  LibClangPath.appendComponent("clang");
-  LibClangPath.appendComponent(CLANG_VERSION_STRING);
+
+  llvm::sys::path::append(LibClangPath, "clang", CLANG_VERSION_STRING);
 
   // Cache our result.
-  ResourcesPath = LibClangPath;
-  return LibClangPath.str();
+  ResourcesPath = LibClangPath.str();
+  return ResourcesPath;
 }
 
-static llvm::sys::Path GetTemporaryPath() {
-  // FIXME: This is lame; sys::Path should provide this function (in particular,
-  // it should know how to find the temporary files dir).
-  std::string Error;
-  const char *TmpDir = ::getenv("TMPDIR");
-  if (!TmpDir)
-    TmpDir = ::getenv("TEMP");
-  if (!TmpDir)
-    TmpDir = ::getenv("TMP");
-  if (!TmpDir)
-    TmpDir = "/tmp";
-  llvm::sys::Path P(TmpDir);
-  P.appendComponent("remap");
-  if (P.makeUnique(false, &Error))
-    return llvm::sys::Path("");
-
-  // FIXME: Grumble, makeUnique sometimes leaves the file around!?  PR3837.
-  P.eraseFromDisk(false, 0);
-
-  return P;
+StringRef CIndexer::getClangToolchainPath() {
+  if (!ToolchainPath.empty())
+    return ToolchainPath;
+  StringRef ResourcePath = getClangResourcesPath();
+  ToolchainPath = llvm::sys::path::parent_path(
+      llvm::sys::path::parent_path(llvm::sys::path::parent_path(ResourcePath)));
+  return ToolchainPath;
 }
 
-bool clang::RemapFiles(unsigned num_unsaved_files,
-                       struct CXUnsavedFile *unsaved_files,
-                       std::vector<std::string> &RemapArgs,
-                       std::vector<llvm::sys::Path> &TemporaryFiles) {
-  for (unsigned i = 0; i != num_unsaved_files; ++i) {
-    // Write the contents of this unsaved file into the temporary file.
-    llvm::sys::Path SavedFile(GetTemporaryPath());
-    if (SavedFile.empty())
-      return true;
+LibclangInvocationReporter::LibclangInvocationReporter(
+    CIndexer &Idx, OperationKind Op, unsigned ParseOptions,
+    llvm::ArrayRef<const char *> Args,
+    llvm::ArrayRef<CXUnsavedFile> UnsavedFiles) {
+  StringRef Path = Idx.getInvocationEmissionPath();
+  if (Path.empty())
+    return;
 
-    std::string ErrorInfo;
-    llvm::raw_fd_ostream OS(SavedFile.c_str(), ErrorInfo,
-                            llvm::raw_fd_ostream::F_Binary);
-    if (!ErrorInfo.empty())
-      return true;
-    
-    OS.write(unsaved_files[i].Contents, unsaved_files[i].Length);
-    OS.close();
-    if (OS.has_error()) {
-      SavedFile.eraseFromDisk();
-      OS.clear_error();
-      return true;
-    }
-    
-    // Remap the file.
-    std::string RemapArg = unsaved_files[i].Filename;
-    RemapArg += ';';
-    RemapArg += SavedFile.str();
-    RemapArgs.push_back("-Xclang");
-    RemapArgs.push_back("-remap-file");
-    RemapArgs.push_back("-Xclang");
-    RemapArgs.push_back(RemapArg);
-    TemporaryFiles.push_back(SavedFile);
+  // Create a temporary file for the invocation log.
+  SmallString<256> TempPath;
+  TempPath = Path;
+  llvm::sys::path::append(TempPath, "libclang-%%%%%%%%%%%%");
+  int FD;
+  if (llvm::sys::fs::createUniqueFile(TempPath, FD, TempPath))
+    return;
+  File = std::string(TempPath.begin(), TempPath.end());
+  llvm::raw_fd_ostream OS(FD, /*ShouldClose=*/true);
+
+  // Write out the information about the invocation to it.
+  auto WriteStringKey = [&OS](StringRef Key, StringRef Value) {
+    OS << R"(")" << Key << R"(":")";
+    OS << Value << '"';
+  };
+  OS << '{';
+  WriteStringKey("toolchain", Idx.getClangToolchainPath());
+  OS << ',';
+  WriteStringKey("libclang.operation",
+                 Op == OperationKind::ParseOperation ? "parse" : "complete");
+  OS << ',';
+  OS << R"("libclang.opts":)" << ParseOptions;
+  OS << ',';
+  OS << R"("args":[)";
+  for (const auto &I : llvm::enumerate(Args)) {
+    if (I.index())
+      OS << ',';
+    OS << '"' << I.value() << '"';
   }
-  
-  return false;
+  if (!UnsavedFiles.empty()) {
+    OS << R"(],"unsaved_file_hashes":[)";
+    for (const auto &UF : llvm::enumerate(UnsavedFiles)) {
+      if (UF.index())
+        OS << ',';
+      OS << '{';
+      WriteStringKey("name", UF.value().Filename);
+      OS << ',';
+      llvm::MD5 Hash;
+      Hash.update(getContents(UF.value()));
+      llvm::MD5::MD5Result Result;
+      Hash.final(Result);
+      SmallString<32> Digest = Result.digest();
+      WriteStringKey("md5", Digest);
+      OS << '}';
+    }
+  }
+  OS << "]}";
 }
 
+LibclangInvocationReporter::~LibclangInvocationReporter() {
+  if (!File.empty())
+    llvm::sys::fs::remove(File);
+}

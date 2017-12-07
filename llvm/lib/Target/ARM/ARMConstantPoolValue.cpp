@@ -1,4 +1,4 @@
-//===-- ARMConstantPoolValue.cpp - ARM constantpool value -----------------===//
+//===- ARMConstantPoolValue.cpp - ARM constantpool value ------------------===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -13,13 +13,16 @@
 
 #include "ARMConstantPoolValue.h"
 #include "llvm/ADT/FoldingSet.h"
-#include "llvm/Constant.h"
-#include "llvm/Constants.h"
-#include "llvm/GlobalValue.h"
-#include "llvm/Type.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
+#include "llvm/IR/Constant.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/GlobalValue.h"
+#include "llvm/IR/Type.h"
+#include "llvm/Support/Casting.h"
+#include "llvm/Support/Compiler.h"
+#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
-#include <cstdlib>
+
 using namespace llvm;
 
 //===----------------------------------------------------------------------===//
@@ -44,18 +47,26 @@ ARMConstantPoolValue::ARMConstantPoolValue(LLVMContext &C, unsigned id,
     LabelId(id), Kind(kind), PCAdjust(PCAdj), Modifier(modifier),
     AddCurrentAddress(addCurrentAddress) {}
 
-ARMConstantPoolValue::~ARMConstantPoolValue() {}
+ARMConstantPoolValue::~ARMConstantPoolValue() = default;
 
-const char *ARMConstantPoolValue::getModifierText() const {
+StringRef ARMConstantPoolValue::getModifierText() const {
   switch (Modifier) {
     // FIXME: Are these case sensitive? It'd be nice to lower-case all the
     // strings if that's legal.
-  case ARMCP::no_modifier: return "none";
-  case ARMCP::TLSGD:       return "tlsgd";
-  case ARMCP::GOT:         return "GOT";
-  case ARMCP::GOTOFF:      return "GOTOFF";
-  case ARMCP::GOTTPOFF:    return "gottpoff";
-  case ARMCP::TPOFF:       return "tpoff";
+  case ARMCP::no_modifier:
+    return "none";
+  case ARMCP::TLSGD:
+    return "tlsgd";
+  case ARMCP::GOT_PREL:
+    return "GOT_PREL";
+  case ARMCP::GOTTPOFF:
+    return "gottpoff";
+  case ARMCP::TPOFF:
+    return "tpoff";
+  case ARMCP::SBREL:
+    return "SBREL";
+  case ARMCP::SECREL:
+    return "secrel32";
   }
   llvm_unreachable("Unknown modifier!");
 }
@@ -75,9 +86,9 @@ bool
 ARMConstantPoolValue::hasSameValue(ARMConstantPoolValue *ACPV) {
   if (ACPV->Kind == Kind &&
       ACPV->PCAdjust == PCAdjust &&
-      ACPV->Modifier == Modifier) {
-    if (ACPV->LabelId == LabelId)
-      return true;
+      ACPV->Modifier == Modifier &&
+      ACPV->LabelId == LabelId &&
+      ACPV->AddCurrentAddress == AddCurrentAddress) {
     // Two PC relative constpool entries containing the same GV address or
     // external symbols. FIXME: What about blockaddress?
     if (Kind == ARMCP::CPValue || Kind == ARMCP::CPExtSymbol)
@@ -86,9 +97,11 @@ ARMConstantPoolValue::hasSameValue(ARMConstantPoolValue *ACPV) {
   return false;
 }
 
-void ARMConstantPoolValue::dump() const {
+#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
+LLVM_DUMP_METHOD void ARMConstantPoolValue::dump() const {
   errs() << "  " << *this;
 }
+#endif
 
 void ARMConstantPoolValue::print(raw_ostream &O) const {
   if (Modifier) O << "(" << getModifierText() << ")";
@@ -123,10 +136,23 @@ ARMConstantPoolConstant::ARMConstantPoolConstant(const Constant *C,
                          AddCurrentAddress),
     CVal(C) {}
 
+ARMConstantPoolConstant::ARMConstantPoolConstant(const GlobalVariable *GV,
+                                                 const Constant *C)
+    : ARMConstantPoolValue((Type *)C->getType(), 0, ARMCP::CPPromotedGlobal, 0,
+                           ARMCP::no_modifier, false), CVal(C) {
+  GVars.insert(GV);
+}
+
 ARMConstantPoolConstant *
 ARMConstantPoolConstant::Create(const Constant *C, unsigned ID) {
   return new ARMConstantPoolConstant(C, ID, ARMCP::CPValue, 0,
                                      ARMCP::no_modifier, false);
+}
+
+ARMConstantPoolConstant *
+ARMConstantPoolConstant::Create(const GlobalVariable *GVar,
+                                const Constant *Initializer) {
+  return new ARMConstantPoolConstant(GVar, Initializer);
 }
 
 ARMConstantPoolConstant *
@@ -163,21 +189,15 @@ const BlockAddress *ARMConstantPoolConstant::getBlockAddress() const {
 
 int ARMConstantPoolConstant::getExistingMachineCPValue(MachineConstantPool *CP,
                                                        unsigned Alignment) {
-  unsigned AlignMask = Alignment - 1;
-  const std::vector<MachineConstantPoolEntry> Constants = CP->getConstants();
-  for (unsigned i = 0, e = Constants.size(); i != e; ++i) {
-    if (Constants[i].isMachineConstantPoolEntry() &&
-        (Constants[i].getAlignment() & AlignMask) == 0) {
-      ARMConstantPoolValue *CPV =
-        (ARMConstantPoolValue *)Constants[i].Val.MachineCPVal;
-      ARMConstantPoolConstant *APC = dyn_cast<ARMConstantPoolConstant>(CPV);
-      if (!APC) continue;
-      if (APC->CVal == CVal && equals(APC))
-        return i;
-    }
+  int index =
+    getExistingMachineCPValueImpl<ARMConstantPoolConstant>(CP, Alignment);
+  if (index != -1) {
+    auto *CPV = static_cast<ARMConstantPoolValue*>(
+        CP->getConstants()[index].Val.MachineCPVal);
+    auto *Constant = cast<ARMConstantPoolConstant>(CPV);
+    Constant->GVars.insert(GVars.begin(), GVars.end());
   }
-
-  return -1;
+  return index;
 }
 
 bool ARMConstantPoolConstant::hasSameValue(ARMConstantPoolValue *ACPV) {
@@ -187,6 +207,8 @@ bool ARMConstantPoolConstant::hasSameValue(ARMConstantPoolValue *ACPV) {
 
 void ARMConstantPoolConstant::addSelectionDAGCSEId(FoldingSetNodeID &ID) {
   ID.AddPointer(CVal);
+  for (const auto *GV : GVars)
+    ID.AddPointer(GV);
   ARMConstantPoolValue::addSelectionDAGCSEId(ID);
 }
 
@@ -199,61 +221,32 @@ void ARMConstantPoolConstant::print(raw_ostream &O) const {
 // ARMConstantPoolSymbol
 //===----------------------------------------------------------------------===//
 
-ARMConstantPoolSymbol::ARMConstantPoolSymbol(LLVMContext &C, const char *s,
-                                             unsigned id,
-                                             unsigned char PCAdj,
+ARMConstantPoolSymbol::ARMConstantPoolSymbol(LLVMContext &C, StringRef s,
+                                             unsigned id, unsigned char PCAdj,
                                              ARMCP::ARMCPModifier Modifier,
                                              bool AddCurrentAddress)
-  : ARMConstantPoolValue(C, id, ARMCP::CPExtSymbol, PCAdj, Modifier,
-                         AddCurrentAddress),
-    S(strdup(s)) {}
+    : ARMConstantPoolValue(C, id, ARMCP::CPExtSymbol, PCAdj, Modifier,
+                           AddCurrentAddress),
+      S(s) {}
 
-ARMConstantPoolSymbol::~ARMConstantPoolSymbol() {
-  free((void*)S);
-}
-
-ARMConstantPoolSymbol *
-ARMConstantPoolSymbol::Create(LLVMContext &C, const char *s,
-                              unsigned ID, unsigned char PCAdj) {
+ARMConstantPoolSymbol *ARMConstantPoolSymbol::Create(LLVMContext &C,
+                                                     StringRef s, unsigned ID,
+                                                     unsigned char PCAdj) {
   return new ARMConstantPoolSymbol(C, s, ID, PCAdj, ARMCP::no_modifier, false);
-}
-
-static bool CPV_streq(const char *S1, const char *S2) {
-  if (S1 == S2)
-    return true;
-  if (S1 && S2 && strcmp(S1, S2) == 0)
-    return true;
-  return false;
 }
 
 int ARMConstantPoolSymbol::getExistingMachineCPValue(MachineConstantPool *CP,
                                                      unsigned Alignment) {
-  unsigned AlignMask = Alignment - 1;
-  const std::vector<MachineConstantPoolEntry> Constants = CP->getConstants();
-  for (unsigned i = 0, e = Constants.size(); i != e; ++i) {
-    if (Constants[i].isMachineConstantPoolEntry() &&
-        (Constants[i].getAlignment() & AlignMask) == 0) {
-      ARMConstantPoolValue *CPV =
-        (ARMConstantPoolValue *)Constants[i].Val.MachineCPVal;
-      ARMConstantPoolSymbol *APS = dyn_cast<ARMConstantPoolSymbol>(CPV);
-      if (!APS) continue;
-
-      if (CPV_streq(APS->S, S) && equals(APS))
-        return i;
-    }
-  }
-
-  return -1;
+  return getExistingMachineCPValueImpl<ARMConstantPoolSymbol>(CP, Alignment);
 }
 
 bool ARMConstantPoolSymbol::hasSameValue(ARMConstantPoolValue *ACPV) {
   const ARMConstantPoolSymbol *ACPS = dyn_cast<ARMConstantPoolSymbol>(ACPV);
-  return ACPS && CPV_streq(ACPS->S, S) &&
-    ARMConstantPoolValue::hasSameValue(ACPV);
+  return ACPS && ACPS->S == S && ARMConstantPoolValue::hasSameValue(ACPV);
 }
 
 void ARMConstantPoolSymbol::addSelectionDAGCSEId(FoldingSetNodeID &ID) {
-  ID.AddPointer(S);
+  ID.AddString(S);
   ARMConstantPoolValue::addSelectionDAGCSEId(ID);
 }
 
@@ -284,22 +277,7 @@ ARMConstantPoolMBB *ARMConstantPoolMBB::Create(LLVMContext &C,
 
 int ARMConstantPoolMBB::getExistingMachineCPValue(MachineConstantPool *CP,
                                                   unsigned Alignment) {
-  unsigned AlignMask = Alignment - 1;
-  const std::vector<MachineConstantPoolEntry> Constants = CP->getConstants();
-  for (unsigned i = 0, e = Constants.size(); i != e; ++i) {
-    if (Constants[i].isMachineConstantPoolEntry() &&
-        (Constants[i].getAlignment() & AlignMask) == 0) {
-      ARMConstantPoolValue *CPV =
-        (ARMConstantPoolValue *)Constants[i].Val.MachineCPVal;
-      ARMConstantPoolMBB *APMBB = dyn_cast<ARMConstantPoolMBB>(CPV);
-      if (!APMBB) continue;
-
-      if (APMBB->MBB == MBB && equals(APMBB))
-        return i;
-    }
-  }
-
-  return -1;
+  return getExistingMachineCPValueImpl<ARMConstantPoolMBB>(CP, Alignment);
 }
 
 bool ARMConstantPoolMBB::hasSameValue(ARMConstantPoolValue *ACPV) {
@@ -314,6 +292,6 @@ void ARMConstantPoolMBB::addSelectionDAGCSEId(FoldingSetNodeID &ID) {
 }
 
 void ARMConstantPoolMBB::print(raw_ostream &O) const {
-  O << "BB#" << MBB->getNumber();
+  O << printMBBReference(*MBB);
   ARMConstantPoolValue::print(O);
 }

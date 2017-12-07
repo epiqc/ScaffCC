@@ -1,4 +1,4 @@
-; RUN: opt -deadargelim -S %s | FileCheck %s
+; RUN: opt -deadargelim -S < %s | FileCheck %s
 
 define void @test(i32) {
   ret void
@@ -7,7 +7,7 @@ define void @test(i32) {
 define void @foo() {
   call void @test(i32 0)
   ret void
-; CHECK: @foo
+; CHECK-LABEL: @foo(
 ; CHECK: i32 undef
 }
 
@@ -31,9 +31,9 @@ define void @h() {
 entry:
   %i = alloca i32, align 4
   store volatile i32 10, i32* %i, align 4
-; CHECK: %tmp = load volatile i32* %i, align 4
-; CHECK-next: call void @f(i32 undef)
-  %tmp = load volatile i32* %i, align 4
+; CHECK: %tmp = load volatile i32, i32* %i, align 4
+; CHECK-NEXT: call void @f(i32 undef)
+  %tmp = load volatile i32, i32* %i, align 4
   call void @f(i32 %tmp)
   ret void
 }
@@ -50,3 +50,18 @@ entry:
   ret void
 }
 
+%swift_error = type opaque
+
+define void @unused_swifterror_arg(%swift_error** swifterror %dead_arg) {
+  tail call void @sideeffect() nounwind
+  ret void
+}
+
+; CHECK-LABEL: @dont_replace_by_undef
+; CHECK-NOT: call void @unused_swifterror_arg({{.*}}undef)
+define void @dont_replace_by_undef() {
+  %error_ptr_ref = alloca swifterror %swift_error*
+  store %swift_error* null, %swift_error** %error_ptr_ref
+  call void @unused_swifterror_arg(%swift_error** %error_ptr_ref)
+  ret void
+}

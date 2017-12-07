@@ -1,4 +1,5 @@
-// RUN: %clang_cc1 -Wno-unused-value -emit-llvm %s -o - | FileCheck %s
+// RUN: %clang_cc1 -Wno-unused-value -triple %itanium_abi_triple -emit-llvm %s -std=c++98 -o - | FileCheck %s
+// RUN: %clang_cc1 -Wno-unused-value -triple %itanium_abi_triple -emit-llvm %s -std=c++11 -o - | FileCheck -check-prefix=CHECK -check-prefix=CHECK11 %s
 
 // CHECK: @i = global [[INT:i[0-9]+]] 0
 volatile int i, j, k;
@@ -17,60 +18,64 @@ volatile struct S {
 int printf(const char *, ...);
 
 
-// CHECK: define void @{{.*}}test
+// CHECK: define {{.*}}void @{{.*}}test
 void test() {
 
   asm("nop"); // CHECK: call void asm
 
-  // should not load
+  // should not load in C++98
   i;
+  // CHECK11-NEXT: load volatile [[INT]], [[INT]]* @i
 
   (float)(ci);
-  // CHECK-NEXT: load volatile [[INT]]* getelementptr inbounds ([[CINT]]* @ci, i32 0, i32 0)
-  // CHECK-NEXT: load volatile [[INT]]* getelementptr inbounds ([[CINT]]* @ci, i32 0, i32 1)
+  // CHECK-NEXT: load volatile [[INT]], [[INT]]* getelementptr inbounds ([[CINT]], [[CINT]]* @ci, i32 0, i32 0)
+  // CHECK-NEXT: load volatile [[INT]], [[INT]]* getelementptr inbounds ([[CINT]], [[CINT]]* @ci, i32 0, i32 1)
   // CHECK-NEXT: sitofp [[INT]]
 
-  // These are not uses in C++:
+  // These are not uses in C++98:
   //   [expr.static.cast]p6:
   //     The lvalue-to-rvalue . . . conversions are not applied to the expression.
   (void)ci;
+  // CHECK11-NEXT: load volatile [[INT]], [[INT]]* getelementptr inbounds ([[CINT]], [[CINT]]* @ci, i32 0, i32 0)
+  // CHECK11-NEXT: load volatile [[INT]], [[INT]]* getelementptr inbounds ([[CINT]], [[CINT]]* @ci, i32 0, i32 1)
+
   (void)a;
 
   (void)(ci=ci);
-  // CHECK-NEXT: [[R:%.*]] = load volatile [[INT]]* getelementptr inbounds ([[CINT]]* @ci, i32 0, i32 0)
-  // CHECK-NEXT: [[I:%.*]] = load volatile [[INT]]* getelementptr inbounds ([[CINT]]* @ci, i32 0, i32 1)
-  // CHECK-NEXT: store volatile [[INT]] [[R]], [[INT]]* getelementptr inbounds ([[CINT]]* @ci, i32 0, i32 0)
-  // CHECK-NEXT: store volatile [[INT]] [[I]], [[INT]]* getelementptr inbounds ([[CINT]]* @ci, i32 0, i32 1)
+  // CHECK-NEXT: [[R:%.*]] = load volatile [[INT]], [[INT]]* getelementptr inbounds ([[CINT]], [[CINT]]* @ci, i32 0, i32 0)
+  // CHECK-NEXT: [[I:%.*]] = load volatile [[INT]], [[INT]]* getelementptr inbounds ([[CINT]], [[CINT]]* @ci, i32 0, i32 1)
+  // CHECK-NEXT: store volatile [[INT]] [[R]], [[INT]]* getelementptr inbounds ([[CINT]], [[CINT]]* @ci, i32 0, i32 0)
+  // CHECK-NEXT: store volatile [[INT]] [[I]], [[INT]]* getelementptr inbounds ([[CINT]], [[CINT]]* @ci, i32 0, i32 1)
 
   (void)(i=j);
-  // CHECK-NEXT: [[T:%.*]] = load volatile [[INT]]* @j
+  // CHECK-NEXT: [[T:%.*]] = load volatile [[INT]], [[INT]]* @j
   // CHECK-NEXT: store volatile [[INT]] [[T]], [[INT]]* @i
 
   ci+=ci;
-  // CHECK-NEXT: [[R1:%.*]] = load volatile [[INT]]* getelementptr inbounds ([[CINT]]* @ci, i32 0, i32 0)
-  // CHECK-NEXT: [[I1:%.*]] = load volatile [[INT]]* getelementptr inbounds ([[CINT]]* @ci, i32 0, i32 1)
-  // CHECK-NEXT: [[R2:%.*]] = load volatile [[INT]]* getelementptr inbounds ([[CINT]]* @ci, i32 0, i32 0)
-  // CHECK-NEXT: [[I2:%.*]] = load volatile [[INT]]* getelementptr inbounds ([[CINT]]* @ci, i32 0, i32 1)
+  // CHECK-NEXT: [[R1:%.*]] = load volatile [[INT]], [[INT]]* getelementptr inbounds ([[CINT]], [[CINT]]* @ci, i32 0, i32 0)
+  // CHECK-NEXT: [[I1:%.*]] = load volatile [[INT]], [[INT]]* getelementptr inbounds ([[CINT]], [[CINT]]* @ci, i32 0, i32 1)
+  // CHECK-NEXT: [[R2:%.*]] = load volatile [[INT]], [[INT]]* getelementptr inbounds ([[CINT]], [[CINT]]* @ci, i32 0, i32 0)
+  // CHECK-NEXT: [[I2:%.*]] = load volatile [[INT]], [[INT]]* getelementptr inbounds ([[CINT]], [[CINT]]* @ci, i32 0, i32 1)
   // Not sure why they're ordered this way.
   // CHECK-NEXT: [[R:%.*]] = add [[INT]] [[R2]], [[R1]]
   // CHECK-NEXT: [[I:%.*]] = add [[INT]] [[I2]], [[I1]]
-  // CHECK-NEXT: store volatile [[INT]] [[R]], [[INT]]* getelementptr inbounds ([[CINT]]* @ci, i32 0, i32 0)
-  // CHECK-NEXT: store volatile [[INT]] [[I]], [[INT]]* getelementptr inbounds ([[CINT]]* @ci, i32 0, i32 1)
+  // CHECK-NEXT: store volatile [[INT]] [[R]], [[INT]]* getelementptr inbounds ([[CINT]], [[CINT]]* @ci, i32 0, i32 0)
+  // CHECK-NEXT: store volatile [[INT]] [[I]], [[INT]]* getelementptr inbounds ([[CINT]], [[CINT]]* @ci, i32 0, i32 1)
 
   // Note that C++ requires an extra load volatile over C from the LHS of the '+'.
   (ci += ci) + ci;
-  // CHECK-NEXT: [[R1:%.*]] = load volatile [[INT]]* getelementptr inbounds ([[CINT]]* @ci, i32 0, i32 0)
-  // CHECK-NEXT: [[I1:%.*]] = load volatile [[INT]]* getelementptr inbounds ([[CINT]]* @ci, i32 0, i32 1)
-  // CHECK-NEXT: [[R2:%.*]] = load volatile [[INT]]* getelementptr inbounds ([[CINT]]* @ci, i32 0, i32 0)
-  // CHECK-NEXT: [[I2:%.*]] = load volatile [[INT]]* getelementptr inbounds ([[CINT]]* @ci, i32 0, i32 1)
+  // CHECK-NEXT: [[R1:%.*]] = load volatile [[INT]], [[INT]]* getelementptr inbounds ([[CINT]], [[CINT]]* @ci, i32 0, i32 0)
+  // CHECK-NEXT: [[I1:%.*]] = load volatile [[INT]], [[INT]]* getelementptr inbounds ([[CINT]], [[CINT]]* @ci, i32 0, i32 1)
+  // CHECK-NEXT: [[R2:%.*]] = load volatile [[INT]], [[INT]]* getelementptr inbounds ([[CINT]], [[CINT]]* @ci, i32 0, i32 0)
+  // CHECK-NEXT: [[I2:%.*]] = load volatile [[INT]], [[INT]]* getelementptr inbounds ([[CINT]], [[CINT]]* @ci, i32 0, i32 1)
   // CHECK-NEXT: [[R:%.*]] = add [[INT]] [[R2]], [[R1]]
   // CHECK-NEXT: [[I:%.*]] = add [[INT]] [[I2]], [[I1]]
-  // CHECK-NEXT: store volatile [[INT]] [[R]], [[INT]]* getelementptr inbounds ([[CINT]]* @ci, i32 0, i32 0)
-  // CHECK-NEXT: store volatile [[INT]] [[I]], [[INT]]* getelementptr inbounds ([[CINT]]* @ci, i32 0, i32 1)
-  // CHECK-NEXT: [[R1:%.*]] = load volatile [[INT]]* getelementptr inbounds ([[CINT]]* @ci, i32 0, i32 0)
-  // CHECK-NEXT: [[I1:%.*]] = load volatile [[INT]]* getelementptr inbounds ([[CINT]]* @ci, i32 0, i32 1)
-  // CHECK-NEXT: [[R2:%.*]] = load volatile [[INT]]* getelementptr inbounds ([[CINT]]* @ci, i32 0, i32 0)
-  // CHECK-NEXT: [[I2:%.*]] = load volatile [[INT]]* getelementptr inbounds ([[CINT]]* @ci, i32 0, i32 1)
+  // CHECK-NEXT: store volatile [[INT]] [[R]], [[INT]]* getelementptr inbounds ([[CINT]], [[CINT]]* @ci, i32 0, i32 0)
+  // CHECK-NEXT: store volatile [[INT]] [[I]], [[INT]]* getelementptr inbounds ([[CINT]], [[CINT]]* @ci, i32 0, i32 1)
+  // CHECK-NEXT: [[R1:%.*]] = load volatile [[INT]], [[INT]]* getelementptr inbounds ([[CINT]], [[CINT]]* @ci, i32 0, i32 0)
+  // CHECK-NEXT: [[I1:%.*]] = load volatile [[INT]], [[INT]]* getelementptr inbounds ([[CINT]], [[CINT]]* @ci, i32 0, i32 1)
+  // CHECK-NEXT: [[R2:%.*]] = load volatile [[INT]], [[INT]]* getelementptr inbounds ([[CINT]], [[CINT]]* @ci, i32 0, i32 0)
+  // CHECK-NEXT: [[I2:%.*]] = load volatile [[INT]], [[INT]]* getelementptr inbounds ([[CINT]], [[CINT]]* @ci, i32 0, i32 1)
   // These additions can be elided.
   // CHECK-NEXT: add [[INT]] [[R1]], [[R2]]
   // CHECK-NEXT: add [[INT]] [[I1]], [[I2]]
@@ -126,7 +131,8 @@ void test() {
   // CHECK-NEXT: load volatile
   // CHECK-NEXT: sitofp
 
-  (void)i;
+  (void)i; // This is now a load in C++11
+  // CHECK11-NEXT: load volatile
 
   i=i;
   // CHECK-NEXT: load volatile
@@ -155,25 +161,30 @@ void test() {
   // CHECK-NEXT: br label
   // CHECK:      phi
 
-  (void)(i,(i=i));
+  (void)(i,(i=i)); // first i is also a load in C++11
+  // CHECK11-NEXT: load volatile
   // CHECK-NEXT: load volatile
   // CHECK-NEXT: store volatile
 
-  i=i,k;
-  // CHECK-NEXT: load volatile [[INT]]* @i
+  i=i,k; // k is also a load in C++11
+  // CHECK-NEXT: load volatile [[INT]], [[INT]]* @i
   // CHECK-NEXT: store volatile {{.*}}, [[INT]]* @i
+  // CHECK11-NEXT: load volatile [[INT]], [[INT]]* @k
 
   (i=j,k=j);
-  // CHECK-NEXT: load volatile [[INT]]* @j
+  // CHECK-NEXT: load volatile [[INT]], [[INT]]* @j
   // CHECK-NEXT: store volatile {{.*}}, [[INT]]* @i
-  // CHECK-NEXT: load volatile [[INT]]* @j
+  // CHECK-NEXT: load volatile [[INT]], [[INT]]* @j
   // CHECK-NEXT: store volatile {{.*}}, [[INT]]* @k
 
-  (i=j,k);
-  // CHECK-NEXT: load volatile [[INT]]* @j
+  (i=j,k); // k is also a load in C++11
+  // CHECK-NEXT: load volatile [[INT]], [[INT]]* @j
   // CHECK-NEXT: store volatile {{.*}}, [[INT]]* @i
+  // CHECK11-NEXT: load volatile [[INT]], [[INT]]* @k
 
-  (i,j);
+  (i,j); // i and j both are loads in C++11
+  // CHECK11-NEXT: load volatile [[INT]], [[INT]]* @i
+  // CHECK11-NEXT: load volatile [[INT]], [[INT]]* @j
 
   // Extra load in C++.
   i=c=k;
@@ -190,7 +201,9 @@ void test() {
   // CHECK-NEXT: add nsw [[INT]]
   // CHECK-NEXT: store volatile
 
-  ci;
+  ci; // ci is a load in C++11
+  // CHECK11-NEXT: load volatile {{.*}} @ci, i32 0, i32 0
+  // CHECK11-NEXT: load volatile {{.*}} @ci, i32 0, i32 1
 
   asm("nop"); // CHECK-NEXT: call void asm
 
@@ -225,10 +238,10 @@ void test() {
   // CHECK-NEXT: store volatile
 
   __imag ci = __imag ci = __imag ci;
-  // CHECK-NEXT: [[T:%.*]] = load volatile [[INT]]* getelementptr inbounds ([[CINT]]* @ci, i32 0, i32 1)
-  // CHECK-NEXT: store volatile [[INT]] [[T]], [[INT]]* getelementptr inbounds ([[CINT]]* @ci, i32 0, i32 1)
-  // CHECK-NEXT: [[T:%.*]] = load volatile [[INT]]* getelementptr inbounds ([[CINT]]* @ci, i32 0, i32 1)
-  // CHECK-NEXT: store volatile [[INT]] [[T]], [[INT]]* getelementptr inbounds ([[CINT]]* @ci, i32 0, i32 1)
+  // CHECK-NEXT: [[T:%.*]] = load volatile [[INT]], [[INT]]* getelementptr inbounds ([[CINT]], [[CINT]]* @ci, i32 0, i32 1)
+  // CHECK-NEXT: store volatile [[INT]] [[T]], [[INT]]* getelementptr inbounds ([[CINT]], [[CINT]]* @ci, i32 0, i32 1)
+  // CHECK-NEXT: [[T:%.*]] = load volatile [[INT]], [[INT]]* getelementptr inbounds ([[CINT]], [[CINT]]* @ci, i32 0, i32 1)
+  // CHECK-NEXT: store volatile [[INT]] [[T]], [[INT]]* getelementptr inbounds ([[CINT]], [[CINT]]* @ci, i32 0, i32 1)
 
   __real (i = j);
   // CHECK-NEXT: load volatile
@@ -248,11 +261,11 @@ void test() {
   // gcc.
 
   // Not a use.  gcc forgets to do the assignment.
-  // CHECK-NEXT: call
+  // CHECK-NEXT: call {{.*}}void
   ((a=a),a);
 
   // Not a use.  gcc gets this wrong, it doesn't emit the copy!  
-  // CHECK-NEXT: call
+  // CHECK-NEXT: call {{.*}}void
   (void)(a=a);
 
   // Not a use.  gcc got this wrong in 4.2 and omitted the side effects
@@ -338,13 +351,14 @@ void test() {
   // CHECK-NEXT: load volatile
   // CHECK-NEXT: add
 
-  (i,j)=k;
-  // CHECK-NEXT: load volatile [[INT]]* @k
+  (i,j)=k; // i is also a load in C++11
+  // CHECK-NEXT: load volatile [[INT]], [[INT]]* @k
+  // CHECK11-NEXT: load volatile [[INT]], [[INT]]* @i
   // CHECK-NEXT: store volatile {{.*}}, [[INT]]* @j
 
   (j=k,i)=i;
-  // CHECK-NEXT: load volatile [[INT]]* @i
-  // CHECK-NEXT: load volatile [[INT]]* @k
+  // CHECK-NEXT: load volatile [[INT]], [[INT]]* @i
+  // CHECK-NEXT: load volatile [[INT]], [[INT]]* @k
   // CHECK-NEXT: store volatile {{.*}}, [[INT]]* @j
   // CHECK-NEXT: store volatile {{.*}}, [[INT]]* @i
 

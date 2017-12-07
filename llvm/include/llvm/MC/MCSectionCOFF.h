@@ -14,56 +14,87 @@
 #ifndef LLVM_MC_MCSECTIONCOFF_H
 #define LLVM_MC_MCSECTIONCOFF_H
 
-#include "llvm/MC/MCSection.h"
-#include "llvm/Support/COFF.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/MC/MCSection.h"
+#include "llvm/MC/SectionKind.h"
+#include <cassert>
 
 namespace llvm {
 
-/// MCSectionCOFF - This represents a section on Windows
-  class MCSectionCOFF : public MCSection {
-    // The memory for this string is stored in the same MCContext as *this.
-    StringRef SectionName;
+class MCSymbol;
 
-    /// Characteristics - This is the Characteristics field of a section,
-    //  drawn from the enums below.
-    unsigned Characteristics;
+/// This represents a section on Windows
+class MCSectionCOFF final : public MCSection {
+  // The memory for this string is stored in the same MCContext as *this.
+  StringRef SectionName;
 
-    /// Selection - This is the Selection field for the section symbol, if
-    /// it is a COMDAT section (Characteristics & IMAGE_SCN_LNK_COMDAT) != 0
-    int Selection;
+  // FIXME: The following fields should not be mutable, but are for now so the
+  // asm parser can honor the .linkonce directive.
 
-  private:
-    friend class MCContext;
-    MCSectionCOFF(StringRef Section, unsigned Characteristics,
-                  int Selection, SectionKind K)
-      : MCSection(SV_COFF, K), SectionName(Section),
-        Characteristics(Characteristics), Selection (Selection) {
-      assert ((Characteristics & 0x00F00000) == 0 &&
-        "alignment must not be set upon section creation");
-    }
-    ~MCSectionCOFF();
+  /// This is the Characteristics field of a section, drawn from the enums
+  /// below.
+  mutable unsigned Characteristics;
 
-  public:
-    /// ShouldOmitSectionDirective - Decides whether a '.section' directive
-    /// should be printed before the section name
-    bool ShouldOmitSectionDirective(StringRef Name, const MCAsmInfo &MAI) const;
+  /// The unique IDs used with the .pdata and .xdata sections created internally
+  /// by the assembler. This ID is used to ensure that for every .text section,
+  /// there is exactly one .pdata and one .xdata section, which is required by
+  /// the Microsoft incremental linker. This data is mutable because this ID is
+  /// not notionally part of the section.
+  mutable unsigned WinCFISectionID = ~0U;
 
-    StringRef getSectionName() const { return SectionName; }
-    unsigned getCharacteristics() const { return Characteristics; }
-    int getSelection () const { return Selection; }
+  /// The COMDAT symbol of this section. Only valid if this is a COMDAT section.
+  /// Two COMDAT sections are merged if they have the same COMDAT symbol.
+  MCSymbol *COMDATSymbol;
 
-    virtual void PrintSwitchToSection(const MCAsmInfo &MAI,
-                                      raw_ostream &OS) const;
-    virtual bool UseCodeAlign() const;
-    virtual bool isVirtualSection() const;
+  /// This is the Selection field for the section symbol, if it is a COMDAT
+  /// section (Characteristics & IMAGE_SCN_LNK_COMDAT) != 0
+  mutable int Selection;
 
-    static bool classof(const MCSection *S) {
-      return S->getVariant() == SV_COFF;
-    }
-    static bool classof(const MCSectionCOFF *) { return true; }
-  };
+private:
+  friend class MCContext;
+  MCSectionCOFF(StringRef Section, unsigned Characteristics,
+                MCSymbol *COMDATSymbol, int Selection, SectionKind K,
+                MCSymbol *Begin)
+      : MCSection(SV_COFF, K, Begin), SectionName(Section),
+        Characteristics(Characteristics), COMDATSymbol(COMDATSymbol),
+        Selection(Selection) {
+    assert((Characteristics & 0x00F00000) == 0 &&
+           "alignment must not be set upon section creation");
+  }
+
+public:
+  ~MCSectionCOFF();
+
+  /// Decides whether a '.section' directive should be printed before the
+  /// section name
+  bool ShouldOmitSectionDirective(StringRef Name, const MCAsmInfo &MAI) const;
+
+  StringRef getSectionName() const { return SectionName; }
+  unsigned getCharacteristics() const { return Characteristics; }
+  MCSymbol *getCOMDATSymbol() const { return COMDATSymbol; }
+  int getSelection() const { return Selection; }
+
+  void setSelection(int Selection) const;
+
+  void PrintSwitchToSection(const MCAsmInfo &MAI, const Triple &T,
+                            raw_ostream &OS,
+                            const MCExpr *Subsection) const override;
+  bool UseCodeAlign() const override;
+  bool isVirtualSection() const override;
+
+  unsigned getOrAssignWinCFISectionID(unsigned *NextID) const {
+    if (WinCFISectionID == ~0U)
+      WinCFISectionID = (*NextID)++;
+    return WinCFISectionID;
+  }
+
+  static bool isImplicitlyDiscardable(StringRef Name) {
+    return Name.startswith(".debug");
+  }
+
+  static bool classof(const MCSection *S) { return S->getVariant() == SV_COFF; }
+};
 
 } // end namespace llvm
 
-#endif
+#endif // LLVM_MC_MCSECTIONCOFF_H

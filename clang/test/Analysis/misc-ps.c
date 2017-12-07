@@ -1,4 +1,6 @@
-// RUN: %clang_cc1 -triple x86_64-apple-darwin10 -analyze -disable-free -analyzer-eagerly-assume -analyzer-checker=core -analyzer-checker=deadcode -verify %s
+// RUN: %clang_analyze_cc1 -triple x86_64-apple-darwin10 -disable-free -analyzer-eagerly-assume -analyzer-checker=core,deadcode,debug.ExprInspection -verify %s
+
+void clang_analyzer_eval(int);
 
 int size_rdar9373039 = 1;
 int foo_rdar9373039(const char *);
@@ -126,3 +128,76 @@ void rdar10686586() {
     }
 }
 
+// This example tests CFG handling of '||' nested in a ternary expression,
+// and seeing that the analyzer doesn't crash.
+int isctype(char c, unsigned long f)
+{
+  return (c < 1 || c > 10) ? 0 : !!(c & f);
+}
+
+// Test that symbolic array offsets are modeled conservatively.
+// This was triggering a false "use of uninitialized value" warning.
+void rdar_12075238__aux(unsigned long y);
+int rdar_12075238_(unsigned long count) {
+  if ((count < 3) || (count > 6))
+    return 0;
+	
+  unsigned long array[6];
+  unsigned long i = 0;
+  for (; i <= count - 2; i++)
+  {
+	  array[i] = i;
+  }
+  array[count - 1] = i;
+  rdar_12075238__aux(array[2]); // no-warning
+  return 0;
+}
+
+// Test that we handle an uninitialized value within a logical expression.
+void PR14635(int *p) {
+  int a = 0, b;
+  *p = a || b; // expected-warning {{Assigned value is garbage or undefined}}
+}
+
+// Test handling floating point values with unary '!'.
+int PR14634(int x) {
+  double y = (double)x;
+  return !y;
+}
+
+
+// PR15684: If a checker generates a sink node after generating a regular node
+// and no state changes between the two, graph trimming would consider the two
+// the same node, forming a loop.
+struct PR15684 {
+  void (*callback)(int);
+};
+void sinkAfterRegularNode(struct PR15684 *context) {
+  int uninitialized;
+  context->callback(uninitialized); // expected-warning {{uninitialized}}
+}
+
+
+// PR16131: C permits variables to be declared extern void.
+static void PR16131(int x) {
+  extern void v;
+
+  int *ip = (int *)&v;
+  char *cp = (char *)&v;
+  clang_analyzer_eval(ip == cp); // expected-warning{{TRUE}}
+  // expected-warning@-1 {{comparison of distinct pointer types}}
+
+  *ip = 42;
+  clang_analyzer_eval(*ip == 42); // expected-warning{{TRUE}}
+  clang_analyzer_eval(*(int *)&v == 42); // expected-warning{{TRUE}}
+}
+
+// PR15623: Currently the analyzer doesn't handle symbolic expressions of the
+// form "(exp comparison_op expr) != 0" very well. We perform a simplification
+// translating an assume of a constraint of the form "(exp comparison_op expr)
+// != 0" to true into an assume of "exp comparison_op expr" to true.
+void PR15623(int n) {
+  if ((n == 0) != 0) {
+    clang_analyzer_eval(n == 0); // expected-warning{{TRUE}}
+  }
+}

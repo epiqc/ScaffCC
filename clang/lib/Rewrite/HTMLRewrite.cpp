@@ -7,22 +7,21 @@
 //
 //===----------------------------------------------------------------------===//
 //
-//  This file defines the HTMLRewriter clas, which is used to translate the
+//  This file defines the HTMLRewriter class, which is used to translate the
 //  text of a source file into prettified HTML.
 //
 //===----------------------------------------------------------------------===//
 
-#include "clang/Lex/Preprocessor.h"
-#include "clang/Rewrite/Rewriter.h"
-#include "clang/Rewrite/HTMLRewrite.h"
-#include "clang/Lex/TokenConcatenation.h"
-#include "clang/Lex/Preprocessor.h"
+#include "clang/Rewrite/Core/HTMLRewrite.h"
 #include "clang/Basic/SourceManager.h"
+#include "clang/Lex/Preprocessor.h"
+#include "clang/Lex/TokenConcatenation.h"
+#include "clang/Rewrite/Core/Rewriter.h"
 #include "llvm/ADT/SmallString.h"
-#include "llvm/ADT/OwningPtr.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/raw_ostream.h"
+#include <memory>
 using namespace clang;
 
 
@@ -165,8 +164,7 @@ void html::EscapeText(Rewriter &R, FileID FID,
   }
 }
 
-std::string html::EscapeText(const std::string& s, bool EscapeSpaces,
-                             bool ReplaceTabs) {
+std::string html::EscapeText(StringRef s, bool EscapeSpaces, bool ReplaceTabs) {
 
   unsigned len = s.size();
   std::string Str;
@@ -269,8 +267,8 @@ void html::AddLineNumbers(Rewriter& R, FileID FID) {
   RB.InsertTextAfter(FileEnd - FileBeg, "</table>");
 }
 
-void html::AddHeaderFooterInternalBuiltinCSS(Rewriter& R, FileID FID,
-                                             const char *title) {
+void html::AddHeaderFooterInternalBuiltinCSS(Rewriter &R, FileID FID,
+                                             StringRef title) {
 
   const llvm::MemoryBuffer *Buf = R.getSourceMgr().getBuffer(FID);
   const char* FileStart = Buf->getBufferStart();
@@ -284,13 +282,18 @@ void html::AddHeaderFooterInternalBuiltinCSS(Rewriter& R, FileID FID,
   os << "<!doctype html>\n" // Use HTML 5 doctype
         "<html>\n<head>\n";
 
-  if (title)
+  if (!title.empty())
     os << "<title>" << html::EscapeText(title) << "</title>\n";
 
   os << "<style type=\"text/css\">\n"
       " body { color:#000000; background-color:#ffffff }\n"
       " body { font-family:Helvetica, sans-serif; font-size:10pt }\n"
       " h1 { font-size:14pt }\n"
+      " .FileName { margin-top: 5px; margin-bottom: 5px; display: inline; }\n"
+      " .FileNav { margin-left: 5px; margin-right: 5px; display: inline; }\n"
+      " .FileNav a { text-decoration:none; font-size: larger; }\n"
+      " .divider { margin-top: 30px; margin-bottom: 30px; height: 15px; }\n"
+      " .divider { background-color: gray; }\n"
       " .code { border-collapse:collapse; width:100%; }\n"
       " .code { font-family: \"Monospace\", monospace; font-size:10pt }\n"
       " .code { line-height: 1.2em }\n"
@@ -303,6 +306,7 @@ void html::AddHeaderFooterInternalBuiltinCSS(Rewriter& R, FileID FID,
       " .macro:hover .expansion { display: block; border: 2px solid #FF0000; "
           "padding: 2px; background-color:#FFF0F0; font-weight: normal; "
           "  -webkit-border-radius:5px;  -webkit-box-shadow:1px 1px 7px #000; "
+          "  border-radius:5px;  box-shadow:1px 1px 7px #000; "
           "position: absolute; top: -1em; left:10em; z-index: 1 } \n"
       " .macro { color: darkmagenta; background-color:LemonChiffon;"
              // Macros are position: relative to provide base for expansions.
@@ -313,7 +317,9 @@ void html::AddHeaderFooterInternalBuiltinCSS(Rewriter& R, FileID FID,
       " .line { padding-left: 1ex; border-left: 3px solid #ccc }\n"
       " .line { white-space: pre }\n"
       " .msg { -webkit-box-shadow:1px 1px 7px #000 }\n"
+      " .msg { box-shadow:1px 1px 7px #000 }\n"
       " .msg { -webkit-border-radius:5px }\n"
+      " .msg { border-radius:5px }\n"
       " .msg { font-family:Helvetica, sans-serif; font-size:8pt }\n"
       " .msg { float:left }\n"
       " .msg { padding:0.25em 1ex 0.25em 1ex }\n"
@@ -323,13 +329,16 @@ void html::AddHeaderFooterInternalBuiltinCSS(Rewriter& R, FileID FID,
       " .msgT { padding:0x; spacing:0x }\n"
       " .msgEvent { background-color:#fff8b4; color:#000000 }\n"
       " .msgControl { background-color:#bbbbbb; color:#000000 }\n"
+      " .msgNote { background-color:#ddeeff; color:#000000 }\n"
       " .mrange { background-color:#dfddf3 }\n"
       " .mrange { border-bottom:1px solid #6F9DBE }\n"
-      " .PathIndex { font-weight: bold; padding:0px 5px 0px 5px; "
+      " .PathIndex { font-weight: bold; padding:0px 5px; "
         "margin-right:5px; }\n"
       " .PathIndex { -webkit-border-radius:8px }\n"
+      " .PathIndex { border-radius:8px }\n"
       " .PathIndexEvent { background-color:#bfba87 }\n"
       " .PathIndexControl { background-color:#8c8c8c }\n"
+      " .PathNav a { text-decoration:none; font-size: larger }\n"
       " .CodeInsertionHint { font-weight: bold; background-color: #10dd10 }\n"
       " .CodeRemovalHint { background-color:#de1010 }\n"
       " .CodeRemovalHint { border-bottom:1px solid #6F9DBE }\n"
@@ -340,8 +349,12 @@ void html::AddHeaderFooterInternalBuiltinCSS(Rewriter& R, FileID FID,
       "   border-collapse: collapse; border-spacing: 0px;\n"
       " }\n"
       " td.rowname {\n"
-      "   text-align:right; font-weight:bold; color:#444444;\n"
-      "   padding-right:2ex; }\n"
+      "   text-align: right;\n"
+      "   vertical-align: top;\n"
+      "   font-weight: bold;\n"
+      "   color:#444444;\n"
+      "   padding-right:2ex;\n"
+      " }\n"
       "</style>\n</head>\n<body>";
 
   // Generate header
@@ -361,7 +374,7 @@ void html::SyntaxHighlight(Rewriter &R, FileID FID, const Preprocessor &PP) {
   const SourceManager &SM = PP.getSourceManager();
   const llvm::MemoryBuffer *FromFile = SM.getBuffer(FID);
   Lexer L(FID, FromFile, SM, PP.getLangOpts());
-  const char *BufferStart = L.getBufferStart();
+  const char *BufferStart = L.getBuffer().data();
 
   // Inform the preprocessor that we want to retain comments as tokens, so we
   // can highlight them.
@@ -401,6 +414,7 @@ void html::SyntaxHighlight(Rewriter &R, FileID FID, const Preprocessor &PP) {
       ++TokOffs;
       --TokLen;
       // FALL THROUGH to chop the 8
+      LLVM_FALLTHROUGH;
     case tok::wide_string_literal:
     case tok::utf16_string_literal:
     case tok::utf32_string_literal:
@@ -483,6 +497,7 @@ void html::HighlightMacros(Rewriter &R, FileID FID, const Preprocessor& PP) {
   // Temporarily change the diagnostics object so that we ignore any generated
   // diagnostics from this pass.
   DiagnosticsEngine TmpDiags(PP.getDiagnostics().getDiagnosticIDs(),
+                             &PP.getDiagnostics().getDiagnosticOptions(),
                       new IgnoringDiagConsumer);
 
   // FIXME: This is a huge hack; we reuse the input preprocessor because we want
@@ -495,9 +510,14 @@ void html::HighlightMacros(Rewriter &R, FileID FID, const Preprocessor& PP) {
   // Inform the preprocessor that we don't want comments.
   TmpPP.SetCommentRetentionState(false, false);
 
+  // We don't want pragmas either. Although we filtered out #pragma, removing
+  // _Pragma and __pragma is much harder.
+  bool PragmasPreviouslyEnabled = TmpPP.getPragmasEnabled();
+  TmpPP.setPragmasEnabled(false);
+
   // Enter the tokens we just lexed.  This will cause them to be macro expanded
   // but won't enter sub-files (because we removed #'s).
-  TmpPP.EnterTokenStream(&TokenStream[0], TokenStream.size(), false, false);
+  TmpPP.EnterTokenStream(TokenStream, false);
 
   TokenConcatenation ConcatInfo(TmpPP);
 
@@ -571,6 +591,7 @@ void html::HighlightMacros(Rewriter &R, FileID FID, const Preprocessor& PP) {
                    "<span class='macro'>", Expansion.c_str());
   }
 
-  // Restore diagnostics object back to its own thing.
+  // Restore the preprocessor's old state.
   TmpPP.setDiagnostics(*OldDiags);
+  TmpPP.setPragmasEnabled(PragmasPreviouslyEnabled);
 }

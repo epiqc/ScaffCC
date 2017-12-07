@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -fsyntax-only -verify %s
+// RUN: %clang_cc1 -triple %itanium_abi_triple -fsyntax-only -verify %s
 
 // PR3588
 void g0(int, int);
@@ -62,7 +62,7 @@ void test2() {
 // <rdar://problem/6127293>
 int outer1(int); // expected-note{{previous declaration is here}}
 struct outer3 { };
-int outer4(int);
+int outer4(int); // expected-note{{previous declaration is here}}
 int outer5; // expected-note{{previous definition is here}}
 int *outer7(int);
 
@@ -70,7 +70,7 @@ void outer_test() {
   int outer1(float); // expected-error{{conflicting types for 'outer1'}}
   int outer2(int); // expected-note{{previous declaration is here}}
   int outer3(int); // expected-note{{previous declaration is here}}
-  int outer4(int); // expected-note{{previous declaration is here}}
+  int outer4(int);
   int outer5(int); // expected-error{{redefinition of 'outer5' as different kind of symbol}}
   int* outer6(int); // expected-note{{previous declaration is here}}
   int *outer7(int);
@@ -91,8 +91,6 @@ void outer_test2(int x) {
 void outer_test3() {
   int *(*fp)(int) = outer8; // expected-error{{use of undeclared identifier 'outer8'}}
 }
-
-static float outer8(float); // okay
 
 enum e { e1, e2 };
 
@@ -129,3 +127,7 @@ void test_x() {
 enum e0 {one}; 
 void f3(); 
 void f3(enum e0 x) {}
+
+enum incomplete_enum;
+void f4(); // expected-note {{previous declaration is here}}
+void f4(enum incomplete_enum); // expected-error {{conflicting types for 'f4'}}

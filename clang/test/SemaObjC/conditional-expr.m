@@ -21,10 +21,10 @@
 @end
 
 @interface DTFilterOutputStream2
-- nextOutputStream; // expected-note {{method definition for 'nextOutputStream' not found}}
+- nextOutputStream; // expected-note {{method 'nextOutputStream' declared here}}
 @end
 
-@implementation DTFilterOutputStream2 // expected-warning {{incomplete implementation}}
+@implementation DTFilterOutputStream2 // expected-warning {{method definition for 'nextOutputStream' not found}}
 - (id)initWithNextOutputStream:(id <DTOutputStreams>) outputStream {
   id <DTOutputStreams> nextOutputStream = [self nextOutputStream];
   self = nextOutputStream; // expected-warning {{assigning to 'DTFilterOutputStream2 *' from incompatible type 'id<DTOutputStreams>'}}
@@ -33,7 +33,8 @@
 @end
 
 // No @interface declaration for DTFilterOutputStream3
-@implementation DTFilterOutputStream3 // expected-warning {{cannot find interface declaration for 'DTFilterOutputStream3'}}
+@implementation DTFilterOutputStream3 // expected-warning {{cannot find interface declaration for 'DTFilterOutputStream3'}} \
+				      // expected-note {{receiver is instance of class declared here}}
 - (id)initWithNextOutputStream:(id <DTOutputStreams>) outputStream {
   id <DTOutputStreams> nextOutputStream = [self nextOutputStream]; // expected-warning {{method '-nextOutputStream' not found (return type defaults to 'id')}}
   self = nextOutputStream; // expected-warning {{assigning to 'DTFilterOutputStream3 *' from incompatible type 'id<DTOutputStreams>'}}
@@ -50,6 +51,10 @@
 @end
 @protocol P2
 @end
+@protocol P3 <P1>
+@end
+@protocol P4 <P1>
+@end
 
 @interface A <P0>
 @end
@@ -61,6 +66,9 @@
 @end
 
 @interface D
+@end
+
+@interface E : A
 @end
 
 void f0(id<P0> x) {
@@ -95,15 +103,15 @@ id f7(int a, id<P0> x, A* p) {
   return a ? x : p;
 }
 
-void f8(int a, A<P0> *x, A *y) {
-  [ (a ? x : y ) intProp ];
+int f8(int a, A<P0> *x, A *y) {
+  return [ (a ? x : y ) intProp ];
 }
 
 void f9(int a, A<P0> *x, A<P1> *y) {
-  id l0 = (a ? x : y ); // expected-warning {{incompatible operand types ('A<P0> *' and 'A<P1> *')}}
-  A<P0> *l1 = (a ? x : y ); // expected-warning {{incompatible operand types ('A<P0> *' and 'A<P1> *')}}
-  A<P1> *l2 = (a ? x : y ); // expected-warning {{incompatible operand types ('A<P0> *' and 'A<P1> *')}}
-  [ (a ? x : y ) intProp ]; // expected-warning {{incompatible operand types ('A<P0> *' and 'A<P1> *')}}
+  id l0 = (a ? x : y );     // Ok. y is of A<P1> object type and A is qualified by P0.
+  A<P0> *l1 = (a ? x : y ); // Ok. y is of A<P1> object type and A is qualified by P0.
+  A<P1> *l2 = (a ? x : y ); // expected-warning {{incompatible pointer types initializing 'A<P1> *' with an expression of type 'A<P0> *'}}
+  (void)[ (a ? x : y ) intProp ]; // Ok. Common type is A<P0> * and P0's property intProp is accessed.
 }
 
 void f10(int a, id<P0> x, id y) {
@@ -115,5 +123,9 @@ void f11(int a, id<P0> x, id<P1> y) {
 }
 
 void f12(int a, A<P0> *x, A<P1> *y) {
-  A<P1>* l0 = (a ? x : y ); // expected-warning {{incompatible operand types ('A<P0> *' and 'A<P1> *')}}
+  A<P1>* l0 = (a ? x : y ); // expected-warning {{incompatible pointer types initializing 'A<P1> *' with an expression of type 'A<P0> *'}}
+}
+
+void f13(int a, B<P3, P0> *x, E<P0, P4> *y) {
+  int *ip = a ? x : y; // expected-warning{{expression of type 'A<P1> *'}}
 }

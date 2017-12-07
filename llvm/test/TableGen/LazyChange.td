@@ -1,5 +1,6 @@
-// RUN: llvm-tblgen %s | grep {int Y = 3}
-// XFAIL: vg_leak
+// RUN: llvm-tblgen %s | FileCheck %s
+
+// CHECK: int Y = 3
 
 class C {
   int X = 4;

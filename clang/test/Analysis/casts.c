@@ -1,5 +1,7 @@
-// RUN: %clang_cc1 -triple x86_64-apple-darwin9 -analyze -analyzer-checker=core,experimental.core -analyzer-store=region -verify %s
-// RUN: %clang_cc1 -triple i386-apple-darwin9 -analyze -analyzer-checker=core,experimental.core -analyzer-store=region -verify %s
+// RUN: %clang_analyze_cc1 -triple x86_64-apple-darwin9 -analyzer-checker=core,alpha.core,debug.ExprInspection -analyzer-store=region -verify %s
+// RUN: %clang_analyze_cc1 -triple i386-apple-darwin9 -analyzer-checker=core,alpha.core,debug.ExprInspection -analyzer-store=region -verify %s
+
+extern void clang_analyzer_eval(_Bool);
 
 // Test if the 'storage' region gets properly initialized after it is cast to
 // 'struct sockaddr *'. 
@@ -16,7 +18,7 @@ void getsockname();
 
 void f(int sock) {
   struct sockaddr_storage storage;
-  struct sockaddr* sockaddr = (struct sockaddr*)&storage;
+  struct sockaddr* sockaddr = (struct sockaddr*)&storage; // expected-warning{{Casting data to a larger structure type and accessing a field can lead to memory access errors or data corruption}}
   socklen_t addrlen = sizeof(storage);
   getsockname(sock, sockaddr, &addrlen);
   switch (sockaddr->sa_family) { // no-warning
@@ -64,4 +66,86 @@ void pr6013_6035_test(void *p) {
   unsigned int foo;
   foo = ((long)(p));
   (void) foo;
+}
+
+// PR12511 and radar://11215362 - Test that we support SymCastExpr, which represents symbolic int to float cast.
+char ttt(int intSeconds) {
+  double seconds = intSeconds;
+  if (seconds)
+    return 0;
+  return 0;
+}
+
+int foo (int* p) {
+  int y = 0;
+  if (p == 0) {
+    if ((*((void**)&p)) == (void*)0) // Test that the cast to void preserves the symbolic region.
+      return 0;
+    else
+      return 5/y; // This code should be unreachable: no-warning.
+  }
+  return 0;
+}
+
+void castsToBool() {
+  clang_analyzer_eval(0); // expected-warning{{FALSE}}
+  clang_analyzer_eval(0U); // expected-warning{{FALSE}}
+  clang_analyzer_eval((void *)0); // expected-warning{{FALSE}}
+
+  clang_analyzer_eval(1); // expected-warning{{TRUE}}
+  clang_analyzer_eval(1U); // expected-warning{{TRUE}}
+  clang_analyzer_eval(-1); // expected-warning{{TRUE}}
+  clang_analyzer_eval(0x100); // expected-warning{{TRUE}}
+  clang_analyzer_eval(0x100U); // expected-warning{{TRUE}}
+  clang_analyzer_eval((void *)0x100); // expected-warning{{TRUE}}
+
+  extern int symbolicInt;
+  clang_analyzer_eval(symbolicInt); // expected-warning{{UNKNOWN}}
+  if (symbolicInt)
+    clang_analyzer_eval(symbolicInt); // expected-warning{{TRUE}}
+
+  extern void *symbolicPointer;
+  clang_analyzer_eval(symbolicPointer); // expected-warning{{UNKNOWN}}
+  if (symbolicPointer)
+    clang_analyzer_eval(symbolicPointer); // expected-warning{{TRUE}}
+
+  int localInt;
+  int* ptr = &localInt;
+  clang_analyzer_eval(ptr); // expected-warning{{TRUE}}
+  clang_analyzer_eval(&castsToBool); // expected-warning{{TRUE}}
+  clang_analyzer_eval("abc"); // expected-warning{{TRUE}}
+
+  extern float globalFloat;
+  clang_analyzer_eval(globalFloat); // expected-warning{{UNKNOWN}}
+}
+
+void locAsIntegerCasts(void *p) {
+  int x = (int) p;
+  clang_analyzer_eval(++x < 10); // no-crash // expected-warning{{UNKNOWN}}
+}
+
+void multiDimensionalArrayPointerCasts() {
+  static int x[10][10];
+  int *y1 = &(x[3][5]);
+  char *z = ((char *) y1) + 2;
+  int *y2 = (int *)(z - 2);
+  int *y3 = ((int *)x) + 35; // This is offset for [3][5].
+
+  clang_analyzer_eval(y1 == y2); // expected-warning{{TRUE}}
+
+  // FIXME: should be FALSE (i.e. equal pointers).
+  clang_analyzer_eval(y1 - y2); // expected-warning{{UNKNOWN}}
+  // FIXME: should be TRUE (i.e. same symbol).
+  clang_analyzer_eval(*y1 == *y2); // expected-warning{{UNKNOWN}}
+
+  clang_analyzer_eval(*((char *)y1) == *((char *) y2)); // expected-warning{{TRUE}}
+
+  clang_analyzer_eval(y1 == y3); // expected-warning{{TRUE}}
+
+  // FIXME: should be FALSE (i.e. equal pointers).
+  clang_analyzer_eval(y1 - y3); // expected-warning{{UNKNOWN}}
+  // FIXME: should be TRUE (i.e. same symbol).
+  clang_analyzer_eval(*y1 == *y3); // expected-warning{{UNKNOWN}}
+
+  clang_analyzer_eval(*((char *)y1) == *((char *) y3)); // expected-warning{{TRUE}}
 }

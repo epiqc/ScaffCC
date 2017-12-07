@@ -1,8 +1,10 @@
-// RUN: %clang_cc1 -emit-llvm -o - %s | FileCheck %s
+// RUN: %clang_cc1 -verify -Wno-return-type -Wno-main -std=c++11 -emit-llvm -triple %itanium_abi_triple -o - %s | FileCheck %s
+// expected-no-diagnostics
+
 namespace test1 {
 int x;
 template <int& D> class T { };
-// CHECK: void @_ZN5test12f0ENS_1TILZNS_1xEEEE(
+// CHECK: void @_ZN5test12f0ENS_1TIL_ZNS_1xEEEE(
 void f0(T<x> a0) {}
 }
 
@@ -10,7 +12,7 @@ namespace test1 {
 // CHECK: void @_ZN5test12f0Ef
 void f0(float) {}
 template<void (&)(float)> struct t1 {};
-// CHECK: void @_ZN5test12f1ENS_2t1ILZNS_2f0EfEEE(
+// CHECK: void @_ZN5test12f1ENS_2t1IL_ZNS_2f0EfEEE(
 void f1(t1<f0> a0) {}
 }
 
@@ -18,8 +20,7 @@ namespace test2 {
 // CHECK: void @_ZN5test22f0Ef
 void f0(float) {}
 template<void (*)(float)> struct t1 {};
-// FIXME: Fails because we don't treat as an expression.
-// CHECK-FIXME: void @_ZN5test22f1ENS_2t1IXadL_ZNS_2f0EfEEEE(
+// CHECK: void @_ZN5test22f1ENS_2t1IXadL_ZNS_2f0EfEEEE(
 void f1(t1<f0> a0) {}
 }
 
@@ -27,8 +28,7 @@ namespace test3 {
 // CHECK: void @test3_f0
 extern "C" void test3_f0(float) {}
 template<void (&)(float)> struct t1 {};
-// FIXME: Fails because we tack on a namespace.
-// CHECK-FIXME: void @_ZN5test32f1ENS_2t1ILZ8test3_f0EEE(
+// CHECK: void @_ZN5test32f1ENS_2t1IL_Z8test3_f0EEE(
 void f1(t1<test3_f0> a0) {}
 }
 
@@ -36,8 +36,7 @@ namespace test4 {
 // CHECK: void @test4_f0
 extern "C" void test4_f0(float) {}
 template<void (*)(float)> struct t1 {};
-// FIXME: Fails because we don't treat as an expression.
-// CHECK-FIXME: void @_ZN5test42f1ENS_2t1IXadL_Z8test4_f0EEEE(
+// CHECK: void @_ZN5test42f1ENS_2t1IXadL_Z8test4_f0EEEE(
 void f1(t1<test4_f0> a0) {}
 }
 
@@ -47,22 +46,20 @@ int main(int) {}
 
 namespace test5 {
 template<void (&)(float)> struct t1 {};
-// CHECK: void @_ZN5test52f1ENS_2t1ILZ8test5_f0EEE(
+// CHECK: void @_ZN5test52f1ENS_2t1IL_Z8test5_f0EEE(
 void f1(t1<test5_f0> a0) {}
 
 template<int (&)(int)> struct t2 {};
-// CHECK: void @_ZN5test52f2ENS_2t2ILZ4mainEEE
+// CHECK: void @_ZN5test52f2ENS_2t2IL_Z4mainEEE
 void f2(t2<main> a0) {}
 }
 
-// FIXME: This fails.
 namespace test6 {
 struct A { void im0(float); };
 // CHECK: void @_ZN5test61A3im0Ef
 void A::im0(float) {}
 template <void(A::*)(float)> class T { };
-// FIXME: Fails because we don't treat as an expression.
-// CHECK-FAIL: void @_ZN5test62f0ENS_1TIXadL_ZNS_1A3im0EfEEEE(
+// CHECK: void @_ZN5test62f0ENS_1TIXadL_ZNS_1A3im0EfEEEE(
 void f0(T<&A::im0> a0) {}
 }
 
@@ -82,7 +79,7 @@ namespace test7 {
     X(U*, typename int_c<(meta<T>::value + meta<U>::value)>::type *) { }
   };
 
-  // CHECK: define weak_odr {{.*}} @_ZN5test71XIiEC1IdEEPT_PNS_5int_cIXplL_ZNS_4metaIiE5valueEEsr4metaIS3_EE5valueEE4typeE(%"struct.test7::X"* %this, double*, float*) unnamed_addr
+  // CHECK: define weak_odr {{.*}} @_ZN5test71XIiEC1IdEEPT_PNS_5int_cIXplL_ZNS_4metaIiE5valueEEsr4metaIS3_EE5valueEE4typeE(
   template X<int>::X(double*, float*);
 }
 
@@ -101,7 +98,7 @@ namespace test8 {
   template<typename T>
   void f(int_c<meta<T>::type::value>) { }
 
-  // CHECK: define weak_odr void @_ZN5test81fIiEEvNS_5int_cIXsr4metaIT_E4typeE5valueEEE
+  // CHECK-LABEL: define weak_odr {{.*}}void @_ZN5test81fIiEEvNS_5int_cIXsr4metaIT_E4typeE5valueEEE(
   template void f<int>(int_c<sizeof(int)>);
 }
 
@@ -145,7 +142,7 @@ namespace test10 {
   }
 }
 
-// Report from Jason Merrill on cxx-abi-dev, 2012.01.04.
+// Report from cxx-abi-dev, 2012.01.04.
 namespace test11 {
   int cmp(char a, char b);
   template <typename T, int (*cmp)(T, T)> struct A {};
@@ -156,17 +153,62 @@ namespace test11 {
 
 namespace test12 {
   // Make sure we can mangle non-type template args with internal linkage.
-  static int f();
+  static int f() {}
   const int n = 10;
   template<typename T, T v> void test() {}
   void use() {
-    // CHECK: define internal void @_ZN6test124testIFivEXadL_ZNS_L1fEvEEEEvv(
+    // CHECK-LABEL: define internal {{.*}}void @_ZN6test124testIFivEXadL_ZNS_L1fEvEEEEvv(
     test<int(), &f>();
-    // CHECK: define internal void @_ZN6test124testIRFivEXadL_ZNS_L1fEvEEEEvv(
+    // CHECK-LABEL: define internal {{.*}}void @_ZN6test124testIRFivEL_ZNS_L1fEvEEEvv(
     test<int(&)(), f>();
-    // CHECK: define internal void @_ZN6test124testIPKiXadL_ZNS_L1nEEEEEvv(
+    // CHECK-LABEL: define internal {{.*}}void @_ZN6test124testIPKiXadL_ZNS_L1nEEEEEvv(
     test<const int*, &n>();
-    // CHECK: define internal void @_ZN6test124testIRKiXadL_ZNS_L1nEEEEEvv(
+    // CHECK-LABEL: define internal {{.*}}void @_ZN6test124testIRKiL_ZNS_L1nEEEEvv(
     test<const int&, n>();
   }
+}
+
+// rdar://problem/12072531
+// Test the boundary condition of minimal signed integers.
+namespace test13 {
+  template <char c> char returnChar() { return c; }
+  template char returnChar<-128>();
+  // CHECK: @_ZN6test1310returnCharILcn128EEEcv()
+
+  template <short s> short returnShort() { return s; }
+  template short returnShort<-32768>();
+  // CHECK: @_ZN6test1311returnShortILsn32768EEEsv()
+}
+
+namespace test14 {
+  template <typename> inline int inl(bool b) {
+    if (b) {
+      static struct {
+        int field;
+      } a;
+      // CHECK: @_ZZN6test143inlIvEEibE1a
+
+      return a.field;
+    } else {
+      static struct {
+        int field;
+      } a;
+      // CHECK: @_ZZN6test143inlIvEEibE1a_0
+
+      return a.field;
+    }
+  }
+
+  int call(bool b) { return inl<void>(b); }
+}
+
+namespace std {
+template <class _Tp, _Tp...> struct integer_sequence {};
+}
+
+namespace test15 {
+template <int N>
+__make_integer_seq<std::integer_sequence, int, N> make() {}
+template __make_integer_seq<std::integer_sequence, int, 5> make<5>();
+// CHECK: define weak_odr {{.*}} @_ZN6test154makeILi5EEE18__make_integer_seqISt16integer_sequenceiXT_EEv(
 }

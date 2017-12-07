@@ -15,7 +15,7 @@ BB1:
 
 BB2:
         ret i32 %A
-; CHECK: @test1
+; CHECK-LABEL: @test1(
 ; CHECK: BB1:
 ; CHECK-NEXT: ret i32 %A
 }
@@ -31,7 +31,7 @@ BB2:
         ; Combine away PHI nodes with same values
         %B = phi i32 [ %A, %BB0 ], [ %A, %BB1 ]         
         ret i32 %B
-; CHECK: @test2
+; CHECK-LABEL: @test2(
 ; CHECK: BB2:
 ; CHECK-NEXT: ret i32 %A
 }
@@ -47,7 +47,7 @@ Loop:
 
 Exit:
         ret i32 %B
-; CHECK: @test3
+; CHECK-LABEL: @test3(
 ; CHECK: Exit:
 ; CHECK-NEXT: ret i32 %A
 }
@@ -64,7 +64,7 @@ Loop:           ; preds = %L2, %Loop
 
 L2:             ; preds = %Loop
         br label %Loop
-; CHECK: @test4
+; CHECK-LABEL: @test4(
 ; CHECK: Loop:
 ; CHECK-NEXT: br i1 %b
 }
@@ -80,7 +80,7 @@ Loop:           ; preds = %Loop, %BB0
 
 Exit:           ; preds = %Loop
         ret i32 %B
-; CHECK: @test5
+; CHECK-LABEL: @test5(
 ; CHECK: Loop:
 ; CHECK-NEXT: br i1 %b
 ; CHECK: Exit:
@@ -100,7 +100,7 @@ BB2:
         ;; Suck casts into phi
         %B = phi i32 [ %X, %BB0 ], [ %Y, %BB1 ]         
         ret i32 %B
-; CHECK: @test6
+; CHECK-LABEL: @test6(
 ; CHECK: BB2:
 ; CHECK: zext i16 %A to i32
 ; CHECK-NEXT: ret i32
@@ -118,28 +118,28 @@ Loop:           ; preds = %Loop, %BB0
 
 Exit:           ; preds = %Loop
         ret i32 0
-; CHECK: @test7
+; CHECK-LABEL: @test7(
 ; CHECK: Loop:
 ; CHECK-NEXT: br i1 %b
 }
 
 define i32* @test8({ i32, i32 } *%A, i1 %b) {
 BB0:
-        %X = getelementptr inbounds { i32, i32 } *%A, i32 0, i32 1
+        %X = getelementptr inbounds { i32, i32 }, { i32, i32 } *%A, i32 0, i32 1
         br i1 %b, label %BB1, label %BB2
 
 BB1:
-        %Y = getelementptr { i32, i32 } *%A, i32 0, i32 1
+        %Y = getelementptr { i32, i32 }, { i32, i32 } *%A, i32 0, i32 1
         br label %BB2
 
 BB2:
         ;; Suck GEPs into phi
         %B = phi i32* [ %X, %BB0 ], [ %Y, %BB1 ]
         ret i32* %B
-; CHECK: @test8
+; CHECK-LABEL: @test8(
 ; CHECK-NOT: phi
 ; CHECK: BB2:
-; CHECK-NEXT: %B = getelementptr { i32, i32 }* %A 
+; CHECK-NEXT: %B = getelementptr { i32, i32 }, { i32, i32 }* %A 
 ; CHECK-NEXT: ret i32* %B
 }
 
@@ -149,20 +149,20 @@ entry:
   br i1 %c, label %bb1, label %bb
 
 bb:
-  %C = load i32* %B, align 1
+  %C = load i32, i32* %B, align 1
   br label %bb2
 
 bb1:
-  %D = load i32* %A, align 1
+  %D = load i32, i32* %A, align 1
   br label %bb2
 
 bb2:
   %E = phi i32 [ %C, %bb ], [ %D, %bb1 ]
   ret i32 %E
-; CHECK: @test9
+; CHECK-LABEL: @test9(
 ; CHECK:       bb2:
 ; CHECK-NEXT:        phi i32* [ %B, %bb ], [ %A, %bb1 ]
-; CHECK-NEXT:   %E = load i32* %{{[^,]*}}, align 1
+; CHECK-NEXT:   %E = load i32, i32* %{{[^,]*}}, align 1
 ; CHECK-NEXT:   ret i32 %E
 
 }
@@ -173,20 +173,20 @@ entry:
   br i1 %c, label %bb1, label %bb
 
 bb:
-  %C = load i32* %B, align 16
+  %C = load i32, i32* %B, align 16
   br label %bb2
 
 bb1:
-  %D = load i32* %A, align 32
+  %D = load i32, i32* %A, align 32
   br label %bb2
 
 bb2:
   %E = phi i32 [ %C, %bb ], [ %D, %bb1 ]
   ret i32 %E
-; CHECK: @test10
+; CHECK-LABEL: @test10(
 ; CHECK:       bb2:
 ; CHECK-NEXT:        phi i32* [ %B, %bb ], [ %A, %bb1 ]
-; CHECK-NEXT:   %E = load i32* %{{[^,]*}}, align 16
+; CHECK-NEXT:   %E = load i32, i32* %{{[^,]*}}, align 16
 ; CHECK-NEXT:   ret i32 %E
 }
 
@@ -219,7 +219,7 @@ end:
   store i32 10, i32* %g
   %z = call i1 @test11a()
   ret i1 %z
-; CHECK: @test11
+; CHECK-LABEL: @test11(
 ; CHECK-NOT: phi i32
 ; CHECK: ret i1 %z
 }
@@ -245,7 +245,7 @@ end:
 
   %tmp2 = add i64 %tmp32, %tmp30
   ret i64 %tmp2
-; CHECK: @test12
+; CHECK-LABEL: @test12(
 ; CHECK-NOT: zext
 ; CHECK: end:
 ; CHECK-NEXT: phi i64 [ 0, %entry ], [ %Val, %two ]
@@ -276,7 +276,7 @@ end:
   
   call void @test13f(double %tmp31, i32 %tmp32)
   ret void
-; CHECK: @test13
+; CHECK-LABEL: @test13(
 ; CHECK-NOT: zext
 ; CHECK: end:
 ; CHECK-NEXT: phi double [ 0.000000e+00, %entry ], [ %Vald, %two ]
@@ -296,7 +296,7 @@ Loop:
 
 Exit:           ; preds = %Loop
         ret i640 %C
-; CHECK: @test14a
+; CHECK-LABEL: @test14a(
 ; CHECK: Loop:
 ; CHECK-NEXT: phi i320
 }
@@ -313,7 +313,7 @@ Loop:
 
 Exit:           ; preds = %Loop
         ret i160 %C
-; CHECK: @test14b
+; CHECK-LABEL: @test14b(
 ; CHECK: Loop:
 ; CHECK-NEXT: phi i160
 }
@@ -321,7 +321,7 @@ Exit:           ; preds = %Loop
 declare i64 @test15a(i64)
 
 define i64 @test15b(i64 %A, i1 %b) {
-; CHECK: @test15b
+; CHECK-LABEL: @test15b(
 entry:
   %i0 = zext i64 %A to i128
   %i1 = shl i128 %i0, 64
@@ -375,37 +375,37 @@ entry:
   store i32 %flag, i32* %flag.addr
   store i32* %pointer2, i32** %pointer2.addr
   store i32 10, i32* %res
-  %tmp = load i32* %flag.addr                     ; <i32> [#uses=1]
+  %tmp = load i32, i32* %flag.addr                     ; <i32> [#uses=1]
   %tobool = icmp ne i32 %tmp, 0                   ; <i1> [#uses=1]
   br i1 %tobool, label %if.then, label %if.else
 
 return:                                           ; preds = %if.end
-  %tmp7 = load i32* %retval                       ; <i32> [#uses=1]
+  %tmp7 = load i32, i32* %retval                       ; <i32> [#uses=1]
   ret i32 %tmp7
 
 if.end:                                           ; preds = %if.else, %if.then
-  %tmp6 = load i32* %res                          ; <i32> [#uses=1]
+  %tmp6 = load i32, i32* %res                          ; <i32> [#uses=1]
   store i32 %tmp6, i32* %retval
   br label %return
 
 if.then:                                          ; preds = %entry
-  %tmp1 = load i32 addrspace(1)** %pointer1.addr  ; <i32 addrspace(1)*>
-  %arrayidx = getelementptr i32 addrspace(1)* %tmp1, i32 0 ; <i32 addrspace(1)*> [#uses=1]
-  %tmp2 = load i32 addrspace(1)* %arrayidx        ; <i32> [#uses=1]
+  %tmp1 = load i32 addrspace(1)*, i32 addrspace(1)** %pointer1.addr  ; <i32 addrspace(1)*>
+  %arrayidx = getelementptr i32, i32 addrspace(1)* %tmp1, i32 0 ; <i32 addrspace(1)*> [#uses=1]
+  %tmp2 = load i32, i32 addrspace(1)* %arrayidx        ; <i32> [#uses=1]
   store i32 %tmp2, i32* %res
   br label %if.end
 
 if.else:                                          ; preds = %entry
-  %tmp3 = load i32** %pointer2.addr               ; <i32*> [#uses=1]
-  %arrayidx4 = getelementptr i32* %tmp3, i32 0    ; <i32*> [#uses=1]
-  %tmp5 = load i32* %arrayidx4                    ; <i32> [#uses=1]
+  %tmp3 = load i32*, i32** %pointer2.addr               ; <i32*> [#uses=1]
+  %arrayidx4 = getelementptr i32, i32* %tmp3, i32 0    ; <i32*> [#uses=1]
+  %tmp5 = load i32, i32* %arrayidx4                    ; <i32> [#uses=1]
   store i32 %tmp5, i32* %res
   br label %if.end
 }
 
 ; PR4413
 declare i32 @ext()
-; CHECK: @test17
+; CHECK-LABEL: @test17(
 define i32 @test17(i1 %a) {
 entry:
     br i1 %a, label %bb1, label %bb2
@@ -435,7 +435,7 @@ ret:
   %ptr = phi i32* [ %zero, %true ] , [ %one, %false ]
   %isnull = icmp eq i32* %ptr, null
   ret i1 %isnull
-; CHECK: @test18
+; CHECK-LABEL: @test18(
 ; CHECK: ret i1 false
 }
 
@@ -449,7 +449,7 @@ ret:
   %p = phi double [ %x, %true ], [ 0x7FF0000000000000, %false ]; RHS = +infty
   %cmp = fcmp ule double %x, %p
   ret i1 %cmp
-; CHECK: @test19
+; CHECK-LABEL: @test19(
 ; CHECK: ret i1 true
 }
 
@@ -466,7 +466,7 @@ ret:
   %p = phi i32* [ %a, %true ], [ %b, %false ]
   %r = icmp eq i32* %p, %c
   ret i1 %r
-; CHECK: @test20
+; CHECK-LABEL: @test20(
 ; CHECK: ret i1 false
 }
 
@@ -485,12 +485,12 @@ loop:
   br i1 %c2, label %ret, label %loop
 ret:
   ret i1 %r
-; CHECK: @test21
+; CHECK-LABEL: @test21(
 ; CHECK: ret i1 false
 }
 
 define void @test22() {
-; CHECK: @test22
+; CHECK-LABEL: @test22(
 entry:
   br label %loop
 loop:
@@ -518,7 +518,7 @@ Loop:           ; preds = %Loop, %BB0
 Exit:           ; preds = %Loop
         %E = add i32 %B, 19
         ret i32 %E
-; CHECK: @test23
+; CHECK-LABEL: @test23(
 ; CHECK: %phitmp = add i32 %A, 19
 ; CHECK: Loop:
 ; CHECK-NEXT: %B = phi i32 [ %phitmp, %BB0 ], [ 61, %Loop ]
@@ -538,7 +538,7 @@ BB1:
 BB2:
         %C = phi i32 [ %X, %BB0 ], [ %Y, %BB1 ]
         ret i32 %C
-; CHECK: @test24
+; CHECK-LABEL: @test24(
 ; CHECK-NOT: phi
 ; CHECK: BB2:
 ; CHECK-NEXT: %C = add nuw i32 %A, 1
@@ -573,7 +573,7 @@ end:
   store i32 10, i32* %g
   %z = call i1 @test25a()
   ret i1 %z
-; CHECK: @test25
+; CHECK-LABEL: @test25(
 ; CHECK-NOT: phi i32
 ; CHECK: ret i1 %z
 }
@@ -616,7 +616,266 @@ end:
   store i32 10, i32* %g
   %z = call i1 @test26a()
   ret i1 %z
-; CHECK: @test26
+; CHECK-LABEL: @test26(
 ; CHECK-NOT: phi i32
 ; CHECK: ret i1 %z
+}
+
+; CHECK-LABEL: @test27(
+; CHECK: ret i32 undef
+define i32 @test27(i1 %b) {
+entry:
+  br label %done
+done:
+  %y = phi i32 [ undef, %entry ]
+  ret i32 %y
+}
+
+; We should be able to fold the zexts to the other side of the phi
+; even though there's a constant value input to the phi. This is
+; because we can shrink that constant to the smaller phi type.
+
+define i1 @PR24766(i8 %x1, i8 %x2, i8 %condition) {
+entry:
+  %conv = sext i8 %condition to i32
+  switch i32 %conv, label %epilog [
+    i32 0, label %sw1
+    i32 1, label %sw2
+  ]
+
+sw1:
+  %cmp1 = icmp eq i8 %x1, %x2
+  %frombool1 = zext i1 %cmp1 to i8
+  br label %epilog
+
+sw2:
+  %cmp2 = icmp sle i8 %x1, %x2
+  %frombool2 = zext i1 %cmp2 to i8
+  br label %epilog
+
+epilog:
+  %conditionMet = phi i8 [ 0, %entry ], [ %frombool2, %sw2 ], [ %frombool1, %sw1 ]
+  %tobool = icmp ne i8 %conditionMet, 0
+  ret i1 %tobool
+
+; CHECK-LABEL: @PR24766(
+; CHECK: %[[RES:.*]] = phi i1 [ false, %entry ], [ %cmp2, %sw2 ], [ %cmp1, %sw1 ]
+; CHECK-NEXT: ret i1 %[[RES]] 
+}
+
+; Same as above (a phi with more than 2 operands), but no constants
+ 
+define i1 @PR24766_no_constants(i8 %x1, i8 %x2, i8 %condition, i1 %another_condition) {
+entry:
+  %frombool0 = zext i1 %another_condition to i8
+  %conv = sext i8 %condition to i32
+  switch i32 %conv, label %epilog [
+    i32 0, label %sw1
+    i32 1, label %sw2
+  ]
+
+sw1:
+  %cmp1 = icmp eq i8 %x1, %x2
+  %frombool1 = zext i1 %cmp1 to i8
+  br label %epilog
+
+sw2:
+  %cmp2 = icmp sle i8 %x1, %x2
+  %frombool2 = zext i1 %cmp2 to i8
+  br label %epilog
+
+epilog:
+  %conditionMet = phi i8 [ %frombool0, %entry ], [ %frombool2, %sw2 ], [ %frombool1, %sw1 ]
+  %tobool = icmp ne i8 %conditionMet, 0
+  ret i1 %tobool
+
+; CHECK-LABEL: @PR24766_no_constants(
+; CHECK: %[[RES:.*]] = phi i1 [ %another_condition, %entry ], [ %cmp2, %sw2 ], [ %cmp1, %sw1 ]
+; CHECK-NEXT: ret i1 %[[RES]]
+}
+
+; Same as above (a phi with more than 2 operands), but two constants
+
+define i1 @PR24766_two_constants(i8 %x1, i8 %x2, i8 %condition) {
+entry:
+  %conv = sext i8 %condition to i32
+  switch i32 %conv, label %epilog [
+    i32 0, label %sw1
+    i32 1, label %sw2
+  ]
+
+sw1:
+  %cmp1 = icmp eq i8 %x1, %x2
+  %frombool1 = zext i1 %cmp1 to i8
+  br label %epilog
+
+sw2:
+  %cmp2 = icmp sle i8 %x1, %x2
+  %frombool2 = zext i1 %cmp2 to i8
+  br label %epilog
+
+epilog:
+  %conditionMet = phi i8 [ 0, %entry ], [ 1, %sw2 ], [ %frombool1, %sw1 ]
+  %tobool = icmp ne i8 %conditionMet, 0
+  ret i1 %tobool
+
+; CHECK-LABEL: @PR24766_two_constants(
+; CHECK: %[[RES:.*]] = phi i1 [ false, %entry ], [ true, %sw2 ], [ %cmp1, %sw1 ]
+; CHECK-NEXT: ret i1 %[[RES]]
+}
+
+; Same as above (a phi with more than 2 operands), but two constants and two variables
+
+define i1 @PR24766_two_constants_two_var(i8 %x1, i8 %x2, i8 %condition) {
+entry:
+  %conv = sext i8 %condition to i32
+  switch i32 %conv, label %epilog [
+    i32 0, label %sw1
+    i32 1, label %sw2
+    i32 2, label %sw3
+  ]
+
+sw1:
+  %cmp1 = icmp eq i8 %x1, %x2
+  %frombool1 = zext i1 %cmp1 to i8
+  br label %epilog
+
+sw2:
+  %cmp2 = icmp sle i8 %x1, %x2
+  %frombool2 = zext i1 %cmp2 to i8
+  br label %epilog
+
+sw3:
+  %cmp3 = icmp sge i8 %x1, %x2
+  %frombool3 = zext i1 %cmp3 to i8
+  br label %epilog
+
+epilog:
+  %conditionMet = phi i8 [ 0, %entry ], [ %frombool2, %sw2 ], [ %frombool1, %sw1 ], [ 1, %sw3 ]
+  %tobool = icmp ne i8 %conditionMet, 0
+  ret i1 %tobool
+
+; CHECK-LABEL: @PR24766_two_constants_two_var(
+; CHECK: %[[RES:.*]] = phi i1 [ false, %entry ], [ %cmp2, %sw2 ], [ %cmp1, %sw1 ], [ true, %sw3 ]
+; CHECK-NEXT: ret i1 %[[RES]]
+}
+
+; CHECK-LABEL: phi_allnonzeroconstant
+; CHECK-NOT: phi i32
+; CHECK: ret i1 false
+define i1 @phi_allnonzeroconstant(i1 %c, i32 %a, i32 %b) {
+entry:
+  br i1 %c, label %if.then, label %if.else
+
+if.then:                                          ; preds = %entry
+  br label %if.end
+
+if.else:                                          ; preds = %entry
+  call void @dummy()
+
+  br label %if.end
+
+if.end:                                           ; preds = %if.else, %if.then
+  %x.0 = phi i32 [ 1, %if.then ], [ 2, %if.else ]
+  %or = or i32 %x.0, %a
+  %cmp1 = icmp eq i32 %or, 0
+  ret i1 %cmp1
+}
+
+declare void @dummy()
+
+; CHECK-LABEL: @phi_knownnonzero_eq
+; CHECK-LABEL: if.then:
+; CHECK-NOT: select
+; CHECK-LABEL: if.end:
+; CHECK: phi i32 [ 1, %if.then ]
+define i1 @phi_knownnonzero_eq(i32 %n, i32 %s, i32* nocapture readonly %P) {
+entry:
+  %tobool = icmp slt  i32 %n, %s
+  br i1 %tobool, label %if.end, label %if.then
+
+if.then:                                          ; preds = %entry
+  %0 = load i32, i32* %P
+  %cmp = icmp eq i32 %n, %0
+  %1 = select i1 %cmp, i32 1, i32 2
+  br label %if.end
+
+if.end:                                           ; preds = %entry, %if.then
+  %a.0 = phi i32 [ %1,  %if.then ], [ %n, %entry ]
+  %cmp1 = icmp eq i32 %a.0, 0
+  ret i1  %cmp1
+}
+
+; CHECK-LABEL: @phi_knownnonzero_ne
+; CHECK-LABEL: if.then:
+; CHECK-NOT: select
+; CHECK-LABEL: if.end:
+; CHECK: phi i32 [ 1, %if.then ]
+define i1 @phi_knownnonzero_ne(i32 %n, i32 %s, i32* nocapture readonly %P) {
+entry:
+  %tobool = icmp slt  i32 %n, %s
+  br i1 %tobool, label %if.end, label %if.then
+
+if.then:                                          ; preds = %entry
+  %0 = load i32, i32* %P
+  %cmp = icmp eq i32 %n, %0
+  %1 = select i1 %cmp, i32 1, i32 2
+  br label %if.end
+
+if.end:                                           ; preds = %entry, %if.then
+  %a.0 = phi i32 [ %1,  %if.then ], [ %n, %entry ]
+  %cmp1 = icmp ne i32 %a.0, 0
+  ret i1  %cmp1
+}
+
+; CHECK-LABEL: @phi_knownnonzero_eq_2
+; CHECK-LABEL: if.then:
+; CHECK-NOT: select
+; CHECK-LABEL: if.end:
+; CHECK: phi i32 [ 2, %if.else ]
+define i1 @phi_knownnonzero_eq_2(i32 %n, i32 %s, i32* nocapture readonly %P) {
+entry:
+  %tobool = icmp slt  i32 %n, %s
+  br i1 %tobool, label %if.then, label %if.end
+
+if.then:
+  %tobool2 = icmp slt  i32 %n, %s
+  br i1 %tobool2, label %if.else, label %if.end
+
+if.else:                                          ; preds = %entry
+  %0 = load i32, i32* %P
+  %cmp = icmp eq i32 %n, %0
+  %1 = select i1 %cmp, i32 1, i32 2
+  br label %if.end
+
+if.end:                                           ; preds = %entry, %if.then
+  %a.0 = phi i32 [ %1,  %if.else], [ %n, %entry ], [2, %if.then]
+  %cmp1 = icmp eq i32 %a.0, 0
+  ret i1  %cmp1
+}
+
+; CHECK-LABEL: @phi_knownnonzero_ne_2
+; CHECK-LABEL: if.then:
+; CHECK-NOT: select
+; CHECK-LABEL: if.end:
+; CHECK: phi i32 [ 2, %if.else ]
+define i1 @phi_knownnonzero_ne_2(i32 %n, i32 %s, i32* nocapture readonly %P) {
+entry:
+  %tobool = icmp slt  i32 %n, %s
+  br i1 %tobool, label %if.then, label %if.end
+
+if.then:
+  %tobool2 = icmp slt  i32 %n, %s
+  br i1 %tobool2, label %if.else, label %if.end
+
+if.else:                                          ; preds = %entry
+  %0 = load i32, i32* %P
+  %cmp = icmp eq i32 %n, %0
+  %1 = select i1 %cmp, i32 1, i32 2
+  br label %if.end
+
+if.end:                                           ; preds = %entry, %if.then
+  %a.0 = phi i32 [ %1,  %if.else], [ %n, %entry ], [2, %if.then]
+  %cmp1 = icmp ne i32 %a.0, 0
+  ret i1  %cmp1
 }

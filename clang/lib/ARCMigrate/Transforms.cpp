@@ -1,4 +1,4 @@
-//===--- Tranforms.cpp - Tranformations to ARC mode -----------------------===//
+//===--- Transforms.cpp - Transformations to ARC mode ---------------------===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -9,14 +9,14 @@
 
 #include "Transforms.h"
 #include "Internals.h"
-#include "clang/Sema/SemaDiagnostic.h"
+#include "clang/AST/ASTContext.h"
 #include "clang/AST/RecursiveASTVisitor.h"
-#include "clang/AST/StmtVisitor.h"
-#include "clang/Lex/Lexer.h"
+#include "clang/Analysis/DomainSpecific/CocoaConventions.h"
 #include "clang/Basic/SourceManager.h"
-#include "llvm/ADT/StringSwitch.h"
-#include "llvm/ADT/DenseSet.h"
-#include <map>
+#include "clang/Basic/TargetInfo.h"
+#include "clang/Lex/Lexer.h"
+#include "clang/Lex/Preprocessor.h"
+#include "clang/Sema/Sema.h"
 
 using namespace clang;
 using namespace arcmt;
@@ -24,13 +24,20 @@ using namespace trans;
 
 ASTTraverser::~ASTTraverser() { }
 
+bool MigrationPass::CFBridgingFunctionsDefined() {
+  if (!EnableCFBridgeFns.hasValue())
+    EnableCFBridgeFns = SemaRef.isKnownName("CFBridgingRetain") &&
+                        SemaRef.isKnownName("CFBridgingRelease");
+  return *EnableCFBridgeFns;
+}
+
 //===----------------------------------------------------------------------===//
 // Helpers.
 //===----------------------------------------------------------------------===//
 
 bool trans::canApplyWeak(ASTContext &Ctx, QualType type,
                          bool AllowOnUnknownClass) {
-  if (!Ctx.getLangOpts().ObjCRuntimeHasWeak)
+  if (!Ctx.getLangOpts().ObjCWeakRuntime)
     return false;
 
   QualType T = type;
@@ -38,7 +45,8 @@ bool trans::canApplyWeak(ASTContext &Ctx, QualType type,
     return false;
 
   // iOS is always safe to use 'weak'.
-  if (Ctx.getTargetInfo().getTriple().getOS() == llvm::Triple::IOS)
+  if (Ctx.getTargetInfo().getTriple().isiOS() ||
+      Ctx.getTargetInfo().getTriple().isWatchOS())
     AllowOnUnknownClass = true;
 
   while (const PointerType *ptr = T->getAs<PointerType>())
@@ -49,11 +57,58 @@ bool trans::canApplyWeak(ASTContext &Ctx, QualType type,
       return false; // id/NSObject is not safe for weak.
     if (!AllowOnUnknownClass && !Class->hasDefinition())
       return false; // forward classes are not verifiable, therefore not safe.
-    if (Class->isArcWeakrefUnavailable())
+    if (Class && Class->isArcWeakrefUnavailable())
       return false;
   }
 
   return true;
+}
+
+bool trans::isPlusOneAssign(const BinaryOperator *E) {
+  if (E->getOpcode() != BO_Assign)
+    return false;
+
+  return isPlusOne(E->getRHS());
+}
+
+bool trans::isPlusOne(const Expr *E) {
+  if (!E)
+    return false;
+  if (const ExprWithCleanups *EWC = dyn_cast<ExprWithCleanups>(E))
+    E = EWC->getSubExpr();
+
+  if (const ObjCMessageExpr *
+        ME = dyn_cast<ObjCMessageExpr>(E->IgnoreParenCasts()))
+    if (ME->getMethodFamily() == OMF_retain)
+      return true;
+
+  if (const CallExpr *
+        callE = dyn_cast<CallExpr>(E->IgnoreParenCasts())) {
+    if (const FunctionDecl *FD = callE->getDirectCallee()) {
+      if (FD->hasAttr<CFReturnsRetainedAttr>())
+        return true;
+
+      if (FD->isGlobal() &&
+          FD->getIdentifier() &&
+          FD->getParent()->isTranslationUnit() &&
+          FD->isExternallyVisible() &&
+          ento::cocoa::isRefType(callE->getType(), "CF",
+                                 FD->getIdentifier()->getName())) {
+        StringRef fname = FD->getIdentifier()->getName();
+        if (fname.endswith("Retain") ||
+            fname.find("Create") != StringRef::npos ||
+            fname.find("Copy") != StringRef::npos) {
+          return true;
+        }
+      }
+    }
+  }
+
+  const ImplicitCastExpr *implCE = dyn_cast<ImplicitCastExpr>(E);
+  while (implCE && implCE->getCastKind() ==  CK_BitCast)
+    implCE = dyn_cast<ImplicitCastExpr>(implCE->getSubExpr());
+
+  return implCE && implCE->getCastKind() == CK_ARCConsumeObject;
 }
 
 /// \brief 'Loc' is the end of a statement range. This returns the location
@@ -61,8 +116,8 @@ bool trans::canApplyWeak(ASTContext &Ctx, QualType type,
 /// If no semicolon is found or the location is inside a macro, the returned
 /// source location will be invalid.
 SourceLocation trans::findLocationAfterSemi(SourceLocation loc,
-                                            ASTContext &Ctx) {
-  SourceLocation SemiLoc = findSemiAfterLocation(loc, Ctx);
+                                            ASTContext &Ctx, bool IsDecl) {
+  SourceLocation SemiLoc = findSemiAfterLocation(loc, Ctx, IsDecl);
   if (SemiLoc.isInvalid())
     return SourceLocation();
   return SemiLoc.getLocWithOffset(1);
@@ -73,7 +128,8 @@ SourceLocation trans::findLocationAfterSemi(SourceLocation loc,
 /// If no semicolon is found or the location is inside a macro, the returned
 /// source location will be invalid.
 SourceLocation trans::findSemiAfterLocation(SourceLocation loc,
-                                            ASTContext &Ctx) {
+                                            ASTContext &Ctx,
+                                            bool IsDecl) {
   SourceManager &SM = Ctx.getSourceManager();
   if (loc.isMacroID()) {
     if (!Lexer::isAtEndOfMacroExpansion(loc, SM, Ctx.getLangOpts(), &loc))
@@ -98,8 +154,13 @@ SourceLocation trans::findSemiAfterLocation(SourceLocation loc,
               file.begin(), tokenBegin, file.end());
   Token tok;
   lexer.LexFromRawLexer(tok);
-  if (tok.isNot(tok::semi))
-    return SourceLocation();
+  if (tok.isNot(tok::semi)) {
+    if (!IsDecl)
+      return SourceLocation();
+    // Declaration may be followed with other tokens; such as an __attribute,
+    // before ending with a semicolon.
+    return findSemiAfterLocation(tok.getLocation(), Ctx, /*IsDecl*/true);
+  }
 
   return tok.getLocation();
 }
@@ -137,7 +198,7 @@ bool trans::isGlobalVar(Expr *E) {
   E = E->IgnoreParenCasts();
   if (DeclRefExpr *DRE = dyn_cast<DeclRefExpr>(E))
     return DRE->getDecl()->getDeclContext()->isFileContext() &&
-           DRE->getDecl()->getLinkage() == ExternalLinkage;
+           DRE->getDecl()->isExternallyVisible();
   if (ConditionalOperator *condOp = dyn_cast<ConditionalOperator>(E))
     return isGlobalVar(condOp->getTrueExpr()) &&
            isGlobalVar(condOp->getFalseExpr());
@@ -145,11 +206,8 @@ bool trans::isGlobalVar(Expr *E) {
   return false;  
 }
 
-StringRef trans::getNilString(ASTContext &Ctx) {
-  if (Ctx.Idents.get("nil").hasMacroDefinition())
-    return "nil";
-  else
-    return "0";
+StringRef trans::getNilString(MigrationPass &Pass) {
+  return Pass.SemaRef.PP.isMacroDefined("nil") ? "nil" : "0";
 }
 
 namespace {
@@ -197,9 +255,8 @@ public:
   }
   
   bool VisitCompoundStmt(CompoundStmt *S) {
-    for (CompoundStmt::body_iterator
-        I = S->body_begin(), E = S->body_end(); I != E; ++I)
-      mark(*I);
+    for (auto *I : S->body())
+      mark(I);
     return true;
   }
   
@@ -347,8 +404,7 @@ bool MigrationContext::rewritePropertyAttribute(StringRef fromAttr,
   if (tok.isNot(tok::at)) return false;
   lexer.LexFromRawLexer(tok);
   if (tok.isNot(tok::raw_identifier)) return false;
-  if (StringRef(tok.getRawIdentifierData(), tok.getLength())
-        != "property")
+  if (tok.getRawIdentifier() != "property")
     return false;
   lexer.LexFromRawLexer(tok);
   if (tok.isNot(tok::l_paren)) return false;
@@ -364,8 +420,7 @@ bool MigrationContext::rewritePropertyAttribute(StringRef fromAttr,
 
   while (1) {
     if (tok.isNot(tok::raw_identifier)) return false;
-    StringRef ident(tok.getRawIdentifierData(), tok.getLength());
-    if (ident == fromAttr) {
+    if (tok.getRawIdentifier() == fromAttr) {
       if (!toAttr.empty()) {
         Pass.TA.replaceText(tok.getLocation(), fromAttr, toAttr);
         return true;
@@ -430,8 +485,7 @@ bool MigrationContext::addPropertyAttribute(StringRef attr,
   if (tok.isNot(tok::at)) return false;
   lexer.LexFromRawLexer(tok);
   if (tok.isNot(tok::raw_identifier)) return false;
-  if (StringRef(tok.getRawIdentifierData(), tok.getLength())
-        != "property")
+  if (tok.getRawIdentifier() != "property")
     return false;
   lexer.LexFromRawLexer(tok);
 
@@ -471,15 +525,12 @@ static void GCRewriteFinalize(MigrationPass &pass) {
   impl_iterator;
   for (impl_iterator I = impl_iterator(DC->decls_begin()),
        E = impl_iterator(DC->decls_end()); I != E; ++I) {
-    for (ObjCImplementationDecl::instmeth_iterator
-         MI = (*I)->instmeth_begin(),
-         ME = (*I)->instmeth_end(); MI != ME; ++MI) {
-      ObjCMethodDecl *MD = *MI;
+    for (const auto *MD : I->instance_methods()) {
       if (!MD->hasBody())
         continue;
       
       if (MD->isInstanceMethod() && MD->getSelector() == FinalizeSel) {
-        ObjCMethodDecl *FinalizeM = MD;
+        const ObjCMethodDecl *FinalizeM = MD;
         Transaction Trans(TA);
         TA.insert(FinalizeM->getSourceRange().getBegin(), 
                   "#if !__has_feature(objc_arc)\n");
@@ -512,6 +563,7 @@ static void traverseAST(MigrationPass &pass) {
   }
   MigrateCtx.addTraverser(new PropertyRewriteTraverser());
   MigrateCtx.addTraverser(new BlockObjCVariableTraverser());
+  MigrateCtx.addTraverser(new ProtectedScopeTraverser());
 
   MigrateCtx.traverse(pass.Ctx.getTranslationUnitDecl());
 }

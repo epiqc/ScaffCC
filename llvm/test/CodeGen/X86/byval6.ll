@@ -1,4 +1,4 @@
-; RUN: llc < %s -mcpu=generic -march=x86 | grep add | not grep 16
+; RUN: llc < %s -mcpu=generic -mtriple=i686-- | grep add | not grep 16
 
 	%struct.W = type { x86_fp80, x86_fp80 }
 @B = global %struct.W { x86_fp80 0xK4001A000000000000000, x86_fp80 0xK4001C000000000000000 }, align 32
@@ -6,8 +6,8 @@
 
 define i32 @main() nounwind  {
 entry:
-	tail call void (i32, ...)* @bar( i32 3, %struct.W* byval  @.cpx ) nounwind 
-	tail call void (i32, ...)* @baz( i32 3, %struct.W* byval  @B ) nounwind 
+	tail call void (i32, ...) @bar( i32 3, %struct.W* byval  @.cpx ) nounwind 
+	tail call void (i32, ...) @baz( i32 3, %struct.W* byval  @B ) nounwind 
 	ret i32 undef
 }
 

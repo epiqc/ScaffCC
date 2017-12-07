@@ -1,5 +1,4 @@
-; RUN: opt < %s -analyze -scalar-evolution \
-; RUN:   -scalar-evolution-max-iterations=0 | FileCheck %s
+; RUN: opt < %s -analyze -scalar-evolution -scalar-evolution-max-iterations=0 | FileCheck %s
 
 ; PR1101
 
@@ -11,7 +10,7 @@ entry:
         br label %bb3
 
 bb:             ; preds = %bb3
-        %tmp = getelementptr [1000 x i32]* @A, i32 0, i32 %i.0          ; <i32*> [#uses=1]
+        %tmp = getelementptr [1000 x i32], [1000 x i32]* @A, i32 0, i32 %i.0          ; <i32*> [#uses=1]
         store i32 123, i32* %tmp
         %tmp2 = add i32 %i.0, 1         ; <i32> [#uses=1]
         br label %bb3
@@ -80,3 +79,24 @@ for.cond539.preheader:
   unreachable
 }
 ; CHECK: Determining loop execution counts for: @test3
+
+; PR13489
+; We used to crash on this too.
+
+define void @test4() {
+entry:
+  br label %for.body
+
+for.body:                                         ; preds = %for.body, %entry
+  %v2.02 = phi i64 [ 2, %entry ], [ %phitmp, %for.body ]
+  %v1.01 = phi i64 [ -2, %entry ], [ %sub1, %for.body ]
+  %sub1 = sub i64 %v1.01, %v2.02
+  %phitmp = add i64 %v2.02, 2
+  %tobool = icmp eq i64 %sub1, %phitmp
+  br i1 %tobool, label %for.end, label %for.body
+
+for.end:                                          ; preds = %for.body
+  ret void
+}
+
+; CHECK: Determining loop execution counts for: @test4

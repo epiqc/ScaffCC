@@ -11,10 +11,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_CLANG_GR_ENVIRONMENT_H
-#define LLVM_CLANG_GR_ENVIRONMENT_H
+#ifndef LLVM_CLANG_STATICANALYZER_CORE_PATHSENSITIVE_ENVIRONMENT_H
+#define LLVM_CLANG_STATICANALYZER_CORE_PATHSENSITIVE_ENVIRONMENT_H
 
-#include "clang/Analysis/AnalysisContext.h"
+#include "clang/Analysis/AnalysisDeclContext.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/SVals.h"
 #include "llvm/ADT/ImmutableMap.h"
 
@@ -26,6 +26,7 @@ namespace ento {
 
 class EnvironmentManager;
 class SValBuilder;
+class SymbolReaper;
 
 /// An entry in the environment consists of a Stmt and an LocationContext.
 /// This allows the environment to manage context-sensitive bindings,
@@ -34,9 +35,7 @@ class SValBuilder;
 class EnvironmentEntry : public std::pair<const Stmt*,
                                           const StackFrameContext *> {
 public:
-  EnvironmentEntry(const Stmt *s, const LocationContext *L)
-    : std::pair<const Stmt*,
-                const StackFrameContext*>(s, L ? L->getCurrentStackFrame():0) {}
+  EnvironmentEntry(const Stmt *s, const LocationContext *L);
 
   const Stmt *getStmt() const { return first; }
   const LocationContext *getLocationContext() const { return second; }
@@ -76,9 +75,7 @@ public:
 
   /// Fetches the current binding of the expression in the
   /// Environment.
-  SVal getSVal(const EnvironmentEntry &E,
-               SValBuilder &svalBuilder,
-               bool useOnlyDirectBindings = false) const;
+  SVal getSVal(const EnvironmentEntry &E, SValBuilder &svalBuilder) const;
 
   /// Profile - Profile the contents of an Environment object for use
   ///  in a FoldingSet.
@@ -110,7 +107,6 @@ private:
 
 public:
   EnvironmentManager(llvm::BumpPtrAllocator& Allocator) : F(Allocator) {}
-  ~EnvironmentManager() {}
 
   Environment getInitialEnvironment() {
     return Environment(F.getEmptyMap());
@@ -119,13 +115,6 @@ public:
   /// Bind a symbolic value to the given environment entry.
   Environment bindExpr(Environment Env, const EnvironmentEntry &E, SVal V,
                        bool Invalidate);
-  
-  /// Bind the location 'location' and value 'V' to the specified
-  /// environment entry.
-  Environment bindExprAndLocation(Environment Env,
-                                  const EnvironmentEntry &E,
-                                  SVal location,
-                                  SVal V);
 
   Environment removeDeadBindings(Environment Env,
                                  SymbolReaper &SymReaper,

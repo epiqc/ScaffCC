@@ -2,9 +2,9 @@
 
 DIR=$(dirname $0)
 ROOT=$DIR/..
-BIN=$ROOT/build/Release+Asserts/bin
-LIB=$ROOT/build/Release+Asserts/lib
-SCAF=$LIB/Scaffold.so
+BIN=$ROOT/build/bin
+LIB=$ROOT/build/lib
+SCAF=$LIB/LLVMScaffold.so
 OPT=$BIN/opt
 CLANG=$BIN/clang
 LLVM_LINK=$BIN/llvm-link
@@ -16,7 +16,7 @@ D=(1024)
 # Number of SIMD regions
 K=(4)
 # Module flattening thresholds: must be picked from the set in scripts/flattening_thresh.py
-THRESHOLDS=(300k)
+THRESHOLDS=(100k)
 # Full schedule? otherwise only generates metrics (faster)
 FULL_SCHED=1
 
@@ -25,7 +25,7 @@ for f in $*; do
   b=$(basename $f .scaffold)  
   echo "[gen-lpfs.sh] $b: Creating output directory ..."
   mkdir -p "$b"
-  mv ./*${b}* ${b} 2>/dev/null
+  #mv ./*${b}* ${b} 2>/dev/null
 done
 
 # Generate .ll file if not done already
@@ -34,7 +34,7 @@ for f in $*; do
   echo "[gen-lpfs.sh] $b: Compiling ..."
   if [ ! -e ${b}/${b}.ll ]; then
     # Generate compiled files
-    $ROOT/scaffold.sh -rk $f
+    $ROOT/scaffold.sh -r $f
     mv ${b}11.ll ${b}11.ll.keep_me
     # clean intermediary compilation files (comment out for speed)
     $ROOT/scaffold.sh -c $f
@@ -71,7 +71,6 @@ for f in $*; do
 done
 
 # For different K and D values specified above, generate MultiSIMD schedules
-# Turn on opp_simd (opportunistic simd) for more efficient schedules, but much slower. Refer to paper.
 for f in $*; do
   b=$(basename $f .scaffold)
   for d in ${D[@]}; do
@@ -79,7 +78,7 @@ for f in $*; do
       for th in ${THRESHOLDS[@]}; do
         echo "[gen-lpfs.sh] $b.flat${th}: Generating SIMD K=$k D=$d leaves ..."        
         if [ ! -e ${b}/${b}.flat${th}.simd.${k}.${d}.leaves.local ]; then
-          $OPT -load $SCAF -GenLPFSSchedule -simd-kconstraint-lpfs $k -simd-dconstraint-lpfs $d -simd_l 1 -full_sched $FULL_SCHED -local_mem 1 -opp_simd 0 ${b}/${b}.flat${th}.ll > /dev/null 2> ${b}/${b}.flat${th}.simd.${k}.${d}.leaves.local
+          $OPT -load $SCAF -GenLPFSSchedule -simd-kconstraint-lpfs $k -simd-dconstraint-lpfs $d -simd_l 1 -full_sched $FULL_SCHED -local_mem 1 ${b}/${b}.flat${th}.ll > /dev/null 2> ${b}/${b}.flat${th}.simd.${k}.${d}.leaves.local
         fi
       done
     done

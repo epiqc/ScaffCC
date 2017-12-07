@@ -1,4 +1,6 @@
-@__experimental_modules_import diamond_top;
+int top_left_before(void *);
+
+@import diamond_top;
 
 float left(float *);
 

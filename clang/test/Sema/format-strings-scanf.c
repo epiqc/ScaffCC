@@ -1,10 +1,28 @@
-// RUN: %clang_cc1 -fsyntax-only -verify -triple i386-apple-darwin9 -Wformat-nonliteral %s
+// RUN: %clang_cc1 -std=c11 -fsyntax-only -verify -Wformat-nonliteral %s
 
 // Test that -Wformat=0 works:
-// RUN: %clang_cc1 -fsyntax-only -Werror -Wformat=0 %s
+// RUN: %clang_cc1 -std=c11 -fsyntax-only -Werror -Wformat=0 %s
 
 #include <stdarg.h>
-typedef __typeof(sizeof(int)) size_t;
+typedef __SIZE_TYPE__ size_t;
+#define __SSIZE_TYPE__                                                         \
+  __typeof__(_Generic((__SIZE_TYPE__)0,                                        \
+                      unsigned long long int : (long long int)0,               \
+                      unsigned long int : (long int)0,                         \
+                      unsigned int : (int)0,                                   \
+                      unsigned short : (short)0,                               \
+                      unsigned char : (signed char)0))
+typedef __SSIZE_TYPE__ ssize_t;                         
+
+typedef __PTRDIFF_TYPE__ ptrdiff_t;
+#define __UNSIGNED_PTRDIFF_TYPE__                                              \
+  __typeof__(_Generic((__PTRDIFF_TYPE__)0,                                     \
+                      long long int : (unsigned long long int)0,               \
+                      long int : (unsigned long int)0,                         \
+                      int : (unsigned int)0,                                   \
+                      short : (unsigned short)0,                               \
+                      signed char : (unsigned char)0))
+
 typedef struct _FILE FILE;
 typedef __WCHAR_TYPE__ wchar_t;
 
@@ -18,7 +36,7 @@ int vfscanf(FILE * restrict, const char * restrict, va_list);
 int vsscanf(const char * restrict, const char * restrict, va_list);
 
 void test(const char *s, int *i) {
-  scanf(s, i); // expected-warning{{ormat string is not a string literal}}
+  scanf(s, i); // expected-warning{{format string is not a string literal}}
   scanf("%0d", i); // expected-warning{{zero field width in scanf format string is unused}}
   scanf("%00d", i); // expected-warning{{zero field width in scanf format string is unused}}
   scanf("%d%[asdfasdfd", i, s); // expected-warning{{no closing ']' for '%[' in scanf format string}}
@@ -33,6 +51,12 @@ void test(const char *s, int *i) {
   scanf("%*d", i); // // expected-warning{{data argument not used by format string}}
   scanf("%*d", i); // // expected-warning{{data argument not used by format string}}
   scanf("%*d%1$d", i); // no-warning
+
+  scanf("%s", (char*)0); // no-warning
+  scanf("%s", (volatile char*)0); // no-warning
+  scanf("%s", (signed char*)0); // no-warning
+  scanf("%s", (unsigned char*)0); // no-warning
+  scanf("%hhu", (signed char*)0); // no-warning
 }
 
 void bad_length_modifiers(char *s, void *p, wchar_t *ws, long double *ld) {
@@ -80,6 +104,11 @@ void test_scanlist(int *ip, char *sp, wchar_t *ls) {
   scanf("%h[abc]", sp); // expected-warning{{length modifier 'h' results in undefined behavior or no effect with '[' conversion specifier}}
   scanf("%l[xyx]", ls); // no-warning
   scanf("%ll[xyx]", ls); // expected-warning {{length modifier 'll' results in undefined behavior or no effect with '[' conversion specifier}}
+
+  // PR19559
+  scanf("%[]% ]", sp); // no-warning
+  scanf("%[^]% ]", sp); // no-warning
+  scanf("%[a^]% ]", sp); // expected-warning {{invalid conversion specifier ' '}}
 }
 
 void test_alloc_extension(char **sp, wchar_t **lsp, float *fp) {
@@ -101,23 +130,114 @@ void test_alloc_extension(char **sp, wchar_t **lsp, float *fp) {
 
   // Test argument type check for the 'm' length modifier.
   scanf("%ms", fp); // expected-warning{{format specifies type 'char **' but the argument has type 'float *'}}
-  scanf("%mS", fp); // expected-warning{{format specifies type 'wchar_t **' (aka 'int **') but the argument has type 'float *'}}
+  scanf("%mS", fp); // expected-warning-re{{format specifies type 'wchar_t **' (aka '{{[^']+}}') but the argument has type 'float *'}}
   scanf("%mc", fp); // expected-warning{{format specifies type 'char **' but the argument has type 'float *'}}
-  scanf("%mC", fp); // expected-warning{{format specifies type 'wchar_t **' (aka 'int **') but the argument has type 'float *'}}
+  scanf("%mC", fp); // expected-warning-re{{format specifies type 'wchar_t **' (aka '{{[^']+}}') but the argument has type 'float *'}}
   scanf("%m[abc]", fp); // expected-warning{{format specifies type 'char **' but the argument has type 'float *'}}
-}
-
-void test_longlong(long long *x, unsigned long long *y) {
-  scanf("%Ld", y); // no-warning
-  scanf("%Lu", y); // no-warning
-  scanf("%Lx", y); // no-warning
-  scanf("%Ld", x); // no-warning
-  scanf("%Lu", x); // no-warning
-  scanf("%Lx", x); // no-warning
-  scanf("%Ls", "hello"); // expected-warning {{length modifier 'L' results in undefined behavior or no effect with 's' conversion specifier}}
 }
 
 void test_quad(int *x, long long *llx) {
   scanf("%qd", x); // expected-warning{{format specifies type 'long long *' but the argument has type 'int *'}}
   scanf("%qd", llx); // no-warning
+}
+
+void test_writeback(int *x) {
+  scanf("%n", (void*)0); // expected-warning{{format specifies type 'int *' but the argument has type 'void *'}}
+  scanf("%n %c", x, x); // expected-warning{{format specifies type 'char *' but the argument has type 'int *'}}
+
+  scanf("%hhn", (signed char*)0); // no-warning
+  scanf("%hhn", (char*)0); // no-warning
+  scanf("%hhn", (unsigned char*)0); // no-warning
+  scanf("%hhn", (int*)0); // expected-warning{{format specifies type 'signed char *' but the argument has type 'int *'}}
+
+  scanf("%hn", (short*)0); // no-warning
+  scanf("%hn", (unsigned short*)0); // no-warning
+  scanf("%hn", (int*)0); // expected-warning{{format specifies type 'short *' but the argument has type 'int *'}}
+
+  scanf("%n", (int*)0); // no-warning
+  scanf("%n", (unsigned int*)0); // no-warning
+  scanf("%n", (char*)0); // expected-warning{{format specifies type 'int *' but the argument has type 'char *'}}
+
+  scanf("%ln", (long*)0); // no-warning
+  scanf("%ln", (unsigned long*)0); // no-warning
+  scanf("%ln", (int*)0); // expected-warning{{format specifies type 'long *' but the argument has type 'int *'}}
+
+  scanf("%lln", (long long*)0); // no-warning
+  scanf("%lln", (unsigned long long*)0); // no-warning
+  scanf("%lln", (int*)0); // expected-warning{{format specifies type 'long long *' but the argument has type 'int *'}}
+
+  scanf("%qn", (long long*)0); // no-warning
+  scanf("%qn", (unsigned long long*)0); // no-warning
+  scanf("%qn", (int*)0); // expected-warning{{format specifies type 'long long *' but the argument has type 'int *'}}
+
+}
+
+void test_qualifiers(const int *cip, volatile int* vip,
+                     const char *ccp, volatile char* vcp,
+                     const volatile int *cvip) {
+  scanf("%d", cip); // expected-warning{{format specifies type 'int *' but the argument has type 'const int *'}}
+  scanf("%n", cip); // expected-warning{{format specifies type 'int *' but the argument has type 'const int *'}}
+  scanf("%s", ccp); // expected-warning{{format specifies type 'char *' but the argument has type 'const char *'}}
+  scanf("%d", cvip); // expected-warning{{format specifies type 'int *' but the argument has type 'const volatile int *'}}
+
+  scanf("%d", vip); // No warning.
+  scanf("%n", vip); // No warning.
+  scanf("%c", vcp); // No warning.
+
+  typedef int* ip_t;
+  typedef const int* cip_t;
+  scanf("%d", (ip_t)0); // No warning.
+  scanf("%d", (cip_t)0); // expected-warning{{format specifies type 'int *' but the argument has type 'cip_t' (aka 'const int *')}}
+}
+
+void test_size_types() {
+  size_t s = 0;
+  scanf("%zu", &s); // No warning.
+
+  double d1 = 0.;
+  scanf("%zu", &d1); // expected-warning-re{{format specifies type 'size_t *' (aka '{{.+}}') but the argument has type 'double *'}}
+
+  ssize_t ss = 0;
+  scanf("%zd", &s); // No warning.
+
+  double d2 = 0.;
+  scanf("%zd", &d2); // expected-warning-re{{format specifies type 'ssize_t *' (aka '{{.+}}') but the argument has type 'double *'}}
+
+  ssize_t sn = 0;
+  scanf("%zn", &sn); // No warning.
+
+  double d3 = 0.;
+  scanf("%zn", &d3); // expected-warning-re{{format specifies type 'ssize_t *' (aka '{{.+}}') but the argument has type 'double *'}}
+}
+
+void test_ptrdiff_t_types() {
+  __UNSIGNED_PTRDIFF_TYPE__ p1 = 0;
+  scanf("%tu", &p1); // No warning.
+
+  double d1 = 0.;
+  scanf("%tu", &d1); // expected-warning-re{{format specifies type 'unsigned ptrdiff_t *' (aka '{{.+}}') but the argument has type 'double *'}}
+
+  ptrdiff_t p2 = 0;
+  scanf("%td", &p2); // No warning.
+  
+  double d2 = 0.;
+  scanf("%td", &d2); // expected-warning-re{{format specifies type 'ptrdiff_t *' (aka '{{.+}}') but the argument has type 'double *'}}
+
+  ptrdiff_t p3 = 0;
+  scanf("%tn", &p3); // No warning.
+  
+  double d3 = 0.;
+  scanf("%tn", &d3); // expected-warning-re{{format specifies type 'ptrdiff_t *' (aka '{{.+}}') but the argument has type 'double *'}}
+}
+
+void check_conditional_literal(char *s, int *i) {
+  scanf(0 ? "%s" : "%d", i); // no warning
+  scanf(1 ? "%s" : "%d", i); // expected-warning{{format specifies type 'char *'}}
+  scanf(0 ? "%d %d" : "%d", i); // no warning
+  scanf(1 ? "%d %d" : "%d", i); // expected-warning{{more '%' conversions than data arguments}}
+  scanf(0 ? "%d %d" : "%d", i, s); // expected-warning{{data argument not used}}
+  scanf(1 ? "%d %s" : "%d", i, s); // no warning
+  scanf(i ? "%d %s" : "%d", i, s); // no warning
+  scanf(i ? "%d" : "%d", i, s); // expected-warning{{data argument not used}}
+  scanf(i ? "%s" : "%d", s); // expected-warning{{format specifies type 'int *'}}
 }

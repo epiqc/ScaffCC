@@ -15,36 +15,37 @@
 #define LLVM_ADT_PACKEDVECTOR_H
 
 #include "llvm/ADT/BitVector.h"
+#include <cassert>
 #include <limits>
 
 namespace llvm {
 
-template <typename T, unsigned BitNum, bool isSigned>
+template <typename T, unsigned BitNum, typename BitVectorTy, bool isSigned>
 class PackedVectorBase;
 
 // This won't be necessary if we can specialize members without specializing
 // the parent template.
-template <typename T, unsigned BitNum>
-class PackedVectorBase<T, BitNum, false> {
+template <typename T, unsigned BitNum, typename BitVectorTy>
+class PackedVectorBase<T, BitNum, BitVectorTy, false> {
 protected:
-  static T getValue(const llvm::BitVector &Bits, unsigned Idx) {
+  static T getValue(const BitVectorTy &Bits, unsigned Idx) {
     T val = T();
     for (unsigned i = 0; i != BitNum; ++i)
       val = T(val | ((Bits[(Idx << (BitNum-1)) + i] ? 1UL : 0UL) << i));
     return val;
   }
 
-  static void setValue(llvm::BitVector &Bits, unsigned Idx, T val) {
+  static void setValue(BitVectorTy &Bits, unsigned Idx, T val) {
     assert((val >> BitNum) == 0 && "value is too big");
     for (unsigned i = 0; i != BitNum; ++i)
       Bits[(Idx << (BitNum-1)) + i] = val & (T(1) << i);
   }
 };
 
-template <typename T, unsigned BitNum>
-class PackedVectorBase<T, BitNum, true> {
+template <typename T, unsigned BitNum, typename BitVectorTy>
+class PackedVectorBase<T, BitNum, BitVectorTy, true> {
 protected:
-  static T getValue(const llvm::BitVector &Bits, unsigned Idx) {
+  static T getValue(const BitVectorTy &Bits, unsigned Idx) {
     T val = T();
     for (unsigned i = 0; i != BitNum-1; ++i)
       val = T(val | ((Bits[(Idx << (BitNum-1)) + i] ? 1UL : 0UL) << i));
@@ -53,7 +54,7 @@ protected:
     return val;
   }
 
-  static void setValue(llvm::BitVector &Bits, unsigned Idx, T val) {
+  static void setValue(BitVectorTy &Bits, unsigned Idx, T val) {
     if (val < 0) {
       val = ~val;
       Bits.set((Idx << (BitNum-1)) + BitNum-1);
@@ -71,40 +72,42 @@ protected:
 /// @endcode
 /// will create a vector accepting values -2, -1, 0, 1. Any other value will hit
 /// an assertion.
-template <typename T, unsigned BitNum>
-class PackedVector : public PackedVectorBase<T, BitNum,
+template <typename T, unsigned BitNum, typename BitVectorTy = BitVector>
+class PackedVector : public PackedVectorBase<T, BitNum, BitVectorTy,
                                             std::numeric_limits<T>::is_signed> {
-  llvm::BitVector Bits;
-  typedef PackedVectorBase<T, BitNum, std::numeric_limits<T>::is_signed> base;
+  BitVectorTy Bits;
+  using base = PackedVectorBase<T, BitNum, BitVectorTy,
+                                std::numeric_limits<T>::is_signed>;
 
 public:
   class reference {
     PackedVector &Vec;
     const unsigned Idx;
 
-    reference();  // Undefined    
   public:
-    reference(PackedVector &vec, unsigned idx) : Vec(vec), Idx(idx) { }    
+    reference() = delete;
+    reference(PackedVector &vec, unsigned idx) : Vec(vec), Idx(idx) {}
 
     reference &operator=(T val) {
       Vec.setValue(Vec.Bits, Idx, val);
       return *this;
     }
+
     operator T() const {
       return Vec.getValue(Vec.Bits, Idx);
     }
   };
 
-  PackedVector() { }
-  explicit PackedVector(unsigned size) : Bits(size << (BitNum-1)) { }
+  PackedVector() = default;
+  explicit PackedVector(unsigned size) : Bits(size << (BitNum-1)) {}
 
   bool empty() const { return Bits.empty(); }
 
-  unsigned size() const { return Bits.size() >> (BitNum-1); }
-  
+  unsigned size() const { return Bits.size() >> (BitNum - 1); }
+
   void clear() { Bits.clear(); }
-  
-  void resize(unsigned N) { Bits.resize(N << (BitNum-1)); }
+
+  void resize(unsigned N) { Bits.resize(N << (BitNum - 1)); }
 
   void reserve(unsigned N) { Bits.reserve(N << (BitNum-1)); }
 
@@ -134,25 +137,15 @@ public:
     return Bits != RHS.Bits;
   }
 
-  const PackedVector &operator=(const PackedVector &RHS) {
-    Bits = RHS.Bits;
-    return *this;
-  }
-
   PackedVector &operator|=(const PackedVector &RHS) {
     Bits |= RHS.Bits;
     return *this;
   }
-
-  void swap(PackedVector &RHS) {
-    Bits.swap(RHS.Bits);
-  }
 };
 
-// Leave BitNum=0 undefined. 
-template <typename T>
-class PackedVector<T, 0>;
+// Leave BitNum=0 undefined.
+template <typename T> class PackedVector<T, 0>;
 
-} // end llvm namespace
+} // end namespace llvm
 
-#endif
+#endif // LLVM_ADT_PACKEDVECTOR_H

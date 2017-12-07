@@ -9,12 +9,13 @@
 
 #include "Transforms.h"
 #include "Internals.h"
-#include "clang/Lex/Lexer.h"
+#include "clang/AST/ASTContext.h"
 #include "clang/Basic/SourceManager.h"
-#include "llvm/Support/SaveAndRestore.h"
+#include "clang/Lex/Lexer.h"
 #include "clang/Sema/SemaDiagnostic.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/TinyPtrVector.h"
+#include "llvm/Support/SaveAndRestore.h"
 
 using namespace clang;
 using namespace arcmt;
@@ -62,25 +63,24 @@ public:
       return;
     TypeLoc TL = TInfo->getTypeLoc();
     while (TL) {
-      if (const QualifiedTypeLoc *QL = dyn_cast<QualifiedTypeLoc>(&TL)) {
-        TL = QL->getUnqualifiedLoc();
-      } else if (const AttributedTypeLoc *
-                   Attr = dyn_cast<AttributedTypeLoc>(&TL)) {
-        if (handleAttr(*Attr, D))
+      if (QualifiedTypeLoc QL = TL.getAs<QualifiedTypeLoc>()) {
+        TL = QL.getUnqualifiedLoc();
+      } else if (AttributedTypeLoc Attr = TL.getAs<AttributedTypeLoc>()) {
+        if (handleAttr(Attr, D))
           break;
-        TL = Attr->getModifiedLoc();
-      } else if (const ArrayTypeLoc *Arr = dyn_cast<ArrayTypeLoc>(&TL)) {
-        TL = Arr->getElementLoc();
-      } else if (const PointerTypeLoc *PT = dyn_cast<PointerTypeLoc>(&TL)) {
-        TL = PT->getPointeeLoc();
-      } else if (const ReferenceTypeLoc *RT = dyn_cast<ReferenceTypeLoc>(&TL))
-        TL = RT->getPointeeLoc();
+        TL = Attr.getModifiedLoc();
+      } else if (ArrayTypeLoc Arr = TL.getAs<ArrayTypeLoc>()) {
+        TL = Arr.getElementLoc();
+      } else if (PointerTypeLoc PT = TL.getAs<PointerTypeLoc>()) {
+        TL = PT.getPointeeLoc();
+      } else if (ReferenceTypeLoc RT = TL.getAs<ReferenceTypeLoc>())
+        TL = RT.getPointeeLoc();
       else
         break;
     }
   }
 
-  bool handleAttr(AttributedTypeLoc TL, Decl *D = 0) {
+  bool handleAttr(AttributedTypeLoc TL, Decl *D = nullptr) {
     if (TL.getAttrKind() != AttributedType::attr_objc_ownership)
       return false;
 
@@ -134,9 +134,8 @@ public:
       return hasObjCImpl(ContD);
 
     if (CXXRecordDecl *RD = dyn_cast<CXXRecordDecl>(D)) {
-      for (CXXRecordDecl::method_iterator
-             MI = RD->method_begin(), ME = RD->method_end(); MI != ME; ++MI) {
-        if ((*MI)->isOutOfLine())
+      for (const auto *MI : RD->methods()) {
+        if (MI->isOutOfLine())
           return true;
       }
       return false;
@@ -150,12 +149,10 @@ public:
       return false;
     if (ObjCContainerDecl *ContD = dyn_cast<ObjCContainerDecl>(D)) {
       if (ObjCInterfaceDecl *ID = dyn_cast<ObjCInterfaceDecl>(ContD))
-        return ID->getImplementation() != 0;
+        return ID->getImplementation() != nullptr;
       if (ObjCCategoryDecl *CD = dyn_cast<ObjCCategoryDecl>(ContD))
-        return CD->getImplementation() != 0;
-      if (isa<ObjCImplDecl>(ContD))
-        return true;
-      return false;
+        return CD->getImplementation() != nullptr;
+      return isa<ObjCImplDecl>(ContD);
     }
     return false;
   }
@@ -164,9 +161,8 @@ public:
     if (!D)
       return false;
 
-    for (Decl::redecl_iterator
-           I = D->redecls_begin(), E = D->redecls_end(); I != E; ++I)
-      if (!isInMainFile((*I)->getLocation()))
+    for (auto I : D->redecls())
+      if (!isInMainFile(I->getLocation()))
         return false;
     
     return true;
@@ -248,8 +244,9 @@ static void checkAllAtProps(MigrationContext &MigrateCtx,
     if (!TInfo)
       return;
     TypeLoc TL = TInfo->getTypeLoc();
-    if (AttributedTypeLoc *ATL = dyn_cast<AttributedTypeLoc>(&TL)) {
-      ATLs.push_back(std::make_pair(*ATL, PD));
+    if (AttributedTypeLoc ATL =
+            TL.getAs<AttributedTypeLoc>()) {
+      ATLs.push_back(std::make_pair(ATL, PD));
       if (TInfo->getType().getObjCLifetime() == Qualifiers::OCL_Weak) {
         hasWeak = true;
       } else if (TInfo->getType().getObjCLifetime() == Qualifiers::OCL_Strong)

@@ -1,16 +1,15 @@
-; RUN: llc < %s -asm-verbose=false -mtriple=x86_64-apple-darwin10 -use-unknown-locations | FileCheck %s
+; RUN: llc < %s -asm-verbose=false -mtriple=x86_64-apple-darwin10 -use-unknown-locations=Enable | FileCheck %s
 
 ; The divide instruction does not have a debug location. CodeGen should
-; represent this in the debug information. This is done by setting line
-; and column to 0
+; represent this in the debug information. This is done by setting line to 0.
 
 ;      CHECK:         leal
-; CHECK-NEXT:         .loc 1 0 0
+; CHECK-NEXT:         .loc 1 0 3
 ;      CHECK:         cltd
 ; CHECK-NEXT:         idivl
-; CHECK-NEXT:         .loc 2 4 3
+; CHECK-NEXT:         .loc 1 4 3
 
-define i32 @foo(i32 %w, i32 %x, i32 %y, i32 %z) nounwind {
+define i32 @foo(i32 %w, i32 %x, i32 %y, i32 %z) nounwind !dbg !1 {
 entry:
   %a = add  i32 %w, %x, !dbg !8
   %b = sdiv i32 %a, %y
@@ -18,12 +17,18 @@ entry:
   ret i32 %c, !dbg !8
 }
 
-!0 = metadata !{i32 524545, metadata !1, metadata !"x", metadata !2, i32 1, metadata !6} ; [ DW_TAG_arg_variable ]
-!1 = metadata !{i32 524334, i32 0, metadata !2, metadata !"foo", metadata !"foo", metadata !"foo", metadata !2, i32 1, metadata !4, i1 false, i1 true, i32 0, i32 0, null, i1 false, i1 false} ; [ DW_TAG_subprogram ]
-!2 = metadata !{i32 524329, metadata !"test.c", metadata !"/dir", metadata !3} ; [ DW_TAG_file_type ]
-!3 = metadata !{i32 524305, i32 0, i32 12, metadata !"test.c", metadata !".", metadata !"producer", i1 true, i1 false, metadata !"", i32 0} ; [ DW_TAG_compile_unit ]
-!4 = metadata !{i32 524309, metadata !2, metadata !"", metadata !2, i32 0, i64 0, i64 0, i64 0, i32 0, null, metadata !5, i32 0, null} ; [ DW_TAG_subroutine_type ]
-!5 = metadata !{metadata !6}
-!6 = metadata !{i32 524324, metadata !2, metadata !"int", metadata !2, i32 0, i64 32, i64 32, i64 0, i32 0, i32 5} ; [ DW_TAG_base_type ]
-!7 = metadata !{i32 524299, metadata !1, i32 1, i32 30} ; [ DW_TAG_lexical_block ]
-!8 = metadata !{i32 4, i32 3, metadata !7, null}
+!llvm.dbg.cu = !{!3}
+!llvm.module.flags = !{!12}
+
+!0 = !DILocalVariable(name: "x", line: 1, arg: 2, scope: !1, file: !2, type: !6)
+!1 = distinct !DISubprogram(name: "foo", linkageName: "foo", line: 1, isLocal: false, isDefinition: true, virtualIndex: 6, isOptimized: false, unit: !3, scopeLine: 1, file: !10, scope: !2, type: !4)
+!2 = !DIFile(filename: "test.c", directory: "/dir")
+!3 = distinct !DICompileUnit(language: DW_LANG_C99, producer: "producer", isOptimized: false, emissionKind: FullDebug, file: !10, enums: !11, retainedTypes: !11)
+!4 = !DISubroutineType(types: !5)
+!5 = !{!6}
+!6 = !DIBasicType(tag: DW_TAG_base_type, name: "int", size: 32, align: 32, encoding: DW_ATE_signed)
+!7 = distinct !DILexicalBlock(line: 1, column: 30, file: !10, scope: !1)
+!8 = !DILocation(line: 4, column: 3, scope: !7)
+!10 = !DIFile(filename: "test.c", directory: "/dir")
+!11 = !{}
+!12 = !{i32 1, !"Debug Info Version", i32 3}

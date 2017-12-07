@@ -7,7 +7,7 @@ namespace test0 {
     template<typename T> void g(T);
 
     void test() {
-      foo(&g<int>); // expected-error {{can't form member pointer of type 'void (test0::A::*)(int)' without '&' and class name}}
+      foo(&g<int>); // expected-error-re {{cannot form member pointer of type 'void (test0::A::*)(int){{( __attribute__\(\(thiscall\)\))?}}' without '&' and class name}}
     }
   };
 }
@@ -38,6 +38,8 @@ namespace test2 {
   };
 
   void A::test() {
-    int (A::*ptr)(int) = &(A::foo); // expected-error {{can't form member pointer of type 'int (test2::A::*)(int)' without '&' and class name}}
+    // FIXME: The error message in this case is less than clear, we can do
+    // better.
+    int (A::*ptr)(int) = &(A::foo); // expected-error {{cannot create a non-constant pointer to member function}}
   }
 }

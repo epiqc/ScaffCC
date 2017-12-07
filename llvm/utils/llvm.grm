@@ -92,8 +92,6 @@ GVInternalLinkage
  | dllexport
  | common
  | private
- | "linker_private"
- | "linker_private_weak"
  ;
 
 GVExternalLinkage
@@ -174,7 +172,9 @@ FuncAttr      ::= noreturn
  | sspreq
  | returns_twice
  | nonlazybind
- | address_safety
+ | sanitize_address
+ | sanitize_thread
+ | sanitize_memory
  ;
 
 OptFuncAttrs  ::= + _ | OptFuncAttrs FuncAttr ;

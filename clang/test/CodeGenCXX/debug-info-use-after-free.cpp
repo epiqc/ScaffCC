@@ -1,4 +1,6 @@
-// RUN: %clang_cc1 -g -emit-llvm-only %s
+// RUN: %clang_cc1 -debug-info-kind=limited -triple %itanium_abi_triple -emit-llvm-only %s
+// RUN: %clang_cc1 -debug-info-kind=limited -triple %itanium_abi_triple -emit-llvm-only -std=c++98 %s
+// RUN: %clang_cc1 -debug-info-kind=limited -triple %itanium_abi_triple -emit-llvm-only -std=c++11 %s
 // Check that we don't crash.
 // PR12305, PR12315
 
@@ -192,6 +194,7 @@ __gnu_cxx {
            public:
             typedef _EqualKey
                 key_equal;
+            typedef void key_type;
           };
   using
       std::equal_to;
@@ -217,7 +220,7 @@ __gnu_cxx {
         _Alloc >
             _Ht;
        public:
-        typename _Ht::key_type;
+        typedef typename _Ht::key_type key_type;
         typedef typename
             _Ht::key_equal
             key_equal;
@@ -232,6 +235,7 @@ template < class > class scoped_ptr {
 namespace {
 class
     AAA {
+protected:
       virtual ~
           AAA () {
           }};

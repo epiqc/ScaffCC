@@ -39,7 +39,7 @@
 #include <boost/graph/copy.hpp>
 #include <boost/graph/graphviz.hpp>
 
-#define _DEBUG    // optional: debug flag
+//#define _DEBUG    // optional: debug flag
 #define _PROGRESS   // optional: progress flag
 
 using namespace std;
@@ -66,17 +66,10 @@ int P_error_rate;           // device error rate parameter = 10^-(P_error_rate)
 int code_distance;          // coding distance of the surface code
 
 // magic state distillation
-bool periphery = true;
-// places Y state factories (for S gates) on the left and right lattice periphery
-#define short_Y_error 0.005
-unsigned int rows_to_Y_factory_ratio = 1;  // ratio of Y state factories to data qubits
-unsigned int distillation_level_Y = 0;
-map< string, unsigned int > num_Y_factories;
-// places A state factories (for T gates) on the top and bottom lattice periphery
 #define short_A_error 0.005
-unsigned int cols_to_A_factory_ratio = 1;  // ratio of A state factories to data qubits
-unsigned int distillation_level_A = 0;
-map< string, unsigned int > num_A_factories;
+unsigned int data_to_factory_ratio = 50;  // ratio of 1:M magic state factories to data qubits
+unsigned int distillation_level = 0;
+map< string, unsigned int > num_magic_factories;
 
 // Physical operation latencies -- also determines surface code cycle length
 std::unordered_map<std::string, int> op_delays_ion; 
@@ -235,7 +228,7 @@ void print_event(Event &event) {
     case cnot7: cout << "cnot7"; break;                
     case h1: cout << "h1"; break;                                
     case h2: cout << "h2"; break;  
-    case t1: cout << "t1"; break;             
+    case t1: cout << "tq"; break;             
   }
   cout << endl;
   cout << "\tGate: " << dag[event.gate].op_type;
@@ -755,7 +748,7 @@ bool do_event(Event event) {
 // print a specific top-left portion of the mesh status
 void print_2d_mesh(unsigned int max_rows, unsigned int max_cols) {
   vis_file << "CLOCK: " << clk << endl;    
-  //if (clk % 100 != 0) return; // print more intermittently
+  if (clk % 100 != 0) return;
   // in case requested printing size is larger that the mesh
   if (max_rows > num_rows+1)
     max_rows = num_rows+1;
@@ -900,6 +893,7 @@ pair< pair<int,int>, pair<int,int> > compare_manhattan_costs () {
   len_binwidth = max_len/num_bins;
   if (crit_binwidth==0) crit_binwidth = 1;  
   if (len_binwidth==0) len_binwidth = 1;   
+  cout << max_crit << " " << max_len << endl; 
   for (auto const &map_it : all_dags) {
     dag_t mdag = map_it.second;
     unsigned long long module_q_count = all_q_counts[map_it.first];
@@ -1008,6 +1002,8 @@ void parse_LPFS (const string file_path) {
       else if (is_there(op_strings, line) != string::npos) {
         vector<string> elems;          
         split(line, ' ', elems);
+        // FIXME: OLD FORMAT: 2,3,5,4
+        // FIXME: NEW FORMAT: 1,2,4,3
         string op_type = elems[1];        
         vector<unsigned int> qid;        
         string qid1 = elems[2];     
@@ -1020,29 +1016,10 @@ void parse_LPFS (const string file_path) {
             q_name_to_num[qid2] = module_q_count++;          
           qid.push_back(q_name_to_num[qid2]);
         }
-        // assume X and Z gates are done in software
-        if (op_type == "CNOT" || op_type == "H" 
-            || op_type == "T" || op_type == "Tdag"
-            || op_type == "S" || op_type == "Sdag") {
+        if (/*op_type == "PrepZ" || op_type == "MeasZ" ||*/ op_type == "CNOT" || op_type == "H" /*|| op_type == "T" || op_type == "Tdag"*/) {
           Gate g = Gate(seq++, op_type, qid); 
           module_gates.push_back(g);        
         }
-        /*
-        // for simplicity (not having 2 factory types)
-        // replace S gates with two T gates
-        if (op_type == "S") {
-          Gate tg1 = Gate(seq++, "T", qid);
-          Gate tg2 = Gate(seq++, "T", qid);          
-          module_gates.push_back(tg1);        
-          module_gates.push_back(tg2);                  
-        }
-        if (op_type == "Sdag") {
-          Gate tg1 = Gate(seq++, "Tdag", qid);
-          Gate tg2 = Gate(seq++, "Tdag", qid);          
-          module_gates.push_back(tg1);        
-          module_gates.push_back(tg2);                  
-        }
-        */        
       }
     }
     // save result of last iteration
@@ -1096,7 +1073,6 @@ void parse_tr (const string file_path) {
   else
     cerr << "Unable to open opt.tr file" << endl;
 }
-
 // parse profile of module frequencies
 void parse_freq (const string file_path) {
   ifstream profile_freq_file (file_path);
@@ -1323,7 +1299,7 @@ int main (int argc, char *argv[]) {
     }     
     if (strcmp(argv[i],"--visualize")==0) {
       visualize_mesh = true;
-      cerr << "Warning: only try to visualize very small lattices\n";
+      cerr << "Warning: only try to visualize very small circuits\n";
     }
     if (strcmp(argv[i],"--help")==0) {
       cerr<<
@@ -1411,25 +1387,20 @@ Simulate braid space occupancies on the surface code mesh.
   parse_LPFS(LPFS_path);
   parse_freq(profile_freq_path);
  
-  //calculate code distance (based on Folwer et al. Equation 11)
+  //calculate code distance
   if (P_error_rate < P_th) {
     cerr << "Physical error rate is higher than the code threshold. Terminating..\n";
     exit(1);
   }      
   unsigned long long total_logical_gates = 0;    // KQ parameter, needed for calculating L_error_rate  
-  unsigned long long total_S_gates = 0;          // total number of logical S gates  
   unsigned long long total_T_gates = 0;          // total number of logical T gates
   for (auto const &map_it : all_gates) {
     string module_name = map_it.first;     
     int module_size = map_it.second.size();
-    int module_S_size = 0;    
     int module_T_size = 0;
-    for (auto const &i : map_it.second) {
-      if ( i.op_type == "S" || i.op_type == "Sdag")
-        module_S_size++;      
+    for (auto const &i : map_it.second)
       if ( i.op_type == "T" || i.op_type == "Tdag")
         module_T_size++;
-    }
     unsigned long long module_freq = 1;
     if ( module_freqs.find(module_name) != module_freqs.end() )
       module_freq = module_freqs[module_name];
@@ -1437,30 +1408,16 @@ Simulate braid space occupancies on the surface code mesh.
       cerr<<"\nleaf: "<<module_name<<" - size: "<<module_size<<" - freq: "<<module_freq;
 #endif      
     total_logical_gates += module_size * module_freq;   
-    total_S_gates += module_S_size * module_freq;      
     total_T_gates += module_T_size * module_freq;   
-
-    if (periphery) {
-      unsigned int module_num_rows = (unsigned int)ceil( sqrt( (double)all_q_counts[module_name] ) );
-      unsigned int module_num_cols = (module_num_rows*(module_num_rows-1) < all_q_counts[module_name]) 
-        ? module_num_rows : module_num_rows-1;
-      num_Y_factories[module_name] = module_num_rows / rows_to_Y_factory_ratio;
-      num_A_factories[module_name] = module_num_cols / cols_to_A_factory_ratio;    
-    }
-    else {
-      num_Y_factories[module_name] = K;
-      num_A_factories[module_name] = K;
-    }
+    num_magic_factories[module_name] = all_q_counts[module_name]/data_to_factory_ratio;
   }
   cerr << "\ntotal logical gates: " << total_logical_gates << endl;
-  cerr << "total logical S gates: " << total_S_gates << endl;    
-  cerr << "total logical T gates: " << total_T_gates << endl;  
+  cerr << "total T gates: " << total_T_gates << endl;  
   L_error_rate = (double)epsilon/(double)total_logical_gates;   
   code_distance = 
           2*(int)( ceil(log( (100.0/3.0) * (double)L_error_rate ) / 
                        log( pow(10.0,(-1.0*(double)P_error_rate)) / pow(10.0,(-1.0*(double)P_th)) ) ) ) - 1;
-  if ( L_error_rate > pow(10.0,(-1.0*(double)P_error_rate)) ) code_distance = 1; // very small circuit (large L_error_rate)
-                                                                                 // means smallest possible mesh
+  if ( L_error_rate > pow(10.0,(-1.0*(double)P_error_rate)) ) code_distance = 1; // very small circuit (large L_error_rate), means smallest possible mesh
 #ifdef _PROGRESS  
   cerr << "Physical error rate (p): " << P_error_rate << endl;
   cerr << "Logical error rate (p_L): " << L_error_rate << endl;    
@@ -1471,31 +1428,21 @@ Simulate braid space occupancies on the surface code mesh.
     exit(1);
   }
 
-  // calculate magic distillation levels (based on Folwer et al. Section XVI-B & Appendix M)
-  // P_0 = short_Y_error, P_1 = 7*(short_Y_error)^3, ..., P_n = 7*(P_(n-1))^3
-  double distillation_error_Y = short_Y_error;
-  while (distillation_error_Y > epsilon/total_S_gates) {
-    distillation_level_Y++;
-    double pow7 = 0.0;
-    for (int j = 0; j < distillation_level_Y; j++)
-      pow7 += pow(3.0, (double)(j));
-    distillation_error_Y = pow(7.0, pow7) * pow(short_Y_error,pow(3.0,(double)distillation_level_Y));
-  }
+  // calculate magic distillation level and number of factories
   // P_0 = short_A_error, P_1 = 35*(short_A_error)^3, ..., P_n = 35*(P_(n-1))^3
-  double distillation_error_A = short_A_error;
-  while (distillation_error_A > epsilon/total_T_gates) {
-    distillation_level_A++;
+  double distillation_error = short_A_error;
+  while (distillation_error > epsilon/total_T_gates) {
+    distillation_level++;
     double pow35 = 0.0;
-    for (int j = 0; j < distillation_level_A; j++)
+    for (int j = 0; j < distillation_level; j++)
       pow35 += pow(3.0, (double)(j));
-    distillation_error_A = pow(35.0, pow35) * pow(short_A_error,pow(3.0,(double)distillation_level_A));
+    distillation_error = pow(35.0, pow35) * pow(short_A_error,pow(3.0,(double)distillation_level));
   }
 
-  cerr << "Y-state distillation level: " << distillation_level_Y << endl;  
-  cerr << "A-state distillation level: " << distillation_level_A << endl;
+  //cerr << "distillation level: " << distillation_level << endl;
 
   // optimize qubit placements
-  // write all_gates to trace (.tr) file, then apply partition-based layout optimization    
+  // write all_gates to trace (.tr) file    
   if (opt) {
     string tr_path = benchmark_path+".tr"; 
     string opt_tr_path = benchmark_path+".opt.tr";         
@@ -1515,11 +1462,12 @@ Simulate braid space occupancies on the surface code mesh.
             else if (i.qid.size() == 2)
               tr_file << "ID: " << i.seq << " TYPE: " << i.op_type << " SRC: " << i.qid[0] << " DST: " << i.qid[1] << endl;
             else
-              cerr << "Invalid gate." << endl;
+              cerr << "Invalide gate." << endl;
           }
         }
       }
       tr_file.close();  
+      // use metis to rearrange qubits for more optimal interaction distances, if not already done.
       string exe_path(argv[0]);
       string exe_dir = exe_path.substr(0, exe_path.find_last_of('/'));  
       string metis_command = "python "+exe_dir+"/arrange.py "+tr_path+
@@ -1585,9 +1533,7 @@ Simulate braid space occupancies on the surface code mesh.
                     +".pri."+to_string(priority_policy)                    
                     +"."+tech
                     +(opt ? ".opt.vis" : ".vis");
-  if (visualize_mesh) {
-    vis_file.open(vis_file_path);
-  }
+  vis_file.open(vis_file_path);
 
   // braidflash for each module of the benchmark
   all_gates = (opt) ? all_gates_opt : all_gates;
@@ -1610,7 +1556,6 @@ Simulate braid space occupancies on the surface code mesh.
     // retrieve parsed gates and q_count for this module
     string module_name = map_it.first;
     vector<Gate> module_gates = map_it.second;
-
     unsigned long long module_q_count = all_q_counts[module_name];
     num_rows = (unsigned int)ceil( sqrt( (double)module_q_count ) );
     num_cols = (num_rows*(num_rows-1) < module_q_count) ? num_rows : num_rows-1;
@@ -1618,55 +1563,13 @@ Simulate braid space occupancies on the surface code mesh.
     cout << "\nModule: " << module_name << endl;    
     cout << "Size: " << num_rows << "X" << num_cols << endl;
 #endif
-    if (num_rows == 1 && num_cols == 1) continue;
+    //if (num_rows == 1 && num_cols == 1) continue;
 
-    // augment mesh for factory outputs: 2 rows for A states and 2 columns for Y states
-    num_rows = num_rows + 2;
-    num_cols = num_cols + 2;
-
-    /*
-    // S gate (Fowler et al., Figure 29)
-    // 1. CNOT data, factory_output
-    // 2. H factory_output
-    // 3. CNOT data, factory_output
-    // 4. H factory_output
-
-    // T gate (Fowler et al., Figure 30)
-    // 1. CNOT factory_output, data
-    // 2. CNOT data, factory_output
-    // 3. CNOT factory_output, data
-    // 4. CNOT data, factory_output
-    // (last 3 specify a swap)
-    */
-
-    // update gate list to be simulated:
-    // 1. update data indices in light of added rows/columns
-    // 2. replace S and T gates by appropriate CNOTs (Fowler et al. Figure 29 & 30)
-    cout << num_rows << " X " << num_cols << endl;
-    for (auto &g : module_gates) {
-      for (auto &arg : g.qid) {
-        cout << "changing #" << arg 
-          << " to #" << arg + num_cols + 2 * ( (arg-1) % (num_cols - 2) ) << "\t";
-        arg = arg + num_cols + 2 * ( (arg-1) % (num_cols - 2) );
-      }   
-      /*
-      if (g.op_type == "S" || g.op_type == "Sdag") {
-        unsigned int closest_Y = ;
-        Gate gcx1 = Gate(g.seq, "CNOT", {closest_Y, g.qid});
-        Gate gcx2 = Gate(g.seq, "CNOT", {g.qid, closest_Y});
-        Gate gcx3 = Gate(g.seq, "CNOT", {closest_Y, g.qid});
-        Gate gcx4 = Gate(g.seq, "CNOT", {g.qid, closest_Y});        
-        module_gates.insert (gcx1);
-        module_gates.insert (gcx2);
-        module_gates.insert (gcx3);
-        module_gates.insert (gcx4);        
-        module_gates.erase(g);
-      }
-      if (g.op_type == "T" || g.op_type == "Tdag") {
-      }
-      */
-    }
-
+#ifdef _PROGRESS
+    cerr << "\nModule: " << module_name << endl;    
+    cerr << "Size: " << num_rows << "X" << num_cols << endl;
+#endif   
+    
     // build mesh
     // add all nodes   
 #ifdef _PROGRESS
@@ -1996,12 +1899,6 @@ Simulate braid space occupancies on the surface code mesh.
   int max_q_count = 0;
   for (auto &i : all_q_counts)
     if (i.second > max_q_count) max_q_count = i.second;
-  int max_Y_factories = 0;
-  for (auto &i : num_Y_factories)
-    if (i.second > max_Y_factories) max_Y_factories = i.second;  
-  int max_A_factories = 0;  
-  for (auto &i : num_A_factories)
-    if (i.second > max_A_factories) max_A_factories = i.second;
   int hole_side = 2*ceil(code_distance/4.0) + 1;
   int width_channel = hole_side;
   int hole_to_channel = 2*ceil(code_distance/2.0);
@@ -2012,9 +1909,7 @@ Simulate braid space occupancies on the surface code mesh.
     max_q_count*area_tile_plus 
     + sqrt(max_q_count)*(width_channel*(width_channel+length_tile))
     + sqrt(max_q_count)*(width_channel*(width_channel+width_tile)) 
-    + width_channel*width_channel
-    + max_Y_factories*pow(8,distillation_level_Y);
-    + max_A_factories*pow(16,distillation_level_A);
+    + width_channel*width_channel;
   br_file << "code_distance(d): " << code_distance << endl;
   br_file << "num_logical_qubits: " << max_q_count << endl;
   br_file << "num_physical_qubits: " << num_physical_qubits << endl;
@@ -2047,8 +1942,8 @@ Simulate braid space occupancies on the surface code mesh.
 
   cerr << "braid report written to:\n" << " \t" << br_file_path << endl;     
 
+  vis_file.close();    
   if (visualize_mesh)  {
-    vis_file.close();        
     cerr << "network visualizations written to:\n" << " \t" << vis_file_path << endl;     
   }
 

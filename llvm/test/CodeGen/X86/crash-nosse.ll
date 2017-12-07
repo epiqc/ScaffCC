@@ -1,4 +1,4 @@
-; RUN: llc < %s -mattr=-sse2,-sse41 -verify-machineinstrs
+; RUN: llc < %s -mcpu=corei7 -mattr=-sse2,-sse4.1 -verify-machineinstrs
 target triple = "x86_64-unknown-linux-gnu"
 
 ; PR10503
@@ -11,7 +11,7 @@ BB:
   br label %CF
 
 CF:                                               ; preds = %CF, %BB
-  %L19 = load <8 x float>* %S17
+  %L19 = load <8 x float>, <8 x float>* %S17
   %BC = bitcast <32 x i32> %Shuff6 to <32 x float>
   %S28 = fcmp ord double 0x3ED1A1F787BB2185, 0x3EE59DE55A8DF890
   br i1 %S28, label %CF, label %CF39

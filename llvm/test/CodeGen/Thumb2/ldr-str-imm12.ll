@@ -1,4 +1,4 @@
-; RUN: llc < %s -mtriple=thumbv7-apple-darwin -mcpu=cortex-a8 -relocation-model=pic -disable-fp-elim | FileCheck %s
+; RUN: llc < %s -mtriple=thumbv7-apple-darwin -arm-atomic-cfg-tidy=0 -mcpu=cortex-a8 -relocation-model=pic -disable-fp-elim | FileCheck %s
 ; rdar://7352504
 ; Make sure we use "str r9, [sp, #+28]" instead of "sub.w r4, r7, #256" followed by "str r9, [r4, #-32]".
 
@@ -29,16 +29,16 @@ entry:
 
 bb20:                                             ; preds = %entry
   switch i32 undef, label %bb1287 [
-    i32 11, label %bb119
-    i32 12, label %bb119
-    i32 21, label %bb420
-    i32 23, label %bb420
-    i32 45, label %bb438
-    i32 46, label %bb438
-    i32 55, label %bb533
-    i32 56, label %bb569
-    i32 64, label %bb745
-    i32 78, label %bb1098
+    i32 110, label %bb119
+    i32 120, label %bb119
+    i32 210, label %bb420
+    i32 230, label %bb420
+    i32 450, label %bb438
+    i32 460, label %bb438
+    i32 550, label %bb533
+    i32 560, label %bb569
+    i32 640, label %bb745
+    i32 780, label %bb1098
   ]
 
 bb119:                                            ; preds = %bb20, %bb20
@@ -50,9 +50,9 @@ bb420:                                            ; preds = %bb20, %bb20
 ; CHECK: str{{(.w)?}} r{{[0-9]+}}, [sp
 ; CHECK: str{{(.w)?}} r{{[0-9]+}}, [sp
 ; CHECK: str{{(.w)?}} r{{[0-9]+}}, [sp
-  store %union.rec* null, %union.rec** @zz_hold, align 4
+  store volatile %union.rec* null, %union.rec** @zz_hold, align 4
   store %union.rec* null, %union.rec** @zz_res, align 4
-  store %union.rec* %x, %union.rec** @zz_hold, align 4
+  store volatile %union.rec* %x, %union.rec** @zz_hold, align 4
   %0 = call  %union.rec* @Manifest(%union.rec* undef, %union.rec* %env, %struct.STYLE* %style, %union.rec** %bthr, %union.rec** %fthr, %union.rec** %target, %union.rec** %crs, i32 %ok, i32 %need_expand, %union.rec** %enclose, i32 %fcr) nounwind ; <%union.rec*> [#uses=0]
   unreachable
 

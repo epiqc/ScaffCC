@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -pedantic -fsyntax-only %s -verify -fblocks
+// RUN: %clang_cc1 -Wno-int-to-pointer-cast -pedantic -fsyntax-only %s -verify -fblocks
 
 typedef void (^CL)(void);
 
@@ -82,7 +82,7 @@ void foo4() {
   int (*yy)(const char *s) = funk; // expected-warning {{incompatible pointer types initializing 'int (*)(const char *)' with an expression of type 'int (char *)'}}
   
   int (^nested)(char *s) = ^(char *str) { void (^nest)(void) = ^(void) { printf("%s\n", str); }; next(); return 1; }; // expected-warning{{implicitly declaring library function 'printf' with type 'int (const char *, ...)'}} \
-  // expected-note{{please include the header <stdio.h> or explicitly provide a declaration for 'printf'}}
+  // expected-note{{include the header <stdio.h> or explicitly provide a declaration for 'printf'}}
 }
 
 typedef void (^bptr)(void);
@@ -134,3 +134,14 @@ void foo7()
 void (^blk)(void) = ^{
     return (void)0; // expected-warning {{void block literal should not return void expression}}
 };
+
+// rdar://13463504
+enum Test8 { T8_a, T8_b, T8_c };
+void test8(void) {
+  extern void test8_helper(int (^)(int));
+  test8_helper(^(int flag) { if (flag) return T8_a; return T8_b; });
+}
+void test8b(void) {
+  extern void test8_helper2(char (^)(int)); // expected-note {{here}}
+  test8_helper2(^(int flag) { if (flag) return T8_a; return T8_b; }); // expected-error {{passing 'enum Test8 (^)(int)' to parameter of type 'char (^)(int)'}}
+}

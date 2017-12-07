@@ -19,19 +19,17 @@
 
 #include "clang/Frontend/ASTUnit.h"
 #include "clang/Frontend/FrontendDiagnostic.h"
-#include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/Twine.h"
-#include "llvm/Support/MemoryBuffer.h"
-#include "llvm/Support/raw_ostream.h"
 
 using namespace clang;
 using namespace clang::cxloc;
-using namespace clang::cxstring;
 
 CXDiagnosticSeverity CXStoredDiagnostic::getSeverity() const {
   switch (Diag.getLevel()) {
     case DiagnosticsEngine::Ignored: return CXDiagnostic_Ignored;
     case DiagnosticsEngine::Note:    return CXDiagnostic_Note;
+    case DiagnosticsEngine::Remark:
+    // The 'Remark' level isn't represented in the stable API.
     case DiagnosticsEngine::Warning: return CXDiagnostic_Warning;
     case DiagnosticsEngine::Error:   return CXDiagnostic_Error;
     case DiagnosticsEngine::Fatal:   return CXDiagnostic_Fatal;
@@ -49,7 +47,7 @@ CXSourceLocation CXStoredDiagnostic::getLocation() const {
 }
 
 CXString CXStoredDiagnostic::getSpelling() const {
-  return createCXString(Diag.getMessage(), false);
+  return cxstring::createRef(Diag.getMessage());
 }
 
 CXString CXStoredDiagnostic::getDiagnosticOption(CXString *Disable) const {
@@ -57,22 +55,17 @@ CXString CXStoredDiagnostic::getDiagnosticOption(CXString *Disable) const {
   StringRef Option = DiagnosticIDs::getWarningOptionForDiag(ID);
   if (!Option.empty()) {
     if (Disable)
-      *Disable = createCXString((Twine("-Wno-") + Option).str());
-    return createCXString((Twine("-W") + Option).str());
+      *Disable = cxstring::createDup((Twine("-Wno-") + Option).str());
+    return cxstring::createDup((Twine("-W") + Option).str());
   }
   
   if (ID == diag::fatal_too_many_errors) {
     if (Disable)
-      *Disable = createCXString("-ferror-limit=0");
-    return createCXString("-ferror-limit=");
+      *Disable = cxstring::createRef("-ferror-limit=0");
+    return cxstring::createRef("-ferror-limit=");
   }
-  
-  bool EnabledByDefault;
-  if (DiagnosticIDs::isBuiltinExtensionDiag(ID, EnabledByDefault) &&
-      !EnabledByDefault)
-    return createCXString("-pedantic");
 
-  return createCXString("");  
+  return cxstring::createEmpty();
 }
 
 unsigned CXStoredDiagnostic::getCategory() const {
@@ -81,7 +74,7 @@ unsigned CXStoredDiagnostic::getCategory() const {
 
 CXString CXStoredDiagnostic::getCategoryText() const {
   unsigned catID = DiagnosticIDs::getCategoryNumberForDiag(Diag.getID());
-  return createCXString(DiagnosticIDs::getCategoryNameFromID(catID));
+  return cxstring::createRef(DiagnosticIDs::getCategoryNameFromID(catID));
 }
 
 unsigned CXStoredDiagnostic::getNumRanges() const {
@@ -114,6 +107,6 @@ CXString CXStoredDiagnostic::getFixIt(unsigned FixIt,
     *ReplacementRange = translateSourceRange(Diag.getLocation().getManager(),
                                              LangOpts, Hint.RemoveRange);
   }
-  return createCXString(Hint.CodeToInsert);
+  return cxstring::createDup(Hint.CodeToInsert);
 }
 

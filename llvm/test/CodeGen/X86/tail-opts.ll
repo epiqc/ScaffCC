@@ -1,4 +1,4 @@
-; RUN: llc < %s -march=x86-64 -mtriple=x86_64-unknown-linux-gnu -asm-verbose=false -post-RA-scheduler=true | FileCheck %s
+; RUN: llc < %s -mtriple=x86_64-unknown-linux-gnu -asm-verbose=false -post-RA-scheduler=true | FileCheck %s
 
 declare void @bar(i32)
 declare void @car(i32)
@@ -13,7 +13,7 @@ declare i1 @qux()
 ; BranchFolding should tail-merge the stores since they all precede
 ; direct branches to the same place.
 
-; CHECK: tail_merge_me:
+; CHECK-LABEL: tail_merge_me:
 ; CHECK-NOT:  GHJK
 ; CHECK:      movl $0, GHJK(%rip)
 ; CHECK-NEXT: movl $1, HABC(%rip)
@@ -60,7 +60,7 @@ declare i8* @choose(i8*, i8*)
 ; BranchFolding should tail-duplicate the indirect jump to avoid
 ; redundant branching.
 
-; CHECK: tail_duplicate_me:
+; CHECK-LABEL: tail_duplicate_me:
 ; CHECK:      movl $0, GHJK(%rip)
 ; CHECK-NEXT: jmpq *%r
 ; CHECK:      movl $0, GHJK(%rip)
@@ -107,31 +107,30 @@ altret:
 ; BranchFolding shouldn't try to merge the tails of two blocks
 ; with only a branch in common, regardless of the fallthrough situation.
 
-; CHECK: dont_merge_oddly:
+; CHECK-LABEL: dont_merge_oddly:
 ; CHECK-NOT:   ret
 ; CHECK:        ucomiss %xmm{{[0-2]}}, %xmm{{[0-2]}}
 ; CHECK-NEXT:   jbe .LBB2_3
 ; CHECK-NEXT:   ucomiss %xmm{{[0-2]}}, %xmm{{[0-2]}}
 ; CHECK-NEXT:   ja .LBB2_4
-; CHECK-NEXT:   jmp .LBB2_2
+; CHECK-NEXT: .LBB2_2:
+; CHECK-NEXT:   movb $1, %al
+; CHECK-NEXT:   ret
 ; CHECK-NEXT: .LBB2_3:
 ; CHECK-NEXT:   ucomiss %xmm{{[0-2]}}, %xmm{{[0-2]}}
 ; CHECK-NEXT:   jbe .LBB2_2
 ; CHECK-NEXT: .LBB2_4:
-; CHECK-NEXT:   xorb %al, %al
-; CHECK-NEXT:   ret
-; CHECK-NEXT: .LBB2_2:
-; CHECK-NEXT:   movb $1, %al
+; CHECK-NEXT:   xorl %eax, %eax
 ; CHECK-NEXT:   ret
 
 define i1 @dont_merge_oddly(float* %result) nounwind {
 entry:
-  %tmp4 = getelementptr float* %result, i32 2
-  %tmp5 = load float* %tmp4, align 4
-  %tmp7 = getelementptr float* %result, i32 4
-  %tmp8 = load float* %tmp7, align 4
-  %tmp10 = getelementptr float* %result, i32 6
-  %tmp11 = load float* %tmp10, align 4
+  %tmp4 = getelementptr float, float* %result, i32 2
+  %tmp5 = load float, float* %tmp4, align 4
+  %tmp7 = getelementptr float, float* %result, i32 4
+  %tmp8 = load float, float* %tmp7, align 4
+  %tmp10 = getelementptr float, float* %result, i32 6
+  %tmp11 = load float, float* %tmp10, align 4
   %tmp12 = fcmp olt float %tmp8, %tmp11
   br i1 %tmp12, label %bb, label %bb21
 
@@ -153,7 +152,7 @@ bb30:
 ; Do any-size tail-merging when two candidate blocks will both require
 ; an unconditional jump to complete a two-way conditional branch.
 
-; CHECK: c_expand_expr_stmt:
+; CHECK-LABEL: c_expand_expr_stmt:
 ;
 ; This test only works when register allocation happens to use %rax for both
 ; load addresses.
@@ -161,7 +160,7 @@ bb30:
 ; CHE:        jmp .LBB3_11
 ; CHE-NEXT: .LBB3_9:
 ; CHE-NEXT:   movq 8(%rax), %rax
-; CHE-NEXT:   xorb %dl, %dl
+; CHE-NEXT:   xorl %edx, %edx
 ; CHE-NEXT:   movb 16(%rax), %al
 ; CHE-NEXT:   cmpb $16, %al
 ; CHE-NEXT:   je .LBB3_11
@@ -179,7 +178,7 @@ bb30:
 
 define fastcc void @c_expand_expr_stmt(%union.tree_node* %expr) nounwind {
 entry:
-  %tmp4 = load i8* null, align 8                  ; <i8> [#uses=3]
+  %tmp4 = load i8, i8* null, align 8                  ; <i8> [#uses=3]
   switch i8 %tmp4, label %bb3 [
     i8 18, label %bb
   ]
@@ -199,9 +198,9 @@ bb2.i:                                            ; preds = %bb
   br label %bb3
 
 lvalue_p.exit:                                    ; preds = %bb.i
-  %tmp21 = load %union.tree_node** null, align 8  ; <%union.tree_node*> [#uses=3]
-  %tmp22 = getelementptr inbounds %union.tree_node* %tmp21, i64 0, i32 0, i32 0, i64 0 ; <i8*> [#uses=1]
-  %tmp23 = load i8* %tmp22, align 8               ; <i8> [#uses=1]
+  %tmp21 = load %union.tree_node*, %union.tree_node** null, align 8  ; <%union.tree_node*> [#uses=3]
+  %tmp22 = getelementptr inbounds %union.tree_node, %union.tree_node* %tmp21, i64 0, i32 0, i32 0, i64 0 ; <i8*> [#uses=1]
+  %tmp23 = load i8, i8* %tmp22, align 8               ; <i8> [#uses=1]
   %tmp24 = zext i8 %tmp23 to i32                  ; <i32> [#uses=1]
   switch i32 %tmp24, label %lvalue_p.exit4 [
     i32 0, label %bb2.i3
@@ -209,11 +208,11 @@ lvalue_p.exit:                                    ; preds = %bb.i
   ]
 
 bb.i1:                                            ; preds = %lvalue_p.exit
-  %tmp25 = getelementptr inbounds %union.tree_node* %tmp21, i64 0, i32 0, i32 2 ; <i32*> [#uses=1]
+  %tmp25 = getelementptr inbounds %union.tree_node, %union.tree_node* %tmp21, i64 0, i32 0, i32 2 ; <i32*> [#uses=1]
   %tmp26 = bitcast i32* %tmp25 to %union.tree_node** ; <%union.tree_node**> [#uses=1]
-  %tmp27 = load %union.tree_node** %tmp26, align 8 ; <%union.tree_node*> [#uses=2]
-  %tmp28 = getelementptr inbounds %union.tree_node* %tmp27, i64 0, i32 0, i32 0, i64 16 ; <i8*> [#uses=1]
-  %tmp29 = load i8* %tmp28, align 8               ; <i8> [#uses=1]
+  %tmp27 = load %union.tree_node*, %union.tree_node** %tmp26, align 8 ; <%union.tree_node*> [#uses=2]
+  %tmp28 = getelementptr inbounds %union.tree_node, %union.tree_node* %tmp27, i64 0, i32 0, i32 0, i64 16 ; <i8*> [#uses=1]
+  %tmp29 = load i8, i8* %tmp28, align 8               ; <i8> [#uses=1]
   %tmp30 = zext i8 %tmp29 to i32                  ; <i32> [#uses=1]
   switch i32 %tmp30, label %lvalue_p.exit4 [
     i32 0, label %bb2.i.i2
@@ -226,22 +225,22 @@ bb.i.i:                                           ; preds = %bb.i1
   br label %lvalue_p.exit4
 
 bb2.i.i2:                                         ; preds = %bb.i1
-  %tmp35 = getelementptr inbounds %union.tree_node* %tmp27, i64 0, i32 0, i32 0, i64 8 ; <i8*> [#uses=1]
+  %tmp35 = getelementptr inbounds %union.tree_node, %union.tree_node* %tmp27, i64 0, i32 0, i32 0, i64 8 ; <i8*> [#uses=1]
   %tmp36 = bitcast i8* %tmp35 to %union.tree_node** ; <%union.tree_node**> [#uses=1]
-  %tmp37 = load %union.tree_node** %tmp36, align 8 ; <%union.tree_node*> [#uses=1]
-  %tmp38 = getelementptr inbounds %union.tree_node* %tmp37, i64 0, i32 0, i32 0, i64 16 ; <i8*> [#uses=1]
-  %tmp39 = load i8* %tmp38, align 8               ; <i8> [#uses=1]
+  %tmp37 = load %union.tree_node*, %union.tree_node** %tmp36, align 8 ; <%union.tree_node*> [#uses=1]
+  %tmp38 = getelementptr inbounds %union.tree_node, %union.tree_node* %tmp37, i64 0, i32 0, i32 0, i64 16 ; <i8*> [#uses=1]
+  %tmp39 = load i8, i8* %tmp38, align 8               ; <i8> [#uses=1]
   switch i8 %tmp39, label %bb2 [
     i8 16, label %lvalue_p.exit4
     i8 23, label %lvalue_p.exit4
   ]
 
 bb2.i3:                                           ; preds = %lvalue_p.exit
-  %tmp40 = getelementptr inbounds %union.tree_node* %tmp21, i64 0, i32 0, i32 0, i64 8 ; <i8*> [#uses=1]
+  %tmp40 = getelementptr inbounds %union.tree_node, %union.tree_node* %tmp21, i64 0, i32 0, i32 0, i64 8 ; <i8*> [#uses=1]
   %tmp41 = bitcast i8* %tmp40 to %union.tree_node** ; <%union.tree_node**> [#uses=1]
-  %tmp42 = load %union.tree_node** %tmp41, align 8 ; <%union.tree_node*> [#uses=1]
-  %tmp43 = getelementptr inbounds %union.tree_node* %tmp42, i64 0, i32 0, i32 0, i64 16 ; <i8*> [#uses=1]
-  %tmp44 = load i8* %tmp43, align 8               ; <i8> [#uses=1]
+  %tmp42 = load %union.tree_node*, %union.tree_node** %tmp41, align 8 ; <%union.tree_node*> [#uses=1]
+  %tmp43 = getelementptr inbounds %union.tree_node, %union.tree_node* %tmp42, i64 0, i32 0, i32 0, i64 16 ; <i8*> [#uses=1]
+  %tmp44 = load i8, i8* %tmp43, align 8               ; <i8> [#uses=1]
   switch i8 %tmp44, label %bb2 [
     i8 16, label %lvalue_p.exit4
     i8 23, label %lvalue_p.exit4
@@ -275,10 +274,10 @@ declare fastcc %union.tree_node* @default_conversion(%union.tree_node*) nounwind
 ; instructions are involved. This function should have only
 ; one ret instruction.
 
-; CHECK: foo:
+; CHECK-LABEL: foo:
 ; CHECK:        callq func
-; CHECK-NEXT: .LBB4_2:
 ; CHECK-NEXT:   popq
+; CHECK-NEXT: .LBB4_2:
 ; CHECK-NEXT:   ret
 
 define void @foo(i1* %V) nounwind {
@@ -298,34 +297,36 @@ declare void @func()
 
 ; one - One instruction may be tail-duplicated even with optsize.
 
-; CHECK: one:
-; CHECK: movl $0, XYZ(%rip)
-; CHECK: movl $0, XYZ(%rip)
+; CHECK-LABEL: one:
+; CHECK: j{{.*}} tail_call_me
+; CHECK: j{{.*}} tail_call_me
 
 @XYZ = external global i32
 
-define void @one() nounwind optsize {
+declare void @tail_call_me()
+
+define void @one(i32 %v) nounwind optsize {
 entry:
-  %0 = icmp eq i32 undef, 0
+  %0 = icmp eq i32 %v, 0
   br i1 %0, label %bbx, label %bby
 
 bby:
-  switch i32 undef, label %bb7 [
+  switch i32 %v, label %bb7 [
     i32 16, label %return
   ]
 
 bb7:
-  store volatile i32 0, i32* @XYZ
-  unreachable
+  tail call void @tail_call_me()
+  ret void
 
 bbx:
-  switch i32 undef, label %bb12 [
+  switch i32 %v, label %bb12 [
     i32 128, label %return
   ]
 
 bb12:
-  store volatile i32 0, i32* @XYZ
-  unreachable
+  tail call void @tail_call_me()
+  ret void
 
 return:
   ret void
@@ -335,7 +336,7 @@ return:
 ; tail instead of one. This is too much to be merged, given
 ; the optsize attribute.
 
-; CHECK: two:
+; CHECK-LABEL: two:
 ; CHECK-NOT: XYZ
 ; CHECK: ret
 ; CHECK: movl $0, XYZ(%rip)
@@ -371,16 +372,16 @@ return:
   ret void
 }
 
-; two_nosize - Same as two, but without the optsize attribute.
-; Now two instructions are enough to be tail-duplicated.
+; two_minsize - Same as two, but with minsize instead of optsize.
 
-; CHECK: two_nosize:
-; CHECK: movl $0, XYZ(%rip)
+; CHECK-LABEL: two_minsize:
+; CHECK-NOT: XYZ
+; CHECK: ret
+; CHECK: andl $0, XYZ(%rip)
 ; CHECK: movl $1, XYZ(%rip)
-; CHECK: movl $0, XYZ(%rip)
-; CHECK: movl $1, XYZ(%rip)
+; CHECK-NOT: XYZ
 
-define void @two_nosize() nounwind {
+define void @two_minsize() nounwind minsize {
 entry:
   %0 = icmp eq i32 undef, 0
   br i1 %0, label %bbx, label %bby
@@ -409,10 +410,48 @@ return:
   ret void
 }
 
+; two_nosize - Same as two, but without the optsize attribute.
+; Now two instructions are enough to be tail-duplicated.
+
+; CHECK-LABEL: two_nosize:
+; CHECK: movl $0, XYZ(%rip)
+; CHECK: jmp tail_call_me
+; CHECK: movl $0, XYZ(%rip)
+; CHECK: jmp tail_call_me
+
+define void @two_nosize() nounwind {
+entry:
+  %0 = icmp eq i32 undef, 0
+  br i1 %0, label %bbx, label %bby
+
+bby:
+  switch i32 undef, label %bb7 [
+    i32 16, label %return
+  ]
+
+bb7:
+  store volatile i32 0, i32* @XYZ
+  tail call void @tail_call_me()
+  ret void
+
+bbx:
+  switch i32 undef, label %bb12 [
+    i32 128, label %return
+  ]
+
+bb12:
+  store volatile i32 0, i32* @XYZ
+  tail call void @tail_call_me()
+  ret void
+
+return:
+  ret void
+}
+
 ; Tail-merging should merge the two ret instructions since one side
 ; can fall-through into the ret and the other side has to branch anyway.
 
-; CHECK: TESTE:
+; CHECK-LABEL: TESTE:
 ; CHECK: ret
 ; CHECK-NOT: ret
 ; CHECK: size TESTE
@@ -430,4 +469,89 @@ bb.nph:                                           ; preds = %entry
 
 for.end:                                          ; preds = %entry
   ret i64 %varx.0
+}
+
+; We should tail merge small blocks that don't end in a tail call or return
+; instruction. Those blocks are typically unreachable and will be placed
+; out-of-line after the main return, so we should try to eliminate as many of
+; them as possible.
+
+; CHECK-LABEL: merge_aborts:
+; CHECK-NOT: callq abort
+; CHECK: ret
+; CHECK: callq abort
+; CHECK-NOT: callq abort
+; CHECK: .Lfunc_end{{.*}}:
+
+declare void @abort()
+define void @merge_aborts() {
+entry:
+  %c1 = call i1 @qux()
+  br i1 %c1, label %cont1, label %abort1
+abort1:
+  call void @abort()
+  unreachable
+cont1:
+  %c2 = call i1 @qux()
+  br i1 %c2, label %cont2, label %abort2
+abort2:
+  call void @abort()
+  unreachable
+cont2:
+  %c3 = call i1 @qux()
+  br i1 %c3, label %cont3, label %abort3
+abort3:
+  call void @abort()
+  unreachable
+cont3:
+  %c4 = call i1 @qux()
+  br i1 %c4, label %cont4, label %abort4
+abort4:
+  call void @abort()
+  unreachable
+cont4:
+  ret void
+}
+
+; Use alternating abort functions so that the blocks we wish to merge are not
+; layout successors during branch folding.
+
+; CHECK-LABEL: merge_alternating_aborts:
+; CHECK-NOT: callq abort
+; CHECK: ret
+; CHECK: callq abort
+; CHECK: callq alt_abort
+; CHECK-NOT: callq abort
+; CHECK-NOT: callq alt_abort
+; CHECK: .Lfunc_end{{.*}}:
+
+declare void @alt_abort()
+
+define void @merge_alternating_aborts() {
+entry:
+  %c1 = call i1 @qux()
+  br i1 %c1, label %cont1, label %abort1
+abort1:
+  call void @abort()
+  unreachable
+cont1:
+  %c2 = call i1 @qux()
+  br i1 %c2, label %cont2, label %abort2
+abort2:
+  call void @alt_abort()
+  unreachable
+cont2:
+  %c3 = call i1 @qux()
+  br i1 %c3, label %cont3, label %abort3
+abort3:
+  call void @abort()
+  unreachable
+cont3:
+  %c4 = call i1 @qux()
+  br i1 %c4, label %cont4, label %abort4
+abort4:
+  call void @alt_abort()
+  unreachable
+cont4:
+  ret void
 }

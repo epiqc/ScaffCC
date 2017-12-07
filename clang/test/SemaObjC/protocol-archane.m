@@ -8,9 +8,9 @@
 void bar();
 void foo(id x) {
   bar((short<SomeProtocol>)x); // expected-error {{expected ')'}} expected-note {{to match this '('}}
-  bar((<SomeProtocol>)x);      // expected-warning {{protocol qualifiers without 'id' is archaic}}
+  bar((<SomeProtocol>)x);      // expected-warning {{protocol has no object type specified; defaults to qualified 'id'}}
 
-  [(<SomeProtocol>)x bar];      // expected-warning {{protocol qualifiers without 'id' is archaic}}
+  [(<SomeProtocol>)x bar];      // expected-warning {{protocol has no object type specified; defaults to qualified 'id'}}
 }
 
 @protocol MyProtocol
@@ -37,6 +37,10 @@ Class <SomeProtocol> UnfortunateGCCExtension;
 @protocol Broken @end
 @interface Crash @end
 @implementation Crash
-- (void)crashWith:(<Broken>)a { // expected-warning {{protocol qualifiers without 'id' is archaic}}
+- (void)crashWith:(<Broken>)a { // expected-warning {{protocol has no object type specified; defaults to qualified 'id'}}
 }
 @end
+
+typedef <SomeProtocol> id TwoTypeSpecs; // expected-warning{{no object type specified}}
+// expected-error@-1{{typedef redefinition with different types ('id<SomeProtocol>' vs 'id')}}
+// expected-error@-2{{expected ';' after top level declarator}}

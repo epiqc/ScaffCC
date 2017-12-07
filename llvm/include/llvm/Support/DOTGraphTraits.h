@@ -72,11 +72,17 @@ public:
     return "";
   }
 
-  /// hasNodeAddressLabel - If this method returns true, the address of the node
-  /// is added to the label of the node.
+  // getNodeIdentifierLabel - Returns a string representing the
+  // address or other unique identifier of the node. (Only used if
+  // non-empty.)
+  template <typename GraphType>
+  static std::string getNodeIdentifierLabel(const void *, const GraphType &) {
+    return "";
+  }
+
   template<typename GraphType>
-  static bool hasNodeAddressLabel(const void *, const GraphType &) {
-    return false;
+  static std::string getNodeDescription(const void *, const GraphType &) {
+    return "";
   }
 
   /// If you want to specify custom node attributes, this is the place to do so

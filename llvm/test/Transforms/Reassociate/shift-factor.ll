@@ -1,12 +1,16 @@
-; There should be exactly one shift and one add left.
-; RUN: opt < %s -reassociate -instcombine -S > %t
-; RUN: grep shl %t | count 1
-; RUN: grep add %t | count 1
+; RUN: opt < %s -reassociate -instcombine -S | FileCheck %s
 
-define i32 @test(i32 %X, i32 %Y) {
-	%tmp.2 = shl i32 %X, 1		; <i32> [#uses=1]
-	%tmp.6 = shl i32 %Y, 1		; <i32> [#uses=1]
-	%tmp.4 = add i32 %tmp.6, %tmp.2		; <i32> [#uses=1]
-	ret i32 %tmp.4
+; There should be exactly one shift and one add left.
+
+define i32 @test1(i32 %X, i32 %Y) {
+; CHECK-LABEL: @test1(
+; CHECK-NEXT:    [[REASS_ADD:%.*]] = add i32 %Y, %X
+; CHECK-NEXT:    [[REASS_MUL:%.*]] = shl i32 [[REASS_ADD]], 1
+; CHECK-NEXT:    ret i32 [[REASS_MUL]]
+;
+  %t2 = shl i32 %X, 1
+  %t6 = shl i32 %Y, 1
+  %t4 = add i32 %t6, %t2
+  ret i32 %t4
 }
 

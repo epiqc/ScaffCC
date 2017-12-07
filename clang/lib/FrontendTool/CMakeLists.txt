@@ -1,11 +1,34 @@
-set(LLVM_USED_LIBS clangDriver clangFrontend clangRewrite clangCodeGen 
-    clangStaticAnalyzerFrontend clangStaticAnalyzerCheckers clangStaticAnalyzerCore
-    clangARCMigrate)
+set(LLVM_LINK_COMPONENTS
+  Option
+  Support
+  )
+
+set(link_libs
+  clangBasic
+  clangCodeGen
+  clangDriver
+  clangFrontend
+  clangRewriteFrontend
+  )
+
+if(CLANG_ENABLE_ARCMT)
+  list(APPEND link_libs
+    clangARCMigrate
+    )
+endif()
+
+if(CLANG_ENABLE_STATIC_ANALYZER)
+  list(APPEND link_libs
+    clangStaticAnalyzerFrontend
+    )
+endif()
 
 add_clang_library(clangFrontendTool
   ExecuteCompilerInvocation.cpp
-  )
 
-add_dependencies(clangFrontendTool
-  ClangCC1Options
-  ClangDiagnosticFrontend)
+  DEPENDS
+  ClangDriverOptions
+
+  LINK_LIBS
+  ${link_libs}
+  )

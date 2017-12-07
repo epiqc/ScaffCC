@@ -17,8 +17,8 @@ class C {
     x = 0;
   }
 
-  void m2() const {
-    x = 0; // expected-error {{read-only variable is not assignable}}
+  void m2() const { // expected-note {{member function 'C::m2' is declared const here}}
+    x = 0; // expected-error {{cannot assign to non-static data member within const member function 'm2'}}
   }
 
   int x;
@@ -26,3 +26,14 @@ class C {
 
 void (C::*mpf)() const;
 cfn C::*mpg;
+
+// Don't crash!
+void (PR14171)() const; // expected-error {{non-member function cannot have 'const' qualifier}}
+
+// Test template instantiation of decayed array types.  Not really related to
+// type quals.
+template <typename T> void arrayDecay(const T a[]) { }
+void instantiateArrayDecay() {
+  int a[1];
+  arrayDecay(a);
+}

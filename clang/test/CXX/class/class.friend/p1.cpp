@@ -1,4 +1,6 @@
 // RUN: %clang_cc1 -fsyntax-only -verify %s
+// RUN: %clang_cc1 -fsyntax-only -verify -std=c++98 %s
+// RUN: %clang_cc1 -fsyntax-only -verify -std=c++11 %s
 
 struct Outer {
   struct Inner {
@@ -41,7 +43,10 @@ class A {
   UndeclaredSoFar x; // expected-error {{unknown type name 'UndeclaredSoFar'}}
 
   void a_member();
-  friend void A::a_member(); // expected-error {{friends cannot be members of the declaring class}}
+  friend void A::a_member();
+#if __cplusplus <= 199711L
+  // expected-error@-2 {{friends cannot be members of the declaring class}}
+#endif
   friend void a_member(); // okay (because we ignore class scopes when looking up friends)
   friend class A::AInner; // this is okay as an extension
   friend class AInner; // okay, refers to ::AInner
@@ -66,6 +71,10 @@ class A {
   class facet;
   friend class facet;  // should not assert
   class facet {};
+
+  friend int Unknown::thing(); // expected-error {{use of undeclared identifier}}
+  friend int friendfunc(), Unknown::thing(); // expected-error {{use of undeclared identifier}}
+  friend int friendfunc(), Unknown::thing() : 4; // expected-error {{use of undeclared identifier}}
 };
 
 A::UndeclaredSoFar y; // expected-error {{no type named 'UndeclaredSoFar' in 'A'}}
@@ -75,3 +84,9 @@ class PreDeclared;
 int myoperation(float f) {
   return (int) f;
 }
+
+template <typename T>
+class B {
+  template <typename U>
+  friend B<U>() {} // expected-error {{must use a qualified name when declaring a constructor as a friend}}
+};

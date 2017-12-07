@@ -1,4 +1,6 @@
-// RUN: %clang_cc1 -fsyntax-only -fobjc-runtime-has-weak -fobjc-arc -fblocks -verify -Wno-objc-root-class %s
+// RUN: %clang_cc1 -fsyntax-only -fobjc-runtime-has-weak -fobjc-arc -fblocks -verify -Wno-objc-root-class -Wno-implicit-retain-self %s
+
+void *_Block_copy(const void *block);
 
 @interface Test0
 - (void) setBlock: (void(^)(void)) block;
@@ -24,6 +26,10 @@ void test0(Test0 *x) {
   [weakx addBlock: ^{ [x actNow]; }];
   [weakx setBlock: ^{ [x actNow]; }];
   weakx.block = ^{ [x actNow]; };
+
+  // rdar://11702054
+  x.block = ^{ (void)x.actNow; };  // expected-warning {{capturing 'x' strongly in this block is likely to lead to a retain cycle}} \
+                                   // expected-note {{block will be retained by the captured object}}
 }
 
 @interface BlockOwner
@@ -116,10 +122,91 @@ void doSomething(unsigned v);
   // Sanity check that we are really whitelisting 'addOperationWithBlock:' and not doing
   // something funny.
   [myOperationQueue addSomethingElse:^() { // expected-note {{block will be retained by an object strongly retained by the captured object}}
-    if (count > 20) { // expected-warning {{capturing 'self' strongly in this block is likely to lead to a retain cycle}}
-      doSomething(count);
+    if (count > 20) {
+      doSomething(count); // expected-warning {{capturing 'self' strongly in this block is likely to lead to a retain cycle}}
     }
   }];
 }
 @end
 
+
+void testBlockVariable() {
+  typedef void (^block_t)(void);
+  
+  // This case will be caught by -Wuninitialized, and does not create a
+  // retain cycle.
+  block_t a1 = ^{
+    a1(); // no-warning
+  };
+
+  // This case will also be caught by -Wuninitialized.
+  block_t a2;
+  a2 = ^{
+    a2(); // no-warning
+  };
+  
+  __block block_t b1 = ^{ // expected-note{{block will be retained by the captured object}}
+    b1(); // expected-warning{{capturing 'b1' strongly in this block is likely to lead to a retain cycle}}
+  };
+
+  __block block_t b2;
+  b2 = ^{ // expected-note{{block will be retained by the captured object}}
+    b2(); // expected-warning{{capturing 'b2' strongly in this block is likely to lead to a retain cycle}}
+  };
+}
+
+
+@interface NSObject
+- (id)copy;
+
+- (void (^)(void))someRandomMethodReturningABlock;
+@end
+
+
+void testCopying(Test0 *obj) {
+  typedef void (^block_t)(void);
+
+  [obj setBlock:[^{ // expected-note{{block will be retained by the captured object}}
+    [obj actNow]; // expected-warning{{capturing 'obj' strongly in this block is likely to lead to a retain cycle}}
+  } copy]];
+
+  [obj addBlock:(__bridge_transfer block_t)_Block_copy((__bridge void *)^{ // expected-note{{block will be retained by the captured object}}
+    [obj actNow]; // expected-warning{{capturing 'obj' strongly in this block is likely to lead to a retain cycle}}
+  })];
+  
+  [obj addBlock:[^{
+    [obj actNow]; // no-warning
+  } someRandomMethodReturningABlock]];
+  
+  extern block_t someRandomFunctionReturningABlock(block_t);
+  [obj setBlock:someRandomFunctionReturningABlock(^{
+    [obj actNow]; // no-warning
+  })];
+}
+
+// rdar://16944538
+void func(int someCondition) {
+
+__block void(^myBlock)(void) = ^{
+        if (someCondition) {
+            doSomething(1);
+            myBlock();
+        }
+        else {
+	    myBlock = ((void*)0);
+        }
+   };
+
+}
+
+typedef void (^a_block_t)(void);
+
+@interface HonorNoEscape
+- (void)addStuffUsingBlock:(__attribute__((noescape)) a_block_t)block;
+@end
+
+void testNoEscape(HonorNoEscape *obj) {
+  [obj addStuffUsingBlock:^{
+    (void)obj; // ok.
+  }];
+}

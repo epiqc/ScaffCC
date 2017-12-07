@@ -24,10 +24,18 @@
 #include <cassert>
 
 namespace llvm {
+/// Offsets of the 32-bit fields of bitcode wrapper header.
+static const unsigned BWH_MagicField = 0 * 4;
+static const unsigned BWH_VersionField = 1 * 4;
+static const unsigned BWH_OffsetField = 2 * 4;
+static const unsigned BWH_SizeField = 3 * 4;
+static const unsigned BWH_CPUTypeField = 4 * 4;
+static const unsigned BWH_HeaderSize = 5 * 4;
+
 namespace bitc {
   enum StandardWidths {
-    BlockIDWidth = 8,  // We use VBR-8 for block IDs.
-    CodeLenWidth = 4,  // Codelen are VBR-4.
+    BlockIDWidth   = 8,  // We use VBR-8 for block IDs.
+    CodeLenWidth   = 4,  // Codelen are VBR-4.
     BlockSizeWidth = 32  // BlockSize up to 2^32 32-bit words = 16GB per block.
   };
 
@@ -69,10 +77,11 @@ namespace bitc {
   enum BlockInfoCodes {
     // DEFINE_ABBREV has magic semantics here, applying to the current SETBID'd
     // block, instead of the BlockInfo block.
-    
-    BLOCKINFO_CODE_SETBID = 1,       // SETBID: [blockid#]
-    BLOCKINFO_CODE_BLOCKNAME = 2,    // BLOCKNAME: [name]
-    BLOCKINFO_CODE_SETRECORDNAME = 3 // BLOCKINFO_CODE_SETRECORDNAME: [id, name]
+
+    BLOCKINFO_CODE_SETBID        = 1, // SETBID: [blockid#]
+    BLOCKINFO_CODE_BLOCKNAME     = 2, // BLOCKNAME: [name]
+    BLOCKINFO_CODE_SETRECORDNAME = 3  // BLOCKINFO_CODE_SETRECORDNAME:
+                                      //                             [id, name]
   };
 
 } // End bitc namespace
@@ -99,7 +108,7 @@ public:
   explicit BitCodeAbbrevOp(Encoding E, uint64_t Data = 0)
     : Val(Data), IsLiteral(false), Enc(E) {}
 
-  bool isLiteral() const { return IsLiteral; }
+  bool isLiteral() const  { return IsLiteral; }
   bool isEncoding() const { return !IsLiteral; }
 
   // Accessors for literals.
@@ -123,7 +132,7 @@ public:
     case Blob:
       return false;
     }
-    llvm_unreachable("Invalid encoding");
+    report_fatal_error("Invalid encoding");
   }
 
   /// isChar6 - Return true if this character is legal in the Char6 encoding.
@@ -138,19 +147,15 @@ public:
     if (C >= 'a' && C <= 'z') return C-'a';
     if (C >= 'A' && C <= 'Z') return C-'A'+26;
     if (C >= '0' && C <= '9') return C-'0'+26+26;
-    if (C == '.') return 62;
-    if (C == '_') return 63;
+    if (C == '.')             return 62;
+    if (C == '_')             return 63;
     llvm_unreachable("Not a value Char6 character!");
   }
 
   static char DecodeChar6(unsigned V) {
     assert((V & ~63) == 0 && "Not a Char6 encoded character!");
-    if (V < 26) return V+'a';
-    if (V < 26+26) return V-26+'A';
-    if (V < 26+26+10) return V-26-26+'0';
-    if (V == 62) return '.';
-    if (V == 63) return '_';
-    llvm_unreachable("Not a value Char6 character!");
+    return "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._"
+        [V];
   }
 
 };
@@ -162,14 +167,8 @@ template <> struct isPodLike<BitCodeAbbrevOp> { static const bool value=true; };
 /// specialized format instead of the fully-general, fully-vbr, format.
 class BitCodeAbbrev {
   SmallVector<BitCodeAbbrevOp, 32> OperandList;
-  unsigned char RefCount; // Number of things using this.
-  ~BitCodeAbbrev() {}
+
 public:
-  BitCodeAbbrev() : RefCount(1) {}
-
-  void addRef() { ++RefCount; }
-  void dropRef() { if (--RefCount == 0) delete this; }
-
   unsigned getNumOperandInfos() const {
     return static_cast<unsigned>(OperandList.size());
   }

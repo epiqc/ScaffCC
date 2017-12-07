@@ -1,7 +1,9 @@
-// RUN: %clang -cc1 -emit-pch -x objective-c++ -std=c++0x -o %t %s
-// RUN: %clang -cc1 -include-pch %t -x objective-c++ -std=c++0x  -verify %s
-// RUN: %clang -cc1 -include-pch %t -x objective-c++ -std=c++0x  -ast-print %s | FileCheck -check-prefix=PRINT %s
-// RUN: %clang -cc1 -include-pch %t -x objective-c++ -std=c++0x  -emit-llvm -o - %s | FileCheck -check-prefix=IR %s
+// RUN: %clang_cc1 -triple %itanium_abi_triple -emit-pch -x objective-c++ -std=c++0x -o %t %s
+// RUN: %clang_cc1 -triple %itanium_abi_triple -include-pch %t -x objective-c++ -std=c++0x -verify %s
+// RUN: %clang_cc1 -triple %itanium_abi_triple -include-pch %t -x objective-c++ -std=c++0x -ast-print %s | FileCheck -check-prefix=CHECK-PRINT %s
+// RUN: %clang_cc1 -triple %itanium_abi_triple -include-pch %t -x objective-c++ -std=c++0x -emit-llvm -o - %s | FileCheck -check-prefix=CHECK-IR %s
+
+// expected-no-diagnostics
 
 #ifndef HEADER
 #define HEADER
@@ -48,7 +50,7 @@ pair<T, U> make_pair(const T& first, const U& second) {
   return { first, second };
 }
 
-// CHECK-IR: define linkonce_odr void @_Z29variadic_dictionary_expansionIJP8NSStringS1_EJP8NSNumberS3_EEvDp4pairIT_T0_E
+// CHECK-IR: define linkonce_odr {{.*}}void @_Z29variadic_dictionary_expansionIJP8NSStringS1_EJP8NSNumberS3_EEvDp4pairIT_T0_E
 template<typename ...Ts, typename ... Us>
 void variadic_dictionary_expansion(pair<Ts, Us>... key_values) {
   // CHECK-PRINT: id dict = @{ key_values.first : key_values.second... };

@@ -1,9 +1,25 @@
 // RUN: %clang_cc1 -triple x86_64-apple-darwin11 -fobjc-runtime-has-weak -fsyntax-only -fobjc-arc -fblocks -verify -Wno-objc-root-class %s
+// RUN: not %clang_cc1 -triple x86_64-apple-darwin11 -fobjc-runtime-has-weak -fsyntax-only -fobjc-arc -fblocks -Wno-objc-root-class -fdiagnostics-parseable-fixits %s 2>&1 | FileCheck %s
 
 typedef unsigned long NSUInteger;
 typedef const void * CFTypeRef;
 CFTypeRef CFBridgingRetain(id X);
 id CFBridgingRelease(CFTypeRef);
+@protocol NSCopying @end
+@interface NSDictionary
++ (id)dictionaryWithObjects:(const id [])objects forKeys:(const id <NSCopying> [])keys count:(NSUInteger)cnt;
+- (void)setObject:(id)object forKeyedSubscript:(id)key;
+@end
+@class NSFastEnumerationState;
+@protocol NSFastEnumeration
+- (NSUInteger)countByEnumeratingWithState:(NSFastEnumerationState *)state objects:(id __unsafe_unretained [])buffer count:(NSUInteger)len;
+@end
+@interface NSNumber 
++ (NSNumber *)numberWithInt:(int)value;
+@end
+@interface NSArray <NSFastEnumeration>
++ (id)arrayWithObjects:(const id [])objects count:(NSUInteger)cnt;
+@end
 
 void test0(void (*fn)(int), int val) {
   fn(val);
@@ -69,14 +85,19 @@ void test1(A *a) {
 // rdar://8861761
 
 @interface B
--(id)alloc;
++ (id)alloc;
 - (id)initWithInt: (int) i;
+- (id)myInit __attribute__((objc_method_family(init)));
+- (id)myBadInit __attribute__((objc_method_family(12)));  // expected-error {{'objc_method_family' attribute requires parameter 1 to be an identifier}}
+
 @end
 
 void rdar8861761() {
   B *o1 = [[B alloc] initWithInt:0];
   B *o2 = [B alloc];
   [o2 initWithInt:0]; // expected-warning {{expression result unused}}
+  B *o3 = [[B alloc] myInit];
+  [[B alloc] myInit]; // expected-warning {{expression result unused}}
 }
 
 // rdar://8925835
@@ -107,9 +128,19 @@ void test6(unsigned cond) {
   switch (cond) {
   case 0:
     ;
-    id x; // expected-note {{jump bypasses initialization of retaining variable}}
+    id x; // expected-note {{jump bypasses initialization of __strong variable}}
 
-  case 1: // expected-error {{switch case is in protected scope}}
+  case 1: // expected-error {{cannot jump}}
+    break;
+  }
+}
+void test6a(unsigned cond) {
+  switch (cond) {
+  case 0:
+    ;
+    __weak id x; // expected-note {{jump bypasses initialization of __weak variable}}
+
+  case 1: // expected-error {{cannot jump}}
     break;
   }
 }
@@ -265,16 +296,16 @@ void test11(id op, void *vp) {
   b = (nil == vp);
 
   b = (vp == op); // expected-error {{implicit conversion of Objective-C pointer type 'id' to C pointer type 'void *' requires a bridged cast}} expected-note {{use __bridge}} expected-note {{use CFBridgingRetain call}}
-  b = (op == vp); // expected-error {{implicit conversion of C pointer type 'void *' to Objective-C pointer type 'id' requires a bridged cast}} expected-note {{use __bridge}} expected-note {{use CFBridgingRelease call}}
+  b = (op == vp);
 }
 
 void test12(id collection) {
   for (id x in collection) {
-    x = 0; // expected-error {{fast enumeration variables can't be modified in ARC by default; declare the variable __strong to allow this}}
+    x = 0; // expected-error {{fast enumeration variables cannot be modified in ARC by default; declare the variable __strong to allow this}}
   }
 
-  for (const id x in collection) {
-    x = 0; // expected-error {{read-only variable is not assignable}}
+  for (const id x in collection) { // expected-note {{variable 'x' declared const here}}
+    x = 0; // expected-error {{cannot assign to variable 'x' with const-qualified type 'const __strong id'}}
   }
 
   for (__strong id x in collection) {
@@ -396,7 +427,7 @@ void test17(void) {
 
 void test18(void) {
   id x;
-  [x test18]; // expected-error {{no known instance method for selector 'test18'}}
+  [x test18]; // expected-error {{instance method 'test18' not found ; did you mean 'test17'?}}
 }
 
 extern struct Test19 *test19a;
@@ -641,7 +672,7 @@ void test35(void) {
   test36_helper(&y);
   ^{ test36_helper(&y); }();
 
-  __strong int non_objc_type; // expected-warning {{'__strong' only applies to objective-c object or block pointer types}} 
+  __strong int non_objc_type; // expected-warning {{'__strong' only applies to Objective-C object or block pointer types}} 
 }
 
 void test36(int first, ...) {
@@ -696,3 +727,119 @@ void _NSCalcBeze(NSColor* color, NSColor* bezelColors[]); // expected-error {{mu
 }
 @end
 
+// rdar://11814185
+@interface Radar11814185
+@property (nonatomic, weak)  Radar11814185* picker1;
++ alloc;
+- init;
+@end
+
+@implementation Radar11814185
+
+@synthesize picker1;
+
+- (void)viewDidLoad
+{
+    picker1 = [[Radar11814185 alloc] init]; // expected-warning {{assigning retained object to weak variable; object will be released after assignment}}
+    self.picker1 = [[Radar11814185 alloc] init]; // expected-warning {{assigning retained object to weak property; object will be released after assignment}}
+}
+
++ alloc { return 0; }
+- init { return 0; }
+@end
+
+// <rdar://problem/12569201>.  Warn on cases of initializing a weak variable
+// with an Objective-C object literal.
+void rdar12569201(id key, id value) {
+    // Declarations.
+    __weak id x = @"foo"; // no-warning
+    __weak id y = @{ key : value }; // expected-warning {{assigning dictionary literal to a weak variable; object will be released after assignment}}
+    __weak id z = @[ value ]; // expected-warning {{assigning array literal to a weak variable; object will be released after assignment}}
+    __weak id b = ^() {}; // expected-warning {{assigning block literal to a weak variable; object will be released after assignment}}
+    __weak id n = @42; // expected-warning {{assigning numeric literal to a weak variable; object will be released after assignment}}
+    __weak id e = @(42); // expected-warning {{assigning numeric literal to a weak variable; object will be released after assignment}}
+    __weak id m = @(41 + 1); // expected-warning {{assigning boxed expression to a weak variable; object will be released after assignment}}
+    
+    // Assignments.
+    y = @{ key : value }; // expected-warning {{assigning dictionary literal to a weak variable; object will be released after assignment}}
+    z = @[ value ]; // expected-warning {{assigning array literal to a weak variable; object will be released after assignment}}
+    b = ^() {}; // expected-warning {{assigning block literal to a weak variable; object will be released after assignment}}
+    n = @42; // expected-warning {{assigning numeric literal to a weak variable; object will be released after assignment}}
+    e = @(42); // expected-warning {{assigning numeric literal to a weak variable; object will be released after assignment}}
+    m = @(41 + 1); // expected-warning {{assigning boxed expression to a weak variable; object will be released after assignment}}
+}
+
+@interface C
+- (void)method:(id[])objects; // expected-error{{must explicitly describe intended ownership of an object array parameter}}
+@end
+
+// rdar://13752880
+@interface NSMutableArray : NSArray @end
+
+typedef __strong NSMutableArray * PSNS;
+
+void test(NSArray *x) {
+  NSMutableArray *y = x; // expected-warning {{incompatible pointer types initializing 'NSMutableArray *' with an expression of type 'NSArray *'}}
+  __strong NSMutableArray *y1 = x; // expected-warning {{incompatible pointer types initializing 'NSMutableArray *' with an expression of type 'NSArray *'}}
+  PSNS y2 = x; // expected-warning {{incompatible pointer types initializing 'NSMutableArray *' with an expression of type 'NSArray *'}}
+}
+
+// rdar://15123684
+@class NSString;
+
+void foo(NSArray *array) {
+  for (NSString *string in array) {
+    for (string in @[@"blah", @"more blah", string]) { // expected-error {{selector element of type 'NSString *const __strong' cannot be a constant l-value}}
+    }
+  }
+}
+
+// rdar://16627903
+extern void abort();
+#define TKAssertEqual(a, b) do{\
+    __typeof(a) a_res = (a);\
+    __typeof(b) b_res = (b);\
+    if ((a_res) != (b_res)) {\
+        abort();\
+    }\
+}while(0)
+
+int garf() {
+  id object;
+  TKAssertEqual(object, nil);
+  TKAssertEqual(object, (id)nil);
+}
+
+void block_capture_autoreleasing(A * __autoreleasing *a,
+                                 A **b, // expected-note {{declare the parameter __autoreleasing explicitly to suppress this warning}} expected-note {{declare the parameter __strong or capture a __block __strong variable to keep values alive across autorelease pools}}
+                                 A * _Nullable *c, // expected-note {{declare the parameter __autoreleasing explicitly to suppress this warning}} expected-note {{declare the parameter __strong or capture a __block __strong variable to keep values alive across autorelease pools}}
+                                 A * _Nullable __autoreleasing *d,
+                                 A ** _Nullable e, // expected-note {{declare the parameter __autoreleasing explicitly to suppress this warning}} expected-note {{declare the parameter __strong or capture a __block __strong variable to keep values alive across autorelease pools}}
+                                 A * __autoreleasing * _Nullable f,
+                                 id __autoreleasing *g,
+                                 id *h, // expected-note {{declare the parameter __autoreleasing explicitly to suppress this warning}} expected-note {{declare the parameter __strong or capture a __block __strong variable to keep values alive across autorelease pools}}
+                                 id _Nullable *i, // expected-note {{declare the parameter __autoreleasing explicitly to suppress this warning}} expected-note {{declare the parameter __strong or capture a __block __strong variable to keep values alive across autorelease pools}}
+                                 id _Nullable __autoreleasing *j,
+                                 id * _Nullable k, // expected-note {{declare the parameter __autoreleasing explicitly to suppress this warning}} expected-note {{declare the parameter __strong or capture a __block __strong variable to keep values alive across autorelease pools}}
+                                 id __autoreleasing * _Nullable l) {
+  // CHECK: fix-it:"{{.*}}":{[[@LINE-11]]:37-[[@LINE-11]]:37}:" __autoreleasing "
+  // CHECK: fix-it:"{{.*}}":{[[@LINE-11]]:47-[[@LINE-11]]:47}:" __autoreleasing"
+  // CHECK: fix-it:"{{.*}}":{[[@LINE-10]]:37-[[@LINE-10]]:37}:" __autoreleasing "
+  // CHECK: fix-it:"{{.*}}":{[[@LINE-8]]:36-[[@LINE-8]]:36}:" __autoreleasing"
+  // CHECK: fix-it:"{{.*}}":{[[@LINE-8]]:46-[[@LINE-8]]:46}:" __autoreleasing"
+  // CHECK: fix-it:"{{.*}}":{[[@LINE-7]]:36-[[@LINE-7]]:36}:" __autoreleasing"
+  ^{
+    (void)*a;
+    (void)*b; // expected-warning {{block captures an autoreleasing out-parameter, which may result in use-after-free bugs}}
+    (void)*c; // expected-warning {{block captures an autoreleasing out-parameter, which may result in use-after-free bugs}}
+    (void)*d;
+    (void)*e; // expected-warning {{block captures an autoreleasing out-parameter, which may result in use-after-free bugs}}
+    (void)*f;
+    (void)*g;
+    (void)*h; // expected-warning {{block captures an autoreleasing out-parameter, which may result in use-after-free bugs}}
+    (void)*i; // expected-warning {{block captures an autoreleasing out-parameter, which may result in use-after-free bugs}}
+    (void)*j;
+    (void)*k; // expected-warning {{block captures an autoreleasing out-parameter, which may result in use-after-free bugs}}
+    (void)*l;
+  }();
+}

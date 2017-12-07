@@ -4,20 +4,20 @@
 
 %struct.cpp_dir = type { %struct.cpp_dir*, i8*, i32, i8, i8**, i8*, i8* (i8*, %struct.cpp_dir*)*, i64, i32, i8 }
 
-declare void @llvm.dbg.value(metadata, i64, metadata) nounwind readnone
+declare void @llvm.dbg.value(metadata, metadata, metadata) nounwind readnone
 
-define internal i8* @framework_construct_pathname(i8* %fname, %struct.cpp_dir* %dir) nounwind ssp {
+define internal i8* @framework_construct_pathname(i8* %fname, %struct.cpp_dir* %dir) nounwind ssp !dbg !2 {
 entry:
   br i1 undef, label %bb33, label %bb
 
 bb:                                               ; preds = %entry
   %tmp = icmp eq i32 undef, 0
   %tmp1 = add i32 0, 11
-  call void @llvm.dbg.value(metadata !{i32 %tmp1}, i64 0, metadata !0)
+  call void @llvm.dbg.value(metadata i32 %tmp1, metadata !0, metadata !DIExpression()), !dbg !DILocation(scope: !1)
   br i1 undef, label %bb18, label %bb31.preheader
 
 bb31.preheader:                                   ; preds = %bb19, %bb
-  %tmp2 = getelementptr inbounds i8* %fname, i32 0
+  %tmp2 = getelementptr inbounds i8, i8* %fname, i32 0
   br label %bb31
 
 bb18:                                             ; preds = %bb
@@ -42,44 +42,52 @@ bb33:                                             ; preds = %bb31, %bb22, %bb18,
 
 declare void @foobar(i32)
 
-!0 = metadata !{i32 590080, metadata !1, metadata !"frname_len", metadata !3, i32 517, metadata !38, i32 0} ; [ DW_TAG_auto_variable ]
-!1 = metadata !{i32 589835, metadata !2, i32 515, i32 0, metadata !3, i32 19} ; [ DW_TAG_lexical_block ]
-!2 = metadata !{i32 589870, i32 0, metadata !3, metadata !"framework_construct_pathname", metadata !"framework_construct_pathname", metadata !"", metadata !3, i32 515, metadata !5, i1 true, i1 true, i32 0, i32 0, null, i32 256, i1 true, i8* (i8*, %struct.cpp_dir*)* @framework_construct_pathname} ; [ DW_TAG_subprogram ]
-!3 = metadata !{i32 589865, metadata !"darwin-c.c", metadata !"/Users/espindola/llvm/build-llvm-gcc/gcc/../../llvm-gcc-4.2/gcc/config", metadata !4} ; [ DW_TAG_file_type ]
-!4 = metadata !{i32 589841, i32 0, i32 1, metadata !"/Users/espindola/llvm/build-llvm-gcc/gcc/../../llvm-gcc-4.2/gcc/config/darwin-c.c", metadata !"/Users/espindola/llvm/build-llvm-gcc/gcc", metadata !"4.2.1 (Based on Apple Inc. build 5658) (LLVM build)", i1 true, i1 true, metadata !"", i32 0} ; [ DW_TAG_compile_unit ]
-!5 = metadata !{i32 589845, metadata !3, metadata !"", metadata !3, i32 0, i64 0, i64 0, i64 0, i32 0, null, metadata !6, i32 0, null} ; [ DW_TAG_subroutine_type ]
-!6 = metadata !{metadata !7, metadata !9, metadata !11}
-!7 = metadata !{i32 589839, metadata !3, metadata !"", metadata !3, i32 0, i64 32, i64 32, i64 0, i32 0, metadata !8} ; [ DW_TAG_pointer_type ]
-!8 = metadata !{i32 589860, metadata !3, metadata !"char", metadata !3, i32 0, i64 8, i64 8, i64 0, i32 0, i32 6} ; [ DW_TAG_base_type ]
-!9 = metadata !{i32 589839, metadata !3, metadata !"", metadata !3, i32 0, i64 32, i64 32, i64 0, i32 0, metadata !10} ; [ DW_TAG_pointer_type ]
-!10 = metadata !{i32 589862, metadata !3, metadata !"", metadata !3, i32 0, i64 8, i64 8, i64 0, i32 0, metadata !8} ; [ DW_TAG_const_type ]
-!11 = metadata !{i32 589839, metadata !3, metadata !"", metadata !3, i32 0, i64 32, i64 32, i64 0, i32 0, metadata !12} ; [ DW_TAG_pointer_type ]
-!12 = metadata !{i32 589846, metadata !13, metadata !"cpp_dir", metadata !13, i32 45, i64 0, i64 0, i64 0, i32 0, metadata !14} ; [ DW_TAG_typedef ]
-!13 = metadata !{i32 589865, metadata !"cpplib.h", metadata !"/Users/espindola/llvm/build-llvm-gcc/gcc/../../llvm-gcc-4.2/gcc/../libcpp/include", metadata !4} ; [ DW_TAG_file_type ]
-!14 = metadata !{i32 589843, metadata !3, metadata !"cpp_dir", metadata !13, i32 43, i64 352, i64 32, i64 0, i32 0, null, metadata !15, i32 0, null} ; [ DW_TAG_structure_type ]
-!15 = metadata !{metadata !16, metadata !18, metadata !19, metadata !21, metadata !23, metadata !25, metadata !27, metadata !29, metadata !33, metadata !36}
-!16 = metadata !{i32 589837, metadata !14, metadata !"next", metadata !13, i32 572, i64 32, i64 32, i64 0, i32 0, metadata !17} ; [ DW_TAG_member ]
-!17 = metadata !{i32 589839, metadata !3, metadata !"", metadata !3, i32 0, i64 32, i64 32, i64 0, i32 0, metadata !14} ; [ DW_TAG_pointer_type ]
-!18 = metadata !{i32 589837, metadata !14, metadata !"name", metadata !13, i32 575, i64 32, i64 32, i64 32, i32 0, metadata !7} ; [ DW_TAG_member ]
-!19 = metadata !{i32 589837, metadata !14, metadata !"len", metadata !13, i32 576, i64 32, i64 32, i64 64, i32 0, metadata !20} ; [ DW_TAG_member ]
-!20 = metadata !{i32 589860, metadata !3, metadata !"unsigned int", metadata !3, i32 0, i64 32, i64 32, i64 0, i32 0, i32 7} ; [ DW_TAG_base_type ]
-!21 = metadata !{i32 589837, metadata !14, metadata !"sysp", metadata !13, i32 580, i64 8, i64 8, i64 96, i32 0, metadata !22} ; [ DW_TAG_member ]
-!22 = metadata !{i32 589860, metadata !3, metadata !"unsigned char", metadata !3, i32 0, i64 8, i64 8, i64 0, i32 0, i32 8} ; [ DW_TAG_base_type ]
-!23 = metadata !{i32 589837, metadata !14, metadata !"name_map", metadata !13, i32 584, i64 32, i64 32, i64 128, i32 0, metadata !24} ; [ DW_TAG_member ]
-!24 = metadata !{i32 589839, metadata !3, metadata !"", metadata !3, i32 0, i64 32, i64 32, i64 0, i32 0, metadata !9} ; [ DW_TAG_pointer_type ]
-!25 = metadata !{i32 589837, metadata !14, metadata !"header_map", metadata !13, i32 590, i64 32, i64 32, i64 160, i32 0, metadata !26} ; [ DW_TAG_member ]
-!26 = metadata !{i32 589839, metadata !3, metadata !"", metadata !3, i32 0, i64 32, i64 32, i64 0, i32 0, null} ; [ DW_TAG_pointer_type ]
-!27 = metadata !{i32 589837, metadata !14, metadata !"construct", metadata !13, i32 597, i64 32, i64 32, i64 192, i32 0, metadata !28} ; [ DW_TAG_member ]
-!28 = metadata !{i32 589839, metadata !3, metadata !"", metadata !3, i32 0, i64 32, i64 32, i64 0, i32 0, metadata !5} ; [ DW_TAG_pointer_type ]
-!29 = metadata !{i32 589837, metadata !14, metadata !"ino", metadata !13, i32 601, i64 64, i64 64, i64 224, i32 0, metadata !30} ; [ DW_TAG_member ]
-!30 = metadata !{i32 589846, metadata !31, metadata !"ino_t", metadata !31, i32 141, i64 0, i64 0, i64 0, i32 0, metadata !32} ; [ DW_TAG_typedef ]
-!31 = metadata !{i32 589865, metadata !"types.h", metadata !"/usr/include/sys", metadata !4} ; [ DW_TAG_file_type ]
-!32 = metadata !{i32 589860, metadata !3, metadata !"long long unsigned int", metadata !3, i32 0, i64 64, i64 64, i64 0, i32 0, i32 7} ; [ DW_TAG_base_type ]
-!33 = metadata !{i32 589837, metadata !14, metadata !"dev", metadata !13, i32 602, i64 32, i64 32, i64 288, i32 0, metadata !34} ; [ DW_TAG_member ]
-!34 = metadata !{i32 589846, metadata !31, metadata !"dev_t", metadata !31, i32 107, i64 0, i64 0, i64 0, i32 0, metadata !35} ; [ DW_TAG_typedef ]
-!35 = metadata !{i32 589860, metadata !3, metadata !"int", metadata !3, i32 0, i64 32, i64 32, i64 0, i32 0, i32 5} ; [ DW_TAG_base_type ]
-!36 = metadata !{i32 589837, metadata !14, metadata !"user_supplied_p", metadata !13, i32 605, i64 8, i64 8, i64 320, i32 0, metadata !37} ; [ DW_TAG_member ]
-!37 = metadata !{i32 589860, metadata !3, metadata !"_Bool", metadata !3, i32 0, i64 8, i64 8, i64 0, i32 0, i32 2} ; [ DW_TAG_base_type ]
-!38 = metadata !{i32 589846, metadata !39, metadata !"size_t", metadata !39, i32 326, i64 0, i64 0, i64 0, i32 0, metadata !40} ; [ DW_TAG_typedef ]
-!39 = metadata !{i32 589865, metadata !"stddef.h", metadata !"/Users/espindola/llvm/build-llvm-gcc/./prev-gcc/include", metadata !4} ; [ DW_TAG_file_type ]
-!40 = metadata !{i32 589860, metadata !3, metadata !"long unsigned int", metadata !3, i32 0, i64 32, i64 32, i64 0, i32 0, i32 7} ; [ DW_TAG_base_type ]
+!llvm.dbg.cu = !{!4}
+!llvm.module.flags = !{!47}
+!0 = !DILocalVariable(name: "frname_len", line: 517, scope: !1, file: !3, type: !38)
+!1 = distinct !DILexicalBlock(line: 515, column: 0, file: !44, scope: !2)
+!2 = distinct !DISubprogram(name: "framework_construct_pathname", line: 515, isLocal: true, isDefinition: true, virtualIndex: 6, flags: DIFlagPrototyped, isOptimized: true, unit: !4, file: !44, scope: null, type: !5)
+!3 = !DIFile(filename: "darwin-c.c", directory: "/Users/espindola/llvm/build-llvm-gcc/gcc/../../llvm-gcc-4.2/gcc/config")
+!4 = distinct !DICompileUnit(language: DW_LANG_C89, producer: "4.2.1 (Based on Apple Inc. build 5658) (LLVM build)", isOptimized: true, emissionKind: FullDebug, file: !44, enums: !46, retainedTypes: !46)
+!5 = !DISubroutineType(types: !6)
+!6 = !{!7, !9, !11}
+!7 = !DIDerivedType(tag: DW_TAG_pointer_type, size: 32, align: 32, file: !44, scope: !3, baseType: !8)
+!8 = !DIBasicType(tag: DW_TAG_base_type, name: "char", size: 8, align: 8, encoding: DW_ATE_signed_char)
+!9 = !DIDerivedType(tag: DW_TAG_pointer_type, size: 32, align: 32, file: !44, scope: !3, baseType: !10)
+!10 = !DIDerivedType(tag: DW_TAG_const_type, size: 8, align: 8, file: !44, scope: !3, baseType: !8)
+!11 = !DIDerivedType(tag: DW_TAG_pointer_type, size: 32, align: 32, file: !44, scope: !3, baseType: !12)
+!12 = !DIDerivedType(tag: DW_TAG_typedef, name: "cpp_dir", line: 45, file: !41, scope: !13, baseType: !14)
+!13 = !DIFile(filename: "cpplib.h", directory: "/Users/espindola/llvm/build-llvm-gcc/gcc/../../llvm-gcc-4.2/gcc/../libcpp/include")
+!14 = !DICompositeType(tag: DW_TAG_structure_type, name: "cpp_dir", line: 43, size: 352, align: 32, file: !41, scope: !3, elements: !15)
+!15 = !{!16, !18, !19, !21, !23, !25, !27, !29, !33, !36}
+!16 = !DIDerivedType(tag: DW_TAG_member, name: "next", line: 572, size: 32, align: 32, file: !41, scope: !14, baseType: !17)
+!17 = !DIDerivedType(tag: DW_TAG_pointer_type, size: 32, align: 32, file: !44, scope: !3, baseType: !14)
+!18 = !DIDerivedType(tag: DW_TAG_member, name: "name", line: 575, size: 32, align: 32, offset: 32, file: !41, scope: !14, baseType: !7)
+!19 = !DIDerivedType(tag: DW_TAG_member, name: "len", line: 576, size: 32, align: 32, offset: 64, file: !41, scope: !14, baseType: !20)
+!20 = !DIBasicType(tag: DW_TAG_base_type, name: "unsigned int", size: 32, align: 32, encoding: DW_ATE_unsigned)
+!21 = !DIDerivedType(tag: DW_TAG_member, name: "sysp", line: 580, size: 8, align: 8, offset: 96, file: !41, scope: !14, baseType: !22)
+!22 = !DIBasicType(tag: DW_TAG_base_type, name: "unsigned char", size: 8, align: 8, encoding: DW_ATE_unsigned_char)
+!23 = !DIDerivedType(tag: DW_TAG_member, name: "name_map", line: 584, size: 32, align: 32, offset: 128, file: !41, scope: !14, baseType: !24)
+!24 = !DIDerivedType(tag: DW_TAG_pointer_type, size: 32, align: 32, file: !44, scope: !3, baseType: !9)
+!25 = !DIDerivedType(tag: DW_TAG_member, name: "header_map", line: 590, size: 32, align: 32, offset: 160, file: !41, scope: !14, baseType: !26)
+!26 = !DIDerivedType(tag: DW_TAG_pointer_type, size: 32, align: 32, file: !44, scope: !3, baseType: null)
+!27 = !DIDerivedType(tag: DW_TAG_member, name: "construct", line: 597, size: 32, align: 32, offset: 192, file: !41, scope: !14, baseType: !28)
+!28 = !DIDerivedType(tag: DW_TAG_pointer_type, size: 32, align: 32, file: !44, scope: !3, baseType: !5)
+!29 = !DIDerivedType(tag: DW_TAG_member, name: "ino", line: 601, size: 64, align: 64, offset: 224, file: !41, scope: !14, baseType: !30)
+!30 = !DIDerivedType(tag: DW_TAG_typedef, name: "ino_t", line: 141, file: !42, scope: !31, baseType: !32)
+!31 = !DIFile(filename: "types.h", directory: "/usr/include/sys")
+!32 = !DIBasicType(tag: DW_TAG_base_type, name: "long long unsigned int", size: 64, align: 64, encoding: DW_ATE_unsigned)
+!33 = !DIDerivedType(tag: DW_TAG_member, name: "dev", line: 602, size: 32, align: 32, offset: 288, file: !41, scope: !14, baseType: !34)
+!34 = !DIDerivedType(tag: DW_TAG_typedef, name: "dev_t", line: 107, file: !42, scope: !31, baseType: !35)
+!35 = !DIBasicType(tag: DW_TAG_base_type, name: "int", size: 32, align: 32, encoding: DW_ATE_signed)
+!36 = !DIDerivedType(tag: DW_TAG_member, name: "user_supplied_p", line: 605, size: 8, align: 8, offset: 320, file: !41, scope: !14, baseType: !37)
+!37 = !DIBasicType(tag: DW_TAG_base_type, name: "_Bool", size: 8, align: 8, encoding: DW_ATE_boolean)
+!38 = !DIDerivedType(tag: DW_TAG_typedef, name: "size_t", line: 326, file: !43, scope: !39, baseType: !40)
+!39 = !DIFile(filename: "stddef.h", directory: "/Users/espindola/llvm/build-llvm-gcc/./prev-gcc/include")
+!40 = !DIBasicType(tag: DW_TAG_base_type, name: "long unsigned int", size: 32, align: 32, encoding: DW_ATE_unsigned)
+!41 = !DIFile(filename: "cpplib.h", directory: "/Users/espindola/llvm/build-llvm-gcc/gcc/../../llvm-gcc-4.2/gcc/../libcpp/include")
+!42 = !DIFile(filename: "types.h", directory: "/usr/include/sys")
+!43 = !DIFile(filename: "stddef.h", directory: "/Users/espindola/llvm/build-llvm-gcc/./prev-gcc/include")
+!44 = !DIFile(filename: "darwin-c.c", directory: "/Users/espindola/llvm/build-llvm-gcc/gcc/../../llvm-gcc-4.2/gcc/config")
+!46 = !{}
+!47 = !{i32 1, !"Debug Info Version", i32 3}

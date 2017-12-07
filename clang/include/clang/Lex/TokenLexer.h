@@ -11,18 +11,20 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_CLANG_TOKENLEXER_H
-#define LLVM_CLANG_TOKENLEXER_H
+#ifndef LLVM_CLANG_LEX_TOKENLEXER_H
+#define LLVM_CLANG_LEX_TOKENLEXER_H
 
 #include "clang/Basic/SourceLocation.h"
+#include "llvm/ADT/ArrayRef.h"
 
 namespace clang {
   class MacroInfo;
   class Preprocessor;
   class Token;
   class MacroArgs;
+  class VAOptExpansionContext;
 
-/// TokenLexer - This implements a lexer that returns token from a macro body
+/// TokenLexer - This implements a lexer that returns tokens from a macro body
 /// or token stream instead of lexing from a character buffer.  This is used for
 /// macro expansion and _Pragma handling, for example.
 ///
@@ -55,9 +57,9 @@ class TokenLexer {
   ///
   unsigned NumTokens;
 
-  /// CurToken - This is the next token that Lex will return.
+  /// This is the index of the next token that Lex will return.
   ///
-  unsigned CurToken;
+  unsigned CurTokenIdx;
 
   /// ExpandLocStart/End - The source location range where this macro was
   /// expanded.
@@ -81,6 +83,14 @@ class TokenLexer {
   bool AtStartOfLine : 1;
   bool HasLeadingSpace : 1;
 
+  // NextTokGetsSpace - When this is true, the next token appended to the
+  // output list during function argument expansion will get a leading space,
+  // regardless of whether it had one to begin with or not. This is used for
+  // placemarker support. If still true after function argument expansion, the
+  // leading space will be applied to the first token following the macro
+  // expansion.
+  bool NextTokGetsSpace : 1;
+
   /// OwnsTokens - This is true if this TokenLexer allocated the Tokens
   /// array, and thus needs to free it when destroyed.  For simple object-like
   /// macros (for example) we just point into the token buffer of the macro
@@ -91,31 +101,32 @@ class TokenLexer {
   /// should not be subject to further macro expansion.
   bool DisableMacroExpansion : 1;
 
-  TokenLexer(const TokenLexer&);  // DO NOT IMPLEMENT
-  void operator=(const TokenLexer&); // DO NOT IMPLEMENT
+  TokenLexer(const TokenLexer &) = delete;
+  void operator=(const TokenLexer &) = delete;
 public:
   /// Create a TokenLexer for the specified macro with the specified actual
   /// arguments.  Note that this ctor takes ownership of the ActualArgs pointer.
   /// ILEnd specifies the location of the ')' for a function-like macro or the
   /// identifier for an object-like macro.
-  TokenLexer(Token &Tok, SourceLocation ILEnd, MacroArgs *ActualArgs,
-             Preprocessor &pp)
-    : Macro(0), ActualArgs(0), PP(pp), OwnsTokens(false) {
-    Init(Tok, ILEnd, ActualArgs);
+  TokenLexer(Token &Tok, SourceLocation ILEnd, MacroInfo *MI,
+             MacroArgs *ActualArgs, Preprocessor &pp)
+    : Macro(nullptr), ActualArgs(nullptr), PP(pp), OwnsTokens(false) {
+    Init(Tok, ILEnd, MI, ActualArgs);
   }
 
   /// Init - Initialize this TokenLexer to expand from the specified macro
   /// with the specified argument information.  Note that this ctor takes
   /// ownership of the ActualArgs pointer.  ILEnd specifies the location of the
   /// ')' for a function-like macro or the identifier for an object-like macro.
-  void Init(Token &Tok, SourceLocation ILEnd, MacroArgs *ActualArgs);
+  void Init(Token &Tok, SourceLocation ILEnd, MacroInfo *MI,
+            MacroArgs *ActualArgs);
 
   /// Create a TokenLexer for the specified token stream.  If 'OwnsTokens' is
   /// specified, this takes ownership of the tokens and delete[]'s them when
   /// the token lexer is empty.
   TokenLexer(const Token *TokArray, unsigned NumToks, bool DisableExpansion,
              bool ownsTokens, Preprocessor &pp)
-    : Macro(0), ActualArgs(0), PP(pp), OwnsTokens(false) {
+    : Macro(nullptr), ActualArgs(nullptr), PP(pp), OwnsTokens(false) {
     Init(TokArray, NumToks, DisableExpansion, ownsTokens);
   }
 
@@ -135,7 +146,7 @@ public:
   unsigned isNextTokenLParen() const;
 
   /// Lex - Lex and return a token from this macro stream.
-  void Lex(Token &Tok);
+  bool Lex(Token &Tok);
 
   /// isParsingPreprocessorDirective - Return true if we are in the middle of a
   /// preprocessor directive.
@@ -147,15 +158,56 @@ private:
   /// isAtEnd - Return true if the next lex call will pop this macro off the
   /// include stack.
   bool isAtEnd() const {
-    return CurToken == NumTokens;
+    return CurTokenIdx == NumTokens;
   }
 
-  /// PasteTokens - Tok is the LHS of a ## operator, and CurToken is the ##
-  /// operator.  Read the ## and RHS, and paste the LHS/RHS together.  If there
-  /// are is another ## after it, chomp it iteratively.  Return the result as
-  /// Tok.  If this returns true, the caller should immediately return the
+  /// Concatenates the next (sub-)sequence of \p Tokens separated by '##'
+  /// starting with LHSTok - stopping when we encounter a token that is neither
+  /// '##' nor preceded by '##'.  Places the result back into \p LHSTok and sets
+  /// \p CurIdx to point to the token following the last one that was pasted.
+  ///
+  /// Also performs the MSVC extension wide-literal token pasting involved with:
+  ///       \code L #macro-arg. \endcode
+  ///
+  /// \param[in,out] LHSTok - Contains the token to the left of '##' in \p
+  /// Tokens upon entry and will contain the resulting concatenated Token upon
+  /// exit.
+  ///
+  /// \param[in] TokenStream - The stream of Tokens we are lexing from.
+  ///
+  /// \param[in,out] CurIdx - Upon entry, \pTokens[\pCurIdx] must equal '##'
+  /// (with the exception of the MSVC extension mentioned above).  Upon exit, it
+  /// is set to the index of the token following the last token that was
+  /// concatenated together.
+  ///
+  /// \returns If this returns true, the caller should immediately return the
   /// token.
-  bool PasteTokens(Token &Tok);
+
+  bool pasteTokens(Token &LHSTok, ArrayRef<Token> TokenStream,
+                   unsigned int &CurIdx);
+
+  /// Calls pasteTokens above, passing in the '*this' object's Tokens and
+  /// CurTokenIdx data members.
+  bool pasteTokens(Token &Tok);
+
+
+  /// Takes the tail sequence of tokens within ReplacementToks that represent
+  /// the just expanded __VA_OPT__ tokens (possibly zero tokens) and transforms
+  /// them into a string.  \p VCtx is used to determine which token represents
+  /// the first __VA_OPT__ replacement token.
+  ///
+  /// \param[in,out] ReplacementToks - Contains the current Replacement Tokens
+  /// (prior to rescanning and token pasting), the tail end of which represents
+  /// the tokens just expanded through __VA_OPT__ processing.  These (sub)
+  /// sequence of tokens are folded into one stringified token.
+  ///
+  /// \param[in] VCtx - contains relevent contextual information about the
+  /// state of the tokens around and including the __VA_OPT__ token, necessary
+  /// for stringification.
+
+  void stringifyVAOPTContents(SmallVectorImpl<Token> &ReplacementToks,
+                              const VAOptExpansionContext &VCtx,
+                              SourceLocation VAOPTClosingParenLoc);
 
   /// Expand the arguments of a function-like macro so that we can quickly
   /// return preexpanded tokens from Tokens.
@@ -166,9 +218,9 @@ private:
   /// macro, other active macros, and anything left on the current physical
   /// source line of the expanded buffer.  Handle this by returning the
   /// first token on the next line.
-  void HandleMicrosoftCommentPaste(Token &Tok);
+  void HandleMicrosoftCommentPaste(Token &Tok, SourceLocation OpLoc);
 
-  /// \brief If \arg loc is a FileID and points inside the current macro
+  /// \brief If \p loc is a FileID and points inside the current macro
   /// definition, returns the appropriate source location pointing at the
   /// macro expansion source location entry.
   SourceLocation getExpansionLocForMacroDefLoc(SourceLocation loc) const;
@@ -180,6 +232,15 @@ private:
   /// macro definition.
   void updateLocForMacroArgTokens(SourceLocation ArgIdSpellLoc,
                                   Token *begin_tokens, Token *end_tokens);
+
+  /// Remove comma ahead of __VA_ARGS__, if present, according to compiler
+  /// dialect settings.  Returns true if the comma is removed.
+  bool MaybeRemoveCommaBeforeVaArgs(SmallVectorImpl<Token> &ResultToks,
+                                    bool HasPasteOperator,
+                                    MacroInfo *Macro, unsigned MacroArgNo,
+                                    Preprocessor &PP);
+
+  void PropagateLineStartLeadingSpaceInfo(Token &Result);
 };
 
 }  // end namespace clang

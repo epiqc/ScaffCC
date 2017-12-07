@@ -11,20 +11,20 @@
 //  about subpar uses of NSAutoreleasePool.  Note that while the check itself
 //  (in its current form) could be written as a flow-insensitive check, in
 //  can be potentially enhanced in the future with flow-sensitive information.
-//  It is also a good example of the CheckerVisitor interface. 
+//  It is also a good example of the CheckerVisitor interface.
 //
 //===----------------------------------------------------------------------===//
 
 #include "ClangSACheckers.h"
-#include "clang/StaticAnalyzer/Core/Checker.h"
-#include "clang/StaticAnalyzer/Core/CheckerManager.h"
+#include "clang/AST/Decl.h"
+#include "clang/AST/DeclObjC.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugReporter.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
+#include "clang/StaticAnalyzer/Core/Checker.h"
+#include "clang/StaticAnalyzer/Core/CheckerManager.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/CallEvent.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/ExprEngine.h"
-#include "clang/StaticAnalyzer/Core/PathSensitive/ObjCMessage.h"
-#include "clang/AST/DeclObjC.h"
-#include "clang/AST/Decl.h"
 
 using namespace clang;
 using namespace ento;
@@ -32,33 +32,24 @@ using namespace ento;
 namespace {
 class NSAutoreleasePoolChecker
   : public Checker<check::PreObjCMessage> {
-  mutable OwningPtr<BugType> BT;
+  mutable std::unique_ptr<BugType> BT;
   mutable Selector releaseS;
 
 public:
-  void checkPreObjCMessage(ObjCMessage msg, CheckerContext &C) const;    
+  void checkPreObjCMessage(const ObjCMethodCall &msg, CheckerContext &C) const;
 };
 
 } // end anonymous namespace
 
-void NSAutoreleasePoolChecker::checkPreObjCMessage(ObjCMessage msg,
+void NSAutoreleasePoolChecker::checkPreObjCMessage(const ObjCMethodCall &msg,
                                                    CheckerContext &C) const {
-  
-  const Expr *receiver = msg.getInstanceReceiver();
-  if (!receiver)
+  if (!msg.isInstanceMessage())
     return;
-  
-  // FIXME: Enhance with value-tracking information instead of consulting
-  // the type of the expression.
-  const ObjCObjectPointerType* PT =
-    receiver->getType()->getAs<ObjCObjectPointerType>();
-  
-  if (!PT)
-    return;  
-  const ObjCInterfaceDecl *OD = PT->getInterfaceDecl();
+
+  const ObjCInterfaceDecl *OD = msg.getReceiverInterface();
   if (!OD)
-    return;  
-  if (!OD->getIdentifier()->getName().equals("NSAutoreleasePool"))
+    return;
+  if (!OD->getIdentifier()->isStr("NSAutoreleasePool"))
     return;
 
   if (releaseS.isNull())
@@ -68,19 +59,20 @@ void NSAutoreleasePoolChecker::checkPreObjCMessage(ObjCMessage msg,
     return;
 
   if (!BT)
-    BT.reset(new BugType("Use -drain instead of -release",
+    BT.reset(new BugType(this, "Use -drain instead of -release",
                          "API Upgrade (Apple)"));
 
-  ExplodedNode *N = C.addTransition();
+  ExplodedNode *N = C.generateNonFatalErrorNode();
   if (!N) {
     assert(0);
     return;
   }
 
-  BugReport *Report = new BugReport(*BT, "Use -drain instead of -release when "
-    "using NSAutoreleasePool and garbage collection", N);
+  auto Report = llvm::make_unique<BugReport>(
+      *BT, "Use -drain instead of -release when using NSAutoreleasePool and "
+           "garbage collection", N);
   Report->addRange(msg.getSourceRange());
-  C.EmitReport(Report);
+  C.emitReport(std::move(Report));
 }
 
 void ento::registerNSAutoreleasePoolChecker(CheckerManager &mgr) {

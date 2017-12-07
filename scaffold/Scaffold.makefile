@@ -11,7 +11,7 @@ TOFF=0
 CTQG=0
 ROTATIONS=0
 
-BUILD=$(ROOT)/build/Release+Asserts
+BUILD=$(ROOT)/build
 
 SQCTPATH=$(ROOT)/Rotations/sqct/rotZ
 GRIDSYNTHPATH=$(ROOT)/Rotations/gridsynth/gridsynth
@@ -23,11 +23,11 @@ OPTIMIZE=0
 CC=$(BUILD)/bin/clang
 OPT=$(BUILD)/bin/opt
 
-CC_FLAGS=-c -emit-llvm -I/usr/include -I/usr/include/x86_64-linux-gnu -I/usr/lib/gcc/x86_64-linux-gnu/4.8/include -I$(DIRNAME)
+CC_FLAGS=-Xclang -disable-O0-optnone -v -S -emit-llvm -I$(DIRNAME)
 
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Linux)
-SCAFFOLD_LIB=$(ROOT)/build/Release+Asserts/lib/Scaffold.so
+SCAFFOLD_LIB=$(ROOT)/build/lib/LLVMScaffold.so
 endif
 ifeq ($(UNAME_S),Darwin)
 SCAFFOLD_LIB=$(ROOT)/build/Release+Asserts/lib/Scaffold.dylib
@@ -92,11 +92,11 @@ $(FILE)1.ll: $(FILE).ll
 # Perform normal C++ optimization routines
 $(FILE)4.ll: $(FILE)1.ll
 	@echo "[Scaffold.makefile] O1 optimizations ..."
-	@$(OPT) -S $(FILE)1.ll -no-aa -tbaa -targetlibinfo -basicaa -o $(FILE)1a.ll > /dev/null
+	@$(OPT) -S $(FILE)1.ll -tbaa -targetlibinfo -basicaa -o $(FILE)1a.ll > /dev/null
 	@$(OPT) -S $(FILE)1a.ll -simplifycfg -domtree -o $(FILE)1b.ll > /dev/null
 	@$(OPT) -S $(FILE)1b.ll -early-cse -lower-expect -o $(FILE)2.ll > /dev/null
-	@$(OPT) -S $(FILE)2.ll -targetlibinfo -no-aa -tbaa -basicaa -globalopt -ipsccp -o $(FILE)3.ll > /dev/null
-	@$(OPT) -S $(FILE)3.ll -instcombine -simplifycfg -basiccg -prune-eh -always-inline -functionattrs -domtree -early-cse -lazy-value-info -jump-threading -correlated-propagation -simplifycfg -instcombine -tailcallelim -simplifycfg -reassociate -domtree -loops -loop-simplify -lcssa -loop-rotate -licm -lcssa -loop-unswitch -instcombine -scalar-evolution -loop-simplify -lcssa -iv-users -indvars -loop-idiom -loop-deletion -loop-unroll -memdep -memcpyopt -sccp -instcombine -lazy-value-info -jump-threading -correlated-propagation -domtree -memdep -dse -adce -simplifycfg -instcombine -strip-dead-prototypes -preverify -domtree -verify -o $(FILE)4.ll > /dev/null
+	@$(OPT) -S $(FILE)2.ll -targetlibinfo -tbaa -basicaa -globalopt -ipsccp -o $(FILE)3.ll > /dev/null
+	@$(OPT) -S $(FILE)3.ll -instcombine -simplifycfg -basiccg -prune-eh -always-inline -functionattrs -domtree -early-cse -lazy-value-info -jump-threading -correlated-propagation -simplifycfg -instcombine -tailcallelim -simplifycfg -reassociate -domtree -loops -lcssa -loop-rotate -licm -lcssa -loop-unswitch -instcombine -scalar-evolution -lcssa -iv-users -indvars -loop-idiom -loop-deletion -memdep -memcpyopt -sccp -instcombine -lazy-value-info -jump-threading -correlated-propagation -domtree -memdep -dse -adce -simplifycfg -instcombine -strip-dead-prototypes -domtree -verify -o $(FILE)4.ll > /dev/null
 
 # Perform loop unrolling until completely unrolled, then remove dead code
 #
@@ -119,8 +119,7 @@ $(FILE)6.ll: $(FILE)4.ll
 		echo "[Scaffold.makefile] Dead Argument Elimination ($$UCNT) ..." && \
 		$(OPT) -S -deadargelim $(FILE)5a.ll -o $(FILE)6tmp.ll > /dev/null; \
 	done && \
-	$(OPT) -S $(FILE)6tmp.ll -internalize -globaldce -adce -o $(FILE)6.ll > /dev/null  
-	
+	$(OPT) -S $(FILE)6tmp.ll -internalize -globaldce -adce -o $(FILE)6.ll > /dev/null
 
 # Perform Rotation decomposition if requested and rotation decomp tool is built
 $(FILE)7.ll: $(FILE)6.ll
@@ -162,7 +161,8 @@ $(FILE)11.ll: $(FILE)9.ll
 # Insert reverse functions if REVERSE is 1
 $(FILE)12.ll: $(FILE)11.ll
 	@echo "[Scaffold.makefile] Inserting Reverse Functions..."
-	@$(OPT) -S -load $(SCAFFOLD_LIB) -FunctionReverse $(FILE)11.ll -o $(FILE)12.ll > /dev/null
+	@$(OPT) -S -load $(SCAFFOLD_LIB) -FunctionReverse $(FILE)11.ll -o $(FILE)12tmp.ll > /dev/null
+	@$(OPT) -S -internalize -globaldce $(FILE)12tmp.ll -o $(FILE)12.ll > /dev/null
 
 # Generate resource counts from final LLVM output
 $(FILE).resources: $(FILE)12.ll
@@ -183,15 +183,16 @@ $(FILE)_qasm.scaffold: $(FILE).qasmh
 
 # Compile C++
 $(FILE)_qasm: $(FILE)_qasm.scaffold
-	@$(CC) $(FILE)_qasm.scaffold -o $(FILE)_qasm
+	@$(CC) -O3 $(FILE)_qasm.scaffold -o $(FILE)_qasm
 
 # Generate flattened QASM 
 $(FILE).qasmf: $(FILE)12.ll
 	@echo "[Scaffold.makefile] Flattening modules ..." 
 	@$(OPT) -S -load $(SCAFFOLD_LIB) -FlattenModule -all 1 $(FILE)12.ll -o $(FILE)12.inlined.ll 2> /dev/null
+	@echo "[Scaffold.makefile] Generating flattened QASM ..."
 	@$(OPT) -load $(SCAFFOLD_LIB) -gen-qasm $(FILE)12.inlined.ll 2> $(FILE).qasmh > /dev/null
 	@$(PYTHON) $(ROOT)/scaffold/flatten-qasm.py $(FILE).qasmh
-	@$(CC) $(FILE)_qasm.scaffold -o $(FILE)_qasm
+	@$(CC) -O3 $(FILE)_qasm.scaffold -o $(FILE)_qasm
 	@./$(FILE)_qasm > $(FILE).tmp
 	@cat fdecl.out $(FILE).tmp > $(FILE).qasmf
 	@echo "[Scaffold.makefile] Flat QASM written to $(FILE).qasmf ..."    
@@ -213,7 +214,7 @@ $(FILE).qc: $(FILE).qasmf
 
 # purge cleans temp files
 purge:
-	@rm -f $(FILE)_merged.scaffold $(FILE)_no.scaffold $(FILE).ll $(FILE)1.ll $(FILE)1a.ll $(FILE)1b.ll $(FILE)2.ll $(FILE)3.ll $(FILE)4.ll $(FILE)5.ll $(FILE)5a.ll $(FILE)6.ll $(FILE)6tmp.ll $(FILE)7.ll $(FILE)8.ll $(FILE)9.ll $(FILE)10.ll $(FILE)11.ll $(FILE)12.ll $(FILE)12.inlined.ll $(FILE)tmp.ll $(FILE)_qasm $(FILE)_qasm.scaffold fdecl.out $(CFILE).ctqg $(CFILE).c $(CFILE).signals $(FILE).tmp sim_$(CFILE) $(FILE).*.qasm
+	@rm -f $(FILE)_merged.scaffold $(FILE)_no.scaffold $(FILE).ll $(FILE)1.ll $(FILE)1a.ll $(FILE)1b.ll $(FILE)2.ll $(FILE)3.ll $(FILE)4.ll $(FILE)5.ll $(FILE)5a.ll $(FILE)6.ll $(FILE)6tmp.ll $(FILE)7.ll $(FILE)8.ll $(FILE)9.ll $(FILE)10.ll $(FILE)11.ll $(FILE)12tmp.ll $(FILE)12.ll $(FILE)12.inlined.ll $(FILE)tmp.ll $(FILE)_qasm $(FILE)_qasm.scaffold fdecl.out $(CFILE).ctqg $(CFILE).c $(CFILE).signals $(FILE).tmp sim_$(CFILE) $(FILE).*.qasm
 
 # clean removes all completed files
 clean: purge

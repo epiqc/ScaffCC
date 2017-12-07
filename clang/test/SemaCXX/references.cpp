@@ -54,7 +54,7 @@ void test4() {
 void test5() {
   //  const double& rcd2 = 2; // rcd2 refers to temporary with value 2.0
   const volatile int cvi = 1;
-  const int& r = cvi; // expected-error{{binding of reference to type 'const int' to a value of type 'const volatile int' drops qualifiers}}
+  const int& r = cvi; // expected-error{{binding value of type 'const volatile int' to reference to type 'const int' drops 'volatile' qualifier}}
 }
 
 // C++ [dcl.init.ref]p3
@@ -70,7 +70,7 @@ class Test6 { // expected-warning{{class 'Test6' does not declare any constructo
   int& okay; // expected-note{{reference member 'okay' will never be initialized}}
 };
 
-struct C : B, A { };
+struct C : B, A { }; // expected-warning {{direct base 'A' is inaccessible due to ambiguity:\n    struct C -> struct B -> struct A\nstruct C -> struct A}}
 
 void test7(C& c) {
   A& a1 = c; // expected-error {{ambiguous conversion from derived class 'C' to base class 'A':}}
@@ -85,8 +85,18 @@ void test8(int& const,// expected-error{{'const' qualifier may not be applied to
   typedef int& intref;
   typedef intref& intrefref; // C++ DR 106: reference collapsing
 
-  typedef intref const intref_c; // okay. FIXME: how do we verify that this is the same type as intref?
+  typedef intref const intref_c; // expected-warning {{'const' qualifier on reference type 'intref' (aka 'int &') has no effect}}
+  typedef intref_c intref; // ok, same type
+
+  typedef intref volatile intref; // expected-warning {{'volatile' qualifier on reference type 'intref' (aka 'int &') has no effect}}
+  typedef intref _Atomic intref; // expected-warning {{'_Atomic' qualifier on reference type 'intref' (aka 'int &') has no effect}}
+
+  void restrict_ref(__restrict intref); // ok
+  void restrict_ref(int &__restrict); // ok
 }
+
+template<typename T> int const_param(const T) {}
+int const_ref_param = const_param<int&>(const_ref_param); // no-warning
 
 
 class string {
@@ -136,4 +146,11 @@ namespace PR8608 {
 }
 
 // The following crashed trying to recursively evaluate the LValue.
-const int &do_not_crash = do_not_crash;
+const int &do_not_crash = do_not_crash; // expected-warning{{reference 'do_not_crash' is not yet bound to a value when used within its own initialization}}
+
+namespace ExplicitRefInit {
+  // This is invalid: we can't copy-initialize an 'A' temporary using an
+  // explicit constructor.
+  struct A { explicit A(int); };
+  const A &a(0); // expected-error {{reference to type 'const ExplicitRefInit::A' could not bind to an rvalue of type 'int'}}
+}

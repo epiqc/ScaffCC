@@ -4,6 +4,7 @@
 @---
 @ RUN: llvm-mc -triple=thumbv6-apple-darwin -show-encoding < %s | FileCheck %s
 @ RUN: llvm-mc -triple=thumbv7-apple-darwin -show-encoding < %s | FileCheck %s
+@ RUN: llvm-mc -triple=thumbebv7-unknown-unknown -show-encoding < %s | FileCheck --check-prefix=CHECK-BE %s
   .syntax unified
   .globl _func
 
@@ -85,11 +86,17 @@ _func:
 @ ADR
 @------------------------------------------------------------------------------
         adr r2, _baz
-        adr	r2, #3
+        adr r5, #0
+        adr r2, #4
+        adr r3, #1020
 
 @ CHECK: adr	r2, _baz                @ encoding: [A,0xa2]
-            @   fixup A - offset: 0, value: _baz, kind: fixup_thumb_adr_pcrel_10
-@ CHECK: adr	r2, #3                  @ encoding: [0x03,0xa2]
+@ CHECK:    @   fixup A - offset: 0, value: _baz, kind: fixup_thumb_adr_pcrel_10
+@ CHECK-BE: adr	r2, _baz                @ encoding: [0xa2,A]
+@ CHECK-BE:    @   fixup A - offset: 0, value: _baz, kind: fixup_thumb_adr_pcrel_10
+@ CHECK: adr	r5, #0                  @ encoding: [0x00,0xa5]
+@ CHECK: adr	r2, #4                  @ encoding: [0x01,0xa2]
+@ CHECK: adr	r3, #1020               @ encoding: [0xff,0xa3]
 
 @------------------------------------------------------------------------------
 @ ASR (immediate)
@@ -124,16 +131,20 @@ _func:
         beq _bar
         b       #1838
         b       #-420
-        beq     #336
+        beq     #-256
         beq     #160
 
 @ CHECK: b	_baz                    @ encoding: [A,0xe0'A']
-             @   fixup A - offset: 0, value: _baz, kind: fixup_arm_thumb_br
+@ CHECK:     @   fixup A - offset: 0, value: _baz, kind: fixup_arm_thumb_br
+@ CHECK-BE: b	_baz                    @ encoding: [0xe0'A',A]
+@ CHECK-BE:     @   fixup A - offset: 0, value: _baz, kind: fixup_arm_thumb_br
 @ CHECK: beq	_bar                    @ encoding: [A,0xd0]
-             @   fixup A - offset: 0, value: _bar, kind: fixup_arm_thumb_bcc
+@ CHECK:     @   fixup A - offset: 0, value: _bar, kind: fixup_arm_thumb_bcc
+@ CHECK-BE: beq	_bar                    @ encoding: [0xd0,A]
+@ CHECK-BE:     @   fixup A - offset: 0, value: _bar, kind: fixup_arm_thumb_bcc
 @ CHECK: b       #1838                   @ encoding: [0x97,0xe3]
 @ CHECK: b       #-420                   @ encoding: [0x2e,0xe7]
-@ CHECK: beq     #336                    @ encoding: [0xa8,0xd0]
+@ CHECK: beq     #-256                   @ encoding: [0x80,0xd0]
 @ CHECK: beq     #160                    @ encoding: [0x50,0xd0]
 
 @------------------------------------------------------------------------------
@@ -169,10 +180,14 @@ _func:
         bl _bar
         blx _baz
 
-@ CHECK: bl	_bar                    @ encoding: [A,0xf0'A',A,0xf8'A']
-             @   fixup A - offset: 0, value: _bar, kind: fixup_arm_thumb_bl
-@ CHECK: blx	_baz                    @ encoding: [A,0xf0'A',A,0xe8'A']
-             @   fixup A - offset: 0, value: _baz, kind: fixup_arm_thumb_blx
+@ CHECK: bl	_bar                    @ encoding: [A,0xf0'A',A,0xd0'A']
+@ CHECK:     @   fixup A - offset: 0, value: _bar, kind: fixup_arm_thumb_bl
+@ CHECK-BE: bl	_bar                    @ encoding: [0xf0'A',A,0xd0'A',A]
+@ CHECK-BE:     @   fixup A - offset: 0, value: _bar, kind: fixup_arm_thumb_bl
+@ CHECK: blx	_baz                    @ encoding: [A,0xf0'A',A,0xc0'A']
+@ CHECK:     @   fixup A - offset: 0, value: _baz, kind: fixup_arm_thumb_blx
+@ CHECK-BE: blx	_baz                    @ encoding: [0xf0'A',A,0xc0'A',A]
+@ CHECK-BE:     @   fixup A - offset: 0, value: _baz, kind: fixup_arm_thumb_blx
 
 
 @------------------------------------------------------------------------------
@@ -210,6 +225,16 @@ _func:
 @ CHECK: cmp	r6, #32                 @ encoding: [0x20,0x2e]
 @ CHECK: cmp	r3, r4                  @ encoding: [0xa3,0x42]
 @ CHECK: cmp	r8, r1                  @ encoding: [0x88,0x45]
+
+@------------------------------------------------------------------------------
+@ CPS
+@------------------------------------------------------------------------------
+
+        cpsie f
+        cpsid a
+
+@ CHECK: cpsie f                        @ encoding: [0x61,0xb6]
+@ CHECK: cpsid a                        @ encoding: [0x74,0xb6]
 
 @------------------------------------------------------------------------------
 @ EOR
@@ -258,9 +283,11 @@ _func:
         ldr     r3, #368
 
 @ CHECK: ldr	r1, _foo                @ encoding: [A,0x49]
-             @   fixup A - offset: 0, value: _foo, kind: fixup_arm_thumb_cp
-@ CHECK: ldr     r3, #604                @ encoding: [0x97,0x4b]
-@ CHECK: ldr     r3, #368                @ encoding: [0x5c,0x4b]
+@ CHECK:     @   fixup A - offset: 0, value: _foo, kind: fixup_arm_thumb_cp
+@ CHECK-BE: ldr	r1, _foo                @ encoding: [0x49,A]
+@ CHECK-BE:     @   fixup A - offset: 0, value: _foo, kind: fixup_arm_thumb_cp
+@ CHECK: ldr     r3, [pc, #604]         @ encoding: [0x97,0x4b]
+@ CHECK: ldr     r3, [pc, #368]         @ encoding: [0x5c,0x4b]
 
 @------------------------------------------------------------------------------
 @ LDR (register)
@@ -635,13 +662,3 @@ _func:
 @ CHECK: uxth	r1, r4                  @ encoding: [0xa1,0xb2]
 
 
-@------------------------------------------------------------------------------
-@ WFE/WFI/YIELD
-@------------------------------------------------------------------------------
-        wfe
-        wfi
-        yield
-
-@ CHECK: wfe                             @ encoding: [0x20,0xbf]
-@ CHECK: wfi                             @ encoding: [0x30,0xbf]
-@ CHECK: yield                           @ encoding: [0x10,0xbf]

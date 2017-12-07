@@ -39,11 +39,11 @@
 	%"struct.llvm::SymbolTable" = type opaque
 	%"struct.llvm::SymbolTableListTraits<llvm::Argument,llvm::Function,llvm::Function,llvm::ilist_traits<llvm::Argument> >" = type { %"struct.llvm::Function"*, %"struct.llvm::Function"* }
 	%"struct.llvm::SymbolTableListTraits<llvm::Instruction,llvm::BasicBlock,llvm::Function,llvm::ilist_traits<llvm::Instruction> >" = type { %"struct.llvm::Function"*, %"struct.llvm::BasicBlock"* }
-	%"struct.llvm::TargetData" = type { %"struct.llvm::FunctionPass", i1, i8, i8, i8, i8, i8, i8, i8, i8 }
+	%"struct.llvm::DataLayout" = type { %"struct.llvm::FunctionPass", i1, i8, i8, i8, i8, i8, i8, i8, i8 }
 	%"struct.llvm::TargetFrameInfo" = type { i32 (...)**, i32, i32, i32 }
 	%"struct.llvm::TargetInstrDescriptor" = type { i8*, i32, i32, i32, i1, i32, i32, i32, i32, i32, i32*, i32* }
 	%"struct.llvm::TargetInstrInfo" = type { i32 (...)**, %"struct.llvm::TargetInstrDescriptor"*, i32, i32 }
-	%"struct.llvm::TargetMachine" = type { i32 (...)**, %"struct.std::basic_string<char,std::char_traits<char>,std::allocator<char> >", %"struct.llvm::TargetData", %"struct.llvm::IntrinsicLowering"* }
+	%"struct.llvm::TargetMachine" = type { i32 (...)**, %"struct.std::basic_string<char,std::char_traits<char>,std::allocator<char> >", %"struct.llvm::DataLayout", %"struct.llvm::IntrinsicLowering"* }
 	%"struct.llvm::TargetRegClassInfo" = type { i32 (...)**, i32, i32, i32 }
 	%"struct.llvm::TargetRegInfo" = type { i32 (...)**, %"struct.std::vector<const llvm::TargetRegClassInfo*,std::allocator<const llvm::TargetRegClassInfo*> >", %"struct.llvm::TargetMachine"* }
 	%"struct.llvm::Type" = type { %"struct.llvm::Value", i32, i32, i1, i32, %"struct.llvm::Type"*, %"struct.std::vector<llvm::PATypeHandle,std::allocator<llvm::PATypeHandle> >" }
@@ -112,13 +112,13 @@ declare void @_ZNK4llvm19MachineInstrBuilder7addSImmEi()
 
 declare i32 @__gxx_personality_v0(...)
 
-define void @_ZN4llvm11_GLOBAL__N_22InsertPrologEpilogCode20runOnMachineFunctionERNS_15MachineFunctionE(%"struct.llvm::MachineFunction"* %F) {
+define void @_ZN4llvm11_GLOBAL__N_22InsertPrologEpilogCode20runOnMachineFunctionERNS_15MachineFunctionE(%"struct.llvm::MachineFunction"* %F) personality i32 (...)* @__gxx_personality_v0 {
 entry:
 	%tmp.8.i = invoke %"struct.llvm::TargetFrameInfo"* null( %"struct.llvm::TargetMachine"* null )
 			to label %invoke_cont.0.i unwind label %invoke_catch.0.i		; <%"struct.llvm::TargetFrameInfo"*> [#uses=0]
 
 invoke_catch.0.i:		; preds = %invoke_cont.49.i, %invoke_cont.48.i, %invoke_cont.47.i, %invoke_cont.i53.i, %no_exit.i, %invoke_cont.44.i, %invoke_cont.43.i, %invoke_cont.42.i, %invoke_cont.41.i, %invoke_cont.40.i, %invoke_cont.39.i, %invoke_cont.38.i, %invoke_cont.37.i, %then.2.i, %invoke_cont.35.i, %invoke_cont.34.i, %then.1.i, %endif.0.i, %invoke_cont.9.i, %invoke_cont.8.i, %invoke_cont.7.i, %invoke_cont.i.i, %then.0.i, %invoke_cont.4.i, %invoke_cont.3.i, %invoke_cont.2.i, %invoke_cont.1.i, %endif.0.i.i, %tmp.7.i.noexc.i, %invoke_cont.0.i, %entry
-        %exn0.i = landingpad {i8*, i32} personality i32 (...)* @__gxx_personality_v0
+        %exn0.i = landingpad {i8*, i32}
                  cleanup
 	ret void
 
@@ -168,7 +168,7 @@ tmp.0.i.noexc.i:		; preds = %then.0.i
 			to label %invoke_cont.i.i unwind label %cond_true.i.i
 
 cond_true.i.i:		; preds = %tmp.0.i.noexc.i
-        %exn.i.i = landingpad {i8*, i32} personality i32 (...)* @__gxx_personality_v0
+        %exn.i.i = landingpad {i8*, i32}
                  cleanup
 	ret void
 
@@ -262,7 +262,7 @@ tmp.0.i.noexc55.i:		; preds = %no_exit.i
 			to label %invoke_cont.i53.i unwind label %cond_true.i52.i
 
 cond_true.i52.i:		; preds = %tmp.0.i.noexc55.i
-        %exn.i52.i = landingpad {i8*, i32} personality i32 (...)* @__gxx_personality_v0
+        %exn.i52.i = landingpad {i8*, i32}
                  cleanup
 	ret void
 

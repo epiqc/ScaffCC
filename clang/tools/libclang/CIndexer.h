@@ -12,33 +12,46 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_CLANG_CINDEXER_H
-#define LLVM_CLANG_CINDEXER_H
+#ifndef LLVM_CLANG_TOOLS_LIBCLANG_CINDEXER_H
+#define LLVM_CLANG_TOOLS_LIBCLANG_CINDEXER_H
 
 #include "clang-c/Index.h"
-#include "llvm/ADT/StringRef.h"
-#include "llvm/Support/Path.h"
-#include <vector>
+#include "clang/Frontend/PCHContainerOperations.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/Support/Mutex.h"
+#include <utility>
 
 namespace llvm {
   class CrashRecoveryContext;
 }
 
 namespace clang {
-  class ASTUnit;
+class ASTUnit;
+class MacroInfo;
+class MacroDefinitionRecord;
+class SourceLocation;
+class Token;
+class IdentifierInfo;
 
 class CIndexer {
   bool OnlyLocalDecls;
   bool DisplayDiagnostics;
   unsigned Options; // CXGlobalOptFlags.
 
-  llvm::sys::Path ResourcesPath;
-  std::string WorkingDir;
+  std::string ResourcesPath;
+  std::shared_ptr<PCHContainerOperations> PCHContainerOps;
+
+  std::string ToolchainPath;
+
+  std::string InvocationEmissionPath;
 
 public:
- CIndexer() : OnlyLocalDecls(false), DisplayDiagnostics(false),
-              Options(CXGlobalOpt_None) { }
-  
+  CIndexer(std::shared_ptr<PCHContainerOperations> PCHContainerOps =
+               std::make_shared<PCHContainerOperations>())
+      : OnlyLocalDecls(false), DisplayDiagnostics(false),
+        Options(CXGlobalOpt_None), PCHContainerOps(std::move(PCHContainerOps)) {
+  }
+
   /// \brief Whether we only want to see "local" declarations (that did not
   /// come from a previous precompiled header). If false, we want to see all
   /// declarations.
@@ -50,6 +63,10 @@ public:
     DisplayDiagnostics = Display;
   }
 
+  std::shared_ptr<PCHContainerOperations> getPCHContainerOperations() const {
+    return PCHContainerOps;
+  }
+
   unsigned getCXGlobalOptFlags() const { return Options; }
   void setCXGlobalOptFlags(unsigned options) { Options = options; }
 
@@ -58,22 +75,32 @@ public:
   }
 
   /// \brief Get the path of the clang resource files.
-  std::string getClangResourcesPath();
+  const std::string &getClangResourcesPath();
 
-  const std::string &getWorkingDirectory() const { return WorkingDir; }
-  void setWorkingDirectory(const std::string &Dir) { WorkingDir = Dir; }
+  StringRef getClangToolchainPath();
+
+  void setInvocationEmissionPath(StringRef Str) {
+    InvocationEmissionPath = Str;
+  }
+
+  StringRef getInvocationEmissionPath() const { return InvocationEmissionPath; }
 };
 
-  /**
-   * \brief Given a set of "unsaved" files, create temporary files and 
-   * construct the clang -cc1 argument list needed to perform the remapping.
-   *
-   * \returns true if an error occurred.
-   */
-  bool RemapFiles(unsigned num_unsaved_files,
-                  struct CXUnsavedFile *unsaved_files,
-                  std::vector<std::string> &RemapArgs,
-                  std::vector<llvm::sys::Path> &TemporaryFiles);
+/// Logs information about a particular libclang operation like parsing to
+/// a new file in the invocation emission path.
+class LibclangInvocationReporter {
+public:
+  enum class OperationKind { ParseOperation, CompletionOperation };
+
+  LibclangInvocationReporter(CIndexer &Idx, OperationKind Op,
+                             unsigned ParseOptions,
+                             llvm::ArrayRef<const char *> Args,
+                             llvm::ArrayRef<CXUnsavedFile> UnsavedFiles);
+  ~LibclangInvocationReporter();
+
+private:
+  std::string File;
+};
 
   /// \brief Return the current size to request for "safety".
   unsigned GetSafetyThreadStackSize();
@@ -86,8 +113,8 @@ public:
   /// threads when possible.
   ///
   /// \return False if a crash was detected.
-  bool RunSafely(llvm::CrashRecoveryContext &CRC,
-                 void (*Fn)(void*), void *UserData, unsigned Size = 0);
+  bool RunSafely(llvm::CrashRecoveryContext &CRC, llvm::function_ref<void()> Fn,
+                 unsigned Size = 0);
 
   /// \brief Set the thread priority to background.
   /// FIXME: Move to llvm/Support.
@@ -98,7 +125,30 @@ public:
 
   namespace cxindex {
     void printDiagsToStderr(ASTUnit *Unit);
-  }
-}
+
+    /// \brief If \c MacroDefLoc points at a macro definition with \c II as
+    /// its name, this retrieves its MacroInfo.
+    MacroInfo *getMacroInfo(const IdentifierInfo &II,
+                            SourceLocation MacroDefLoc, CXTranslationUnit TU);
+
+    /// \brief Retrieves the corresponding MacroInfo of a MacroDefinitionRecord.
+    const MacroInfo *getMacroInfo(const MacroDefinitionRecord *MacroDef,
+                                  CXTranslationUnit TU);
+
+    /// \brief If \c Loc resides inside the definition of \c MI and it points at
+    /// an identifier that has ever been a macro name, this returns the latest
+    /// MacroDefinitionRecord for that name, otherwise it returns NULL.
+    MacroDefinitionRecord *checkForMacroInMacroDefinition(const MacroInfo *MI,
+                                                          SourceLocation Loc,
+                                                          CXTranslationUnit TU);
+
+    /// \brief If \c Tok resides inside the definition of \c MI and it points at
+    /// an identifier that has ever been a macro name, this returns the latest
+    /// MacroDefinitionRecord for that name, otherwise it returns NULL.
+    MacroDefinitionRecord *checkForMacroInMacroDefinition(const MacroInfo *MI,
+                                                          const Token &Tok,
+                                                          CXTranslationUnit TU);
+    }
+    }
 
 #endif

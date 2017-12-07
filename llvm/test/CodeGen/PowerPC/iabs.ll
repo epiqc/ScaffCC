@@ -1,5 +1,6 @@
-; RUN: llc < %s -march=ppc32 -stats |& \
-; RUN:   grep {4 .*Number of machine instrs printed}
+; REQUIRES: asserts
+; RUN: llc -verify-machineinstrs < %s -mtriple=ppc32-- -stats 2>&1 | \
+; RUN:   grep "4 .*Number of machine instrs printed"
 
 ;; Integer absolute value, should produce something as good as:
 ;;      srawi r2, r3, 31

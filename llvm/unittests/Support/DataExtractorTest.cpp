@@ -7,8 +7,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "gtest/gtest.h"
 #include "llvm/Support/DataExtractor.h"
+#include "gtest/gtest.h"
 using namespace llvm;
 
 namespace {
@@ -16,6 +16,7 @@ namespace {
 const char numberData[] = "\x80\x90\xFF\xFF\x80\x00\x00\x00";
 const char stringData[] = "hellohello\0hello";
 const char leb128data[] = "\xA6\x49";
+const char bigleb128data[] = "\xAA\xA9\xFF\xAA\xFF\xAA\xFF\x4A";
 
 TEST(DataExtractorTest, OffsetOverflow) {
   DataExtractor DE(StringRef(numberData, sizeof(numberData)-1), false, 8);
@@ -93,7 +94,7 @@ TEST(DataExtractorTest, Strings) {
 
   EXPECT_EQ(stringData, DE.getCStr(&offset));
   EXPECT_EQ(11U, offset);
-  EXPECT_EQ(NULL, DE.getCStr(&offset));
+  EXPECT_EQ(nullptr, DE.getCStr(&offset));
   EXPECT_EQ(11U, offset);
 }
 
@@ -106,6 +107,14 @@ TEST(DataExtractorTest, LEB128) {
   offset = 0;
   EXPECT_EQ(-7002LL, DE.getSLEB128(&offset));
   EXPECT_EQ(2U, offset);
+
+  DataExtractor BDE(StringRef(bigleb128data, sizeof(bigleb128data)-1), false,8);
+  offset = 0;
+  EXPECT_EQ(42218325750568106ULL, BDE.getULEB128(&offset));
+  EXPECT_EQ(8U, offset);
+  offset = 0;
+  EXPECT_EQ(-29839268287359830LL, BDE.getSLEB128(&offset));
+  EXPECT_EQ(8U, offset);
 }
 
 }

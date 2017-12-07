@@ -13,12 +13,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_CLANG_FRONTEND_TEXT_DIAGNOSTIC_H_
-#define LLVM_CLANG_FRONTEND_TEXT_DIAGNOSTIC_H_
+#ifndef LLVM_CLANG_FRONTEND_TEXTDIAGNOSTIC_H
+#define LLVM_CLANG_FRONTEND_TEXTDIAGNOSTIC_H
 
 #include "clang/Frontend/DiagnosticRenderer.h"
-
-struct SourceColumnMap;
 
 namespace clang {
 
@@ -39,12 +37,11 @@ class TextDiagnostic : public DiagnosticRenderer {
 
 public:
   TextDiagnostic(raw_ostream &OS,
-                 const SourceManager &SM,
                  const LangOptions &LangOpts,
-                 const DiagnosticOptions &DiagOpts);
+                 DiagnosticOptions *DiagOpts);
 
-  virtual ~TextDiagnostic();
-  
+  ~TextDiagnostic() override;
+
   /// \brief Print the diagonstic level to a raw_ostream.
   ///
   /// This is a static helper that handles colorizing the level and formatting
@@ -54,68 +51,63 @@ public:
   /// TextDiagnostic logic requires.
   static void printDiagnosticLevel(raw_ostream &OS,
                                    DiagnosticsEngine::Level Level,
-                                   bool ShowColors);
+                                   bool ShowColors,
+                                   bool CLFallbackMode = false);
 
   /// \brief Pretty-print a diagnostic message to a raw_ostream.
   ///
   /// This is a static helper to handle the line wrapping, colorizing, and
   /// rendering of a diagnostic message to a particular ostream. It is
-  /// publically visible so that clients which do not have sufficient state to
+  /// publicly visible so that clients which do not have sufficient state to
   /// build a complete TextDiagnostic object can still get consistent
   /// formatting of their diagnostic messages.
   ///
   /// \param OS Where the message is printed
-  /// \param Level Used to colorizing the message
+  /// \param IsSupplemental true if this is a continuation note diagnostic
   /// \param Message The text actually printed
   /// \param CurrentColumn The starting column of the first line, accounting
   ///                      for any prefix.
   /// \param Columns The number of columns to use in line-wrapping, 0 disables
   ///                all line-wrapping.
   /// \param ShowColors Enable colorizing of the message.
-  static void printDiagnosticMessage(raw_ostream &OS,
-                                     DiagnosticsEngine::Level Level,
-                                     StringRef Message,
-                                     unsigned CurrentColumn, unsigned Columns,
-                                     bool ShowColors);
+  static void printDiagnosticMessage(raw_ostream &OS, bool IsSupplemental,
+                                     StringRef Message, unsigned CurrentColumn,
+                                     unsigned Columns, bool ShowColors);
 
 protected:
-  virtual void emitDiagnosticMessage(SourceLocation Loc,PresumedLoc PLoc,
-                                     DiagnosticsEngine::Level Level,
-                                     StringRef Message,
-                                     ArrayRef<CharSourceRange> Ranges,
-                                     DiagOrStoredDiag D);
+  void emitDiagnosticMessage(FullSourceLoc Loc, PresumedLoc PLoc,
+                             DiagnosticsEngine::Level Level, StringRef Message,
+                             ArrayRef<CharSourceRange> Ranges,
+                             DiagOrStoredDiag D) override;
 
-  virtual void emitDiagnosticLoc(SourceLocation Loc, PresumedLoc PLoc,
-                                 DiagnosticsEngine::Level Level,
-                                 ArrayRef<CharSourceRange> Ranges);
-  
-  virtual void emitCodeContext(SourceLocation Loc,
-                               DiagnosticsEngine::Level Level,
-                               SmallVectorImpl<CharSourceRange>& Ranges,
-                               ArrayRef<FixItHint> Hints) {
+  void emitDiagnosticLoc(FullSourceLoc Loc, PresumedLoc PLoc,
+                         DiagnosticsEngine::Level Level,
+                         ArrayRef<CharSourceRange> Ranges) override;
+
+  void emitCodeContext(FullSourceLoc Loc, DiagnosticsEngine::Level Level,
+                       SmallVectorImpl<CharSourceRange> &Ranges,
+                       ArrayRef<FixItHint> Hints) override {
     emitSnippetAndCaret(Loc, Level, Ranges, Hints);
   }
-  
-  virtual void emitBasicNote(StringRef Message);
-  
-  virtual void emitIncludeLocation(SourceLocation Loc, PresumedLoc PLoc);
+
+  void emitIncludeLocation(FullSourceLoc Loc, PresumedLoc PLoc) override;
+
+  void emitImportLocation(FullSourceLoc Loc, PresumedLoc PLoc,
+                          StringRef ModuleName) override;
+
+  void emitBuildingModuleLocation(FullSourceLoc Loc, PresumedLoc PLoc,
+                                  StringRef ModuleName) override;
 
 private:
-  void emitSnippetAndCaret(SourceLocation Loc, DiagnosticsEngine::Level Level,
-                           SmallVectorImpl<CharSourceRange>& Ranges,
+  void emitFilename(StringRef Filename, const SourceManager &SM);
+
+  void emitSnippetAndCaret(FullSourceLoc Loc, DiagnosticsEngine::Level Level,
+                           SmallVectorImpl<CharSourceRange> &Ranges,
                            ArrayRef<FixItHint> Hints);
 
   void emitSnippet(StringRef SourceLine);
 
-  void highlightRange(const CharSourceRange &R,
-                      unsigned LineNo, FileID FID,
-                      const SourceColumnMap &map,
-                      std::string &CaretLine);
-
-  std::string buildFixItInsertionLine(unsigned LineNo,
-                                      const SourceColumnMap &map,
-                                      ArrayRef<FixItHint> Hints);
-  void emitParseableFixits(ArrayRef<FixItHint> Hints);
+  void emitParseableFixits(ArrayRef<FixItHint> Hints, const SourceManager &SM);
 };
 
 } // end namespace clang

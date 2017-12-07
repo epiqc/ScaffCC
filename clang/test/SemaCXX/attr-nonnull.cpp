@@ -27,7 +27,28 @@ namespace rdar8769025 {
   __attribute__((nonnull(2))) void f2(int i, int * const &p);
 
   void test_f1() {
-    f1(0); // expected-warning{{null passed to a callee which requires a non-null argument}}
-    f2(0, 0); // expected-warning{{null passed to a callee which requires a non-null argument}}
+    f1(0); // expected-warning{{null passed to a callee that requires a non-null argument}}
+    f2(0, 0); // expected-warning{{null passed to a callee that requires a non-null argument}}
   }
+}
+
+namespace test3 {
+__attribute__((nonnull(1))) void f(void *ptr);
+
+void g() {
+  f(static_cast<char*>((void*)0));  // expected-warning{{null passed}}
+  f(static_cast<char*>(0));  // expected-warning{{null passed}}
+}
+}
+
+namespace test4 {
+struct X {
+  bool operator!=(const void *) const __attribute__((nonnull(2)));
+};
+bool operator==(const X&, const void *) __attribute__((nonnull(2)));
+
+void test(const X& x) {
+  (void)(x == 0);  // expected-warning{{null passed}}
+  (void)(x != 0);  // expected-warning{{null passed}}
+}
 }

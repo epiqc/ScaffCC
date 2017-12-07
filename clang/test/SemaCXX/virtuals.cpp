@@ -30,7 +30,7 @@ A fn(A) // expected-error{{parameter type 'A' is an abstract class}} \
         // expected-error{{return type 'A' is an abstract class}}
 {
   A a; // expected-error{{variable type 'A' is an abstract class}}
-  (void)static_cast<A>(0);
+  (void)static_cast<A>(0); // expected-error{{allocating an object of abstract class type 'A'}}
   try {
   } catch(A) { // expected-error{{variable type 'A' is an abstract class}}
   }
@@ -43,5 +43,21 @@ namespace rdar9670557 {
     virtual func f = 0;
     virtual func (g) = 0;
     func *h = 0;
+  };
+}
+
+namespace pr8264 {
+  struct Test {
+    virtual virtual void func();  // expected-warning {{duplicate 'virtual' declaration specifier}}
+  };
+}
+
+namespace VirtualFriend {
+  // DR (filed but no number yet): reject meaningless pure-specifier on a friend declaration.
+  struct A { virtual int f(); };
+  struct B { friend int A::f() = 0; }; // expected-error {{friend declaration cannot have a pure-specifier}}
+  struct C {
+    virtual int f();
+    friend int C::f() = 0; // expected-error {{friend declaration cannot have a pure-specifier}}
   };
 }

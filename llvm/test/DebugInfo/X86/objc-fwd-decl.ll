@@ -1,27 +1,31 @@
 ; RUN: llc -mtriple=x86_64-macosx %s -o %t -filetype=obj
-; RUN: llvm-dwarfdump %t | FileCheck %s
+; RUN: llvm-dwarfdump -debug-info %t | FileCheck %s
 
-; CHECK: 0x00000027:   DW_TAG_structure_type
-; CHECK: 0x0000002c:     DW_AT_declaration
-; CHECK: 0x0000002d:     DW_AT_APPLE_runtime_class
+; CHECK: DW_TAG_structure_type
+; CHECK:                 DW_AT_declaration
+; CHECK:                 DW_AT_APPLE_runtime_class
+
+source_filename = "test/DebugInfo/X86/objc-fwd-decl.ll"
 
 %0 = type opaque
 
-@a = common global %0* null, align 8
+@a = common global %0* null, align 8, !dbg !0
 
-!llvm.dbg.cu = !{!0}
-!llvm.module.flags = !{!9, !10, !11, !12}
+!llvm.dbg.cu = !{!5}
+!llvm.module.flags = !{!8, !9, !10, !11, !12, !13}
 
-!0 = metadata !{i32 786449, i32 0, i32 16, metadata !"foo.m", metadata !"/Users/echristo", metadata !"clang version 3.1 (trunk 152054 trunk 152094)", i1 true, i1 false, metadata !"", i32 2, metadata !1, metadata !1, metadata !1, metadata !3} ; [ DW_TAG_compile_unit ]
-!1 = metadata !{metadata !2}
-!2 = metadata !{i32 0}
-!3 = metadata !{metadata !4}
-!4 = metadata !{metadata !5}
-!5 = metadata !{i32 786484, i32 0, null, metadata !"a", metadata !"a", metadata !"", metadata !6, i32 3, metadata !7, i32 0, i32 1, %0** @a} ; [ DW_TAG_variable ]
-!6 = metadata !{i32 786473, metadata !"foo.m", metadata !"/Users/echristo", null} ; [ DW_TAG_file_type ]
-!7 = metadata !{i32 786447, null, metadata !"", null, i32 0, i64 64, i64 64, i64 0, i32 0, metadata !8} ; [ DW_TAG_pointer_type ]
-!8 = metadata !{i32 786451, null, metadata !"FooBarBaz", metadata !6, i32 1, i32 0, i32 0, i32 0, i32 4, null, null, i32 16} ; [ DW_TAG_structure_type ]
-!9 = metadata !{i32 1, metadata !"Objective-C Version", i32 2}
-!10 = metadata !{i32 1, metadata !"Objective-C Image Info Version", i32 0}
-!11 = metadata !{i32 1, metadata !"Objective-C Image Info Section", metadata !"__DATA, __objc_imageinfo, regular, no_dead_strip"}
-!12 = metadata !{i32 4, metadata !"Objective-C Garbage Collection", i32 0}
+!0 = !DIGlobalVariableExpression(var: !1, expr: !DIExpression())
+!1 = !DIGlobalVariable(name: "a", scope: null, file: !2, line: 3, type: !3, isLocal: false, isDefinition: true)
+!2 = !DIFile(filename: "foo.m", directory: "/Users/echristo")
+!3 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !4, size: 64, align: 64)
+!4 = !DICompositeType(tag: DW_TAG_structure_type, name: "FooBarBaz", file: !2, line: 1, flags: DIFlagFwdDecl, runtimeLang: DW_LANG_ObjC)
+!5 = distinct !DICompileUnit(language: DW_LANG_ObjC, file: !2, producer: "clang version 3.1 (trunk 152054 trunk 152094)", isOptimized: false, runtimeVersion: 2, emissionKind: FullDebug, enums: !6, retainedTypes: !6, globals: !7, imports: !6)
+!6 = !{}
+!7 = !{!0}
+!8 = !{i32 1, !"Objective-C Version", i32 2}
+!9 = !{i32 1, !"Objective-C Image Info Version", i32 0}
+!10 = !{i32 1, !"Objective-C Image Info Section", !"__DATA, __objc_imageinfo, regular, no_dead_strip"}
+!11 = !{i32 4, !"Objective-C Garbage Collection", i32 0}
+!12 = !{i32 1, !"Debug Info Version", i32 3}
+!13 = !{i32 4, !"Objective-C Class Properties", i32 0}
+

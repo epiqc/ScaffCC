@@ -161,7 +161,7 @@ TEST(SparseSetTest, MultipleEntrySet) {
 struct Alt {
   unsigned Value;
   explicit Alt(unsigned x) : Value(x) {}
-  unsigned getSparseSetKey() const { return Value - 1000; }
+  unsigned getSparseSetIndex() const { return Value - 1000; }
 };
 
 TEST(SparseSetTest, AltStructSet) {
@@ -182,5 +182,25 @@ TEST(SparseSetTest, AltStructSet) {
 
   EXPECT_FALSE(Set.erase(5));
   EXPECT_TRUE(Set.erase(6));
+}
+
+TEST(SparseSetTest, PopBack) {
+  USet Set;
+  const unsigned UpperBound = 300;
+  Set.setUniverse(UpperBound);
+  for (unsigned i = 0; i < UpperBound; ++i)
+    Set.insert(i);
+
+  // Make sure pop back returns the values in the reverse order we
+  // inserted them.
+  unsigned Expected = UpperBound;
+  while (!Set.empty())
+    ASSERT_TRUE(--Expected == Set.pop_back_val());
+
+  // Insert again the same elements in the sparse set and make sure
+  // each insertion actually inserts the elements. I.e., check
+  // that the underlying data structure are properly cleared.
+  for (unsigned i = 0; i < UpperBound; ++i)
+    ASSERT_TRUE(Set.insert(i).second);
 }
 } // namespace

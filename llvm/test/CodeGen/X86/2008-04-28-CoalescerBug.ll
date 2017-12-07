@@ -1,7 +1,7 @@
 ; RUN: llc < %s -mtriple=x86_64-apple-darwin | grep movl > %t
-; RUN: not grep {r\[abcd\]x} %t
-; RUN: not grep {r\[ds\]i} %t
-; RUN: not grep {r\[bs\]p} %t
+; RUN: not grep "r[abcd]x" %t
+; RUN: not grep "r[ds]i" %t
+; RUN: not grep "r[bs]p" %t
 
 	%struct.BITMAP = type { i16, i16, i32, i32, i32, i32, i32, i32, i8*, i8* }
 	%struct.BltData = type { float, float, float, float }
@@ -33,7 +33,7 @@ bb13101:		; preds = %bb13088
 
 bb13107:		; preds = %bb13101, %bb13088
 	%iftmp.684.0 = phi i32 [ 0, %bb13101 ], [ 65535, %bb13088 ]		; <i32> [#uses=2]
-	%tmp13111 = load i64* null, align 8		; <i64> [#uses=3]
+	%tmp13111 = load i64, i64* null, align 8		; <i64> [#uses=3]
 	%tmp13116 = lshr i64 %tmp13111, 16		; <i64> [#uses=1]
 	%tmp1311613117 = trunc i64 %tmp13116 to i32		; <i32> [#uses=1]
 	%tmp13118 = and i32 %tmp1311613117, 65535		; <i32> [#uses=1]

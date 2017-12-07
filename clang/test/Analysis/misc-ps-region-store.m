@@ -1,5 +1,5 @@
-// RUN: %clang_cc1 -triple i386-apple-darwin9 -analyze -analyzer-checker=core,experimental.deadcode.IdempotentOperations,experimental.core.CastToStruct,experimental.security.ReturnPtrRange,experimental.security.ArrayBound -analyzer-store=region -verify -fblocks -analyzer-opt-analyze-nested-blocks -Wno-objc-root-class %s
-// RUN: %clang_cc1 -triple x86_64-apple-darwin9 -DTEST_64 -analyze -analyzer-checker=core,experimental.deadcode.IdempotentOperations,experimental.core.CastToStruct,experimental.security.ReturnPtrRange,experimental.security.ArrayBound -analyzer-store=region -verify -fblocks   -analyzer-opt-analyze-nested-blocks -Wno-objc-root-class %s
+// RUN: %clang_analyze_cc1 -triple i386-apple-darwin9 -analyzer-checker=core,alpha.core.CastToStruct,alpha.security.ReturnPtrRange,alpha.security.ArrayBound -analyzer-store=region -verify -fblocks -analyzer-opt-analyze-nested-blocks -Wno-objc-root-class %s
+// RUN: %clang_analyze_cc1 -triple x86_64-apple-darwin9 -DTEST_64 -analyzer-checker=core,alpha.core.CastToStruct,alpha.security.ReturnPtrRange,alpha.security.ArrayBound -analyzer-store=region -verify -fblocks   -analyzer-opt-analyze-nested-blocks -Wno-objc-root-class %s
 
 typedef long unsigned int size_t;
 void *memcpy(void *, const void *, size_t);
@@ -253,7 +253,7 @@ void rdar_7249327(unsigned int A[2*32]) {
   a = A;
   b = B;
   
-  n = *a++; // expected-warning{{Assigned value is always the same as the existing value}}
+  n = *a++;
   if (n)
     x += *b++; // no-warning
 }
@@ -299,7 +299,7 @@ void test_handle_array_wrapper_helper();
 int test_handle_array_wrapper() {
   struct ArrayWrapper x;
   test_handle_array_wrapper_helper(&x);
-  struct WrappedStruct *p = (struct WrappedStruct*) x.y; // expected-warning{{Casting a non-structure type to a structure type and accessing a field can lead to memory access errors or data corruption.}}
+  struct WrappedStruct *p = (struct WrappedStruct*) x.y; // expected-warning{{Casting a non-structure type to a structure type and accessing a field can lead to memory access errors or data corruption}}
   return p->z;  // no-warning
 }
 
@@ -396,7 +396,7 @@ void rdar_7332673_test1() {
 int rdar_7332673_test2_aux(char *x);
 void rdar_7332673_test2() {
     char *value;
-    if ( rdar_7332673_test2_aux(value) != 1 ) {} // expected-warning{{Function call argument is an uninitialized value}}
+    if ( rdar_7332673_test2_aux(value) != 1 ) {} // expected-warning{{1st function call argument is an uninitialized value}}
 }
 
 //===----------------------------------------------------------------------===//
@@ -673,7 +673,7 @@ typedef void (^RDar_7462324_Callback)(id obj);
   builder = ^(id object) {
     id x;
     if (object) {
-      builder(x); // expected-warning{{Function call argument is an uninitialized value}}
+      builder(x); // expected-warning{{1st block call argument is an uninitialized value}}
     }
   };
   builder(target);
@@ -920,7 +920,7 @@ int rdar_7770737_pos(void)
 
 void pr6302(id x, Class y) {
   // This previously crashed the analyzer (reported in PR 6302)
-  x->isa  = y; // expected-warning {{direct access to objective-c's isa is deprecated in favor of object_setClass() and object_getClass()}}
+  x->isa  = y; // expected-warning {{assignment to Objective-C's isa is deprecated in favor of object_setClass()}}
 }
 
 //===----------------------------------------------------------------------===//
@@ -1086,6 +1086,9 @@ pr8052(u_int boot_addr)
     u_char         *src = (u_char *) ((u_long) bootMP);
     u_char         *dst = (u_char *) boot_addr + ((vm_offset_t) ((((((((1 <<
 12) / (sizeof(pd_entry_t))) - 1) - 1) - (260 - 2))) << 22) | ((0) << 12)));
+#ifdef TEST_64
+// expected-warning@-3 {{cast to 'u_char *' (aka 'unsigned char *') from smaller integer type 'u_int' (aka 'unsigned int')}}
+#endif
     for (x = 0;
          x < size;
          ++x)
@@ -1112,7 +1115,7 @@ void pr8015_D_FIXME() {
   int number = pr8015_A();
   const char *numbers[] = { "zero" };
   if (number == 0) {
-    if (numbers[number] == numbers[0]) // expected-warning{{Both operands to '==' always have the same value}}
+    if (numbers[number] == numbers[0])
       return;
     // Unreachable.
     int *p = 0;
@@ -1190,7 +1193,7 @@ static void RDar8424269_B(RDar8424269_A *p, unsigned char *RDar8424269_D,
   tmp2 = tmp2t[2];
 }
 
-// <rdar://problem/8642434> - Handle transparent unions with the AttrNonNullChecker.
+// <rdar://problem/8642434> - Handle transparent unions with the NonNullParamChecker.
 typedef union {
   struct rdar_8642434_typeA *_dq;
 }
@@ -1341,3 +1344,23 @@ static unsigned rdar_11127008(void) {
     return values[index].value;
 }
 
+// Test handling invalidating arrays passed to a block via captured
+// pointer value (not a __block variable).
+typedef void (^radar11125868_cb)(int *, unsigned);
+
+void rdar11125868_aux(radar11125868_cb cb);
+
+int rdar11125868() {
+  int integersStackArray[1];
+  int *integers = integersStackArray;
+  rdar11125868_aux(^(int *integerValue, unsigned index) {
+      integers[index] = integerValue[index];
+    });
+  return integers[0] == 0; // no-warning
+}
+
+int rdar11125868_positive() {
+  int integersStackArray[1];
+  int *integers = integersStackArray;
+  return integers[0] == 0; // expected-warning {{The left operand of '==' is a}}
+}

@@ -11,8 +11,8 @@ entry:
   br label %bb
 
 bb:                                               ; preds = %bb, %entry
-  %String2Loc9 = getelementptr inbounds [31 x i8]* %String2Loc, i64 0, i64 0
-  call void @llvm.memcpy.p0i8.p0i8.i64(i8* %String2Loc9, i8* getelementptr inbounds ([31 x i8]* @.str3, i64 0, i64 0), i64 31, i32 1, i1 false)
+  %String2Loc9 = getelementptr inbounds [31 x i8], [31 x i8]* %String2Loc, i64 0, i64 0
+  call void @llvm.memcpy.p0i8.p0i8.i64(i8* %String2Loc9, i8* getelementptr inbounds ([31 x i8], [31 x i8]* @.str3, i64 0, i64 0), i64 31, i32 1, i1 false)
   br label %bb
 
 return:                                           ; No predecessors!
@@ -30,8 +30,8 @@ declare void @llvm.memcpy.p0i8.p0i8.i64(i8* nocapture, i8* nocapture, i64, i32, 
 ; COREI7: movups _.str3
 
 ; CORE2: .section
-; CORE2: .align  3
+; CORE2: .p2align  3
 ; CORE2-NEXT: _.str1:
 ; CORE2-NEXT: .asciz "DHRYSTONE PROGRAM, SOME STRING"
-; CORE2: .align 3
+; CORE2: .p2align 3
 ; CORE2-NEXT: _.str3:

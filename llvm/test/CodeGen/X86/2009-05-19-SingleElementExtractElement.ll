@@ -1,4 +1,4 @@
-; RUN: llc < %s -march=x86-64
+; RUN: llc < %s -mtriple=x86_64--
 ; PR3886
 
 define i32 @main(i32 %argc, i8** nocapture %argv) nounwind {
@@ -7,7 +7,7 @@ entry:
         %tmp5.i = extractelement <1 x i64> %a, i32 0
         %tmp11 = bitcast i64 %tmp5.i to <1 x i64>
         %tmp8 = extractelement <1 x i64> %tmp11, i32 0
-        %call6 = call i32 (i64)* @foo(i64 %tmp8)
+        %call6 = call i32 (i64) @foo(i64 %tmp8)
         ret i32 undef
 }
 

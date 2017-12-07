@@ -1,123 +1,131 @@
-; RUN: llc < %s | FileCheck %s
+; RUN: llc -arm-global-merge -global-merge-group-by-use=false -filetype=obj < %s | llvm-dwarfdump -debug-info -v - | FileCheck %s
 
-; Check debug info output for merged global.
-; DW_AT_location
-; DW_OP_addr
-; DW_OP_plus
-; .long __MergedGlobals
-; DW_OP_constu
-; offset
+; CHECK: DW_TAG_variable
+; CHECK-NOT: DW_TAG
+; CHECK:    DW_AT_name {{.*}} "x1"
+; CHECK-NOT: {{DW_TAG|NULL}}
+; CHECK:    DW_AT_location [DW_FORM_exprloc]        (DW_OP_addr [[ADDR:0x[0-9a-fA-F]+]])
+; CHECK: DW_TAG_variable
+; CHECK-NOT: DW_TAG
+; CHECK:    DW_AT_name {{.*}} "x2"
+; CHECK-NOT: {{DW_TAG|NULL}}
+; CHECK:    DW_AT_location [DW_FORM_exprloc]        (DW_OP_addr [[ADDR]], DW_OP_plus_uconst 0x4)
 
-;CHECK: .long Lset33
-;CHECK-NEXT:        @ DW_AT_type
-;CHECK-NEXT:        @ DW_AT_decl_file
-;CHECK-NEXT:        @ DW_AT_decl_line
-;CHECK-NEXT:        @ DW_AT_location
-;CHECK-NEXT:        .byte   3
-;CHECK-NEXT:        .long   __MergedGlobals
-;CHECK-NEXT:        .byte   16
-; 4 is byte offset of x2 in __MergedGobals
-;CHECK-NEXT:        .byte   4
-;CHECK-NEXT:        .byte   34
-
-
+source_filename = "test/CodeGen/ARM/2011-08-02-MergedGlobalDbg.ll"
 target datalayout = "e-p:32:32:32-i1:8:32-i8:8:32-i16:16:32-i32:32:32-i64:32:64-f32:32:32-f64:32:64-v64:32:64-v128:32:128-a0:0:32-n32"
 target triple = "thumbv7-apple-macosx10.7.0"
 
-@x1 = internal unnamed_addr global i32 1, align 4
-@x2 = internal unnamed_addr global i32 2, align 4
+@x1 = internal unnamed_addr global i32 1, align 4, !dbg !0
+@x2 = internal unnamed_addr global i32 2, align 4, !dbg !6
 @x3 = internal unnamed_addr global i32 3, align 4
 @x4 = internal unnamed_addr global i32 4, align 4
 @x5 = global i32 0, align 4
 
-define i32 @get1(i32 %a) nounwind optsize ssp {
-  tail call void @llvm.dbg.value(metadata !{i32 %a}, i64 0, metadata !10), !dbg !30
-  %1 = load i32* @x1, align 4, !dbg !31
-  tail call void @llvm.dbg.value(metadata !{i32 %1}, i64 0, metadata !11), !dbg !31
-  store i32 %a, i32* @x1, align 4, !dbg !31
-  ret i32 %1, !dbg !31
+; Function Attrs: nounwind optsize ssp
+define i32 @get1(i32 %a) #0 !dbg !10 {
+  tail call void @llvm.dbg.value(metadata i32 %a, metadata !14, metadata !17), !dbg !18
+  %1 = load i32, i32* @x1, align 4, !dbg !19
+  tail call void @llvm.dbg.value(metadata i32 %1, metadata !15, metadata !17), !dbg !19
+  store i32 %a, i32* @x1, align 4, !dbg !19
+  ret i32 %1, !dbg !19
 }
 
-define i32 @get2(i32 %a) nounwind optsize ssp {
-  tail call void @llvm.dbg.value(metadata !{i32 %a}, i64 0, metadata !13), !dbg !32
-  %1 = load i32* @x2, align 4, !dbg !33
-  tail call void @llvm.dbg.value(metadata !{i32 %1}, i64 0, metadata !14), !dbg !33
-  store i32 %a, i32* @x2, align 4, !dbg !33
+; Function Attrs: nounwind optsize ssp
+
+define i32 @get2(i32 %a) #0 !dbg !20 {
+  tail call void @llvm.dbg.value(metadata i32 %a, metadata !22, metadata !17), !dbg !25
+  %1 = load i32, i32* @x2, align 4, !dbg !26
+  tail call void @llvm.dbg.value(metadata i32 %1, metadata !23, metadata !17), !dbg !26
+  store i32 %a, i32* @x2, align 4, !dbg !26
+  ret i32 %1, !dbg !26
+}
+
+; Function Attrs: nounwind optsize ssp
+
+define i32 @get3(i32 %a) #0 !dbg !27 {
+  tail call void @llvm.dbg.value(metadata i32 %a, metadata !29, metadata !17), !dbg !32
+  %1 = load i32, i32* @x3, align 4, !dbg !33
+  tail call void @llvm.dbg.value(metadata i32 %1, metadata !30, metadata !17), !dbg !33
+  store i32 %a, i32* @x3, align 4, !dbg !33
   ret i32 %1, !dbg !33
 }
 
-define i32 @get3(i32 %a) nounwind optsize ssp {
-  tail call void @llvm.dbg.value(metadata !{i32 %a}, i64 0, metadata !16), !dbg !34
-  %1 = load i32* @x3, align 4, !dbg !35
-  tail call void @llvm.dbg.value(metadata !{i32 %1}, i64 0, metadata !17), !dbg !35
-  store i32 %a, i32* @x3, align 4, !dbg !35
-  ret i32 %1, !dbg !35
+; Function Attrs: nounwind optsize ssp
+
+define i32 @get4(i32 %a) #0 !dbg !34 {
+  tail call void @llvm.dbg.value(metadata i32 %a, metadata !36, metadata !17), !dbg !39
+  %1 = load i32, i32* @x4, align 4, !dbg !40
+  tail call void @llvm.dbg.value(metadata i32 %1, metadata !37, metadata !17), !dbg !40
+  store i32 %a, i32* @x4, align 4, !dbg !40
+  ret i32 %1, !dbg !40
 }
 
-define i32 @get4(i32 %a) nounwind optsize ssp {
-  tail call void @llvm.dbg.value(metadata !{i32 %a}, i64 0, metadata !19), !dbg !36
-  %1 = load i32* @x4, align 4, !dbg !37
-  tail call void @llvm.dbg.value(metadata !{i32 %1}, i64 0, metadata !20), !dbg !37
-  store i32 %a, i32* @x4, align 4, !dbg !37
-  ret i32 %1, !dbg !37
+; Function Attrs: nounwind optsize ssp
+
+define i32 @get5(i32 %a) #0 !dbg !41 {
+  tail call void @llvm.dbg.value(metadata i32 %a, metadata !43, metadata !17), !dbg !46
+  %1 = load i32, i32* @x5, align 4, !dbg !47
+  tail call void @llvm.dbg.value(metadata i32 %1, metadata !44, metadata !17), !dbg !47
+  store i32 %a, i32* @x5, align 4, !dbg !47
+  ret i32 %1, !dbg !47
 }
 
-define i32 @get5(i32 %a) nounwind optsize ssp {
-  tail call void @llvm.dbg.value(metadata !{i32 %a}, i64 0, metadata !27), !dbg !38
-  %1 = load i32* @x5, align 4, !dbg !39
-  tail call void @llvm.dbg.value(metadata !{i32 %1}, i64 0, metadata !28), !dbg !39
-  store i32 %a, i32* @x5, align 4, !dbg !39
-  ret i32 %1, !dbg !39
-}
+; Function Attrs: nounwind readnone
 
-declare void @llvm.dbg.value(metadata, i64, metadata) nounwind readnone
+declare void @llvm.dbg.value(metadata, metadata, metadata) #1
 
-!llvm.dbg.cu = !{!0}
-!llvm.dbg.sp = !{!1, !6, !7, !8, !9}
-!llvm.dbg.lv.get1 = !{!10, !11}
-!llvm.dbg.lv.get2 = !{!13, !14}
-!llvm.dbg.lv.get3 = !{!16, !17}
-!llvm.dbg.lv.get4 = !{!19, !20}
-!llvm.dbg.gv = !{!22, !23, !24, !25, !26}
-!llvm.dbg.lv.get5 = !{!27, !28}
+attributes #0 = { nounwind optsize ssp }
+attributes #1 = { nounwind readnone }
 
-!0 = metadata !{i32 589841, i32 0, i32 12, metadata !"ss3.c", metadata !"/private/tmp", metadata !"clang", i1 true, i1 true, metadata !"", i32 0} ; [ DW_TAG_compile_unit ]
-!1 = metadata !{i32 589870, i32 0, metadata !2, metadata !"get1", metadata !"get1", metadata !"", metadata !2, i32 5, metadata !3, i1 false, i1 true, i32 0, i32 0, i32 0, i32 256, i1 true, i32 (i32)* @get1, null, null} ; [ DW_TAG_subprogram ]
-!2 = metadata !{i32 589865, metadata !"ss3.c", metadata !"/private/tmp", metadata !0} ; [ DW_TAG_file_type ]
-!3 = metadata !{i32 589845, metadata !2, metadata !"", metadata !2, i32 0, i64 0, i64 0, i32 0, i32 0, i32 0, metadata !4, i32 0, i32 0} ; [ DW_TAG_subroutine_type ]
-!4 = metadata !{metadata !5}
-!5 = metadata !{i32 589860, metadata !0, metadata !"int", null, i32 0, i64 32, i64 32, i64 0, i32 0, i32 5} ; [ DW_TAG_base_type ]
-!6 = metadata !{i32 589870, i32 0, metadata !2, metadata !"get2", metadata !"get2", metadata !"", metadata !2, i32 8, metadata !3, i1 false, i1 true, i32 0, i32 0, i32 0, i32 256, i1 true, i32 (i32)* @get2, null, null} ; [ DW_TAG_subprogram ]
-!7 = metadata !{i32 589870, i32 0, metadata !2, metadata !"get3", metadata !"get3", metadata !"", metadata !2, i32 11, metadata !3, i1 false, i1 true, i32 0, i32 0, i32 0, i32 256, i1 true, i32 (i32)* @get3, null, null} ; [ DW_TAG_subprogram ]
-!8 = metadata !{i32 589870, i32 0, metadata !2, metadata !"get4", metadata !"get4", metadata !"", metadata !2, i32 14, metadata !3, i1 false, i1 true, i32 0, i32 0, i32 0, i32 256, i1 true, i32 (i32)* @get4, null, null} ; [ DW_TAG_subprogram ]
-!9 = metadata !{i32 589870, i32 0, metadata !2, metadata !"get5", metadata !"get5", metadata !"", metadata !2, i32 17, metadata !3, i1 false, i1 true, i32 0, i32 0, i32 0, i32 256, i1 true, i32 (i32)* @get5, null, null} ; [ DW_TAG_subprogram ]
-!10 = metadata !{i32 590081, metadata !1, metadata !"a", metadata !2, i32 16777221, metadata !5, i32 0} ; [ DW_TAG_arg_variable ]
-!11 = metadata !{i32 590080, metadata !12, metadata !"b", metadata !2, i32 5, metadata !5, i32 0} ; [ DW_TAG_auto_variable ]
-!12 = metadata !{i32 589835, metadata !1, i32 5, i32 19, metadata !2, i32 0} ; [ DW_TAG_lexical_block ]
-!13 = metadata !{i32 590081, metadata !6, metadata !"a", metadata !2, i32 16777224, metadata !5, i32 0} ; [ DW_TAG_arg_variable ]
-!14 = metadata !{i32 590080, metadata !15, metadata !"b", metadata !2, i32 8, metadata !5, i32 0} ; [ DW_TAG_auto_variable ]
-!15 = metadata !{i32 589835, metadata !6, i32 8, i32 17, metadata !2, i32 1} ; [ DW_TAG_lexical_block ]
-!16 = metadata !{i32 590081, metadata !7, metadata !"a", metadata !2, i32 16777227, metadata !5, i32 0} ; [ DW_TAG_arg_variable ]
-!17 = metadata !{i32 590080, metadata !18, metadata !"b", metadata !2, i32 11, metadata !5, i32 0} ; [ DW_TAG_auto_variable ]
-!18 = metadata !{i32 589835, metadata !7, i32 11, i32 19, metadata !2, i32 2} ; [ DW_TAG_lexical_block ]
-!19 = metadata !{i32 590081, metadata !8, metadata !"a", metadata !2, i32 16777230, metadata !5, i32 0} ; [ DW_TAG_arg_variable ]
-!20 = metadata !{i32 590080, metadata !21, metadata !"b", metadata !2, i32 14, metadata !5, i32 0} ; [ DW_TAG_auto_variable ]
-!21 = metadata !{i32 589835, metadata !8, i32 14, i32 19, metadata !2, i32 3} ; [ DW_TAG_lexical_block ]
-!22 = metadata !{i32 589876, i32 0, metadata !0, metadata !"x5", metadata !"x5", metadata !"", metadata !2, i32 16, metadata !5, i32 0, i32 1, i32* @x5} ; [ DW_TAG_variable ]
-!23 = metadata !{i32 589876, i32 0, metadata !0, metadata !"x4", metadata !"x4", metadata !"", metadata !2, i32 13, metadata !5, i32 1, i32 1, i32* @x4} ; [ DW_TAG_variable ]
-!24 = metadata !{i32 589876, i32 0, metadata !0, metadata !"x3", metadata !"x3", metadata !"", metadata !2, i32 10, metadata !5, i32 1, i32 1, i32* @x3} ; [ DW_TAG_variable ]
-!25 = metadata !{i32 589876, i32 0, metadata !0, metadata !"x2", metadata !"x2", metadata !"", metadata !2, i32 7, metadata !5, i32 1, i32 1, i32* @x2} ; [ DW_TAG_variable ]
-!26 = metadata !{i32 589876, i32 0, metadata !0, metadata !"x1", metadata !"x1", metadata !"", metadata !2, i32 4, metadata !5, i32 1, i32 1, i32* @x1} ; [ DW_TAG_variable ]
-!27 = metadata !{i32 590081, metadata !9, metadata !"a", metadata !2, i32 16777233, metadata !5, i32 0} ; [ DW_TAG_arg_variable ]
-!28 = metadata !{i32 590080, metadata !29, metadata !"b", metadata !2, i32 17, metadata !5, i32 0} ; [ DW_TAG_auto_variable ]
-!29 = metadata !{i32 589835, metadata !9, i32 17, i32 19, metadata !2, i32 4} ; [ DW_TAG_lexical_block ]
-!30 = metadata !{i32 5, i32 16, metadata !1, null}
-!31 = metadata !{i32 5, i32 32, metadata !12, null}
-!32 = metadata !{i32 8, i32 14, metadata !6, null}
-!33 = metadata !{i32 8, i32 29, metadata !15, null}
-!34 = metadata !{i32 11, i32 16, metadata !7, null}
-!35 = metadata !{i32 11, i32 32, metadata !18, null}
-!36 = metadata !{i32 14, i32 16, metadata !8, null}
-!37 = metadata !{i32 14, i32 32, metadata !21, null}
-!38 = metadata !{i32 17, i32 16, metadata !9, null}
-!39 = metadata !{i32 17, i32 32, metadata !29, null}
+!llvm.dbg.cu = !{!2}
+!llvm.module.flags = !{!9}
+
+!0 = !DIGlobalVariableExpression(var: !1, expr: !DIExpression())
+!1 = !DIGlobalVariable(name: "x1", scope: !2, file: !3, line: 4, type: !8, isLocal: true, isDefinition: true)
+!2 = distinct !DICompileUnit(language: DW_LANG_C99, file: !3, producer: "clang", isOptimized: true, runtimeVersion: 0, emissionKind: FullDebug, enums: !4, retainedTypes: !4, globals: !5, imports: !4)
+!3 = !DIFile(filename: "ss3.c", directory: "/private/tmp")
+!4 = !{}
+!5 = !{!0, !6}
+!6 = !DIGlobalVariableExpression(var: !7, expr: !DIExpression())
+!7 = !DIGlobalVariable(name: "x2", scope: !2, file: !3, line: 7, type: !8, isLocal: true, isDefinition: true)
+!8 = !DIBasicType(name: "int", size: 32, align: 32, encoding: DW_ATE_signed)
+!9 = !{i32 1, !"Debug Info Version", i32 3}
+!10 = distinct !DISubprogram(name: "get1", scope: !3, file: !3, line: 5, type: !11, isLocal: false, isDefinition: true, scopeLine: 5, virtualIndex: 6, flags: DIFlagPrototyped, isOptimized: true, unit: !2, variables: !13)
+!11 = !DISubroutineType(types: !12)
+!12 = !{!8}
+!13 = !{!14, !15}
+!14 = !DILocalVariable(name: "a", arg: 1, scope: !10, file: !3, line: 5, type: !8)
+!15 = !DILocalVariable(name: "b", scope: !16, file: !3, line: 5, type: !8)
+!16 = distinct !DILexicalBlock(scope: !10, file: !3, line: 5, column: 19)
+!17 = !DIExpression()
+!18 = !DILocation(line: 5, column: 16, scope: !10)
+!19 = !DILocation(line: 5, column: 32, scope: !16)
+!20 = distinct !DISubprogram(name: "get2", scope: !3, file: !3, line: 8, type: !11, isLocal: false, isDefinition: true, scopeLine: 8, virtualIndex: 6, flags: DIFlagPrototyped, isOptimized: true, unit: !2, variables: !21)
+!21 = !{!22, !23}
+!22 = !DILocalVariable(name: "a", arg: 1, scope: !20, file: !3, line: 8, type: !8)
+!23 = !DILocalVariable(name: "b", scope: !24, file: !3, line: 8, type: !8)
+!24 = distinct !DILexicalBlock(scope: !20, file: !3, line: 8, column: 17)
+!25 = !DILocation(line: 8, column: 14, scope: !20)
+!26 = !DILocation(line: 8, column: 29, scope: !24)
+!27 = distinct !DISubprogram(name: "get3", scope: !3, file: !3, line: 11, type: !11, isLocal: false, isDefinition: true, scopeLine: 11, virtualIndex: 6, flags: DIFlagPrototyped, isOptimized: true, unit: !2, variables: !28)
+!28 = !{!29, !30}
+!29 = !DILocalVariable(name: "a", arg: 1, scope: !27, file: !3, line: 11, type: !8)
+!30 = !DILocalVariable(name: "b", scope: !31, file: !3, line: 11, type: !8)
+!31 = distinct !DILexicalBlock(scope: !27, file: !3, line: 11, column: 19)
+!32 = !DILocation(line: 11, column: 16, scope: !27)
+!33 = !DILocation(line: 11, column: 32, scope: !31)
+!34 = distinct !DISubprogram(name: "get4", scope: !3, file: !3, line: 14, type: !11, isLocal: false, isDefinition: true, scopeLine: 14, virtualIndex: 6, flags: DIFlagPrototyped, isOptimized: true, unit: !2, variables: !35)
+!35 = !{!36, !37}
+!36 = !DILocalVariable(name: "a", arg: 1, scope: !34, file: !3, line: 14, type: !8)
+!37 = !DILocalVariable(name: "b", scope: !38, file: !3, line: 14, type: !8)
+!38 = distinct !DILexicalBlock(scope: !34, file: !3, line: 14, column: 19)
+!39 = !DILocation(line: 14, column: 16, scope: !34)
+!40 = !DILocation(line: 14, column: 32, scope: !38)
+!41 = distinct !DISubprogram(name: "get5", scope: !3, file: !3, line: 17, type: !11, isLocal: false, isDefinition: true, scopeLine: 17, virtualIndex: 6, flags: DIFlagPrototyped, isOptimized: true, unit: !2, variables: !42)
+!42 = !{!43, !44}
+!43 = !DILocalVariable(name: "a", arg: 1, scope: !41, file: !3, line: 17, type: !8)
+!44 = !DILocalVariable(name: "b", scope: !45, file: !3, line: 17, type: !8)
+!45 = distinct !DILexicalBlock(scope: !41, file: !3, line: 17, column: 19)
+!46 = !DILocation(line: 17, column: 16, scope: !41)
+!47 = !DILocation(line: 17, column: 32, scope: !45)
+

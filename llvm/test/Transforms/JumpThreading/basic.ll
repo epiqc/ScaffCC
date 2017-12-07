@@ -1,11 +1,11 @@
-; RUN: opt %s -jump-threading -S | FileCheck %s
+; RUN: opt -jump-threading -S < %s | FileCheck %s
 
 declare i32 @f1()
 declare i32 @f2()
 declare void @f3()
 
 define i32 @test1(i1 %cond) {
-; CHECK: @test1
+; CHECK-LABEL: @test1(
 
 	br i1 %cond, label %T1, label %F1
 
@@ -37,7 +37,7 @@ F2:
 
 ;; cond is known false on Entry -> F1 edge!
 define i32 @test2(i1 %cond) {
-; CHECK: @test2
+; CHECK-LABEL: @test2(
 Entry:
 	br i1 %cond, label %T1, label %F1
 
@@ -62,7 +62,7 @@ F2:
 
 ; Undef handling.
 define i32 @test3(i1 %cond) {
-; CHECK: @test3
+; CHECK-LABEL: @test3(
 ; CHECK-NEXT: T1:
 ; CHECK-NEXT: ret i32 42
 	br i1 undef, label %T1, label %F1
@@ -75,7 +75,7 @@ F1:
 }
 
 define i32 @test4(i1 %cond, i1 %cond2) {
-; CHECK: @test4
+; CHECK-LABEL: @test4(
 
 	br i1 %cond, label %T1, label %F1
 
@@ -89,7 +89,7 @@ T1:
 F1:
 	%v2 = call i32 @f2()
 ; CHECK:   %v2 = call i32 @f2()
-; CHECK-NEXT:   br i1 %cond2, 
+; CHECK-NEXT:   br i1 %cond2,
 	br label %Merge
 
 Merge:
@@ -108,7 +108,7 @@ F2:
 
 ;; This tests that the branch in 'merge' can be cloned up into T1.
 define i32 @test5(i1 %cond, i1 %cond2) {
-; CHECK: @test5
+; CHECK-LABEL: @test5(
 
 	br i1 %cond, label %T1, label %F1
 
@@ -144,7 +144,7 @@ F2:
 
 
 define i32 @test6(i32 %A) {
-; CHECK: @test6
+; CHECK-LABEL: @test6(
 	%tmp455 = icmp eq i32 %A, 42
 	br i1 %tmp455, label %BB1, label %BB2
 
@@ -156,11 +156,11 @@ define i32 @test6(i32 %A) {
 ; CHECK: call void @f3()
 ; CHECK-NOT: br
 ; CHECK: ret i32 4
-    
+
 BB2:
 	call i32 @f1()
 	br label %BB1
-        
+
 
 BB1:
 	%tmp459 = icmp eq i32 %A, 42
@@ -180,7 +180,7 @@ BB4:
 ;; rdar://7367025
 define i32 @test7(i1 %cond, i1 %cond2) {
 Entry:
-; CHECK: @test7
+; CHECK-LABEL: @test7(
 	%v1 = call i32 @f1()
 	br i1 %cond, label %Merge, label %F1
 
@@ -213,11 +213,11 @@ F2:
 declare i1 @test8a()
 
 define i32 @test8b(i1 %cond, i1 %cond2) {
-; CHECK: @test8b
+; CHECK-LABEL: @test8b(
 T0:
         %A = call i1 @test8a()
 	br i1 %A, label %T1, label %F1
-        
+
 ; CHECK: T0:
 ; CHECK-NEXT: call
 ; CHECK-NEXT: br i1 %A, label %T1, label %Y
@@ -255,7 +255,7 @@ Y:
 ;;; Verify that we can handle constraint propagation through "xor x, 1".
 define i32 @test9(i1 %cond, i1 %cond2) {
 Entry:
-; CHECK: @test9
+; CHECK-LABEL: @test9(
 	%v1 = call i32 @f1()
 	br i1 %cond, label %Merge, label %F1
 
@@ -298,14 +298,14 @@ declare void @test10f3()
 
 ;; Non-local condition threading.
 define i32 @test10g(i1 %cond) {
-; CHECK: @test10g
+; CHECK-LABEL: @test10g(
 ; CHECK-NEXT:   br i1 %cond, label %T2, label %F2
         br i1 %cond, label %T1, label %F1
 
 T1:
         %v1 = call i32 @test10f1()
         br label %Merge
-        
+
 ; CHECK: %v1 = call i32 @test10f1()
 ; CHECK-NEXT: call void @f3()
 ; CHECK-NEXT: ret i32 %v1
@@ -329,18 +329,18 @@ F2:
 
 ; Impossible conditional constraints should get threaded.  BB3 is dead here.
 define i32 @test11(i32 %A) {
-; CHECK: @test11
+; CHECK-LABEL: @test11(
 ; CHECK-NEXT: icmp
 ; CHECK-NEXT: br i1 %tmp455, label %BB4, label %BB2
 	%tmp455 = icmp eq i32 %A, 42
 	br i1 %tmp455, label %BB1, label %BB2
-        
+
 BB2:
 ; CHECK: call i32 @f1()
 ; CHECK-NEXT: ret i32 %C
 	%C = call i32 @f1()
 	ret i32 %C
-        
+
 
 BB1:
 	%tmp459 = icmp eq i32 %A, 43
@@ -357,7 +357,7 @@ BB4:
 
 ;; Correlated value through boolean expression.  GCC PR18046.
 define void @test12(i32 %A) {
-; CHECK: @test12
+; CHECK-LABEL: @test12(
 entry:
   %cond = icmp eq i32 %A, 0
   br i1 %cond, label %bb, label %bb1
@@ -366,7 +366,7 @@ entry:
 ; CHECK-NEXT: %cond = icmp eq i32 %A, 0
 ; CHECK-NEXT: br i1 %cond, label %bb1, label %return
 
-bb:                   
+bb:
   %B = call i32 @test10f2()
   br label %bb1
 
@@ -393,7 +393,7 @@ return:
 ;; rdar://7391699
 define i32 @test13(i1 %cond, i1 %cond2) {
 Entry:
-; CHECK: @test13
+; CHECK-LABEL: @test13(
 	%v1 = call i32 @f1()
 	br i1 %cond, label %Merge, label %F1
 
@@ -412,7 +412,7 @@ T2:
 
 F2:
 	ret i32 %v1
-        
+
 ; CHECK:   br i1 %cond, label %F2, label %Merge
 
 ; CHECK:      Merge:
@@ -421,7 +421,7 @@ F2:
 ; CHECK-NEXT:   br i1 %N, label %T2, label %F2
 }
 
-; CHECK: @test14
+; CHECK-LABEL: @test14(
 define i32 @test14(i32 %in) {
 entry:
 	%A = icmp eq i32 %in, 0
@@ -453,7 +453,7 @@ right_ret:
 }
 
 ; PR5652
-; CHECK: @test15
+; CHECK-LABEL: @test15(
 define i32 @test15(i32 %len) {
 entry:
 ; CHECK: icmp ult i32 %len, 13
@@ -476,3 +476,107 @@ exit1:
 ; CHECK: }
 }
 
+;;; Verify that we can handle constraint propagation through cast.
+define i32 @test16(i1 %cond) {
+Entry:
+; CHECK-LABEL: @test16(
+	br i1 %cond, label %Merge, label %F1
+
+; CHECK: Entry:
+; CHECK-NEXT:  br i1 %cond, label %F2, label %Merge
+
+F1:
+	%v1 = call i32 @f1()
+	br label %Merge
+
+Merge:
+	%B = phi i32 [0, %Entry], [%v1, %F1]
+	%M = icmp eq i32 %B, 0
+	%M1 = zext i1 %M to i32
+	%N = icmp eq i32 %M1, 0
+	br i1 %N, label %T2, label %F2
+
+; CHECK: Merge:
+; CHECK-NOT: phi
+; CHECK-NEXT:   %v1 = call i32 @f1()
+
+T2:
+	%Q = call i32 @f2()
+	ret i32 %Q
+
+F2:
+	ret i32 %B
+; CHECK: F2:
+; CHECK-NEXT: phi i32
+}
+
+; In this test we check that block duplication is inhibited by the presence
+; of a function with the 'noduplicate' attribute.
+
+declare void @g()
+declare void @j()
+declare void @k()
+
+; CHECK-LABEL: define void @h(i32 %p) {
+define void @h(i32 %p) {
+  %x = icmp ult i32 %p, 5
+  br i1 %x, label %l1, label %l2
+
+l1:
+  call void @j()
+  br label %l3
+
+l2:
+  call void @k()
+  br label %l3
+
+l3:
+; CHECK: call void @g() [[$NOD:#[0-9]+]]
+; CHECK-NOT: call void @g() [[$NOD]]
+  call void @g() noduplicate
+  %y = icmp ult i32 %p, 5
+  br i1 %y, label %l4, label %l5
+
+l4:
+  call void @j()
+  ret void
+
+l5:
+  call void @k()
+  ret void
+; CHECK: }
+}
+
+; CHECK-LABEL: define void @h_con(i32 %p) {
+define void @h_con(i32 %p) {
+  %x = icmp ult i32 %p, 5
+  br i1 %x, label %l1, label %l2
+
+l1:
+  call void @j()
+  br label %l3
+
+l2:
+  call void @k()
+  br label %l3
+
+l3:
+; CHECK: call void @g() [[$CON:#[0-9]+]]
+; CHECK-NOT: call void @g() [[$CON]]
+  call void @g() convergent
+  %y = icmp ult i32 %p, 5
+  br i1 %y, label %l4, label %l5
+
+l4:
+  call void @j()
+  ret void
+
+l5:
+  call void @k()
+  ret void
+; CHECK: }
+}
+
+
+; CHECK: attributes [[$NOD]] = { noduplicate }
+; CHECK: attributes [[$CON]] = { convergent }

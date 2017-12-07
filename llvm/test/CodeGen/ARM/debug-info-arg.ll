@@ -6,14 +6,14 @@ target triple = "thumbv7-apple-ios"
 
 %struct.tag_s = type { i32, i32, i32 }
 
-define void @foo(%struct.tag_s* nocapture %this, %struct.tag_s* %c, i64 %x, i64 %y, %struct.tag_s* nocapture %ptr1, %struct.tag_s* nocapture %ptr2) nounwind ssp {
-  tail call void @llvm.dbg.value(metadata !{%struct.tag_s* %this}, i64 0, metadata !5), !dbg !20
-  tail call void @llvm.dbg.value(metadata !{%struct.tag_s* %c}, i64 0, metadata !13), !dbg !21
-  tail call void @llvm.dbg.value(metadata !{i64 %x}, i64 0, metadata !14), !dbg !22
-  tail call void @llvm.dbg.value(metadata !{i64 %y}, i64 0, metadata !17), !dbg !23
-;CHECK:	@DEBUG_VALUE: foo:y <- R7+4294967295
-  tail call void @llvm.dbg.value(metadata !{%struct.tag_s* %ptr1}, i64 0, metadata !18), !dbg !24
-  tail call void @llvm.dbg.value(metadata !{%struct.tag_s* %ptr2}, i64 0, metadata !19), !dbg !25
+define void @foo(%struct.tag_s* nocapture %this, %struct.tag_s* %c, i64 %x, i64 %y, %struct.tag_s* nocapture %ptr1, %struct.tag_s* nocapture %ptr2) nounwind ssp "no-frame-pointer-elim"="true" !dbg !1 {
+  tail call void @llvm.dbg.value(metadata %struct.tag_s* %this, metadata !5, metadata !DIExpression()), !dbg !20
+  tail call void @llvm.dbg.value(metadata %struct.tag_s* %c, metadata !13, metadata !DIExpression()), !dbg !21
+  tail call void @llvm.dbg.value(metadata i64 %x, metadata !14, metadata !DIExpression()), !dbg !22
+  tail call void @llvm.dbg.value(metadata i64 %y, metadata !17, metadata !DIExpression()), !dbg !23
+;CHECK:	@DEBUG_VALUE: foo:y <- [DW_OP_plus_uconst 8] [%r7+0]
+  tail call void @llvm.dbg.value(metadata %struct.tag_s* %ptr1, metadata !18, metadata !DIExpression()), !dbg !24
+  tail call void @llvm.dbg.value(metadata %struct.tag_s* %ptr2, metadata !19, metadata !DIExpression()), !dbg !25
   %1 = icmp eq %struct.tag_s* %c, null, !dbg !26
   br i1 %1, label %3, label %2, !dbg !26
 
@@ -27,39 +27,41 @@ define void @foo(%struct.tag_s* nocapture %this, %struct.tag_s* %c, i64 %x, i64 
 
 declare void @foobar(i64, i64)
 
-declare void @llvm.dbg.value(metadata, i64, metadata) nounwind readnone
+declare void @llvm.dbg.value(metadata, metadata, metadata) nounwind readnone
 
 !llvm.dbg.cu = !{!0}
-!llvm.dbg.sp = !{!1}
-!llvm.dbg.lv.foo = !{!5, !13, !14, !17, !18, !19}
+!llvm.module.flags = !{!33}
 
-!0 = metadata !{i32 589841, i32 0, i32 12, metadata !"one.c", metadata !"/Volumes/Athwagate/R10048772", metadata !"Apple clang version 3.0 (tags/Apple/clang-211.10.1) (based on LLVM 3.0svn)", i1 true, i1 true, metadata !"", i32 0} ; [ DW_TAG_compile_unit ]
-!1 = metadata !{i32 589870, i32 0, metadata !2, metadata !"foo", metadata !"foo", metadata !"", metadata !2, i32 11, metadata !3, i1 false, i1 true, i32 0, i32 0, i32 0, i32 256, i1 true, void (%struct.tag_s*, %struct.tag_s*, i64, i64, %struct.tag_s*, %struct.tag_s*)* @foo, null, null} ; [ DW_TAG_subprogram ]
-!2 = metadata !{i32 589865, metadata !"one.c", metadata !"/Volumes/Athwagate/R10048772", metadata !0} ; [ DW_TAG_file_type ]
-!3 = metadata !{i32 589845, metadata !2, metadata !"", metadata !2, i32 0, i64 0, i64 0, i32 0, i32 0, i32 0, metadata !4, i32 0, i32 0} ; [ DW_TAG_subroutine_type ]
-!4 = metadata !{null}
-!5 = metadata !{i32 590081, metadata !1, metadata !"this", metadata !2, i32 16777227, metadata !6, i32 0} ; [ DW_TAG_arg_variable ]
-!6 = metadata !{i32 589839, metadata !0, metadata !"", null, i32 0, i64 32, i64 32, i64 0, i32 0, metadata !7} ; [ DW_TAG_pointer_type ]
-!7 = metadata !{i32 589843, metadata !0, metadata !"tag_s", metadata !2, i32 5, i64 96, i64 32, i32 0, i32 0, i32 0, metadata !8, i32 0, i32 0} ; [ DW_TAG_structure_type ]
-!8 = metadata !{metadata !9, metadata !11, metadata !12}
-!9 = metadata !{i32 589837, metadata !7, metadata !"x", metadata !2, i32 6, i64 32, i64 32, i64 0, i32 0, metadata !10} ; [ DW_TAG_member ]
-!10 = metadata !{i32 589860, metadata !0, metadata !"int", null, i32 0, i64 32, i64 32, i64 0, i32 0, i32 5} ; [ DW_TAG_base_type ]
-!11 = metadata !{i32 589837, metadata !7, metadata !"y", metadata !2, i32 7, i64 32, i64 32, i64 32, i32 0, metadata !10} ; [ DW_TAG_member ]
-!12 = metadata !{i32 589837, metadata !7, metadata !"z", metadata !2, i32 8, i64 32, i64 32, i64 64, i32 0, metadata !10} ; [ DW_TAG_member ]
-!13 = metadata !{i32 590081, metadata !1, metadata !"c", metadata !2, i32 33554443, metadata !6, i32 0} ; [ DW_TAG_arg_variable ]
-!14 = metadata !{i32 590081, metadata !1, metadata !"x", metadata !2, i32 50331659, metadata !15, i32 0} ; [ DW_TAG_arg_variable ]
-!15 = metadata !{i32 589846, metadata !0, metadata !"UInt64", metadata !2, i32 1, i64 0, i64 0, i64 0, i32 0, metadata !16} ; [ DW_TAG_typedef ]
-!16 = metadata !{i32 589860, metadata !0, metadata !"long long unsigned int", null, i32 0, i64 64, i64 32, i64 0, i32 0, i32 7} ; [ DW_TAG_base_type ]
-!17 = metadata !{i32 590081, metadata !1, metadata !"y", metadata !2, i32 67108875, metadata !15, i32 0} ; [ DW_TAG_arg_variable ]
-!18 = metadata !{i32 590081, metadata !1, metadata !"ptr1", metadata !2, i32 83886091, metadata !6, i32 0} ; [ DW_TAG_arg_variable ]
-!19 = metadata !{i32 590081, metadata !1, metadata !"ptr2", metadata !2, i32 100663307, metadata !6, i32 0} ; [ DW_TAG_arg_variable ]
-!20 = metadata !{i32 11, i32 24, metadata !1, null}
-!21 = metadata !{i32 11, i32 44, metadata !1, null}
-!22 = metadata !{i32 11, i32 54, metadata !1, null}
-!23 = metadata !{i32 11, i32 64, metadata !1, null}
-!24 = metadata !{i32 11, i32 81, metadata !1, null}
-!25 = metadata !{i32 11, i32 101, metadata !1, null}
-!26 = metadata !{i32 12, i32 3, metadata !27, null}
-!27 = metadata !{i32 589835, metadata !1, i32 11, i32 107, metadata !2, i32 0} ; [ DW_TAG_lexical_block ]
-!28 = metadata !{i32 13, i32 5, metadata !27, null}
-!29 = metadata !{i32 14, i32 1, metadata !27, null}
+!0 = distinct !DICompileUnit(language: DW_LANG_C99, producer: "Apple clang version 3.0 (tags/Apple/clang-211.10.1) (based on LLVM 3.0svn)", isOptimized: true, emissionKind: FullDebug, file: !32, enums: !{}, retainedTypes: !{}, imports:  null)
+!1 = distinct !DISubprogram(name: "foo", line: 11, isLocal: false, isDefinition: true, virtualIndex: 6, flags: DIFlagPrototyped, isOptimized: true, unit: !0, scopeLine: 11, file: !2, scope: !2, type: !3, variables: !31)
+!2 = !DIFile(filename: "one.c", directory: "/Volumes/Athwagate/R10048772")
+!3 = !DISubroutineType(types: !4)
+!4 = !{null}
+!5 = !DILocalVariable(name: "this", line: 11, arg: 1, scope: !1, file: !2, type: !6)
+!6 = !DIDerivedType(tag: DW_TAG_pointer_type, size: 32, align: 32, scope: !0, baseType: !7)
+!7 = !DICompositeType(tag: DW_TAG_structure_type, name: "tag_s", line: 5, size: 96, align: 32, file: !32, scope: !0, elements: !8)
+!8 = !{!9, !11, !12}
+!9 = !DIDerivedType(tag: DW_TAG_member, name: "x", line: 6, size: 32, align: 32, file: !32, scope: !7, baseType: !10)
+!10 = !DIBasicType(tag: DW_TAG_base_type, name: "int", size: 32, align: 32, encoding: DW_ATE_signed)
+!11 = !DIDerivedType(tag: DW_TAG_member, name: "y", line: 7, size: 32, align: 32, offset: 32, file: !32, scope: !7, baseType: !10)
+!12 = !DIDerivedType(tag: DW_TAG_member, name: "z", line: 8, size: 32, align: 32, offset: 64, file: !32, scope: !7, baseType: !10)
+!13 = !DILocalVariable(name: "c", line: 11, arg: 2, scope: !1, file: !2, type: !6)
+!14 = !DILocalVariable(name: "x", line: 11, arg: 3, scope: !1, file: !2, type: !15)
+!15 = !DIDerivedType(tag: DW_TAG_typedef, name: "UInt64", line: 1, file: !32, scope: !0, baseType: !16)
+!16 = !DIBasicType(tag: DW_TAG_base_type, name: "long long unsigned int", size: 64, align: 32, encoding: DW_ATE_unsigned)
+!17 = !DILocalVariable(name: "y", line: 11, arg: 4, scope: !1, file: !2, type: !15)
+!18 = !DILocalVariable(name: "ptr1", line: 11, arg: 5, scope: !1, file: !2, type: !6)
+!19 = !DILocalVariable(name: "ptr2", line: 11, arg: 6, scope: !1, file: !2, type: !6)
+!20 = !DILocation(line: 11, column: 24, scope: !1)
+!21 = !DILocation(line: 11, column: 44, scope: !1)
+!22 = !DILocation(line: 11, column: 54, scope: !1)
+!23 = !DILocation(line: 11, column: 64, scope: !1)
+!24 = !DILocation(line: 11, column: 81, scope: !1)
+!25 = !DILocation(line: 11, column: 101, scope: !1)
+!26 = !DILocation(line: 12, column: 3, scope: !27)
+!27 = distinct !DILexicalBlock(line: 11, column: 107, file: !2, scope: !1)
+!28 = !DILocation(line: 13, column: 5, scope: !27)
+!29 = !DILocation(line: 14, column: 1, scope: !27)
+!31 = !{!5, !13, !14, !17, !18, !19}
+!32 = !DIFile(filename: "one.c", directory: "/Volumes/Athwagate/R10048772")
+!33 = !{i32 1, !"Debug Info Version", i32 3}

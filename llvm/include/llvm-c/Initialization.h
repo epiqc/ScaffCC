@@ -13,10 +13,10 @@
 |*                                                                            *|
 \*===----------------------------------------------------------------------===*/
 
-#ifndef LLVM_C_INITIALIZEPASSES_H
-#define LLVM_C_INITIALIZEPASSES_H
+#ifndef LLVM_C_INITIALIZATION_H
+#define LLVM_C_INITIALIZATION_H
 
-#include "llvm-c/Core.h"
+#include "llvm-c/Types.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -34,6 +34,7 @@ extern "C" {
 void LLVMInitializeCore(LLVMPassRegistryRef R);
 void LLVMInitializeTransformUtils(LLVMPassRegistryRef R);
 void LLVMInitializeScalarOpts(LLVMPassRegistryRef R);
+void LLVMInitializeObjCARCOpts(LLVMPassRegistryRef R);
 void LLVMInitializeVectorization(LLVMPassRegistryRef R);
 void LLVMInitializeInstCombine(LLVMPassRegistryRef R);
 void LLVMInitializeIPO(LLVMPassRegistryRef R);

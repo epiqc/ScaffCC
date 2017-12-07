@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -fsyntax-only -verify %s
+// RUN: %clang_cc1 -fsyntax-only -Wno-pragma-pack -verify %s
 
 // Note that this puts the expected lines before the directives to work around
 // limitations in the -verify mode.
@@ -30,3 +30,21 @@
 
 _Pragma("pack(push)")
 /* expected-warning {{expected integer or identifier in '#pragma pack'}}*/ _Pragma("pack(push,)") 
+
+// PR13580
+struct S
+{
+  char a[3];
+#pragma pack(1)
+  struct T
+  {
+    char b;
+    int c;
+  } d;
+#pragma pack()
+  int e;
+};
+
+_Pragma("pack(push, 1)") struct PR28094 {
+  int a;
+} _Pragma("pack(pop)");

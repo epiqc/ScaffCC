@@ -1,4 +1,5 @@
 // RUN: %clang_cc1 -fsyntax-only -verify %s
+// REQUIRES: LP64
 
 struct A {};
 
@@ -83,11 +84,11 @@ void t_529_2()
   (void)(void*)((int*)0);
   (void)(volatile const void*)((const int*)0);
   (void)(A*)((B*)0);
-  (void)(A&)(*((B*)0));
+  (void)(A&)(*((B*)0)); // expected-warning {{binding dereferenced null pointer to reference has undefined behavior}}
   (void)(const B*)((C1*)0);
-  (void)(B&)(*((C1*)0));
+  (void)(B&)(*((C1*)0)); // expected-warning {{binding dereferenced null pointer to reference has undefined behavior}}
   (void)(A*)((D*)0);
-  (void)(const A&)(*((D*)0));
+  (void)(const A&)(*((D*)0)); // expected-warning {{binding dereferenced null pointer to reference has undefined behavior}}
   (void)(int B::*)((int A::*)0);
   (void)(void (B::*)())((void (A::*)())0);
   (void)(A*)((E*)0); // C-style cast ignores access control
@@ -226,6 +227,6 @@ void memptrs()
   void (structure::*psf)() = 0;
   (void)(int (structure::*)())(psf);
 
-  (void)(void (structure::*)())(psi); // expected-error {{C-style cast from 'const int structure::*' to 'void (structure::*)()' is not allowed}}
-  (void)(int structure::*)(psf); // expected-error {{C-style cast from 'void (structure::*)()' to 'int structure::*' is not allowed}}
+  (void)(void (structure::*)())(psi); // expected-error-re {{C-style cast from 'const int structure::*' to 'void (structure::*)(){{( __attribute__\(\(thiscall\)\))?}}' is not allowed}}
+  (void)(int structure::*)(psf); // expected-error-re {{C-style cast from 'void (structure::*)(){{( __attribute__\(\(thiscall\)\))?}}' to 'int structure::*' is not allowed}}
 }

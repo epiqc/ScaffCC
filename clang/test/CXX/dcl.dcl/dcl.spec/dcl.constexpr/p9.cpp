@@ -34,4 +34,4 @@ struct pixel {
   int x, y;
 };
 constexpr pixel ur = { 1294, 1024 }; // ok
-constexpr pixel origin;              // expected-error {{default initialization of an object of const type 'const pixel' requires a user-provided default constructor}}
+constexpr pixel origin;              // expected-error {{default initialization of an object of const type 'const pixel' without a user-provided default constructor}}

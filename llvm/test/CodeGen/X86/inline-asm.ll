@@ -1,4 +1,4 @@
-; RUN: llc < %s -march=x86
+; RUN: llc < %s -mtriple=i686-- -no-integrated-as
 
 define i32 @test1() nounwind {
 	; Dest is AX, dest type = i32.
@@ -41,5 +41,36 @@ entry:
 define void @test7(i1 zeroext %desired, i32* %p) nounwind {
 entry:
   %0 = tail call i8 asm sideeffect "xchg $0, $1", "=r,*m,0,~{memory},~{dirflag},~{fpsr},~{flags}"(i32* %p, i1 %desired) nounwind
+  ret void
+}
+
+; <rdar://problem/11542429>
+; The constrained GR32_ABCD register class of the 'q' constraint requires
+; special handling after the preceding outputs used up eax-edx.
+define void @constrain_abcd(i8* %h) nounwind ssp {
+entry:
+  %0 = call { i32, i32, i32, i32, i32 } asm sideeffect "", "=&r,=&r,=&r,=&r,=&q,r,~{ecx},~{memory},~{dirflag},~{fpsr},~{flags}"(i8* %h) nounwind
+  ret void
+}
+
+; Mix normal and EC defs of the same register.
+define i32 @pr14376() nounwind noinline {
+entry:
+  %asm = tail call i32 asm sideeffect "", "={ax},i,~{eax},~{flags},~{rax}"(i64 61) nounwind
+  ret i32 %asm
+}
+
+@test8_v = global i32 42
+
+define void @test8() {
+  call void asm sideeffect "${0:P}", "i"( i32* @test8_v )
+  ret void
+}
+
+define void @test9() {
+  call void asm sideeffect "${0:P}", "X"( i8* blockaddress(@test9, %bb) )
+  br label %bb
+
+bb:
   ret void
 }

@@ -1,13 +1,5 @@
-SVN=/usr/bin/svn
-
-LLVM_RELEASE="RELEASE_31/final"
-CLANG_RELEASE="RELEASE_31/final"
-
-LLVM_URL="http://llvm.org/svn/llvm-project/llvm"
-CLANG_URL="http://llvm.org/svn/llvm-project/cfe"
-
-#CLANG=../build/Debug+Asserts/bin/clang++
-CLANG=g++
+CC=clang
+CXX=clang++
 
 # LDFLAGS is modified from `llvm-config --libs`
 # -- certain libs were not found for some reason or another...
@@ -103,10 +95,10 @@ LDFLAGS=-lclangFrontend \
 		-lLLVMCore \
 		-lLLVMSupport
 
-CLANGFLAGS=`../build/Debug+Asserts/bin/llvm-config --cxxflags --ldflags`
+CLANGFLAGS=`../build/bin/llvm-config --cxxflags --ldflags`
 
-CFLAGS=-L ../build/Debug+Asserts/lib \
-		-I`../build/Debug+Asserts/bin/llvm-config --includedir` \
+CFLAGS=-L ../build/lib \
+		-I`../build/bin/llvm-config --includedir` \
 		-I ../llvm/tools/clang/include \
 		-I ../build/include \
 		-I ../build/tools/clang/include
@@ -115,38 +107,30 @@ SCAFFOLD=scaffold
 
 all: Sqct Clang
 
-Clang: llvm build
+Clang:
+	@mkdir -p build
 	@cd llvm/tools && /bin/rm -f clang && /bin/ln -s ../../clang;
 	@cd clang && /bin/rm -f build && /bin/ln -s ../build;
-	@if [ -z $(USE_GCC) ]; then \
-		cd build && ../llvm/configure --disable-debug-symbols && make ; \
-	else \
-		mkdir -p build && cd build && ../llvm/configure --disable-debug-symbols CC=gcc CXX=g++ && make ; fi
-	@if [ -z `echo ${PATH} | grep ${PWD}/Debug+Asserts/bin` ]; then \
-		export PATH=${PATH}:${PWD}/Debug+Asserts/bin; \
+	@cd build && cmake ../llvm/ -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_C_COMPILER=$(CC) -DCMAKE_CXX_COMPILER=$(CXX) && make ;
+	@if [ -z `echo ${PATH} | grep ${PWD}/bin` ]; then \
+		export PATH=${PATH}:${PWD}/bin; \
 	else true; fi
-	@if [ -z `echo ${PATH} | grep ${PWD}/Debug+Asserts/bin` ]; then \
-		export PATH=${PATH}:${PWD}/Debug+Asserts/bin; \
+	@if [ -z `echo ${PATH} | grep ${PWD}/bin` ]; then \
+		export PATH=${PATH}:${PWD}/bin; \
 	else true; fi
-
-build: llvm
-	@mkdir -p build
-
-llvm:
-	@if [ ! -e $(SVN) ]; then \
-		echo "Please install Subversion: 'sudo apt-get install subversion'"; exit 2; \
-	else true; fi
-	@$(SVN) checkout --force $(LLVM_URL)/tags/$(LLVM_RELEASE) llvm;
 
 Scaffold:
 	@cd scaffold && make;
 
 Sqct:
-	@cd Rotations/sqct && make
+ifdef DISABLE_STATIC
+	@cd Rotations/sqct && make DISABLE_STATIC=1 CC=$(CC) CXX=$(CXX)
+else
+	@cd Rotations/sqct && make CC=$(CC) CXX=$(CXX)
+endif
 
 clean:
 	@cd Rotations/sqct && make clean
-	#cd scaffold && make clean
 	@if [ -d build ]; then cd build && make clean; fi
 
 .PHONY: clean Sqct Scaffold Clang

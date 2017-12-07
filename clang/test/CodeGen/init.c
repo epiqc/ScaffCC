@@ -1,5 +1,16 @@
 // RUN: %clang_cc1 -triple i386-unknown-unknown -emit-llvm %s -o - | FileCheck %s
 
+struct I { int k[3]; };
+struct M { struct I o[2]; };
+struct M v1[1] = { [0].o[0 ... 1].k[0 ... 1] = 4, 5 };
+unsigned v2[2][3] = {[0 ... 1][0 ... 1] = 2222, 3333};
+
+// CHECK-DAG: %struct.M = type { [2 x %struct.I] }
+// CHECK-DAG: %struct.I = type { [3 x i32] }
+
+// CHECK: [1 x %struct.M] [%struct.M { [2 x %struct.I] [%struct.I { [3 x i32] [i32 4, i32 4, i32 0] }, %struct.I { [3 x i32] [i32 4, i32 4, i32 5] }] }],
+// CHECK: [2 x [3 x i32]] {{[[][[]}}3 x i32] [i32 2222, i32 2222, i32 0], [3 x i32] [i32 2222, i32 2222, i32 3333]],
+
 void f1() {
   // Scalars in braces.
   int a = { 1 };
@@ -69,6 +80,8 @@ char test8(int X) {
 // CHECK: store i8 97
 // CHECK: store i8 98
 // CHECK: store i8 99
+// CHECK-NOT: getelementptr
+// CHECK: load
 }
 
 void bar(void*);
@@ -128,5 +141,13 @@ void test13(int x) {
   struct X { int a; int b : 10; int c; };
   struct X y = {.c = x};
   // CHECK: @test13
-  // CHECK: and i32 {{.*}}, -1024
+  // CHECK: and i16 {{.*}}, -1024
+}
+
+// CHECK-LABEL: @PR20473
+void PR20473() {
+  // CHECK: memcpy{{.*}}getelementptr inbounds ([2 x i8], [2 x i8]* @
+  bar((char[2]) {""});
+  // CHECK: memcpy{{.*}}getelementptr inbounds ([3 x i8], [3 x i8]* @
+  bar((char[3]) {""});
 }

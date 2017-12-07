@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -triple x86_64-apple-darwin10 -fobjc-fragile-abi -emit-llvm -o - %s | FileCheck %s -check-prefix=CHECK
+// RUN: %clang_cc1 -triple x86_64-apple-darwin10 -fobjc-runtime=macosx-fragile-10.5 -emit-llvm -o - %s | FileCheck %s
 // RUN: %clang_cc1 -triple x86_64-apple-darwin10 -emit-llvm -o - %s | FileCheck %s -check-prefix=CHECK-NF
 
 // Most of this test is apparently just verifying that we don't crash.
@@ -150,7 +150,7 @@ typedef struct {
 void test0(A *x) {
   // CHECK:         [[X:%.*]] = alloca [[A]]*
   // CHECK-NEXT:    [[POINT:%.*]] = alloca [[POINT_T:%.*]],
-  // CHECK:         [[T0:%.*]] = load [[A]]** [[X]]
+  // CHECK:         [[T0:%.*]] = load [[A]]*, [[A]]** [[X]]
   // CHECK:         [[T1:%.*]] = bitcast [[A]]* [[T0]] to i8*
   // CHECK-NEXT:    icmp eq i8* [[T1]], null
   // CHECK-NEXT:    br i1
@@ -162,7 +162,7 @@ void test0(A *x) {
 
   // CHECK-NF:      [[X:%.*]] = alloca [[A]]*
   // CHECK-NF-NEXT: [[POINT:%.*]] = alloca [[POINT_T:%.*]],
-  // CHECK-NF:      [[T0:%.*]] = load [[A]]** [[X]]
+  // CHECK-NF:      [[T0:%.*]] = load [[A]]*, [[A]]** [[X]]
   // CHECK-NF:      [[T1:%.*]] = bitcast [[A]]* [[T0]] to i8*
   // CHECK-NF-NEXT: icmp eq i8* [[T1]], null
   // CHECK-NF-NEXT: br i1

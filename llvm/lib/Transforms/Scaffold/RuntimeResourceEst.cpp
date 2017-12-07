@@ -1,4 +1,4 @@
-//===- QBitDataPath.cpp - Generate datapaths for qubits in code -----------===//
+//===------------------- RuntimeResourceEst.cpp ---------------------------===//
 //
 //                     The LLVM Scaffold Compiler Infrastructure
 //
@@ -6,14 +6,14 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/Instruction.h"
+#include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/Module.h"
 #include "llvm/Pass.h"
-#include "llvm/Module.h"
-#include "llvm/Function.h"
-#include "llvm/BasicBlock.h"
-#include "llvm/Instruction.h"
-#include "llvm/Constants.h"
-#include "llvm/Intrinsics.h"
-#include "llvm/Support/InstVisitor.h" 
+#include "llvm/IR/InstVisitor.h"
 #include "llvm/Support/raw_ostream.h"
 
 using namespace llvm;
@@ -40,133 +40,157 @@ bool debugRTResourceEst = false;
 
 namespace {
 
-  vector<Instruction*> vInstRemove;
+vector<Instruction *> vInstRemove;
 
-  struct RTResourceEst : public ModulePass, public InstVisitor<RTResourceEst> {
-    friend class InstVisitor<RTResourceEst>;
+struct RTResourceEst : public ModulePass, public InstVisitor<RTResourceEst> {
+  friend class InstVisitor<RTResourceEst>;
 
-    static char ID;  // Pass identification, replacement for typeid
+  static char ID; // Pass identification, replacement for typeid
 
-    Function* qasmGate; //external instrumentation function
-    Function* qasmQbitDecl; //external instrumentation function    
-    Function* qasmCbitDecl; //external instrumentation function    
-    Function* qasmResSum; //external instrumentation function    
+  Function *qasmGate;     // external instrumentation function
+  Function *qasmQbitDecl; // external instrumentation function
+  Function *qasmCbitDecl; // external instrumentation function
+  Function *qasmResSum;   // external instrumentation function
 
-    RTResourceEst() : ModulePass(ID) {  }
+  RTResourceEst() : ModulePass(ID) {}
 
-    void instrumentInst(Function* F,Instruction* pInst, int intParam, bool isCall){
-      SmallVector<Value*,16> call_args;
-      Value* intArg = ConstantInt::get(Type::getInt32Ty(pInst->getContext()),intParam);	
-      call_args.push_back(intArg);
+  void instrumentInst(Function *F, Instruction *pInst, int intParam,
+                      bool isCall) {
+    SmallVector<Value *, 16> call_args;
+    Value *intArg =
+        ConstantInt::get(Type::getInt32Ty(pInst->getContext()), intParam);
+    call_args.push_back(intArg);
 
-      CallInst::Create(F, call_args,"",(Instruction*)pInst);
+    CallInst::Create(F, call_args, "", (Instruction *)pInst);
 
-      if(isCall)
-	vInstRemove.push_back(pInst);
-    }
-    
-    void visitCallInst(CallInst &I) {
-      CallInst *CI = dyn_cast<CallInst>(&I);
+    if (isCall)
+      vInstRemove.push_back(pInst);
+  }
 
-      Function* CF = CI->getCalledFunction();
+  void visitCallInst(CallInst &I) {
+    CallInst *CI = dyn_cast<CallInst>(&I);
 
-      int gateIndex = 14;
-      bool isIntrinsicQuantum = true;
+    Function *CF = CI->getCalledFunction();
 
-      bool delAfterInst = true;
+    int gateIndex = 14;
+    bool isIntrinsicQuantum = true;
 
-      if(CF->isIntrinsic()){
-	  if(CF->getIntrinsicID() == Intrinsic::CNOT) gateIndex = _CNOT;
-	  else if(CF->getIntrinsicID() == Intrinsic::Fredkin) gateIndex = _Fredkin;
-	  else if(CF->getIntrinsicID() == Intrinsic::H) gateIndex = _H;
-	  else if(CF->getIntrinsicID() == Intrinsic::MeasX) { gateIndex = _MeasX; delAfterInst = false; }
-	  else if(CF->getIntrinsicID() == Intrinsic::MeasZ) { gateIndex = _MeasZ; delAfterInst = false; }
-	  else if(CF->getIntrinsicID() == Intrinsic::PrepX) gateIndex = _PrepX;
-	  else if(CF->getIntrinsicID() == Intrinsic::PrepZ) gateIndex = _PrepZ;
-	  else if(CF->getIntrinsicID() == Intrinsic::Rz) gateIndex = _Rz;
-	  else if(CF->getIntrinsicID() == Intrinsic::S) gateIndex = _S;
-	  else if(CF->getIntrinsicID() == Intrinsic::T) gateIndex = _T;
-	  else if(CF->getIntrinsicID() == Intrinsic::Sdag) gateIndex = _Sdag;
-	  else if(CF->getIntrinsicID() == Intrinsic::Tdag) gateIndex = _Tdag;
-	  else if(CF->getIntrinsicID() == Intrinsic::Toffoli) gateIndex = _Toffoli;
-	  else if(CF->getIntrinsicID() == Intrinsic::X) gateIndex = _X;
-	  else if(CF->getIntrinsicID() == Intrinsic::Y) gateIndex = _Y;
-	  else if(CF->getIntrinsicID() == Intrinsic::Z) gateIndex = _Z;
-	  else { isIntrinsicQuantum = false; delAfterInst = false; }
+    bool delAfterInst = true;
+
+    if (CF->isIntrinsic()) {
+      if (CF->getIntrinsicID() == Intrinsic::CNOT)
+        gateIndex = _CNOT;
+      else if (CF->getIntrinsicID() == Intrinsic::Fredkin)
+        gateIndex = _Fredkin;
+      else if (CF->getIntrinsicID() == Intrinsic::H)
+        gateIndex = _H;
+      else if (CF->getIntrinsicID() == Intrinsic::MeasX) {
+        gateIndex = _MeasX;
+        delAfterInst = false;
+      } else if (CF->getIntrinsicID() == Intrinsic::MeasZ) {
+        gateIndex = _MeasZ;
+        delAfterInst = false;
+      } else if (CF->getIntrinsicID() == Intrinsic::PrepX)
+        gateIndex = _PrepX;
+      else if (CF->getIntrinsicID() == Intrinsic::PrepZ)
+        gateIndex = _PrepZ;
+      else if (CF->getIntrinsicID() == Intrinsic::Rz)
+        gateIndex = _Rz;
+      else if (CF->getIntrinsicID() == Intrinsic::S)
+        gateIndex = _S;
+      else if (CF->getIntrinsicID() == Intrinsic::T)
+        gateIndex = _T;
+      else if (CF->getIntrinsicID() == Intrinsic::Sdag)
+        gateIndex = _Sdag;
+      else if (CF->getIntrinsicID() == Intrinsic::Tdag)
+        gateIndex = _Tdag;
+      else if (CF->getIntrinsicID() == Intrinsic::Toffoli)
+        gateIndex = _Toffoli;
+      else if (CF->getIntrinsicID() == Intrinsic::X)
+        gateIndex = _X;
+      else if (CF->getIntrinsicID() == Intrinsic::Y)
+        gateIndex = _Y;
+      else if (CF->getIntrinsicID() == Intrinsic::Z)
+        gateIndex = _Z;
+      else {
+        isIntrinsicQuantum = false;
+        delAfterInst = false;
       }
-      else{
-	isIntrinsicQuantum = false;
-	delAfterInst = false;
-      }
-      
-      if(isIntrinsicQuantum)
-	instrumentInst(qasmGate,CI,gateIndex,delAfterInst);
-      
+    } else {
+      isIntrinsicQuantum = false;
+      delAfterInst = false;
     }
-    
-    void visitAllocaInst(AllocaInst &I) {
-      AllocaInst *AI = dyn_cast<AllocaInst>(&I);
-	
-      Type *allocatedType = AI->getAllocatedType();
-	
-      if(ArrayType *arrayType = dyn_cast<ArrayType>(allocatedType)) {      
-	
-	Type *elementType = arrayType->getElementType();
-	uint64_t arraySize = arrayType->getNumElements();
-	if (elementType->isIntegerTy(16)){
-	  if(debugRTResourceEst)
-	    errs() << "New QBit Allocation Found: " << AI->getName() <<"\n";
-	  
-	  //instrumentation
-	  instrumentInst(qasmQbitDecl,AI,arraySize,false);
-	  }
-	  
-	if (elementType->isIntegerTy(1)){
-	  if(debugRTResourceEst)
-	    errs() << "New CBit Allocation Found: " << AI->getName() <<"\n";
-	  
-	  //instrumentation
-	  instrumentInst(qasmCbitDecl,AI,arraySize,false);
-	}
-      }
-    } // visitAllocaInst
-    
-    void visitFunction(Function &F){
-      if(F.getName() == "main"){
-	BasicBlock* BB = &F.back();
-	TerminatorInst *BBTerm = BB->getTerminator();
-	CallInst::Create(qasmResSum, "",(Instruction*)BBTerm);	
-      }
-    }
-    
-    bool runOnModule(Module &M){
-      qasmGate = cast<Function>(M.getOrInsertFunction("qasm_gate", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), (Type*)0));
-      
-      qasmQbitDecl = cast<Function>(M.getOrInsertFunction("qasm_qbit_decl", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), (Type*)0));
-      
-      qasmCbitDecl = cast<Function>(M.getOrInsertFunction("qasm_cbit_decl", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), (Type*)0));
-      
-      qasmResSum = cast<Function>(M.getOrInsertFunction("qasm_resource_summary", Type::getVoidTy(M.getContext()), (Type*)0));
-            
-      visit(M);
 
+    if (isIntrinsicQuantum)
+      instrumentInst(qasmGate, CI, gateIndex, delAfterInst);
+  }
 
-      //errs() << "Removing instructions:\n";
-      for(vector<Instruction*>::iterator iterInst = vInstRemove.begin(); iterInst != vInstRemove.end(); ++iterInst){
-	//errs() << *(*iterInst) << "\n";
-	(*iterInst)->eraseFromParent();
-      }     
-      
-      return true;      
+  void visitAllocaInst(AllocaInst &I) {
+    AllocaInst *AI = dyn_cast<AllocaInst>(&I);
+
+    Type *allocatedType = AI->getAllocatedType();
+
+    if (ArrayType *arrayType = dyn_cast<ArrayType>(allocatedType)) {
+
+      Type *elementType = arrayType->getElementType();
+      uint64_t arraySize = arrayType->getNumElements();
+      if (elementType->isIntegerTy(16)) {
+        if (debugRTResourceEst)
+          errs() << "New QBit Allocation Found: " << AI->getName() << "\n";
+
+        // instrumentation
+        instrumentInst(qasmQbitDecl, AI, arraySize, false);
+      }
+
+      if (elementType->isIntegerTy(1)) {
+        if (debugRTResourceEst)
+          errs() << "New CBit Allocation Found: " << AI->getName() << "\n";
+
+        // instrumentation
+        instrumentInst(qasmCbitDecl, AI, arraySize, false);
+      }
     }
-    
-    void print(raw_ostream &O, const Module* = 0) const { 
-      errs() << "Ran Runtime Resource Estimator Validator \n";
-    }  
-  };
+  } // visitAllocaInst
+
+  void visitFunction(Function &F) {
+    if (F.getName() == "main") {
+      BasicBlock *BB = &F.back();
+      TerminatorInst *BBTerm = BB->getTerminator();
+      CallInst::Create(qasmResSum, "", (Instruction *)BBTerm);
+    }
+  }
+
+  bool runOnModule(Module &M) {
+    qasmGate = cast<Function>(
+        M.getOrInsertFunction("qasm_gate", Type::getVoidTy(M.getContext()),
+                              Type::getInt32Ty(M.getContext()), (Type *)0));
+
+    qasmQbitDecl = cast<Function>(
+        M.getOrInsertFunction("qasm_qbit_decl", Type::getVoidTy(M.getContext()),
+                              Type::getInt32Ty(M.getContext()), (Type *)0));
+
+    qasmCbitDecl = cast<Function>(
+        M.getOrInsertFunction("qasm_cbit_decl", Type::getVoidTy(M.getContext()),
+                              Type::getInt32Ty(M.getContext()), (Type *)0));
+
+    qasmResSum = cast<Function>(M.getOrInsertFunction(
+        "qasm_resource_summary", Type::getVoidTy(M.getContext()), (Type *)0));
+
+    visit(M);
+
+    for (vector<Instruction *>::iterator iterInst = vInstRemove.begin();
+         iterInst != vInstRemove.end(); ++iterInst)
+      (*iterInst)->eraseFromParent();
+
+    return true;
+  }
+
+  void print(raw_ostream &O, const Module * = 0) const {
+    errs() << "Ran Runtime Resource Estimator Validator \n";
+  }
+};
 }
 
 char RTResourceEst::ID = 0;
-static RegisterPass<RTResourceEst>
-X("runtime-resource-estimation", "Estimate qbits and qgates at runtime");
-  
+static RegisterPass<RTResourceEst> X("runtime-resource-estimation",
+                                     "Estimate qbits and qgates at runtime");

@@ -3,8 +3,8 @@ add_llvm_library(LLVMPowerPCDesc
   PPCMCTargetDesc.cpp
   PPCMCAsmInfo.cpp
   PPCMCCodeEmitter.cpp
+  PPCMCExpr.cpp
   PPCPredicates.cpp
+  PPCMachObjectWriter.cpp
   PPCELFObjectWriter.cpp
   )
-
-add_dependencies(LLVMPowerPCDesc PowerPCCommonTableGen)

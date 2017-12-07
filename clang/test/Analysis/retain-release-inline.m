@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -triple x86_64-apple-darwin10 -analyze -analyzer-checker=core,osx.coreFoundation.CFRetainRelease,osx.cocoa.ClassRelease,osx.cocoa.RetainCount -analyzer-store=region -fblocks -analyzer-ipa=inlining -verify %s
+// RUN: %clang_analyze_cc1 -triple x86_64-apple-darwin10 -analyzer-checker=core,osx.coreFoundation.CFRetainRelease,osx.cocoa.ClassRelease,osx.cocoa.RetainCount -fblocks -verify %s
 
 //===----------------------------------------------------------------------===//
 // The following code is reduced using delta-debugging from Mac OS X headers:
@@ -12,7 +12,7 @@
 //
 // It includes the basic definitions for the test cases below.
 //===----------------------------------------------------------------------===//
-
+#define NULL 0
 typedef unsigned int __darwin_natural_t;
 typedef unsigned long uintptr_t;
 typedef unsigned int uint32_t;
@@ -267,6 +267,10 @@ typedef NSUInteger NSStringEncoding;
 
 extern CFStringRef CFStringCreateWithCStringNoCopy(CFAllocatorRef alloc, const char *cStr, CFStringEncoding encoding, CFAllocatorRef contentsDeallocator);
 
+typedef struct {
+  int ref;
+} isl_basic_map;
+
 //===----------------------------------------------------------------------===//
 // Test cases.
 //===----------------------------------------------------------------------===//
@@ -285,6 +289,7 @@ void test() {
   foo(s);
   bar(s);
 }
+
 void test_neg() {
   NSString *s = [[NSString alloc] init]; // no-warning  
   foo(s);
@@ -292,6 +297,89 @@ void test_neg() {
   bar(s);
   bar(s);
   bar(s);
+}
+
+__attribute__((annotate("rc_ownership_returns_retained"))) isl_basic_map *isl_basic_map_cow(__attribute__((annotate("rc_ownership_consumed"))) isl_basic_map *bmap);
+void free(void *);
+
+void callee_side_parameter_checking_leak(__attribute__((annotate("rc_ownership_consumed"))) isl_basic_map *bmap) { // expected-warning {{Potential leak of an object}}
+}
+
+// As 'isl_basic_map_free' is annotated with 'rc_ownership_trusted_implementation', RetainCountChecker trusts its
+// implementation and doesn't analyze its body. If the annotation 'rc_ownership_trusted_implementation' is removed,
+// a leak warning is raised by RetainCountChecker as the analyzer is unable to detect a decrement in the reference
+// count of 'bmap' along the path in 'isl_basic_map_free' assuming the predicate of the second 'if' branch to be
+// true or assuming both the predicates in the function to be false.
+__attribute__((annotate("rc_ownership_trusted_implementation"))) isl_basic_map *isl_basic_map_free(__attribute__((annotate("rc_ownership_consumed"))) isl_basic_map *bmap) {
+  if (!bmap)
+    return NULL;
+
+  if (--bmap->ref > 0)
+    return NULL;
+
+  free(bmap);
+  return NULL;
+}
+
+// As 'isl_basic_map_copy' is annotated with 'rc_ownership_trusted_implementation', RetainCountChecker trusts its
+// implementation and doesn't analyze its body. If that annotation is removed, a 'use-after-release' warning might
+// be raised by RetainCountChecker as the pointer which is passed as an argument to this function and the pointer
+// which is returned from the function point to the same memory location.
+__attribute__((annotate("rc_ownership_trusted_implementation"))) __attribute__((annotate("rc_ownership_returns_retained"))) isl_basic_map *isl_basic_map_copy(isl_basic_map *bmap) {
+  if (!bmap)
+    return NULL;
+
+  bmap->ref++;
+  return bmap;
+}
+
+void test_use_after_release_with_trusted_implementation_annotate_attribute(__attribute__((annotate("rc_ownership_consumed"))) isl_basic_map *bmap) {
+  // After this call, 'bmap' has a +1 reference count.
+  bmap = isl_basic_map_cow(bmap);
+  // After the call to 'isl_basic_map_copy', 'bmap' has a +1 reference count.
+  isl_basic_map *temp = isl_basic_map_cow(isl_basic_map_copy(bmap));
+  // After this call, 'bmap' has a +0 reference count.
+  isl_basic_map *temp2 = isl_basic_map_cow(bmap); // no-warning
+  isl_basic_map_free(temp2);
+  isl_basic_map_free(temp);
+}
+
+void test_leak_with_trusted_implementation_annotate_attribute(__attribute__((annotate("rc_ownership_consumed"))) isl_basic_map *bmap) {
+  // After this call, 'bmap' has a +1 reference count.
+  bmap = isl_basic_map_cow(bmap); // no-warning
+  // After this call, 'bmap' has a +0 reference count.
+  isl_basic_map_free(bmap);
+}
+
+void callee_side_parameter_checking_incorrect_rc_decrement(isl_basic_map *bmap) {
+  isl_basic_map_free(bmap); // expected-warning {{Incorrect decrement of the reference count}}
+}
+
+__attribute__((annotate("rc_ownership_returns_retained"))) isl_basic_map *callee_side_parameter_checking_return_notowned_object(isl_basic_map *bmap) {
+  return bmap; // expected-warning {{Object with a +0 retain count returned to caller where a +1 (owning) retain count is expected}}
+}
+
+__attribute__((annotate("rc_ownership_returns_retained"))) isl_basic_map *callee_side_parameter_checking_assign_consumed_parameter_leak_return(__attribute__((annotate("rc_ownership_consumed"))) isl_basic_map *bmap1, __attribute__((annotate("rc_ownership_consumed"))) isl_basic_map *bmap2) { // expected-warning {{Potential leak of an object}}
+  bmap1 = bmap2;
+  isl_basic_map_free(bmap2);
+  return bmap1;
+}
+
+__attribute__((annotate("rc_ownership_returns_retained"))) isl_basic_map *callee_side_parameter_checking_assign_consumed_parameter_leak(__attribute__((annotate("rc_ownership_consumed"))) isl_basic_map *bmap1, __attribute__((annotate("rc_ownership_consumed"))) isl_basic_map *bmap2) { // expected-warning {{Potential leak of an object}}
+  bmap1 = bmap2;
+  isl_basic_map_free(bmap1);
+  return bmap2;
+}
+
+__attribute__((annotate("rc_ownership_returns_retained"))) isl_basic_map *error_path_leak(__attribute__((annotate("rc_ownership_consumed"))) isl_basic_map *bmap1, __attribute__((annotate("rc_ownership_consumed"))) isl_basic_map *bmap2) { // expected-warning {{Potential leak of an object}}
+  bmap1 = isl_basic_map_cow(bmap1);
+  if (!bmap1 || !bmap2)
+    goto error;
+
+  isl_basic_map_free(bmap2);
+  return bmap1;
+error:
+  return isl_basic_map_free(bmap1);
 }
 
 //===----------------------------------------------------------------------===//
@@ -343,5 +431,53 @@ void test_test_return_inline_2(char *bytes) {
   CFRelease(str);
 }
 
+extern CFStringRef getString(void);
+CFStringRef testCovariantReturnType(void) __attribute__((cf_returns_retained));
 
+void usetestCovariantReturnType() {
+  CFStringRef S = ((void*)0);
+  S = testCovariantReturnType();
+  if (S)
+    CFRelease(S);
+} 
 
+CFStringRef testCovariantReturnType() {
+  CFStringRef Str = ((void*)0);
+  Str = getString();
+  if (Str) {
+    CFRetain(Str);
+  }
+  return Str;
+}
+
+// Test that we reanalyze ObjC methods which have been inlined. When reanalyzing
+// them, make sure we inline very small functions.
+id returnInputParam(id x) {
+  return x;
+}
+
+@interface MyClass : NSObject
+- (id)test_reanalyze_as_top_level;
+- (void)test_inline_tiny_when_reanalyzing;
+- (void)inline_test_reanalyze_as_top_level;
+@end
+
+@implementation MyClass
+- (void)test_inline_tiny_when_reanalyzing {
+  id x = [[NSString alloc] init]; // no-warning
+  x = returnInputParam(x);
+  [x release];
+}
+
+- (id)test_reanalyze_as_top_level {
+  // This method does not follow naming conventions, so a warning will be
+  // reported when it is reanalyzed at top level.
+  return [[NSString alloc] init]; // expected-warning {{leak}}
+}
+
+- (void)inline_test_reanalyze_as_top_level {
+  id x = [self test_reanalyze_as_top_level];
+  [x release];
+  [self test_inline_tiny_when_reanalyzing];
+}
+@end

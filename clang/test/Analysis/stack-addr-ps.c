@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -analyze -analyzer-checker=core -analyzer-store=region -fblocks -verify %s
+// RUN: %clang_analyze_cc1 -analyzer-checker=core -analyzer-store=region -fblocks -verify %s
 
 int* f1() {
   int x = 0;
@@ -90,3 +90,10 @@ RDar10348049 test_rdar10348049(void) {
   return b; // no-warning
 }
 
+void testRegister(register const char *reg) {
+    if (reg) (void)reg[0];
+}
+void callTestRegister() {
+    char buf[20];
+    testRegister(buf); // no-warning
+}

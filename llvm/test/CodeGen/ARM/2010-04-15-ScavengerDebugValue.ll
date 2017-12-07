@@ -5,22 +5,27 @@ target triple = "armv4t-apple-darwin10"
 
 define hidden i32 @__addvsi3(i32 %a, i32 %b) nounwind {
 entry:
-  tail call void @llvm.dbg.value(metadata !{i32 %b}, i64 0, metadata !0)
+  tail call void @llvm.dbg.value(metadata i32 %b, metadata !0, metadata !DIExpression()), !dbg !DILocation(scope: !1)
   %0 = add nsw i32 %b, %a, !dbg !9                ; <i32> [#uses=1]
   ret i32 %0, !dbg !11
 }
 
-declare void @llvm.dbg.value(metadata, i64, metadata) nounwind readnone
+declare void @llvm.dbg.value(metadata, metadata, metadata) nounwind readnone
 
-!0 = metadata !{i32 524545, metadata !1, metadata !"b", metadata !2, i32 93, metadata !6} ; [ DW_TAG_arg_variable ]
-!1 = metadata !{i32 524334, i32 0, metadata !2, metadata !"__addvsi3", metadata !"__addvsi3", metadata !"__addvsi3", metadata !2, i32 94, metadata !4, i1 false, i1 true, i32 0, i32 0, null, i1 false} ; [ DW_TAG_subprogram ]
-!2 = metadata !{i32 524329, metadata !"libgcc2.c", metadata !"/Users/bwilson/local/nightly/test-2010-04-14/build/llvmgcc.roots/llvmgcc~obj/src/gcc", metadata !3} ; [ DW_TAG_file_type ]
-!3 = metadata !{i32 524305, i32 0, i32 1, metadata !"libgcc2.c", metadata !"/Users/bwilson/local/nightly/test-2010-04-14/build/llvmgcc.roots/llvmgcc~obj/src/gcc", metadata !"4.2.1 (Based on Apple Inc. build 5658) (LLVM build 00)", i1 true, i1 true, metadata !"", i32 0} ; [ DW_TAG_compile_unit ]
-!4 = metadata !{i32 524309, metadata !2, metadata !"", metadata !2, i32 0, i64 0, i64 0, i64 0, i32 0, null, metadata !5, i32 0, null} ; [ DW_TAG_subroutine_type ]
-!5 = metadata !{metadata !6, metadata !6, metadata !6}
-!6 = metadata !{i32 524310, metadata !2, metadata !"SItype", metadata !7, i32 152, i64 0, i64 0, i64 0, i32 0, metadata !8} ; [ DW_TAG_typedef ]
-!7 = metadata !{i32 524329, metadata !"libgcc2.h", metadata !"/Users/bwilson/local/nightly/test-2010-04-14/build/llvmgcc.roots/llvmgcc~obj/src/gcc", metadata !3} ; [ DW_TAG_file_type ]
-!8 = metadata !{i32 524324, metadata !2, metadata !"int", metadata !2, i32 0, i64 32, i64 32, i64 0, i32 0, i32 5} ; [ DW_TAG_base_type ]
-!9 = metadata !{i32 95, i32 0, metadata !10, null}
-!10 = metadata !{i32 524299, metadata !1, i32 94, i32 0} ; [ DW_TAG_lexical_block ]
-!11 = metadata !{i32 100, i32 0, metadata !10, null}
+!llvm.dbg.cu = !{!3}
+!llvm.module.flags = !{!15}
+!0 = !DILocalVariable(name: "b", line: 93, arg: 2, scope: !1, file: !2, type: !6)
+!1 = distinct !DISubprogram(name: "__addvsi3", linkageName: "__addvsi3", line: 94, isLocal: false, isDefinition: true, virtualIndex: 6, isOptimized: false, unit: !3, file: !12, scope: null, type: !4)
+!2 = !DIFile(filename: "libgcc2.c", directory: "/Users/bwilson/local/nightly/test-2010-04-14/build/llvmgcc.roots/llvmgcc~obj/src/gcc")
+!12 = !DIFile(filename: "libgcc2.c", directory: "/Users/bwilson/local/nightly/test-2010-04-14/build/llvmgcc.roots/llvmgcc~obj/src/gcc")
+!3 = distinct !DICompileUnit(language: DW_LANG_C89, producer: "4.2.1 (Based on Apple Inc. build 5658) (LLVM build 00)", isOptimized: true, emissionKind: FullDebug, file: !12, enums: !13, retainedTypes: !13)
+!4 = !DISubroutineType(types: !5)
+!5 = !{!6, !6, !6}
+!6 = !DIDerivedType(tag: DW_TAG_typedef, name: "SItype", line: 152, file: !12, baseType: !8)
+!7 = !DIFile(filename: "libgcc2.h", directory: "/Users/bwilson/local/nightly/test-2010-04-14/build/llvmgcc.roots/llvmgcc~obj/src/gcc")
+!8 = !DIBasicType(tag: DW_TAG_base_type, name: "int", size: 32, align: 32, encoding: DW_ATE_signed)
+!9 = !DILocation(line: 95, scope: !10)
+!10 = distinct !DILexicalBlock(line: 94, column: 0, file: !12, scope: !1)
+!11 = !DILocation(line: 100, scope: !10)
+!13 = !{}
+!15 = !{i32 1, !"Debug Info Version", i32 3}

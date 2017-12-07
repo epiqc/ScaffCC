@@ -1,8 +1,8 @@
-; RUN: llc < %s -march=x86 | FileCheck %s
+; RUN: llc < %s -mtriple=i686-- | FileCheck %s
 
 define i32* @t() nounwind optsize ssp {
 entry:
-; CHECK: t:
+; CHECK-LABEL: t:
 ; CHECK: testl %eax, %eax
 ; CHECK: js
   %cmp = icmp slt i32 undef, 0                    ; <i1> [#uses=1]

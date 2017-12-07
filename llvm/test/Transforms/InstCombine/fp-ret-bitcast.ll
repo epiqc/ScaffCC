@@ -1,5 +1,5 @@
 ; RUN: opt < %s -instcombine -S | \
-; RUN:    grep {call float bitcast} | count 1
+; RUN:    grep "call float bitcast" | count 1
 target datalayout = "E-p:64:64:64-a0:0:8-f32:32:32-f64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:32:64-v64:64:64-v128:128:128"
 	%struct.NSObject = type { %struct.objc_class* }
  	%struct.NSArray = type { %struct.NSObject }
@@ -13,11 +13,11 @@ define void @bork() nounwind  {
 entry:
 	%color = alloca %struct.NSArray*
 	%color.466 = alloca %struct.NSObject*
-	%tmp103 = load %struct.NSArray** %color, align 4
-	%tmp103104 = getelementptr %struct.NSArray* %tmp103, i32 0, i32 0
+	%tmp103 = load %struct.NSArray*, %struct.NSArray** %color, align 4
+	%tmp103104 = getelementptr %struct.NSArray, %struct.NSArray* %tmp103, i32 0, i32 0
 	store %struct.NSObject* %tmp103104, %struct.NSObject** %color.466, align 4
-	%tmp105 = load %struct.objc_selector** @"\01L_OBJC_SELECTOR_REFERENCES_81", align 4
-	%tmp106 = load %struct.NSObject** %color.466, align 4
+	%tmp105 = load %struct.objc_selector*, %struct.objc_selector** @"\01L_OBJC_SELECTOR_REFERENCES_81", align 4
+	%tmp106 = load %struct.NSObject*, %struct.NSObject** %color.466, align 4
 	%tmp107 = call float bitcast (void (%struct.NSObject*, ...)* @objc_msgSend_fpret to float (%struct.NSObject*, %struct.objc_selector*)*)( %struct.NSObject* %tmp106, %struct.objc_selector* %tmp105 ) nounwind
 	br label %exit
 

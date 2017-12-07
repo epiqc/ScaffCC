@@ -12,18 +12,20 @@
 //===----------------------------------------------------------------------===//
 
 #include "clang/Analysis/DomainSpecific/CocoaConventions.h"
-#include "clang/AST/Type.h"
 #include "clang/AST/Decl.h"
 #include "clang/AST/DeclObjC.h"
+#include "clang/AST/Type.h"
+#include "clang/Basic/CharInfo.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/ErrorHandling.h"
+
 using namespace clang;
 using namespace ento;
 
 bool cocoa::isRefType(QualType RetTy, StringRef Prefix,
                       StringRef Name) {
   // Recursively walk the typedef stack, allowing typedefs of reference types.
-  while (const TypedefType *TD = dyn_cast<TypedefType>(RetTy.getTypePtr())) {
+  while (const TypedefType *TD = RetTy->getAs<TypedefType>()) {
     StringRef TDName = TD->getDecl()->getIdentifier()->getName();
     if (TDName.startswith(Prefix) && TDName.endswith("Ref"))
       return true;
@@ -45,12 +47,19 @@ bool cocoa::isRefType(QualType RetTy, StringRef Prefix,
   return Name.startswith(Prefix);
 }
 
+/// Returns true when the passed-in type is a CF-style reference-counted
+/// type from the DiskArbitration framework.
+static bool isDiskArbitrationAPIRefType(QualType T) {
+  return cocoa::isRefType(T, "DADisk") ||
+      cocoa::isRefType(T, "DADissenter") ||
+      cocoa::isRefType(T, "DASessionRef");
+}
+
 bool coreFoundation::isCFObjectRef(QualType T) {
   return cocoa::isRefType(T, "CF") || // Core Foundation.
          cocoa::isRefType(T, "CG") || // Core Graphics.
-         cocoa::isRefType(T, "DADisk") || // Disk Arbitration API.
-         cocoa::isRefType(T, "DADissenter") ||
-         cocoa::isRefType(T, "DASessionRef");
+         cocoa::isRefType(T, "CM") || // Core Media.
+         isDiskArbitrationAPIRefType(T);
 }
 
 
@@ -104,7 +113,7 @@ bool coreFoundation::followsCreateRule(const FunctionDecl *fn) {
       char ch = *it;
       if (ch == 'C' || ch == 'c') {
         // Make sure this isn't something like 'recreate' or 'Scopy'.
-        if (ch == 'c' && it != start && isalpha(*(it - 1)))
+        if (ch == 'c' && it != start && isLetter(*(it - 1)))
           continue;
 
         ++it;
@@ -129,7 +138,7 @@ bool coreFoundation::followsCreateRule(const FunctionDecl *fn) {
       continue;
     }
     
-    if (it == endI || !islower(*it))
+    if (it == endI || !isLowercase(*it))
       return true;
   
     // If we matched a lowercase character, it isn't the end of the

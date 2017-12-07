@@ -49,9 +49,9 @@ template class vector<int*>;
 struct Z4 {
   template<typename T> T getAs();
 };
-
+template<typename T, T> struct value { };
 void template_exprs() {
-  f<Unsigned, OneDimension, array>(array<Unsigned, OneDimension>());
+  f<Unsigned, OneDimension, value>(value<Unsigned, OneDimension>());
   Z4().getAs<Unsigned>();
 }
 
@@ -100,6 +100,19 @@ template class Pair<int, int>;
 template<typename T, typename U>
 struct SuperPair : Pair<int, int>, Pair<T, U> { };
 
+enum FxnTmplEnum {
+  FxnTmplEnum_A, FxnTmplEnum_B, FxnTmplEnum_C,
+};
+template <typename T, int I, FxnTmplEnum, int E>
+void foo(T Value) {}
+
+static const int FxnTmpl_Var = 7;
+template <>
+void foo<float, 9, FxnTmplEnum_B, FxnTmpl_Var + 7>(float Value);
+
+template <class T>
+using alias = T;
+
 // RUN: c-index-test -test-load-source all -fno-delayed-template-parsing %s | FileCheck -check-prefix=CHECK-LOAD %s
 // CHECK-LOAD: index-templates.cpp:4:6: FunctionTemplate=f:4:6 Extent=[3:1 - 4:22]
 // CHECK-LOAD: index-templates.cpp:3:19: TemplateTypeParameter=T:3:19 (Definition) Extent=[3:10 - 3:20]
@@ -143,7 +156,7 @@ struct SuperPair : Pair<int, int>, Pair<T, U> { };
 // CHECK-LOAD: index-templates.cpp:40:8: ClassTemplate=storage:40:8 (Definition) Extent=[39:1 - 40:19]
 // CHECK-LOAD: index-templates.cpp:39:45: TemplateTemplateParameter=DataStructure:39:45 (Definition) Extent=[39:10 - 39:66]
 // CHECK-LOAD: index-templates.cpp:39:19: TemplateTypeParameter=:39:19 (Definition) Extent=[39:19 - 39:27]
-// CHECK-LOAD: index-templates.cpp:39:37: NonTypeTemplateParameter=:39:37 (Definition) Extent=[39:29 - 39:38]
+// CHECK-LOAD: index-templates.cpp:39:37: NonTypeTemplateParameter=:39:37 (Definition) Extent=[39:29 - 39:37]
 // CHECK-LOAD: index-templates.cpp:39:61: TemplateRef=array:37:8 Extent=[39:61 - 39:66]
 // CHECK-LOAD: index-templates.cpp:42:18: TypedefDecl=Unsigned:42:18 (Definition) Extent=[42:1 - 42:26]
 // CHECK-LOAD: index-templates.cpp:45:8: ClassTemplate=value_c:45:8 Extent=[44:1 - 45:15]
@@ -160,7 +173,7 @@ struct SuperPair : Pair<int, int>, Pair<T, U> { };
 // CHECK-LOAD: index-templates.cpp:54:3: DeclRefExpr=f:4:6 RefName=[54:3 - 54:4] RefName=[54:4 - 54:35] Extent=[54:3 - 54:35]
 // CHECK-LOAD: index-templates.cpp:54:5: TypeRef=Unsigned:42:18 Extent=[54:5 - 54:13]
 // CHECK-LOAD: index-templates.cpp:54:15: DeclRefExpr=OneDimension:35:16 Extent=[54:15 - 54:27]
-// CHECK-LOAD: index-templates.cpp:54:29: TemplateRef=array:37:8 Extent=[54:29 - 54:34]
+// CHECK-LOAD: index-templates.cpp:54:29: TemplateRef=value:52:32 Extent=[54:29 - 54:34]
 // CHECK-LOAD: index-templates.cpp:55:8: MemberRefExpr=getAs:50:26 SingleRefName=[55:8 - 55:13] RefName=[55:8 - 55:13] Extent=[55:3 - 55:23]
 // CHECK-LOAD: index-templates.cpp:55:3: CallExpr=Z4:49:8 Extent=[55:3 - 55:7]
 // CHECK-LOAD: index-templates.cpp:55:14: TypeRef=Unsigned:42:18 Extent=[55:14 - 55:22]
@@ -178,30 +191,34 @@ struct SuperPair : Pair<int, int>, Pair<T, U> { };
 // CHECK-LOAD: index-templates.cpp:100:31: TemplateTypeParameter=U:100:31 (Definition) Extent=[100:22 - 100:32]
 // CHECK-LOAD: index-templates.cpp:101:20: C++ base class specifier=Pair<int, int>:98:16 [access=public isVirtual=false] Extent=[101:20 - 101:34]
 // CHECK-LOAD: index-templates.cpp:101:36: C++ base class specifier=Pair<T, U>:76:8 [access=public isVirtual=false] Extent=[101:36 - 101:46]
-
+// CHECK-LOAD: index-templates.cpp:111:6: FunctionDecl=foo:111:6 [Specialization of foo:107:6] [Template arg 0: kind: 1, type: float] [Template arg 1: kind: 4, intval: 9] [Template arg 2: kind: 4, intval: 1] [Template arg 3: kind: 4, intval: 14] Extent=[110:1 - 111:64]
+// CHECK-LOAD: index-templates.cpp:114:1: TypeAliasTemplateDecl=alias:114:1 (Definition) Extent=[113:1 - 114:16]
+// CHECK-LOAD: index-templates.cpp:113:17: TemplateTypeParameter=T:113:17 (Definition) Extent=[113:11 - 113:18] [access=public]
+// CHECK-LOAD: index-templates.cpp:114:7: TypeAliasDecl=alias:114:7 (Definition) Extent=[114:1 - 114:16]
+// CHECK-LOAD: index-templates.cpp:114:15: TypeRef=T:113:17 Extent=[114:15 - 114:16]
 
 // RUN: c-index-test -test-load-source-usrs all -fno-delayed-template-parsing %s | FileCheck -check-prefix=CHECK-USRS %s
-// CHECK-USRS: index-templates.cpp c:@FT@>3#T#Nt0.0#t>2#T#Nt1.0f#>t0.22S0_# Extent=[3:1 - 4:22]
+// CHECK-USRS: index-templates.cpp c:@FT@>3#T#Nt0.0#t>2#T#Nt1.0f#>t0.22S0_#v# Extent=[3:1 - 4:22]
 // CHECK-USRS: index-templates.cpp c:index-templates.cpp@70 Extent=[3:10 - 3:20]
 // CHECK-USRS: index-templates.cpp c:index-templates.cpp@82 Extent=[3:22 - 3:29]
 // CHECK-USRS: index-templates.cpp c:index-templates.cpp@91 Extent=[3:31 - 3:67]
-// CHECK-USRS: index-templates.cpp c:index-templates.cpp@136@FT@>3#T#Nt0.0#t>2#T#Nt1.0f#>t0.22S0_#@x Extent=[4:8 - 4:21]
-// CHECK-USRS: index-templates.cpp c:@CT>1#T@allocator Extent=[6:1 - 6:37]
+// CHECK-USRS: index-templates.cpp c:index-templates.cpp@136@FT@>3#T#Nt0.0#t>2#T#Nt1.0f#>t0.22S0_#v#@x Extent=[4:8 - 4:21]
+// CHECK-USRS: index-templates.cpp c:@ST>1#T@allocator Extent=[6:1 - 6:37]
 // CHECK-USRS: index-templates.cpp c:index-templates.cpp@162 Extent=[6:10 - 6:20]
-// CHECK-USRS: index-templates.cpp c:@CT>2#T#T@vector Extent=[8:1 - 11:2]
+// CHECK-USRS: index-templates.cpp c:@ST>2#T#T@vector Extent=[8:1 - 11:2]
 // CHECK-USRS: index-templates.cpp c:index-templates.cpp@201 Extent=[8:10 - 8:20]
 // CHECK-USRS: index-templates.cpp c:index-templates.cpp@213 Extent=[8:22 - 8:51]
-// CHECK-USRS: index-templates.cpp c:@CT>2#T#T@vector@F@clear# Extent=[10:3 - 10:15]
-// CHECK-USRS: index-templates.cpp c:@CP>1#T@vector>#*t0.0#>@CT>1#T@allocator1S0_ Extent=[13:1 - 14:21]
+// CHECK-USRS: index-templates.cpp c:@ST>2#T#T@vector@F@clear# Extent=[10:3 - 10:15]
+// CHECK-USRS: index-templates.cpp c:@SP>1#T@vector>#*t0.0#>@ST>1#T@allocator1S0_ Extent=[13:1 - 14:21]
 // CHECK-USRS: index-templates.cpp c:index-templates.cpp@289 Extent=[13:10 - 13:20]
 // CHECK-USRS: index-templates.cpp c:@S@Z1 Extent=[16:1 - 16:14]
-// CHECK-USRS: index-templates.cpp c:@C@vector>#$@S@Z1#$@C@allocator>#S0_ Extent=[18:1 - 18:26]
+// CHECK-USRS: index-templates.cpp c:@S@vector>#$@S@Z1#$@S@allocator>#S0_ Extent=[18:1 - 18:26]
 // CHECK-USRS: index-templates.cpp c:@S@Z2 Extent=[20:1 - 20:14]
-// CHECK-USRS: index-templates.cpp c:@C@vector>#$@S@Z2#$@C@allocator>#S0_ Extent=[22:1 - 25:2]
-// CHECK-USRS: index-templates.cpp c:@C@vector>#$@S@Z2#$@C@allocator>#S0_@F@clear# Extent=[24:3 - 24:15]
+// CHECK-USRS: index-templates.cpp c:@S@vector>#$@S@Z2#$@S@allocator>#S0_ Extent=[22:1 - 25:2]
+// CHECK-USRS: index-templates.cpp c:@S@vector>#$@S@Z2#$@S@allocator>#S0_@F@clear# Extent=[24:3 - 24:15]
 // CHECK-USRS: index-templates.cpp c:@ST>2#T#T@Y Extent=[27:1 - 31:2]
 // CHECK-USRS: index-templates.cpp c:index-templates.cpp@443 Extent=[27:10 - 27:20]
 // CHECK-USRS: index-templates.cpp c:index-templates.cpp@455 Extent=[27:22 - 27:32]
-// CHECK-USRS-NOT: type
+// CHECK-USRS: index-templates.cpp c:index-templates.cpp@ST>2#T#T@Y@UUT@T::type Extent=[29:3 - 29:25]
 // CHECK-USRS: index-templates.cpp c:@S@Z3 Extent=[33:1 - 33:14]
-// CHECK-USRS: index-templates.cpp c:@F@f#$@S@map>#$@S@Z4#$@S@Pair>#I#S1_#$@S@compare>#$@S@Pair>#S1_#S2_#$@C@allocator>#S4_#
+// CHECK-USRS: index-templates.cpp c:@F@f#$@S@map>#$@S@Z4#$@S@Pair>#I#S1_#$@S@compare>#$@S@Pair>#S1_#S2_#$@S@allocator>#S4_#

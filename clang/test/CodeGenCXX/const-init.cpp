@@ -1,4 +1,6 @@
-// RUN: %clang_cc1 -verify -triple x86_64-apple-darwin -emit-llvm -o - %s | FileCheck %s
+// RUN: %clang_cc1 -triple x86_64-apple-darwin -emit-llvm -o - %s | FileCheck %s
+// RUN: %clang_cc1 -triple x86_64-apple-darwin -emit-llvm -std=c++98 -o - %s | FileCheck %s
+// RUN: %clang_cc1 -triple x86_64-apple-darwin -emit-llvm -std=c++11 -o - %s | FileCheck %s
 
 // CHECK: @a = global i32 10
 int a = 10;
@@ -27,8 +29,13 @@ C g0 = { C::e1 };
 
 namespace test2 {
   struct A {
+#if __cplusplus <= 199711L
     static const double d = 1.0;
     static const float f = d / 2;
+#else
+    static constexpr double d = 1.0;
+    static constexpr float f = d / 2;
+#endif
     static int g();
   } a;
 
@@ -74,5 +81,12 @@ void FoldableAddrLabelDiff() { static long x = (long)&&a-(long)&&b; a:b:return;}
 int &i = reinterpret_cast<int&>(PR9558);
 
 int arr[2];
-// CHECK: @pastEnd = constant i32* bitcast (i8* getelementptr (i8* bitcast ([2 x i32]* @arr to i8*), i64 8) to i32*)
+// CHECK: @pastEnd = constant i32* bitcast (i8* getelementptr (i8, i8* bitcast ([2 x i32]* @arr to i8*), i64 8) to i32*)
 int &pastEnd = arr[2];
+
+struct X {
+  long n : 8;
+};
+long k;
+X x = {(long)&k};
+// CHECK: store i8 ptrtoint (i64* @k to i8), i8* getelementptr inbounds (%struct.X, %struct.X* @x, i32 0, i32 0)

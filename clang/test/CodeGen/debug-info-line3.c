@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -g -S -emit-llvm %s -o - | FileCheck %s
+// RUN: %clang_cc1 -debug-info-kind=limited -S -emit-llvm %s -o - | FileCheck %s
 
 void func(char c, char* d)
 {
@@ -12,5 +12,5 @@ void func(char c, char* d)
   
 }
 
-// CHECK: ret void, !dbg !19
-// CHECK: !19 = metadata !{i32 6,
+// CHECK: ret void, !dbg [[LINE:.*]]
+// CHECK: [[LINE]] = !DILocation(line: 6,

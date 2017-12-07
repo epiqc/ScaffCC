@@ -5,7 +5,7 @@
 
 define void @func() nounwind {
 entry:
-  %tmp = load i32* undef, align 4
+  %tmp = load i32, i32* undef, align 4
   br label %bb1
 
 bb1:
@@ -17,7 +17,7 @@ bb1:
 
 bb2:
   %tmp120 = add i32 %tmp119, 0
-  %scevgep810.i = getelementptr %struct.foo* null, i32 %tmp120, i32 1
+  %scevgep810.i = getelementptr %struct.foo, %struct.foo* null, i32 %tmp120, i32 1
   store i32 undef, i32* %scevgep810.i, align 4
   br i1 undef, label %bb2, label %bb3
 
@@ -69,3 +69,26 @@ bb:
   store <4 x float> %tmp154, <4 x float>* undef, align 16
   ret void
 }
+
+; <rdar://problem/12721258>
+%A = type { %B }
+%B = type { i32 }
+
+define void @_Z3Foov() ssp personality i8* bitcast (i32 (...)* @__gxx_personality_sj0 to i8*) {
+entry:
+  br i1 true, label %exit, label %false
+
+false:
+  invoke void undef(%A* undef)
+          to label %exit unwind label %lpad
+
+lpad:
+  %0 = landingpad { i8*, i32 }
+          catch i8* null
+  unreachable
+
+exit:
+  ret void
+}
+
+declare i32 @__gxx_personality_sj0(...)

@@ -1,8 +1,8 @@
-; RUN: llc < %s -march=x86 | FileCheck %s
+; RUN: llc < %s -mtriple=i686-- | FileCheck %s
 ; PR3018
 
 define i32 @test(i32 %A) nounwind {
-; CHECK: test:
+; CHECK-LABEL: test:
 ; CHECK-NOT: ret
 ; CHECK: orl $1
 ; CHECK: ret

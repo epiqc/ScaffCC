@@ -1,16 +1,15 @@
-// RUN: %clang_cc1 -arcmt-check -verify -triple x86_64-apple-darwin10 -fsyntax-only -fblocks -Warc-abi  %s
-// DISABLE: mingw32
+// RUN: %clang_cc1 -arcmt-check -verify -triple x86_64-apple-darwin10 -fsyntax-only -fblocks %s
 
 // Classes that have an Objective-C object pointer.
-struct HasObjectMember0 { // expected-warning{{'HasObjectMember0' cannot be shared between ARC and non-ARC code; add a copy constructor, a copy assignment operator, and a destructor to make it ABI-compatible}}
+struct HasObjectMember0 {
   id x;
 };
 
-struct HasObjectMember1 { // expected-warning{{'HasObjectMember1' cannot be shared between ARC and non-ARC code; add a copy constructor, a copy assignment operator, and a destructor to make it ABI-compatible}}
+struct HasObjectMember1 {
   id x[3];
 };
 
-struct HasObjectMember2 { // expected-warning{{'HasObjectMember2' cannot be shared between ARC and non-ARC code; add a copy constructor, a copy assignment operator, and a destructor to make it ABI-compatible}}
+struct HasObjectMember2 {
   id x[3][2];
 };
 
@@ -27,11 +26,11 @@ struct HasObjectMember3 {
   __unsafe_unretained id x[3][2];
 };
 
-struct HasBlockPointerMember0 { // expected-warning{{'HasBlockPointerMember0' cannot be shared between ARC and non-ARC code; add a copy constructor, a copy assignment operator, and a destructor to make it ABI-compatible}}
+struct HasBlockPointerMember0 {
   int (^bp)(int);
 };
 
-struct HasBlockPointerMember1 { // expected-warning{{'HasBlockPointerMember1' cannot be shared between ARC and non-ARC code; add a copy constructor, a copy assignment operator, and a destructor to make it ABI-compatible}}
+struct HasBlockPointerMember1 {
   int (^bp[2][3])(int);
 };
 
@@ -39,20 +38,17 @@ struct NonPOD {
   NonPOD(const NonPOD&);
 };
 
-struct HasObjectMemberAndNonPOD0 { // expected-warning{{'HasObjectMemberAndNonPOD0' cannot be shared between ARC and non-ARC code; add a non-trivial copy assignment operator to make it ABI-compatible}} \
-  // expected-warning{{'HasObjectMemberAndNonPOD0' cannot be shared between ARC and non-ARC code; add a non-trivial destructor to make it ABI-compatible}}
+struct HasObjectMemberAndNonPOD0 {
   id x;
   NonPOD np;
 };
 
-struct HasObjectMemberAndNonPOD1 { // expected-warning{{'HasObjectMemberAndNonPOD1' cannot be shared between ARC and non-ARC code; add a non-trivial copy assignment operator to make it ABI-compatible}} \
-  // expected-warning{{'HasObjectMemberAndNonPOD1' cannot be shared between ARC and non-ARC code; add a non-trivial destructor to make it ABI-compatible}}
+struct HasObjectMemberAndNonPOD1 {
   NonPOD np;
   id x[3];
 };
 
-struct HasObjectMemberAndNonPOD2 { // expected-warning{{'HasObjectMemberAndNonPOD2' cannot be shared between ARC and non-ARC code; add a non-trivial copy assignment operator to make it ABI-compatible}} \
-  // expected-warning{{'HasObjectMemberAndNonPOD2' cannot be shared between ARC and non-ARC code; add a non-trivial destructor to make it ABI-compatible}}
+struct HasObjectMemberAndNonPOD2 {
   NonPOD np;
   id x[3][2];
 };
@@ -64,14 +60,12 @@ struct HasObjectMemberAndNonPOD3 {
   id x[3][2];
 };
 
-struct HasBlockPointerMemberAndNonPOD0 { // expected-warning{{'HasBlockPointerMemberAndNonPOD0' cannot be shared between ARC and non-ARC code; add a non-trivial copy assignment operator to make it ABI-compatible}} \
-// expected-warning{{'HasBlockPointerMemberAndNonPOD0' cannot be shared between ARC and non-ARC code; add a non-trivial destructor to make it ABI-compatible}}
+struct HasBlockPointerMemberAndNonPOD0 {
   NonPOD np;
   int (^bp)(int);
 };
 
-struct HasBlockPointerMemberAndNonPOD1 { // expected-warning{{'HasBlockPointerMemberAndNonPOD1' cannot be shared between ARC and non-ARC code; add a non-trivial copy assignment operator to make it ABI-compatible}} \
-// expected-warning{{'HasBlockPointerMemberAndNonPOD1' cannot be shared between ARC and non-ARC code; add a non-trivial destructor to make it ABI-compatible}}
+struct HasBlockPointerMemberAndNonPOD1 {
   NonPOD np;
   int (^bp[2][3])(int);
 };
@@ -86,7 +80,7 @@ int check_non_pod_block1[__is_pod(int (^ __unsafe_unretained)(int))? 1 : -1];
 
 struct FlexibleArrayMember0 {
   int length;
-  id array[]; // expected-error{{flexible array member 'array' of non-POD element type 'id __strong[]'}}
+  id array[]; // expected-error{{flexible array member 'array' of type 'id __strong[]' with non-trivial destruction}}
 };
 
 struct FlexibleArrayMember1 {

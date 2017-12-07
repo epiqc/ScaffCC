@@ -2,7 +2,7 @@
 
 // C++ rules for ?: are a lot stricter than C rules, and have to take into
 // account more conversion options.
-// This test runs in C++0x mode for the contextual conversion of the condition.
+// This test runs in C++11 mode for the contextual conversion of the condition.
 
 struct ToBool { explicit operator bool(); };
 
@@ -57,6 +57,16 @@ struct Ambig {
   operator signed char(); // expected-note 2 {{candidate function}}
 };
 
+struct Abstract {
+  virtual ~Abstract() = 0; // expected-note {{unimplemented pure virtual method '~Abstract' in 'Abstract'}}
+};
+
+struct Derived1: Abstract {
+};
+
+struct Derived2: Abstract {
+};
+
 void test()
 {
   // This function tests C++0x 5.16
@@ -65,16 +75,27 @@ void test()
   int i1 = ToBool() ? 0 : 1;
 
   // p2 (one or both void, and throwing)
+  Fields flds;
   i1 ? throw 0 : throw 1;
   i1 ? test() : throw 1;
   i1 ? throw 0 : test();
   i1 ? test() : test();
   i1 = i1 ? throw 0 : 0;
   i1 = i1 ? 0 : throw 0;
+  i1 = i1 ? (throw 0) : 0;
+  i1 = i1 ? 0 : (throw 0);
   i1 ? 0 : test(); // expected-error {{right operand to ? is void, but left operand is of type 'int'}}
   i1 ? test() : 0; // expected-error {{left operand to ? is void, but right operand is of type 'int'}}
-  (i1 ? throw 0 : i1) = 0; // expected-error {{expression is not assignable}}
-  (i1 ? i1 : throw 0) = 0; // expected-error {{expression is not assignable}}
+  (i1 ? throw 0 : i1) = 0;
+  (i1 ? i1 : throw 0) = 0;
+  (i1 ? (throw 0) : i1) = 0;
+  (i1 ? i1 : (throw 0)) = 0;
+  (i1 ? (void)(throw 0) : i1) = 0; // expected-error {{left operand to ? is void, but right operand is of type 'int'}}
+  (i1 ? i1 : (void)(throw 0)) = 0; // expected-error {{right operand to ? is void, but left operand is of type 'int'}}
+  int &throwRef1 = (i1 ? flds.i1 : throw 0);
+  int &throwRef2 = (i1 ? throw 0 : flds.i1);
+  int &throwRef3 = (i1 ? flds.b1 : throw 0); // expected-error {{non-const reference cannot bind to bit-field}}
+  int &throwRef4 = (i1 ? throw 0 : flds.b1); // expected-error {{non-const reference cannot bind to bit-field}}
 
   // p3 (one or both class type, convert to each other)
   // b1 (lvalues)
@@ -136,10 +157,9 @@ void test()
   (void)(i1 ? 1 : Ambig()); // expected-error {{conversion from 'Ambig' to 'int' is ambiguous}}
   (void)(i1 ? Ambig() : 1); // expected-error {{conversion from 'Ambig' to 'int' is ambiguous}}
   // By the way, this isn't an lvalue:
-  &(i1 ? i1 : i2); // expected-error {{address expression must be an lvalue or a function designator}}
+  &(i1 ? i1 : i2); // expected-error {{cannot take the address of an rvalue}}
 
   // p4 (lvalue, same type)
-  Fields flds;
   int &ir1 = i1 ? flds.i1 : flds.i2;
   (i1 ? flds.b1 : flds.i2) = 0;
   (i1 ? flds.i1 : flds.b2) = 0;
@@ -173,7 +193,7 @@ void test()
     i1 ? &MixedFields::ci : &MixedFields::cvi;
   (void)(i1 ? &MixedFields::ci : &MixedFields::vi);
   // Conversion of primitives does not result in an lvalue.
-  &(i1 ? i1 : d1); // expected-error {{address expression must be an lvalue or a function designator}}
+  &(i1 ? i1 : d1); // expected-error {{cannot take the address of an rvalue}}
 
   (void)&(i1 ? flds.b1 : flds.i1); // expected-error {{address of bit-field requested}}
   (void)&(i1 ? flds.i1 : flds.b1); // expected-error {{address of bit-field requested}}
@@ -206,6 +226,9 @@ void test()
   // Note the thing that this does not test: since DR446, various situations
   // *must* create a separate temporary copy of class objects. This can only
   // be properly tested at runtime, though.
+
+  const Abstract &abstract1 = true ? static_cast<const Abstract&>(Derived1()) : Derived2(); // expected-error {{allocating an object of abstract class type 'const Abstract'}}
+  const Abstract &abstract2 = true ? static_cast<const Abstract&>(Derived1()) : throw 3; // ok
 }
 
 namespace PR6595 {
@@ -239,7 +262,7 @@ namespace PR6757 {
   struct Foo2 { };
 
   struct Foo3 {
-    Foo3();
+    Foo3(); // expected-note{{requires 0 arguments}}
     Foo3(Foo3&); // expected-note{{would lose const qualifier}}
   };
 
@@ -327,4 +350,46 @@ namespace PR9236 {
     (void)(true ? __null : A()); // expected-error{{non-pointer operand type 'A' incompatible with NULL}}
     (void)(true ? (void*)0 : A()); // expected-error{{incompatible operand types}}
   }
+}
+
+namespace DR587 {
+  template<typename T>
+  const T *f(bool b) {
+    static T t1 = T();
+    static const T t2 = T();
+    return &(b ? t1 : t2);
+  }
+  struct S {};
+  template const int *f(bool);
+  template const S *f(bool);
+
+  extern bool b;
+  int i = 0;
+  const int ci = 0;
+  volatile int vi = 0;
+  const volatile int cvi = 0;
+
+  const int &cir = b ? i : ci;
+  volatile int &vir = b ? vi : i;
+  const volatile int &cvir1 = b ? ci : cvi;
+  const volatile int &cvir2 = b ? cvi : vi;
+  const volatile int &cvir3 = b ? ci : vi; // expected-error{{volatile lvalue reference to type 'const volatile int' cannot bind to a temporary of type 'int'}}
+}
+
+namespace PR17052 {
+  struct X {
+    int i_;
+    bool b_;
+
+    int &test() { return b_ ? i_ : throw 1; }
+  };
+}
+
+namespace PR26448 {
+struct Base {};
+struct Derived : Base {};
+Base b;
+Derived d;
+typedef decltype(true ? static_cast<Base&&>(b) : static_cast<Derived&&>(d)) x;
+typedef Base &&x;
 }

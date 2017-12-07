@@ -1,4 +1,4 @@
-; RUN: opt -S %s -loop-rotate | FileCheck %s
+; RUN: opt -S -loop-rotate < %s | FileCheck %s
 target datalayout = "e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64"
 target triple = "x86_64-apple-darwin10.0"
 
@@ -13,13 +13,13 @@ for.cond:                                         ; preds = %for.body, %entry
   br i1 %cmp, label %for.body, label %for.end
 
 for.body:                                         ; preds = %for.cond
-  %arrayidx = getelementptr inbounds double* %G, i64 %j.0 ; <double*> [#uses=1]
-  %tmp3 = load double* %arrayidx                  ; <double> [#uses=1]
+  %arrayidx = getelementptr inbounds double, double* %G, i64 %j.0 ; <double*> [#uses=1]
+  %tmp3 = load double, double* %arrayidx                  ; <double> [#uses=1]
   %sub = sub i64 %j.0, 1                          ; <i64> [#uses=1]
-  %arrayidx6 = getelementptr inbounds double* %G, i64 %sub ; <double*> [#uses=1]
-  %tmp7 = load double* %arrayidx6                 ; <double> [#uses=1]
+  %arrayidx6 = getelementptr inbounds double, double* %G, i64 %sub ; <double*> [#uses=1]
+  %tmp7 = load double, double* %arrayidx6                 ; <double> [#uses=1]
   %add = fadd double %tmp3, %tmp7                 ; <double> [#uses=1]
-  %arrayidx10 = getelementptr inbounds double* %G, i64 %j.0 ; <double*> [#uses=1]
+  %arrayidx10 = getelementptr inbounds double, double* %G, i64 %j.0 ; <double*> [#uses=1]
   store double %add, double* %arrayidx10
   %inc = add nsw i64 %j.0, 1                      ; <i64> [#uses=1]
   br label %for.cond
@@ -29,7 +29,7 @@ for.end:                                          ; preds = %for.cond
 }
 
 ; Should only end up with one phi.
-; CHECK:      define void @test
+; CHECK-LABEL:      define void @test(
 ; CHECK-NEXT: entry:
 ; CHECK-NEXT:   br label %for.body
 ; CHECK:      for.body:

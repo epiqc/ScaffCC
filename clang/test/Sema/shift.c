@@ -1,4 +1,4 @@
-// RUN: %clang -Wall -Wshift-sign-overflow -ffreestanding -fsyntax-only -Xclang -verify %s
+// RUN: %clang_cc1 -Wall -Wshift-sign-overflow -ffreestanding -fsyntax-only -verify %s
 
 #include <limits.h>
 
@@ -39,7 +39,8 @@ void test() {
   i = 1 << (WORD_BIT - 2);
   i = 2 << (WORD_BIT - 1); // expected-warning {{bits to represent, but 'int' only has}}
   i = 1 << (WORD_BIT - 1); // expected-warning {{sets the sign bit of the shift expression}}
-  i = -1 << (WORD_BIT - 1);
+  i = -1 << (WORD_BIT - 1); // expected-warning {{shifting a negative signed value is undefined}}
+  i = -1 << 0; // expected-warning {{shifting a negative signed value is undefined}}
   i = 0 << (WORD_BIT - 1);
   i = (char)1 << (WORD_BIT - 2);
 
@@ -48,7 +49,7 @@ void test() {
   u = 5U << (WORD_BIT - 1);
 
   long long int lli;
-  lli = INT_MIN << 2; // expected-warning {{bits to represent, but 'int' only has}}
+  lli = INT_MIN << 2; // expected-warning {{shifting a negative signed value is undefined}}
   lli = 1LL << (sizeof(long long) * CHAR_BIT - 2);
 }
 
@@ -65,4 +66,15 @@ void test_shift_too_much(char x) {
   if (0)
     (void) (x >> 80); // no-warning
   (void) (x >> 80); // expected-warning {{shift count >= width of type}}
+}
+
+typedef unsigned vec16 __attribute__((vector_size(16)));
+typedef unsigned vec8 __attribute__((vector_size(8)));
+
+void vect_shift_1(vec16 *x) { *x = *x << 4; }
+
+void vect_shift_2(vec16 *x, vec16 y) { *x = *x << y; }
+
+void vect_shift_3(vec16 *x, vec8 y) {
+  *x = *x << y; // expected-error {{vector operands do not have the same number of elements}}
 }

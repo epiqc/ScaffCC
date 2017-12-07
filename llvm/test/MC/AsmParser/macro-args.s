@@ -4,10 +4,18 @@
     movl   \var@GOTOFF(%ebx),\re2g
 .endm
 
+.macro GET_DEFAULT var, re2g=%ebx, re3g=%ecx
+movl 2(\re2g, \re3g, 2), \var
+.endm
 
-GET    is_sse, %eax
+GET         is_sse, %eax
+// CHECK: movl  is_sse@GOTOFF(%ebx), %eax
 
-// CHECK: movl	is_sse@GOTOFF(%ebx), %eax
+GET_DEFAULT %ebx, , %edx
+// CHECK: movl  2(%ebx,%edx,2), %ebx
+
+GET_DEFAULT %ebx, %edx
+// CHECK: movl  2(%edx,%ecx,2), %ebx
 
 .macro bar
     .long $n
@@ -42,3 +50,15 @@ top bar, 42
 // CHECK-NOT: fred
 // CHECK: _bar
 // CHECK-NEXT: fred = 42
+
+
+.macro foo
+foo_$0_$1_$2_$3:
+  nop
+.endm
+
+foo 1, 2, 3, 4
+foo 1, , 3, 4
+
+// CHECK: foo_1_2_3_4:
+// CHECK: foo_1__3_4:

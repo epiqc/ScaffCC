@@ -12,20 +12,80 @@
 //===----------------------------------------------------------------------===//
 
 #include "clang/Parse/ParseAST.h"
-#include "clang/Sema/Sema.h"
-#include "clang/Sema/CodeCompleteConsumer.h"
-#include "clang/Sema/SemaConsumer.h"
-#include "clang/Sema/ExternalSemaSource.h"
 #include "clang/AST/ASTConsumer.h"
-#include "clang/AST/DeclCXX.h"
+#include "clang/AST/ASTContext.h"
 #include "clang/AST/ExternalASTSource.h"
 #include "clang/AST/Stmt.h"
+#include "clang/Parse/ParseDiagnostic.h"
 #include "clang/Parse/Parser.h"
-#include "llvm/ADT/OwningPtr.h"
+#include "clang/Sema/CodeCompleteConsumer.h"
+#include "clang/Sema/Sema.h"
+#include "clang/Sema/SemaConsumer.h"
 #include "llvm/Support/CrashRecoveryContext.h"
 #include <cstdio>
+#include <memory>
 
 using namespace clang;
+
+namespace {
+
+/// Resets LLVM's pretty stack state so that stack traces are printed correctly
+/// when there are nested CrashRecoveryContexts and the inner one recovers from
+/// a crash.
+class ResetStackCleanup
+    : public llvm::CrashRecoveryContextCleanupBase<ResetStackCleanup,
+                                                   const void> {
+public:
+  ResetStackCleanup(llvm::CrashRecoveryContext *Context, const void *Top)
+      : llvm::CrashRecoveryContextCleanupBase<ResetStackCleanup, const void>(
+            Context, Top) {}
+  void recoverResources() override {
+    llvm::RestorePrettyStackState(resource);
+  }
+};
+
+/// If a crash happens while the parser is active, an entry is printed for it.
+class PrettyStackTraceParserEntry : public llvm::PrettyStackTraceEntry {
+  const Parser &P;
+public:
+  PrettyStackTraceParserEntry(const Parser &p) : P(p) {}
+  void print(raw_ostream &OS) const override;
+};
+
+/// If a crash happens while the parser is active, print out a line indicating
+/// what the current token is.
+void PrettyStackTraceParserEntry::print(raw_ostream &OS) const {
+  const Token &Tok = P.getCurToken();
+  if (Tok.is(tok::eof)) {
+    OS << "<eof> parser at end of file\n";
+    return;
+  }
+
+  if (Tok.getLocation().isInvalid()) {
+    OS << "<unknown> parser at unknown location\n";
+    return;
+  }
+
+  const Preprocessor &PP = P.getPreprocessor();
+  Tok.getLocation().print(OS, PP.getSourceManager());
+  if (Tok.isAnnotation()) {
+    OS << ": at annotation token\n";
+  } else {
+    // Do the equivalent of PP.getSpelling(Tok) except for the parts that would
+    // allocate memory.
+    bool Invalid = false;
+    const SourceManager &SM = P.getPreprocessor().getSourceManager();
+    unsigned Length = Tok.getLength();
+    const char *Spelling = SM.getCharacterData(Tok.getLocation(), &Invalid);
+    if (Invalid) {
+      OS << ": unknown current parser token\n";
+      return;
+    }
+    OS << ": current parser token '" << StringRef(Spelling, Length) << "'\n";
+  }
+}
+
+}  // namespace
 
 //===----------------------------------------------------------------------===//
 // Public interface to the file
@@ -41,9 +101,8 @@ void clang::ParseAST(Preprocessor &PP, ASTConsumer *Consumer,
                      CodeCompleteConsumer *CompletionConsumer,
                      bool SkipFunctionBodies) {
 
-  OwningPtr<Sema> S(new Sema(PP, Ctx, *Consumer,
-                                   TUKind,
-                                   CompletionConsumer));
+  std::unique_ptr<Sema> S(
+      new Sema(PP, Ctx, *Consumer, TUKind, CompletionConsumer));
 
   // Recover resources if we crash before exiting this method.
   llvm::CrashRecoveryContextCleanupRegistrar<Sema> CleanupSema(S.get());
@@ -64,10 +123,12 @@ void clang::ParseAST(Sema &S, bool PrintStats, bool SkipFunctionBodies) {
 
   ASTConsumer *Consumer = &S.getASTConsumer();
 
-  OwningPtr<Parser> ParseOP(new Parser(S.getPreprocessor(), S,
-                                       SkipFunctionBodies));
+  std::unique_ptr<Parser> ParseOP(
+      new Parser(S.getPreprocessor(), S, SkipFunctionBodies));
   Parser &P = *ParseOP.get();
 
+  llvm::CrashRecoveryContextCleanupRegistrar<const void, ResetStackCleanup>
+      CleanupPrettyStack(llvm::SavePrettyStackState());
   PrettyStackTraceParserEntry CrashInfo(P);
 
   // Recover resources if we crash before exiting this method.
@@ -76,34 +137,24 @@ void clang::ParseAST(Sema &S, bool PrintStats, bool SkipFunctionBodies) {
 
   S.getPreprocessor().EnterMainSourceFile();
   P.Initialize();
-  S.Initialize();
-  
-  if (ExternalASTSource *External = S.getASTContext().getExternalSource())
-    External->StartTranslationUnit(Consumer);
-  
-  bool Abort = false;
+
   Parser::DeclGroupPtrTy ADecl;
-  
-  while (!P.ParseTopLevelDecl(ADecl)) {  // Not end of file.
+  ExternalASTSource *External = S.getASTContext().getExternalSource();
+  if (External)
+    External->StartTranslationUnit(Consumer);
+
+  for (bool AtEOF = P.ParseFirstTopLevelDecl(ADecl); !AtEOF;
+       AtEOF = P.ParseTopLevelDecl(ADecl)) {
     // If we got a null return and something *was* parsed, ignore it.  This
     // is due to a top-level semicolon, an action override, or a parse error
     // skipping something.
-    if (ADecl) {
-      if (!Consumer->HandleTopLevelDecl(ADecl.get())) {
-        Abort = true;
-        break;
-      }
-    }
-  };
+    if (ADecl && !Consumer->HandleTopLevelDecl(ADecl.get()))
+      return;
+  }
 
-  if (Abort)
-    return;
-  
   // Process any TopLevelDecls generated by #pragma weak.
-  for (SmallVector<Decl*,2>::iterator
-       I = S.WeakTopLevelDecls().begin(),
-       E = S.WeakTopLevelDecls().end(); I != E; ++I)
-    Consumer->HandleTopLevelDecl(DeclGroupRef(*I));
+  for (Decl *D : S.WeakTopLevelDecls())
+    Consumer->HandleTopLevelDecl(DeclGroupRef(D));
   
   Consumer->HandleTranslationUnit(S.getASTContext());
 

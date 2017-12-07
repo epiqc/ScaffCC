@@ -1,5 +1,5 @@
-; RUN: llc < %s -march=ppc32 -mtriple=powerpc-apple-darwin -mcpu=g5 | FileCheck %s
-; RUN: llc < %s -march=ppc32 -mtriple=powerpc-apple-darwin -mcpu=g5 -regalloc=basic | FileCheck %s
+; RUN: llc -verify-machineinstrs < %s -mtriple=powerpc-apple-darwin -mcpu=g5 | FileCheck %s
+; RUN: llc -verify-machineinstrs < %s -mtriple=powerpc-apple-darwin -mcpu=g5 -regalloc=basic | FileCheck %s
 
 declare i8* @llvm.frameaddress(i32) nounwind readnone
 
@@ -18,8 +18,8 @@ entry:
 ; CHECK: _g:
 ; CHECK:  mflr r0
 ; CHECK:  stw r0, 8(r1)
-; CHECK:  lwz r3, 0(r1)
-; CHECK:  lwz r3, 8(r3)
+; CHECK:  lwz r2, 0(r1)
+; CHECK:  lwz r3, 8(r2)
   %0 = tail call i8* @llvm.returnaddress(i32 1)   ; <i8*> [#uses=1]
   ret i8* %0
 }

@@ -2,8 +2,8 @@
 
 DIR=$(dirname $0)
 ROOT=$DIR/..
-OPT=$ROOT/build/Release+Asserts/bin/opt
-SCAF=$ROOT/build/Release+Asserts/lib/Scaffold.so
+OPT=$ROOT/build/bin/opt
+SCAF=$ROOT/build/lib/LLVMScaffold.so
 
 # Module flattening threshold
 # note: thresholds must be picked from the set in scripts/flattening_thresh.py

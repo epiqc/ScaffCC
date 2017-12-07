@@ -1,4 +1,4 @@
-// RUN: %clang --analyze -std=c++11 %s -Xclang -verify -o /dev/null
+// RUN: %clang_analyze_cc1 -analyzer-checker=core.NullDereference,core.uninitialized.UndefReturn -std=c++11 %s -verify -o /dev/null
 
 void test_static_assert() {
   static_assert(sizeof(void *) == sizeof(void*), "test_static_assert");
@@ -73,3 +73,17 @@ void test2() {
 struct RDar11178609 {
   ~RDar11178609() = delete;
 };
+
+// Tests that dynamic_cast handles references to C++ classes.  Previously
+// this crashed.
+class rdar11817693_BaseBase {};
+class rdar11817693_BaseInterface {};
+class rdar11817693_Base : public rdar11817693_BaseBase, public rdar11817693_BaseInterface {};
+class rdar11817693 : public rdar11817693_Base {
+  virtual void operator=(const rdar11817693_BaseBase& src);
+  void operator=(const rdar11817693& src);
+};
+void rdar11817693::operator=(const rdar11817693& src) {
+  operator=(dynamic_cast<const rdar11817693_BaseBase&>(src));
+}
+

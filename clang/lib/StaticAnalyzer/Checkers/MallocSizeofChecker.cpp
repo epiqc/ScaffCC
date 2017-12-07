@@ -14,13 +14,14 @@
 //===----------------------------------------------------------------------===//
 
 #include "ClangSACheckers.h"
+#include "clang/AST/StmtVisitor.h"
+#include "clang/AST/TypeLoc.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugReporter.h"
 #include "clang/StaticAnalyzer/Core/Checker.h"
 #include "clang/StaticAnalyzer/Core/CheckerManager.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/AnalysisManager.h"
-#include "clang/AST/StmtVisitor.h"
-#include "clang/AST/TypeLoc.h"
 #include "llvm/ADT/SmallString.h"
+#include "llvm/Support/raw_ostream.h"
 
 using namespace clang;
 using namespace ento;
@@ -64,10 +65,9 @@ public:
   }
 
   void VisitChildren(const Stmt *S) {
-    for (Stmt::const_child_iterator I = S->child_begin(), E = S->child_end();
-         I!=E; ++I)
-      if (const Stmt *child = *I)
-        VisitChild(S, child);
+    for (const Stmt *Child : S->children())
+      if (Child)
+        VisitChild(S, Child);
   }
 
   TypeCallPair VisitCastExpr(const CastExpr *E) {
@@ -94,15 +94,14 @@ public:
     if (FD) {
       IdentifierInfo *II = FD->getIdentifier();
       if (II == II_malloc || II == II_calloc || II == II_realloc)
-        return TypeCallPair((const TypeSourceInfo *)0, E);
+        return TypeCallPair((const TypeSourceInfo *)nullptr, E);
     }
     return TypeCallPair();
   }
 
   TypeCallPair VisitDeclStmt(const DeclStmt *S) {
-    for (DeclStmt::const_decl_iterator I = S->decl_begin(), E = S->decl_end();
-         I!=E; ++I)
-      if (const VarDecl *VD = dyn_cast<VarDecl>(*I))
+    for (const auto *I : S->decls())
+      if (const VarDecl *VD = dyn_cast<VarDecl>(I))
         if (const Expr *Init = VD->getInit())
           VisitChild(VD, Init);
     return TypeCallPair();
@@ -114,11 +113,6 @@ public:
   std::vector<const UnaryExprOrTypeTraitExpr *> Sizeofs;
 
   void VisitBinMul(const BinaryOperator *E) {
-    Visit(E->getLHS());
-    Visit(E->getRHS());
-  }
-
-  void VisitBinAdd(const BinaryOperator *E) {
     Visit(E->getLHS());
     Visit(E->getRHS());
   }
@@ -139,6 +133,45 @@ public:
   }
 };
 
+// Determine if the pointee and sizeof types are compatible.  Here
+// we ignore constness of pointer types.
+static bool typesCompatible(ASTContext &C, QualType A, QualType B) {
+  // sizeof(void*) is compatible with any other pointer.
+  if (B->isVoidPointerType() && A->getAs<PointerType>())
+    return true;
+
+  while (true) {
+    A = A.getCanonicalType();
+    B = B.getCanonicalType();
+
+    if (A.getTypePtr() == B.getTypePtr())
+      return true;
+
+    if (const PointerType *ptrA = A->getAs<PointerType>())
+      if (const PointerType *ptrB = B->getAs<PointerType>()) {
+        A = ptrA->getPointeeType();
+        B = ptrB->getPointeeType();
+        continue;
+      }
+
+    break;
+  }
+
+  return false;
+}
+
+static bool compatibleWithArrayType(ASTContext &C, QualType PT, QualType T) {
+  // Ex: 'int a[10][2]' is compatible with 'int', 'int[2]', 'int[10][2]'.
+  while (const ArrayType *AT = T->getAsArrayTypeUnsafe()) {
+    QualType ElemType = AT->getElementType();
+    if (typesCompatible(C, PT, AT->getElementType()))
+      return true;
+    T = ElemType;
+  }
+
+  return false;
+}
+
 class MallocSizeofChecker : public Checker<check::ASTCodeBody> {
 public:
   void checkASTCodeBody(const Decl *D, AnalysisManager& mgr,
@@ -157,7 +190,7 @@ public:
 
       for (CallExpr::const_arg_iterator ai = i->AllocCall->arg_begin(),
            ae = i->AllocCall->arg_end(); ai != ae; ++ai) {
-        if (!(*ai)->getType()->isIntegerType())
+        if (!(*ai)->getType()->isIntegralOrUnscopedEnumerationType())
           continue;
 
         SizeofFinder SFinder;
@@ -166,39 +199,47 @@ public:
           continue;
 
         QualType SizeofType = SFinder.Sizeofs[0]->getTypeOfArgument();
-        if (!BR.getContext().hasSameUnqualifiedType(PointeeType, SizeofType)) {
-          const TypeSourceInfo *TSI = 0;
-          if (i->CastedExprParent.is<const VarDecl *>()) {
-            TSI =
+
+        if (typesCompatible(BR.getContext(), PointeeType, SizeofType))
+          continue;
+
+        // If the argument to sizeof is an array, the result could be a
+        // pointer to any array element.
+        if (compatibleWithArrayType(BR.getContext(), PointeeType, SizeofType))
+          continue;
+
+        const TypeSourceInfo *TSI = nullptr;
+        if (i->CastedExprParent.is<const VarDecl *>()) {
+          TSI =
               i->CastedExprParent.get<const VarDecl *>()->getTypeSourceInfo();
-          } else {
-            TSI = i->ExplicitCastType;
-          }
-
-          SmallString<64> buf;
-          llvm::raw_svector_ostream OS(buf);
-
-          OS << "Result of '"
-             << i->AllocCall->getDirectCallee()->getIdentifier()->getName()
-             << "' is converted to type '"
-             << CastedType.getAsString() << "', whose pointee type '"
-             << PointeeType.getAsString() << "' is incompatible with "
-             << "sizeof operand type '" << SizeofType.getAsString() << "'";
-          llvm::SmallVector<SourceRange, 4> Ranges;
-          Ranges.push_back(i->AllocCall->getCallee()->getSourceRange());
-          Ranges.push_back(SFinder.Sizeofs[0]->getSourceRange());
-          if (TSI)
-            Ranges.push_back(TSI->getTypeLoc().getSourceRange());
-
-          PathDiagnosticLocation L =
-            PathDiagnosticLocation::createBegin(i->AllocCall->getCallee(),
-                                                BR.getSourceManager(), ADC);
-
-          BR.EmitBasicReport(D, "allocator sizeof operand mismatch",
-                             categories::UnixAPI,
-                             OS.str(),
-                             L, Ranges.data(), Ranges.size());
+        } else {
+          TSI = i->ExplicitCastType;
         }
+
+        SmallString<64> buf;
+        llvm::raw_svector_ostream OS(buf);
+
+        OS << "Result of ";
+        const FunctionDecl *Callee = i->AllocCall->getDirectCallee();
+        if (Callee && Callee->getIdentifier())
+          OS << '\'' << Callee->getIdentifier()->getName() << '\'';
+        else
+          OS << "call";
+        OS << " is converted to a pointer of type '"
+            << PointeeType.getAsString() << "', which is incompatible with "
+            << "sizeof operand type '" << SizeofType.getAsString() << "'";
+        SmallVector<SourceRange, 4> Ranges;
+        Ranges.push_back(i->AllocCall->getCallee()->getSourceRange());
+        Ranges.push_back(SFinder.Sizeofs[0]->getSourceRange());
+        if (TSI)
+          Ranges.push_back(TSI->getTypeLoc().getSourceRange());
+
+        PathDiagnosticLocation L =
+            PathDiagnosticLocation::createBegin(i->AllocCall->getCallee(),
+                BR.getSourceManager(), ADC);
+
+        BR.EmitBasicReport(D, this, "Allocator sizeof operand mismatch",
+                           categories::UnixAPI, OS.str(), L, Ranges);
       }
     }
   }

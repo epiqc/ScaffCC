@@ -1,11 +1,9 @@
 // RUN: mkdir -p %t.dir
-// RUN: %clang_cc1 -analyze -analyzer-output=html -analyzer-checker=core -o %t.dir
-// RUN: ls %t.dir | grep report | count 0
+// RUN: %clang_analyze_cc1 -analyzer-output=html -analyzer-checker=core -o %t.dir %s
+// RUN: ls %t.dir | grep report
 // RUN: rm -fR %t.dir
-// REQUIRES: shell
 
-// This tests that we do not currently emit HTML diagnostics for reports that
-// cross file boundaries.
+// This tests that we emit HTML diagnostics for reports that cross file boundaries.
 
 #include "html-diags-multifile.h"
 

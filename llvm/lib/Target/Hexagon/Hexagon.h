@@ -12,46 +12,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef TARGET_Hexagon_H
-#define TARGET_Hexagon_H
-
-#include "MCTargetDesc/HexagonMCTargetDesc.h"
-#include "llvm/Target/TargetLowering.h"
-#include "llvm/Target/TargetMachine.h"
-
-namespace llvm {
-  class FunctionPass;
-  class TargetMachine;
-  class MachineInstr;
-  class MCInst;
-  class HexagonAsmPrinter;
-  class HexagonTargetMachine;
-  class raw_ostream;
-
-  FunctionPass *createHexagonISelDag(HexagonTargetMachine &TM);
-  FunctionPass *createHexagonDelaySlotFillerPass(TargetMachine &TM);
-  FunctionPass *createHexagonFPMoverPass(TargetMachine &TM);
-  FunctionPass *createHexagonRemoveExtendOps(HexagonTargetMachine &TM);
-  FunctionPass *createHexagonCFGOptimizer(HexagonTargetMachine &TM);
-
-  FunctionPass *createHexagonSplitTFRCondSets(HexagonTargetMachine &TM);
-  FunctionPass *createHexagonExpandPredSpillCode(HexagonTargetMachine &TM);
-
-  FunctionPass *createHexagonHardwareLoops();
-  FunctionPass *createHexagonPeephole();
-  FunctionPass *createHexagonFixupHwLoops();
-
-/* TODO: object output.
-  MCCodeEmitter *createHexagonMCCodeEmitter(const Target &,
-                                            TargetMachine &TM,
-                                            MCContext &Ctx);
-*/
-/* TODO: assembler input.
-  TargetAsmBackend *createHexagonAsmBackend(const Target &, const std::string &);
-*/
-  void HexagonLowerToMC(const MachineInstr *MI, MCInst &MCI,
-                        HexagonAsmPrinter &AP);
-} // end namespace llvm;
+#ifndef LLVM_LIB_TARGET_HEXAGON_HEXAGON_H
+#define LLVM_LIB_TARGET_HEXAGON_HEXAGON_H
 
 #define Hexagon_POINTER_SIZE 4
 
@@ -67,7 +29,28 @@ namespace llvm {
 // Normal instruction size (in bytes).
 #define HEXAGON_INSTR_SIZE 4
 
-// Maximum number of words in a packet (in instructions).
+// Maximum number of words and instructions in a packet.
 #define HEXAGON_PACKET_SIZE 4
+#define HEXAGON_MAX_PACKET_SIZE (HEXAGON_PACKET_SIZE * HEXAGON_INSTR_SIZE)
+// Minimum number of instructions in an end-loop packet.
+#define HEXAGON_PACKET_INNER_SIZE 2
+#define HEXAGON_PACKET_OUTER_SIZE 3
+// Maximum number of instructions in a packet before shuffling,
+// including a compound one or a duplex or an extender.
+#define HEXAGON_PRESHUFFLE_PACKET_SIZE (HEXAGON_PACKET_SIZE + 3)
+
+// Name of the global offset table as defined by the Hexagon ABI
+#define HEXAGON_GOT_SYM_NAME "_GLOBAL_OFFSET_TABLE_"
+
+#include "MCTargetDesc/HexagonMCTargetDesc.h"
+#include "llvm/CodeGen/TargetLowering.h"
+#include "llvm/Target/TargetMachine.h"
+
+namespace llvm {
+  class HexagonTargetMachine;
+
+  /// \brief Creates a Hexagon-specific Target Transformation Info pass.
+  ImmutablePass *createHexagonTargetTransformInfoPass(const HexagonTargetMachine *TM);
+} // end namespace llvm;
 
 #endif

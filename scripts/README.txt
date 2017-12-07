@@ -24,7 +24,7 @@ Lowers .scaffold source file to .ll file (intermediary LLVM format). Creates <al
 The .ll file is the main file in LLVM on which all transformations, optimizations and analysis are performed.
 
 NB: In general, to run a pass in LLVM, you invoke the opt program as follows:
-    build/Release+Asserts/bin/opt -S -load build/Release+Asserts/lib/Scaffold.so <desired_pass_name> <input_ll_file> > <output_ll_file> 2> <log_file>
+    build/bin/opt -S -load build/lib/Scaffold.so <desired_pass_name> <input_ll_file> > <output_ll_file> 2> <log_file>
     (These scripts basically automate the above command for several passes)
 
 

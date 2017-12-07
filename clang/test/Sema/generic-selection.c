@@ -1,4 +1,6 @@
-// RUN: %clang_cc1 -std=c1x -fsyntax-only -verify %s
+// RUN: %clang_cc1 -std=c11 -fsyntax-only -verify %s
+
+void g(void);
 
 void foo(int n) {
   (void) _Generic(0,
@@ -23,4 +25,22 @@ void foo(int n) {
   int a4[_Generic(0L, default: 1, short: 2, float: 3, int: 4) == 1 ? 1 : -1];
   int a5[_Generic(0, int: 1, short: 2, float: 3) == 1 ? 1 : -1];
   int a6[_Generic(0, short: 1, float: 2, int: 3) == 3 ? 1 : -1];
+
+  int a7[_Generic("test", char *: 1, default: 2) == 1 ? 1 : -1];
+  int a8[_Generic(g, void (*)(void): 1, default: 2) == 1 ? 1 : -1];
+
+  const int i = 12;
+  int a9[_Generic(i, int: 1, default: 2) == 1 ? 1 : -1];
+
+  // This is expected to not trigger any diagnostics because the controlling
+  // expression is not evaluated.
+  (void)_Generic(*(int *)0, int: 1);
+}
+
+int __attribute__((overloadable)) test (int);
+double __attribute__((overloadable)) test (double);
+char testc(char);
+
+void PR30201(void) {
+  _Generic(4, char:testc, default:test)(4);
 }

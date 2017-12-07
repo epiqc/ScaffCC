@@ -1,14 +1,14 @@
 ; rdar://8465407
-; RUN: llc < %s -mtriple=thumbv7-apple-ios | FileCheck %s
+; RUN: llc < %s -mtriple=thumbv7-apple-ios -arm-atomic-cfg-tidy=0 | FileCheck %s
 
 %struct.buf = type opaque
 
 declare void @bar() nounwind optsize
 
-define void @foo() nounwind optsize {
-; CHECK: foo:
+define void @foo() nounwind optsize "no-frame-pointer-elim"="true" {
+; CHECK-LABEL: foo:
 ; CHECK: push
-; CHECK: mov r7, sp
+; CHECK: add r7, sp
 ; CHECK: sub sp, #4
 entry:
   %m.i = alloca %struct.buf*, align 4

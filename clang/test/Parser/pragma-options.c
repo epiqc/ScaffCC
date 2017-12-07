@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -triple i386-apple-darwin9 -fsyntax-only -verify %s
+// RUN: %clang_cc1 -triple i386-apple-darwin9 -Wno-pragma-pack -fsyntax-only -verify %s
 
 /* expected-warning {{expected 'align' following '#pragma options'}} */ #pragma options
 /* expected-warning {{expected '=' following '#pragma options align'}} */ #pragma options align
@@ -20,3 +20,15 @@
 #pragma align=reset
 #pragma align=mac68k
 #pragma align=power
+
+// PR13580
+struct S
+{
+  char a[3];
+#pragma align=packed
+  struct T
+  {
+    char b;
+    int c;
+  } d;
+};
