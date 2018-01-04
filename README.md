@@ -42,14 +42,11 @@ Installation
 Getting ScaffCC
 ---------------
 
-1.  Go to https://github.com/ScaffCC
+1.  Go to https://github.com/epiqc/ScaffCC
 
 2.  For the **Unix build**, download the repository:
 
-           git clone https://github.com/ScaffCC/ScaffCC.git [dir]
-           cd ScaffCC
-           git clone https://github.com/ScaffCC/scaff-llvm.git llvm [dir]
-           git clone https://github.com/ScaffCC/scaff-clang.git clang [dir]
+           git clone https://github.com/epiqc/ScaffCC.git [dir]
 
 3.  For the **OS X build**, download the repository:
 
