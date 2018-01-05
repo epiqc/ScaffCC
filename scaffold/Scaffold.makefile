@@ -30,7 +30,7 @@ ifeq ($(UNAME_S),Linux)
 SCAFFOLD_LIB=$(ROOT)/build/lib/LLVMScaffold.so
 endif
 ifeq ($(UNAME_S),Darwin)
-SCAFFOLD_LIB=$(ROOT)/build/Release+Asserts/lib/Scaffold.dylib
+SCAFFOLD_LIB=$(ROOT)/build/lib/Scaffold.dylib
 endif
 
 

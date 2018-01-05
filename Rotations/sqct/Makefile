@@ -8,7 +8,7 @@ CXXWARN=-Wextra -Wunreachable-code
 INC=-I/usr/include/boost
 
 ifdef DISABLE_STATIC
-	LDLIBS=-lgomp -lpthread -lmpfr -lgmpxx -lgmp -lrt
+	LDLIBS=-lgomp -lpthread -lmpfr -lgmpxx -lgmp
 	BOOST=-lboost_program_options -lboost_timer -lboost_chrono -lboost_system
 else
 	LIB=-L/usr/lib/boost_1_48_0
