@@ -91,7 +91,9 @@ of your system (“yum" on Red Hat or “apt-get" on Ubuntu).
     consider using ‘update-alternatives’ as system-wide method for
     preserving and maintaining these.
 
-3.  Boost 1.48
+3.  Clang++ 3.5 or higher
+
+4.  Boost 1.48
 
     -   “Source Build": Boost installation instructions are here:
         <http://www.boost.org/doc/libs/1_48_0/doc/html/bbv2/installation.html>
@@ -108,7 +110,7 @@ of your system (“yum" on Red Hat or “apt-get" on Ubuntu).
                 sudo apt-get install libboost-all-dev
                 
 
-4.  The GNU Multiple Precision Arithmetic Library (gmp and gmpxx)
+5.  The GNU Multiple Precision Arithmetic Library (gmp and gmpxx)
 
     -   “Ubuntu": Use tab-completion to verify the correct packages
 
@@ -122,7 +124,7 @@ of your system (“yum" on Red Hat or “apt-get" on Ubuntu).
                 sudo make && sudo make check && sudo make install
                 
 
-5.  The GNU MPFR Library (mpfr)
+6.  The GNU MPFR Library (mpfr)
 
     -   “Ubuntu"
 
@@ -136,9 +138,9 @@ of your system (“yum" on Red Hat or “apt-get" on Ubuntu).
                 sudo make && sudo make check && sudo make install
                 
 
-6.  Python 2.7 (or later)
+7.  Python 2.7 (or later)
 
-7.  CMake (For Integrating RKQC Functionality)
+8.  CMake (For Integrating RKQC Functionality)
 
     -   “Ubuntu"
 
