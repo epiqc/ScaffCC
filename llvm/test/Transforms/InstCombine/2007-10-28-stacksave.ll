@@ -1,4 +1,4 @@
-; RUN: opt < %s -instcombine -S | grep {call.*stacksave}
+; RUN: opt < %s -instcombine -S | grep "call.*stacksave"
 ; PR1745
 target datalayout = "e-p:32:32:32-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:32:64-f32:32:32-f64:32:64-v64:64:64-v128:128:128-a0:0:64-f80:128:128"
 target triple = "i686-apple-darwin8"
@@ -23,7 +23,7 @@ lab:		; preds = %cleanup31, %entry
 	%tmp17 = mul i32 %tmp5, 4		; <i32> [#uses=1]
 	%tmp18 = alloca i8, i32 %tmp17		; <i8*> [#uses=1]
 	%tmp1819 = bitcast i8* %tmp18 to i32*		; <i32*> [#uses=2]
-	%tmp21 = getelementptr i32* %tmp1819, i32 0		; <i32*> [#uses=1]
+	%tmp21 = getelementptr i32, i32* %tmp1819, i32 0		; <i32*> [#uses=1]
 	store i32 1, i32* %tmp21, align 4
 	%tmp2223 = bitcast i32* %tmp1819 to i8*		; <i8*> [#uses=1]
 	store volatile i8* %tmp2223, i8** @p, align 4

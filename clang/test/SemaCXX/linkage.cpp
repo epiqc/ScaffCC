@@ -5,6 +5,8 @@
 
 // RUN: %clang_cc1 -Werror -triple x86_64-apple-darwin10 -emit-llvm %s -o - | FileCheck %s
 
+// CHECK: @_ZZN5test61A3fooEvE3bar = linkonce_odr global i32 0, align 4
+
 // PR8926
 namespace test0 {
   typedef struct {
@@ -81,7 +83,7 @@ extern "C" {
         // Test both for mangling in the code generation and warnings from use
         // of internal, undefined names via -Werror.
         // CHECK: call i32 @g(
-        // CHECK: load i32* @a,
+        // CHECK: load i32, i32* @a,
         return g() + a;
       }
     };
@@ -92,5 +94,31 @@ extern "C" {
   }
 }
 
-// CHECK: define linkonce_odr i8* @_ZN5test21A1BILj0EE3fooEv(
 // CHECK: define linkonce_odr i8* @_ZN5test11A3fooILj0EEEPvv(
+// CHECK: define linkonce_odr i8* @_ZN5test21A1BILj0EE3fooEv(
+
+namespace test5 {
+  struct foo {
+  };
+  extern "C" {
+    const foo bar[]  = {
+    };
+  }
+}
+
+// Test that we don't compute linkage too hastily before we're done
+// processing a record decl.  rdar://15928125
+namespace test6 {
+  typedef struct {
+    int foo() {
+      // Tested at top of file.
+      static int bar = 0;
+      return bar++;
+    }
+  } A;
+
+  void test() {
+    A a;
+    a.foo();
+  }
+}

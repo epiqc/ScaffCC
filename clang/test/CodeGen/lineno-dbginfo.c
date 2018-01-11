@@ -1,5 +1,9 @@
 // RUN: echo "#include <stddef.h>" > %t.h
-// RUN: %clang -S -g -include %t.h %s -emit-llvm -o %t.ll
-// RUN: grep "i32 5" %t.ll
-// outer is at line number 5.
+// RUN: %clang_cc1 -S -debug-info-kind=limited -include %t.h %s -emit-llvm -o - | FileCheck %s
+
+// CHECK: !DIGlobalVariable(name: "outer",
+// CHECK-NOT:               linkageName:
+// CHECK-SAME:              line: [[@LINE+2]]
+// CHECK-SAME:              isDefinition: true
 int outer = 42;
+

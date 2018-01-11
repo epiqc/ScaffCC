@@ -1,4 +1,4 @@
-; RUN: llc < %s -march=arm | grep .weak
+; RUN: llc -mtriple=arm-eabi %s -o - | FileCheck %s
 
 define i32 @f(i32 %a) {
 entry:
@@ -8,7 +8,7 @@ entry:
 	br i1 %tmp5, label %UnifiedReturnBlock, label %cond_true8
 
 cond_true8:		; preds = %entry
-	%tmp10 = tail call i32 (...)* %t.0( )		; <i32> [#uses=1]
+	%tmp10 = tail call i32 (...) %t.0( )		; <i32> [#uses=1]
 	ret i32 %tmp10
 
 UnifiedReturnBlock:		; preds = %entry
@@ -16,3 +16,6 @@ UnifiedReturnBlock:		; preds = %entry
 }
 
 declare extern_weak i32 @test_weak(...)
+
+; CHECK: {{.}}weak
+

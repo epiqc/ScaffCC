@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -fsyntax-only -verify -fcxx-exceptions %s
+// RUN: %clang_cc1 -std=c++98 -fsyntax-only -verify -fcxx-exceptions %s
 
 //
 // Tests for "expression traits" intrinsics such as __is_lvalue_expr.
@@ -189,12 +189,12 @@ struct Class : BaseClass
     static int& NestedFuncTemplate() { return variable; }  // expected-note{{possible target for call}}
 
     template <class T>
-    int& NestedMemfunTemplate() { return variable; }
+    int& NestedMemfunTemplate() { return variable; } // expected-note{{possible target for call}}
 
     int operator*() const;
 
     template <class T>
-    int operator+(T) const;
+    int operator+(T) const; // expected-note{{possible target for call}}
 
     int NonstaticMemberFunction();
     static int StaticMemberFunction();
@@ -520,20 +520,19 @@ void expr_cond(bool cond)
     // 5.16 Conditional operator [expr.cond]
     //
     // 2 If either the second or the third operand has type (possibly
-    // cv-qualified) void, then the lvalue-to-rvalue (4.1),
-    // array-to-pointer (4.2), and function-to-pointer (4.3) standard
-    // conversions are performed on the second and third operands, and one
-    // of the following shall hold:
+    // cv-qualified) void, one of the following shall hold:
     //
     // - The second or the third operand (but not both) is a
-    // throw-expression (15.1); the result is of the type of the other and
-    // is an rvalue.
+    // (possibly parenthesized) throw-expression (15.1); the result
+    // is of the type and value category of the other.
 
     Class classLvalue;
     ASSERT_RVALUE(cond ? throw 1 : (void)0);
     ASSERT_RVALUE(cond ? (void)0 : throw 1);
-    ASSERT_RVALUE(cond ? throw 1 : classLvalue);
-    ASSERT_RVALUE(cond ? classLvalue : throw 1);
+    ASSERT_RVALUE(cond ? throw 1 : 0);
+    ASSERT_RVALUE(cond ? 0 : throw 1);
+    ASSERT_LVALUE(cond ? throw 1 : classLvalue);
+    ASSERT_LVALUE(cond ? classLvalue : throw 1);
 
     // - Both the second and the third operands have type void; the result
     // is of type void and is an rvalue. [Note: this includes the case

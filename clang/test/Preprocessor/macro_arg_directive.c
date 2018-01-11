@@ -1,5 +1,17 @@
 // RUN: %clang_cc1 %s -fsyntax-only -verify
 
+#define a(x) enum { x }
+a(n =
+#undef a
+#define a 5
+  a);
+_Static_assert(n == 5, "");
+
+#define M(A)
+M(
+#pragma pack(pop) // expected-error {{embedding a #pragma directive within macro arguments is not supported}}
+)
+
 // header1.h
 void fail(const char *);
 #define MUNCH(...) \

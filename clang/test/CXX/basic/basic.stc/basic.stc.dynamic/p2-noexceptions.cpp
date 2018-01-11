@@ -1,4 +1,7 @@
+// RUN: %clang_cc1 -fsyntax-only -verify -std=c++98 %s
+// RUN: %clang_cc1 -fsyntax-only -verify -std=c++11 %s
 // RUN: %clang_cc1 -fsyntax-only -verify %s
+// expected-no-diagnostics
 namespace std {
   class bad_alloc { };
   

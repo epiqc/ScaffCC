@@ -1,70 +1,56 @@
-// RUN: llvm-mc -filetype=obj -triple x86_64-pc-linux-gnu %s -o - | elf-dump   | FileCheck %s
+// RUN: llvm-mc -filetype=obj -triple x86_64-pc-linux-gnu %s -o - | llvm-readobj -s | FileCheck %s
+// RUN: llvm-mc -filetype=obj -triple x86_64-apple-darwin14.0.0-elf %s -o - | llvm-readobj -s | FileCheck %s -check-prefix=DARWIN
+// RUN: llvm-mc -filetype=obj -triple x86_64-pc-win32-elf %s -o - | llvm-readobj -s | FileCheck %s -check-prefix=WINDOWS
 
-// Test that like gnu as we create text, data and bss by default. Also test
-// that shstrtab, symtab and strtab are listed in that order.
+// Check that we can create ELF files for darwin/windows, even though
+// it is not the default file format.
 
-// CHECK:      ('sh_name', 0x00000001) # '.text'
-// CHECK-NEXT: ('sh_type', 0x00000001)
-// CHECK-NEXT: ('sh_flags', 0x0000000000000006)
-// CHECK-NEXT: ('sh_addr', 0x0000000000000000)
-// CHECK-NEXT: ('sh_offset', 0x0000000000000040)
-// CHECK-NEXT: ('sh_size', 0x0000000000000000)
-// CHECK-NEXT: ('sh_link', 0x00000000)
-// CHECK-NEXT: ('sh_info', 0x00000000)
-// CHECK-NEXT: ('sh_addralign', 0x0000000000000004)
-// CHECK-NEXT: ('sh_entsize', 0x0000000000000000)
+// DARWIN:       Format: ELF64-x86-64
+// WINDOWS:      Format: ELF64-x86-64
+// DARWIN-NEXT:  Arch: x86_64
+// WINDOWS-NEXT: Arch: x86_64
 
-// CHECK:      ('sh_name', 0x00000026) # '.data'
-// CHECK-NEXT: ('sh_type', 0x00000001)
-// CHECK-NEXT: ('sh_flags', 0x0000000000000003)
-// CHECK-NEXT: ('sh_addr', 0x0000000000000000)
-// CHECK-NEXT: ('sh_offset', 0x0000000000000040)
-// CHECK-NEXT: ('sh_size', 0x0000000000000000)
-// CHECK-NEXT: ('sh_link', 0x00000000)
-// CHECK-NEXT: ('sh_info', 0x00000000)
-// CHECK-NEXT: ('sh_addralign', 0x0000000000000004)
-// CHECK-NEXT: ('sh_entsize', 0x0000000000000000)
+// Test that we create text by default. Also test that symtab and strtab are
+// listed.
 
-// CHECK:      ('sh_name', 0x00000007) # '.bss'
-// CHECK-NEXT: ('sh_type', 0x00000008)
-// CHECK-NEXT: ('sh_flags', 0x0000000000000003)
-// CHECK-NEXT: ('sh_addr', 0x0000000000000000)
-// CHECK-NEXT: ('sh_offset', 0x0000000000000040)
-// CHECK-NEXT: ('sh_size', 0x0000000000000000)
-// CHECK-NEXT: ('sh_link', 0x00000000)
-// CHECK-NEXT: ('sh_info', 0x00000000)
-// CHECK-NEXT: ('sh_addralign', 0x0000000000000004)
-// CHECK-NEXT: ('sh_entsize', 0x0000000000000000)
-
-// CHECK:      ('sh_name', 0x0000000c) # '.shstrtab'
-// CHECK-NEXT: ('sh_type', 0x00000003)
-// CHECK-NEXT:    ('sh_flags', 0x0000000000000000)
-// CHECK-NEXT:    ('sh_addr', 0x0000000000000000)
-// CHECK-NEXT:    ('sh_offset', 0x0000000000000040)
-// CHECK-NEXT:    ('sh_size', 0x000000000000002c)
-// CHECK-NEXT:    ('sh_link', 0x00000000)
-// CHECK-NEXT:    ('sh_info', 0x00000000)
-// CHECK-NEXT:    ('sh_addralign', 0x0000000000000001)
-// CHECK-NEXT:    ('sh_entsize', 0x0000000000000000)
-
-// CHECK: ('sh_name', 0x0000001e) # '.symtab'
-// CHECK-NEXT:    ('sh_type', 0x00000002)
-// CHECK-NEXT:    ('sh_flags', 0x0000000000000000)
-// CHECK-NEXT:    ('sh_addr', 0x0000000000000000)
-// CHECK-NEXT:    ('sh_offset',
-// CHECK-NEXT:    ('sh_size', 0x0000000000000060)
-// CHECK-NEXT:    ('sh_link', 0x00000006)
-// CHECK-NEXT:    ('sh_info', 0x00000004)
-// CHECK-NEXT:    ('sh_addralign', 0x0000000000000008)
-// CHECK-NEXT:    ('sh_entsize', 0x0000000000000018)
-
-// CHECK: ('sh_name', 0x00000016) # '.strtab'
-// CHECK-NEXT:    ('sh_type', 0x00000003)
-// CHECK-NEXT:    ('sh_flags', 0x0000000000000000)
-// CHECK-NEXT:    ('sh_addr', 0x0000000000000000)
-// CHECK-NEXT:    ('sh_offset',
-// CHECK-NEXT:    ('sh_size', 0x0000000000000001)
-// CHECK-NEXT:    ('sh_link', 0x00000000)
-// CHECK-NEXT:    ('sh_info', 0x00000000)
-// CHECK-NEXT:    ('sh_addralign', 0x0000000000000001)
-// CHECK-NEXT:    ('sh_entsize', 0x0000000000000000)
+// CHECK:        Section {
+// CHECK:          Name: .strtab
+// CHECK-NEXT:     Type: SHT_STRTAB
+// CHECK-NEXT:     Flags [
+// CHECK-NEXT:     ]
+// CHECK-NEXT:     Address: 0x0
+// CHECK-NEXT:     Offset:
+// CHECK-NEXT:     Size: 23
+// CHECK-NEXT:     Link: 0
+// CHECK-NEXT:     Info: 0
+// CHECK-NEXT:     AddressAlignment: 1
+// CHECK-NEXT:     EntrySize: 0
+// CHECK-NEXT:   }
+// CHECK:        Section {
+// CHECK:          Name: .text
+// CHECK-NEXT:     Type: SHT_PROGBITS
+// CHECK-NEXT:     Flags [
+// CHECK-NEXT:       SHF_ALLOC
+// CHECK-NEXT:       SHF_EXECINSTR
+// CHECK-NEXT:     ]
+// CHECK-NEXT:     Address: 0x0
+// CHECK-NEXT:     Offset: 0x40
+// CHECK-NEXT:     Size: 0
+// CHECK-NEXT:     Link: 0
+// CHECK-NEXT:     Info: 0
+// CHECK-NEXT:     AddressAlignment: 4
+// CHECK-NEXT:     EntrySize: 0
+// CHECK-NEXT:   }
+// CHECK:        Section {
+// CHECK:          Name: .symtab
+// CHECK-NEXT:     Type: SHT_SYMTAB
+// CHECK-NEXT:     Flags [
+// CHECK-NEXT:     ]
+// CHECK-NEXT:     Address: 0x0
+// CHECK-NEXT:     Offset:
+// CHECK-NEXT:     Size: 24
+// CHECK-NEXT:     Link:
+// CHECK-NEXT:     Info: 1
+// CHECK-NEXT:     AddressAlignment: 8
+// CHECK-NEXT:     EntrySize: 24
+// CHECK-NEXT:   }

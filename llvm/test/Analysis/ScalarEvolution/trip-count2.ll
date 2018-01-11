@@ -1,16 +1,16 @@
-; RUN: opt < %s -analyze -scalar-evolution | \
-; RUN:   grep {backedge-taken count is 4}
+; RUN: opt < %s -analyze -scalar-evolution | FileCheck %s
 ; PR1101
 
 @A = weak global [1000 x i32] zeroinitializer, align 32         
 
+; CHECK: backedge-taken count is 4
 
 define void @test(i32 %N) {
 entry:
         br label %bb3
 
 bb:             ; preds = %bb3
-        %tmp = getelementptr [1000 x i32]* @A, i32 0, i32 %i.0          ; <i32*> [#uses=1]
+        %tmp = getelementptr [1000 x i32], [1000 x i32]* @A, i32 0, i32 %i.0          ; <i32*> [#uses=1]
         store i32 123, i32* %tmp
         %tmp4 = mul i32 %i.0, 4         ; <i32> [#uses=1]
         %tmp5 = or i32 %tmp4, 1

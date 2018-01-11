@@ -42,6 +42,8 @@
 #include <map>
 using namespace llvm;
 
+#define DEBUG_TYPE "dag-delta"
+
 namespace {
 
 class DAGDeltaAlgorithmImpl {
@@ -60,9 +62,6 @@ private:
   typedef std::set<change_ty>::iterator succ_closure_iterator_ty;
 
   DAGDeltaAlgorithm &DDA;
-
-  const changeset_ty &Changes;
-  const std::vector<edge_ty> &Dependencies;
 
   std::vector<change_ty> Roots;
 
@@ -122,7 +121,7 @@ private:
     DDA.UpdatedSearchState(Changes, Sets, Required);
   }
 
-  /// ExecuteOneTest - Execute a single test predicate on the change set \arg S.
+  /// ExecuteOneTest - Execute a single test predicate on the change set \p S.
   bool ExecuteOneTest(const changeset_ty &S) {
     // Check dependencies invariant.
     DEBUG({
@@ -137,14 +136,13 @@ private:
   }
 
 public:
-  DAGDeltaAlgorithmImpl(DAGDeltaAlgorithm &_DDA,
-                        const changeset_ty &_Changes,
-                        const std::vector<edge_ty> &_Dependencies);
+  DAGDeltaAlgorithmImpl(DAGDeltaAlgorithm &DDA, const changeset_ty &Changes,
+                        const std::vector<edge_ty> &Dependencies);
 
   changeset_ty Run();
 
-  /// GetTestResult - Get the test result for the active set \arg Changes with
-  /// \arg Required changes from the cache, executing the test if necessary.
+  /// GetTestResult - Get the test result for the active set \p Changes with
+  /// \p Required changes from the cache, executing the test if necessary.
   ///
   /// \param Changes - The set of active changes being minimized, which should
   /// have their pred closure included in the test.
@@ -162,31 +160,27 @@ class DeltaActiveSetHelper : public DeltaAlgorithm {
 
 protected:
   /// UpdatedSearchState - Callback used when the search state changes.
-  virtual void UpdatedSearchState(const changeset_ty &Changes,
-                                  const changesetlist_ty &Sets) {
+  void UpdatedSearchState(const changeset_ty &Changes,
+                                  const changesetlist_ty &Sets) override {
     DDAI.UpdatedSearchState(Changes, Sets, Required);
   }
 
-  virtual bool ExecuteOneTest(const changeset_ty &S) {
+  bool ExecuteOneTest(const changeset_ty &S) override {
     return DDAI.GetTestResult(S, Required);
   }
 
 public:
-  DeltaActiveSetHelper(DAGDeltaAlgorithmImpl &_DDAI,
-                       const changeset_ty &_Required)
-    : DDAI(_DDAI), Required(_Required) {}
+  DeltaActiveSetHelper(DAGDeltaAlgorithmImpl &DDAI,
+                       const changeset_ty &Required)
+      : DDAI(DDAI), Required(Required) {}
 };
 
 }
 
-DAGDeltaAlgorithmImpl::DAGDeltaAlgorithmImpl(DAGDeltaAlgorithm &_DDA,
-                                             const changeset_ty &_Changes,
-                                             const std::vector<edge_ty>
-                                               &_Dependencies)
-  : DDA(_DDA),
-    Changes(_Changes),
-    Dependencies(_Dependencies)
-{
+DAGDeltaAlgorithmImpl::DAGDeltaAlgorithmImpl(
+    DAGDeltaAlgorithm &DDA, const changeset_ty &Changes,
+    const std::vector<edge_ty> &Dependencies)
+    : DDA(DDA) {
   for (changeset_ty::const_iterator it = Changes.begin(),
          ie = Changes.end(); it != ie; ++it) {
     Predecessors.insert(std::make_pair(*it, std::vector<change_ty>()));

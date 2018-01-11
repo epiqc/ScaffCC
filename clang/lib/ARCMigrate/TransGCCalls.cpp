@@ -1,4 +1,4 @@
-//===--- TransGCCalls.cpp - Tranformations to ARC mode --------------------===//
+//===--- TransGCCalls.cpp - Transformations to ARC mode -------------------===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -9,6 +9,7 @@
 
 #include "Transforms.h"
 #include "Internals.h"
+#include "clang/AST/ASTContext.h"
 #include "clang/Sema/SemaDiagnostic.h"
 
 using namespace clang;
@@ -20,13 +21,12 @@ namespace {
 class GCCollectableCallsChecker :
                          public RecursiveASTVisitor<GCCollectableCallsChecker> {
   MigrationContext &MigrateCtx;
-  ParentMap &PMap;
   IdentifierInfo *NSMakeCollectableII;
   IdentifierInfo *CFMakeCollectableII;
 
 public:
-  GCCollectableCallsChecker(MigrationContext &ctx, ParentMap &map)
-    : MigrateCtx(ctx), PMap(map) {
+  GCCollectableCallsChecker(MigrationContext &ctx)
+    : MigrateCtx(ctx) {
     IdentifierTable &Ids = MigrateCtx.Pass.Ctx.Idents;
     NSMakeCollectableII = &Ids.get("NSMakeCollectable");
     CFMakeCollectableII = &Ids.get("CFMakeCollectable");
@@ -38,14 +38,8 @@ public:
     TransformActions &TA = MigrateCtx.Pass.TA;
 
     if (MigrateCtx.isGCOwnedNonObjC(E->getType())) {
-      if (MigrateCtx.Pass.noNSAllocReallocError())
-        TA.reportWarning("call returns pointer to GC managed memory; "
-                       "it will become unmanaged in ARC",
-                       E->getLocStart(), E->getSourceRange());
-      else 
-        TA.reportError("call returns pointer to GC managed memory; "
-                       "it will become unmanaged in ARC",
-                       E->getLocStart(), E->getSourceRange());
+      TA.report(E->getLocStart(), diag::warn_arcmt_nsalloc_realloc,
+                E->getSourceRange());
       return true;
     }
 
@@ -78,7 +72,6 @@ public:
 } // anonymous namespace
 
 void GCCollectableCallsTraverser::traverseBody(BodyContext &BodyCtx) {
-  GCCollectableCallsChecker(BodyCtx.getMigrationContext(),
-                            BodyCtx.getParentMap())
+  GCCollectableCallsChecker(BodyCtx.getMigrationContext())
                                             .TraverseStmt(BodyCtx.getTopStmt());
 }

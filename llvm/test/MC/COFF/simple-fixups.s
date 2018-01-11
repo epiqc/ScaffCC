@@ -1,8 +1,9 @@
-// The purpose of this test is to verify that we do not produce unneeded
-// relocations when symbols are in the same section and we know their offset.
+// The purpose of this test is to verify that we produce relocations for
+// references to functions.  Failing to do so might cause pointer-to-function
+// equality to fail if /INCREMENTAL links are used.
 
-// RUN: llvm-mc -filetype=obj -triple i686-pc-win32 %s | coff-dump.py | FileCheck %s
-// I WOULD RUN, BUT THIS FAILS: llvm-mc -filetype=obj -triple x86_64-pc-win32 %s | coff-dump.py | FileCheck %s
+// RUN: llvm-mc -filetype=obj -incremental-linker-compatible -triple i686-pc-win32 %s | llvm-readobj -s | FileCheck %s
+// RUN: llvm-mc -filetype=obj -incremental-linker-compatible -triple x86_64-pc-win32 %s | llvm-readobj -s | FileCheck %s
 
 	.def	 _foo;
 	.scl	2;
@@ -12,7 +13,7 @@
 	.globl	_foo
 	.align	16, 0x90
 _foo:                                   # @foo
-# BB#0:                                 # %e
+# %bb.0:                                # %e
 	.align	16, 0x90
 LBB0_1:                                 # %i
                                         # =>This Inner Loop Header: Depth=1
@@ -25,7 +26,7 @@ LBB0_1:                                 # %i
 	.globl	_bar
 	.align	16, 0x90
 _bar:                                   # @bar
-# BB#0:                                 # %e
+# %bb.0:                                # %e
 	.align	16, 0x90
 LBB1_1:                                 # %i
                                         # =>This Inner Loop Header: Depth=1
@@ -38,13 +39,12 @@ LBB1_1:                                 # %i
 	.globl	_baz
 	.align	16, 0x90
 _baz:                                   # @baz
-# BB#0:                                 # %e
+# %bb.0:                                # %e
 	subl	$4, %esp
 Ltmp0:
-	calll	_baz
+	call	_baz
 	addl	$4, %esp
 	ret
 
-// CHECK:     Sections = [
-// CHECK-NOT: NumberOfRelocations = {{[^0]}}
-// CHECK:     Symbols = [
+// CHECK:     Sections [
+// CHECK: RelocationCount: 1

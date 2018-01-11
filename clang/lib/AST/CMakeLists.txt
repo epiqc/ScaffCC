@@ -1,15 +1,26 @@
-set(LLVM_LINK_COMPONENTS support)
-
-set(LLVM_USED_LIBS clangBasic clangLex)
+set(LLVM_LINK_COMPONENTS
+  BinaryFormat
+  Support
+  )
 
 add_clang_library(clangAST
   APValue.cpp
   ASTConsumer.cpp
   ASTContext.cpp
   ASTDiagnostic.cpp
+  ASTDumper.cpp
   ASTImporter.cpp
+  ASTStructuralEquivalence.cpp
+  ASTTypeTraits.cpp
   AttrImpl.cpp
   CXXInheritance.cpp
+  Comment.cpp
+  CommentBriefParser.cpp
+  CommentCommandTraits.cpp
+  CommentLexer.cpp
+  CommentParser.cpp
+  CommentSema.cpp
+  DataCollection.cpp
   Decl.cpp
   DeclarationName.cpp
   DeclBase.cpp
@@ -17,30 +28,37 @@ add_clang_library(clangAST
   DeclFriend.cpp
   DeclGroup.cpp
   DeclObjC.cpp
+  DeclOpenMP.cpp
   DeclPrinter.cpp
   DeclTemplate.cpp
-  DumpXML.cpp
   Expr.cpp
   ExprClassification.cpp
   ExprConstant.cpp
   ExprCXX.cpp
+  ExprObjC.cpp
+  ExternalASTMerger.cpp
   ExternalASTSource.cpp
   InheritViz.cpp
   ItaniumCXXABI.cpp
   ItaniumMangle.cpp
-  LambdaMangleContext.cpp
   Mangle.cpp
   MicrosoftCXXABI.cpp
   MicrosoftMangle.cpp
   NestedNameSpecifier.cpp
   NSAPI.cpp
+  ODRHash.cpp
+  OpenMPClause.cpp
   ParentMap.cpp
+  QualTypeNames.cpp
+  RawCommentList.cpp
   RecordLayout.cpp
   RecordLayoutBuilder.cpp
   SelectorLocationsKind.cpp
   Stmt.cpp
-  StmtDumper.cpp
+  StmtCXX.cpp
   StmtIterator.cpp
+  StmtObjC.cpp
+  StmtOpenMP.cpp
   StmtPrinter.cpp
   StmtProfile.cpp
   StmtViz.cpp
@@ -51,7 +69,8 @@ add_clang_library(clangAST
   TypePrinter.cpp
   VTableBuilder.cpp
   VTTBuilder.cpp
-  )
 
-add_dependencies(clangAST ClangARMNeon ClangAttrClasses ClangAttrList 
-                 ClangAttrImpl ClangDiagnosticAST ClangDeclNodes ClangStmtNodes)
+  LINK_LIBS
+  clangBasic
+  clangLex
+  )

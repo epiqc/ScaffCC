@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 %s -fsyntax-only -verify -std=c89
+// RUN: %clang_cc1 %s -fsyntax-only -verify -std=c89 -Wno-sizeof-array-decay
 // rdar://6095180
 
 struct s { char c[17]; };
@@ -14,4 +14,4 @@ int B[sizeof((a.c)) == 17 ? 1 : -1];
 int W[sizeof(0, a.c) == sizeof(char*) ? 1 : -1];
 int X[sizeof(0, (foo().c)) == 17 ? 1 : -1];
 int Y[sizeof(0, (a,b).c) == 17 ? 1 : -1];
-int Z[sizeof(0, (a=b).c) == 17 ? 1 : -1];
+int Z[sizeof(0, (a=b).c) == 17 ? 1 : -1]; // expected-warning {{expression with side effects has no effect in an unevaluated context}}

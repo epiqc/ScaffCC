@@ -1,11 +1,17 @@
 // RUN: %clang_cc1 -fsyntax-only -Wmismatched-tags -verify %s
-// RUN: %clang_cc1 -fsyntax-only -Wmismatched-tags %s 2>&1 | FileCheck %s
+// RUN: not %clang_cc1 -fsyntax-only -Wmismatched-tags %s 2>&1 | FileCheck %s
 class X; // expected-note 2{{here}}
 typedef struct X * X_t; // expected-warning{{previously declared}}
 union X { int x; float y; }; // expected-error{{use of 'X' with tag type that does not match previous declaration}}
 
 template<typename T> struct Y; // expected-note{{did you mean class here?}}
 template<class U> class Y { }; // expected-warning{{previously declared}}
+
+template <typename>
+struct Z {
+  struct Z { // expected-error{{member 'Z' has the same name as its class}}
+  };
+};
 
 class A;
 class A;  // expected-note{{previous use is here}}

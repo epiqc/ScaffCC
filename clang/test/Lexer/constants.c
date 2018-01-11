@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -fsyntax-only -verify -pedantic -trigraphs %s
+// RUN: %clang_cc1 -fsyntax-only -verify -pedantic -ftrigraphs %s
 
 int x = 000000080;  // expected-error {{invalid digit}}
 
@@ -13,7 +13,12 @@ float Y = 08.123456;
 // PR2252
 #if -0x8000000000000000  // should not warn.
 #endif
-
+#if -01000000000000000000000  // should not warn.
+#endif
+#if 9223372036854775808 // expected-warning {{integer literal is too large to be represented in a signed integer type, interpreting as unsigned}}
+#endif
+#if 0x10000000000000000 // expected-error {{integer literal is too large to be represented in any integer type}}
+#endif
 
 int c[] = {
   'df',   // expected-warning {{multi-character character constant}}

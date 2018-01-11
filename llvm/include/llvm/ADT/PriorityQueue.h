@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_ADT_PRIORITY_QUEUE_H
-#define LLVM_ADT_PRIORITY_QUEUE_H
+#ifndef LLVM_ADT_PRIORITYQUEUE_H
+#define LLVM_ADT_PRIORITYQUEUE_H
 
 #include <algorithm>
 #include <queue>
@@ -46,8 +46,7 @@ public:
   ///
   void erase_one(const T &t) {
     // Linear-search to find the element.
-    typename Sequence::size_type i =
-      std::find(this->c.begin(), this->c.end(), t) - this->c.begin();
+    typename Sequence::size_type i = find(this->c, t) - this->c.begin();
 
     // Logarithmic-time heap bubble-up.
     while (i != 0) {

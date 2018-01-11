@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -fsyntax-only -verify %s 
+// RUN: %clang_cc1 -fsyntax-only -verify -std=c++11 %s 
 
 void test() {
   int x;
@@ -6,8 +6,8 @@ void test() {
   if (int x=0) ++x;
 
   typedef int arr[10];
-  while (arr x=0) ; // expected-error {{an array type is not allowed here}} expected-error {{array initializer must be an initializer list}}
-  while (int f()=0) ; // expected-warning {{interpreted as a function declaration}} expected-note {{initializer}} expected-error {{a function type is not allowed here}}
+  while (arr x={0}) ; // expected-error {{an array type is not allowed here}}
+  while (int f()=0) ; // expected-error {{a function type is not allowed here}}
 
   struct S {} s;
   if (s) ++x; // expected-error {{value of type 'struct S' is not contextually convertible to 'bool'}}
@@ -17,11 +17,9 @@ void test() {
   switch (s) {} // expected-error {{statement requires expression of integer type ('struct S' invalid)}}
 
   while (struct NewS *x=0) ;
-  while (struct S {} *x=0) ; // expected-error {{types may not be defined in conditions}}
-  while (struct {} *x=0) ; // expected-error {{types may not be defined in conditions}}
-  switch (enum {E} x=0) ; // expected-error {{types may not be defined in conditions}} expected-error {{cannot initialize}} \
-  // expected-warning{{enumeration value 'E' not handled in switch}} expected-warning {{switch statement has empty body}} \
-  // expected-note{{put the semicolon on a separate line}}
+  while (struct S {} *x=0) ; // expected-error {{'S' cannot be defined in a condition}}
+  while (struct {} *x=0) ; // expected-error-re {{'(anonymous struct at {{.*}})' cannot be defined in a condition}}
+  switch (enum {E} x=0) ; // expected-error-re {{'(anonymous enum at {{.*}})' cannot be defined in a condition}}
 
   if (int x=0) { // expected-note 2 {{previous definition is here}}
     int x;  // expected-error {{redefinition of 'x'}}
@@ -57,4 +55,17 @@ void test3() {
 
 void test4(bool (&x)(void)) {
   while (x);
+}
+
+template <class>
+void test5() {
+  if (struct S {}* p = 0) // expected-error {{'S' cannot be defined in a condition}}
+    ;
+}
+void test5_inst() {
+   test5<int>();
+}
+
+void PR28373() {
+  if (!x) {} // expected-error {{undeclared}}
 }

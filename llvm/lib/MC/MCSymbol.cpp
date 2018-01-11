@@ -8,74 +8,81 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/MC/MCSymbol.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/MC/MCAsmInfo.h"
+#include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCExpr.h"
+#include "llvm/MC/MCFragment.h"
+#include "llvm/Support/Compiler.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
+#include <cassert>
+#include <cstddef>
+
 using namespace llvm;
 
-// Sentinel value for the absolute pseudo section.
-const MCSection *MCSymbol::AbsolutePseudoSection =
-  reinterpret_cast<const MCSection *>(1);
+// Only the address of this fragment is ever actually used.
+static MCDummyFragment SentinelFragment(nullptr);
 
-static bool isAcceptableChar(char C) {
-  if ((C < 'a' || C > 'z') &&
-      (C < 'A' || C > 'Z') &&
-      (C < '0' || C > '9') &&
-      C != '_' && C != '$' && C != '.' && C != '@')
-    return false;
-  return true;
-}
+// Sentinel value for the absolute pseudo fragment.
+MCFragment *MCSymbol::AbsolutePseudoFragment = &SentinelFragment;
 
-/// NameNeedsQuoting - Return true if the identifier \arg Str needs quotes to be
-/// syntactically correct.
-static bool NameNeedsQuoting(StringRef Str) {
-  assert(!Str.empty() && "Cannot create an empty MCSymbol");
-  
-  // If any of the characters in the string is an unacceptable character, force
-  // quotes.
-  for (unsigned i = 0, e = Str.size(); i != e; ++i)
-    if (!isAcceptableChar(Str[i]))
-      return true;
-  return false;
-}
+void *MCSymbol::operator new(size_t s, const StringMapEntry<bool> *Name,
+                             MCContext &Ctx) {
+  // We may need more space for a Name to account for alignment.  So allocate
+  // space for the storage type and not the name pointer.
+  size_t Size = s + (Name ? sizeof(NameEntryStorageTy) : 0);
 
-const MCSymbol &MCSymbol::AliasedSymbol() const {
-  const MCSymbol *S = this;
-  while (S->isVariable()) {
-    const MCExpr *Value = S->getVariableValue();
-    if (Value->getKind() != MCExpr::SymbolRef)
-      return *S;
-    const MCSymbolRefExpr *Ref = static_cast<const MCSymbolRefExpr*>(Value);
-    S = &Ref->getSymbol();
-  }
-  return *S;
+  // For safety, ensure that the alignment of a pointer is enough for an
+  // MCSymbol.  This also ensures we don't need padding between the name and
+  // symbol.
+  static_assert((unsigned)alignof(MCSymbol) <= alignof(NameEntryStorageTy),
+                "Bad alignment of MCSymbol");
+  void *Storage = Ctx.allocate(Size, alignof(NameEntryStorageTy));
+  NameEntryStorageTy *Start = static_cast<NameEntryStorageTy*>(Storage);
+  NameEntryStorageTy *End = Start + (Name ? 1 : 0);
+  return End;
 }
 
 void MCSymbol::setVariableValue(const MCExpr *Value) {
   assert(!IsUsed && "Cannot set a variable that has already been used.");
   assert(Value && "Invalid variable value!");
+  assert((SymbolContents == SymContentsUnset ||
+          SymbolContents == SymContentsVariable) &&
+         "Cannot give common/offset symbol a variable value");
   this->Value = Value;
-
-  // Variables should always be marked as in the same "section" as the value.
-  const MCSection *Section = Value->FindAssociatedSection();
-  if (Section)
-    setSection(*Section);
-  else
-    setUndefined();
+  SymbolContents = SymContentsVariable;
+  setUndefined();
 }
 
-void MCSymbol::print(raw_ostream &OS) const {
+void MCSymbol::print(raw_ostream &OS, const MCAsmInfo *MAI) const {
   // The name for this MCSymbol is required to be a valid target name.  However,
   // some targets support quoting names with funny characters.  If the name
   // contains a funny character, then print it quoted.
-  if (!NameNeedsQuoting(getName())) {
-    OS << getName();
+  StringRef Name = getName();
+  if (!MAI || MAI->isValidUnquotedName(Name)) {
+    OS << Name;
     return;
   }
-    
-  OS << '"' << getName() << '"';
+
+  if (MAI && !MAI->supportsNameQuoting())
+    report_fatal_error("Symbol name with unsupported characters");
+
+  OS << '"';
+  for (char C : Name) {
+    if (C == '\n')
+      OS << "\\n";
+    else if (C == '"')
+      OS << "\\\"";
+    else
+      OS << C;
+  }
+  OS << '"';
 }
 
-void MCSymbol::dump() const {
-  print(dbgs());
+#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
+LLVM_DUMP_METHOD void MCSymbol::dump() const {
+  dbgs() << *this;
 }
+#endif

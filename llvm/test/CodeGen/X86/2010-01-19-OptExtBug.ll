@@ -1,4 +1,5 @@
-; RUN: llc < %s -mtriple=x86_64-apple-darwin11 -relocation-model=pic -disable-fp-elim -stats |& not grep ext-opt
+; REQUIRES: asserts
+; RUN: llc < %s -mtriple=x86_64-apple-darwin11 -relocation-model=pic -disable-fp-elim -stats 2>&1 | not grep ext-opt
 
 define fastcc i8* @S_scan_str(i8* %start, i32 %keep_quoted, i32 %keep_delims) nounwind ssp {
 entry:
@@ -20,7 +21,7 @@ bb7:                                              ; preds = %bb6
   unreachable
 
 bb9:                                              ; preds = %bb6
-  %0 = load i8* undef, align 1                    ; <i8> [#uses=3]
+  %0 = load i8, i8* undef, align 1                    ; <i8> [#uses=3]
   br i1 undef, label %bb12, label %bb10
 
 bb10:                                             ; preds = %bb9

@@ -1,4 +1,4 @@
-//===-- DeclarationName.cpp - Declaration names implementation --*- C++ -*-===//
+//===- DeclarationName.cpp - Declaration names implementation -------------===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -11,20 +11,36 @@
 // classes.
 //
 //===----------------------------------------------------------------------===//
+
+#include "clang/AST/DeclarationName.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Decl.h"
-#include "clang/AST/DeclarationName.h"
+#include "clang/AST/DeclBase.h"
+#include "clang/AST/DeclCXX.h"
+#include "clang/AST/DeclTemplate.h"
+#include "clang/AST/PrettyPrinter.h"
 #include "clang/AST/Type.h"
 #include "clang/AST/TypeLoc.h"
 #include "clang/AST/TypeOrdering.h"
 #include "clang/Basic/IdentifierTable.h"
-#include "llvm/ADT/DenseMap.h"
+#include "clang/Basic/LLVM.h"
+#include "clang/Basic/LangOptions.h"
+#include "clang/Basic/OperatorKinds.h"
+#include "clang/Basic/SourceLocation.h"
 #include "llvm/ADT/FoldingSet.h"
+#include "llvm/Support/Casting.h"
+#include "llvm/Support/Compiler.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
+#include <algorithm>
+#include <cassert>
+#include <cstdint>
+#include <string>
+
 using namespace clang;
 
 namespace clang {
+
 /// CXXSpecialName - Records the type associated with one of the
 /// "special" kinds of declaration names in C++, e.g., constructors,
 /// destructors, and conversion functions.
@@ -41,6 +57,22 @@ public:
   void Profile(llvm::FoldingSetNodeID &ID) {
     ID.AddInteger(ExtraKindOrNumArgs);
     ID.AddPointer(Type.getAsOpaquePtr());
+  }
+};
+
+/// Contains extra information for the name of a C++ deduction guide.
+class CXXDeductionGuideNameExtra : public DeclarationNameExtra,
+                                   public llvm::FoldingSetNode {
+public:
+  /// The template named by the deduction guide.
+  TemplateDecl *Template;
+
+  /// FETokenInfo - Extra information associated with this operator
+  /// name that can be used by the front end.
+  void *FETokenInfo;
+
+  void Profile(llvm::FoldingSetNodeID &ID) {
+    ID.AddPointer(Template);
   }
 };
 
@@ -73,6 +105,8 @@ public:
   }
 };
 
+} // namespace clang
+
 static int compareInt(unsigned A, unsigned B) {
   return (A < B ? -1 : (A > B ? 1 : 0));
 }
@@ -96,12 +130,18 @@ int DeclarationName::compare(DeclarationName LHS, DeclarationName RHS) {
   case DeclarationName::ObjCMultiArgSelector: {
     Selector LHSSelector = LHS.getObjCSelector();
     Selector RHSSelector = RHS.getObjCSelector();
+    // getNumArgs for ZeroArgSelector returns 0, but we still need to compare.
+    if (LHS.getNameKind() == DeclarationName::ObjCZeroArgSelector &&
+        RHS.getNameKind() == DeclarationName::ObjCZeroArgSelector) {
+      return LHSSelector.getAsIdentifierInfo()->getName().compare(
+             RHSSelector.getAsIdentifierInfo()->getName());
+    }
     unsigned LN = LHSSelector.getNumArgs(), RN = RHSSelector.getNumArgs();
     for (unsigned I = 0, N = std::min(LN, RN); I != N; ++I) {
       switch (LHSSelector.getNameForSlot(I).compare(
                                                RHSSelector.getNameForSlot(I))) {
-      case -1: return true;
-      case 1: return false;
+      case -1: return -1;
+      case 1: return 1;
       default: break;
       }
     }
@@ -117,7 +157,13 @@ int DeclarationName::compare(DeclarationName LHS, DeclarationName RHS) {
     if (QualTypeOrdering()(RHS.getCXXNameType(), LHS.getCXXNameType()))
       return 1;
     return 0;
-              
+
+  case DeclarationName::CXXDeductionGuideName:
+    // We never want to compare deduction guide names for templates from
+    // different scopes, so just compare the template-name.
+    return compare(LHS.getCXXDeductionGuideTemplate()->getDeclName(),
+                   RHS.getCXXDeductionGuideTemplate()->getDeclName());
+
   case DeclarationName::CXXOperatorName:
     return compareInt(LHS.getCXXOverloadedOperator(),
                       RHS.getCXXOverloadedOperator());
@@ -133,34 +179,103 @@ int DeclarationName::compare(DeclarationName LHS, DeclarationName RHS) {
   llvm_unreachable("Invalid DeclarationName Kind!");
 }
 
-} // end namespace clang
+static void printCXXConstructorDestructorName(QualType ClassType,
+                                              raw_ostream &OS,
+                                              PrintingPolicy Policy) {
+  // We know we're printing C++ here. Ensure we print types properly.
+  Policy.adjustForCPlusPlus();
 
-DeclarationName::DeclarationName(Selector Sel) {
-  if (!Sel.getAsOpaquePtr()) {
-    Ptr = 0;
+  if (const RecordType *ClassRec = ClassType->getAs<RecordType>()) {
+    OS << *ClassRec->getDecl();
+    return;
+  }
+  if (Policy.SuppressTemplateArgsInCXXConstructors) {
+    if (auto *InjTy = ClassType->getAs<InjectedClassNameType>()) {
+      OS << *InjTy->getDecl();
+      return;
+    }
+  }
+  ClassType.print(OS, Policy);
+}
+
+void DeclarationName::print(raw_ostream &OS, const PrintingPolicy &Policy) {
+  DeclarationName &N = *this;
+  switch (N.getNameKind()) {
+  case DeclarationName::Identifier:
+    if (const IdentifierInfo *II = N.getAsIdentifierInfo())
+      OS << II->getName();
+    return;
+
+  case DeclarationName::ObjCZeroArgSelector:
+  case DeclarationName::ObjCOneArgSelector:
+  case DeclarationName::ObjCMultiArgSelector:
+    N.getObjCSelector().print(OS);
+    return;
+
+  case DeclarationName::CXXConstructorName:
+    return printCXXConstructorDestructorName(N.getCXXNameType(), OS, Policy);
+
+  case DeclarationName::CXXDestructorName:
+    OS << '~';
+    return printCXXConstructorDestructorName(N.getCXXNameType(), OS, Policy);
+
+  case DeclarationName::CXXDeductionGuideName:
+    OS << "<deduction guide for ";
+    getCXXDeductionGuideTemplate()->getDeclName().print(OS, Policy);
+    OS << '>';
+    return;
+
+  case DeclarationName::CXXOperatorName: {
+    static const char* const OperatorNames[NUM_OVERLOADED_OPERATORS] = {
+      nullptr,
+#define OVERLOADED_OPERATOR(Name,Spelling,Token,Unary,Binary,MemberOnly) \
+      Spelling,
+#include "clang/Basic/OperatorKinds.def"
+    };
+    const char *OpName = OperatorNames[N.getCXXOverloadedOperator()];
+    assert(OpName && "not an overloaded operator");
+
+    OS << "operator";
+    if (OpName[0] >= 'a' && OpName[0] <= 'z')
+      OS << ' ';
+    OS << OpName;
     return;
   }
 
-  switch (Sel.getNumArgs()) {
-  case 0:
-    Ptr = reinterpret_cast<uintptr_t>(Sel.getAsIdentifierInfo());
-    assert((Ptr & PtrMask) == 0 && "Improperly aligned IdentifierInfo");
-    Ptr |= StoredObjCZeroArgSelector;
-    break;
+  case DeclarationName::CXXLiteralOperatorName:
+    OS << "operator\"\"" << N.getCXXLiteralIdentifier()->getName();
+    return;
 
-  case 1:
-    Ptr = reinterpret_cast<uintptr_t>(Sel.getAsIdentifierInfo());
-    assert((Ptr & PtrMask) == 0 && "Improperly aligned IdentifierInfo");
-    Ptr |= StoredObjCOneArgSelector;
-    break;
-
-  default:
-    Ptr = Sel.InfoPtr & ~Selector::ArgFlags;
-    assert((Ptr & PtrMask) == 0 && "Improperly aligned MultiKeywordSelector");
-    Ptr |= StoredDeclarationNameExtra;
-    break;
+  case DeclarationName::CXXConversionFunctionName: {
+    OS << "operator ";
+    QualType Type = N.getCXXNameType();
+    if (const RecordType *Rec = Type->getAs<RecordType>()) {
+      OS << *Rec->getDecl();
+      return;
+    }
+    // We know we're printing C++ here, ensure we print 'bool' properly.
+    PrintingPolicy CXXPolicy = Policy;
+    CXXPolicy.adjustForCPlusPlus();
+    Type.print(OS, CXXPolicy);
+    return;
   }
+  case DeclarationName::CXXUsingDirective:
+    OS << "<using-directive>";
+    return;
+  }
+
+  llvm_unreachable("Unexpected declaration name kind");
 }
+
+namespace clang {
+
+raw_ostream &operator<<(raw_ostream &OS, DeclarationName N) {
+  LangOptions LO;
+  N.print(OS, PrintingPolicy(LO));
+  return OS;
+}
+
+} // namespace clang
 
 DeclarationName::NameKind DeclarationName::getNameKind() const {
   switch (getStoredNameKind()) {
@@ -175,6 +290,9 @@ DeclarationName::NameKind DeclarationName::getNameKind() const {
 
     case DeclarationNameExtra::CXXDestructor:
       return CXXDestructorName;
+
+    case DeclarationNameExtra::CXXDeductionGuide:
+      return CXXDeductionGuideName;
 
     case DeclarationNameExtra::CXXConversionFunction:
       return CXXConversionFunctionName;
@@ -201,84 +319,22 @@ DeclarationName::NameKind DeclarationName::getNameKind() const {
 
 bool DeclarationName::isDependentName() const {
   QualType T = getCXXNameType();
-  return !T.isNull() && T->isDependentType();
+  if (!T.isNull() && T->isDependentType())
+    return true;
+
+  // A class-scope deduction guide in a dependent context has a dependent name.
+  auto *TD = getCXXDeductionGuideTemplate();
+  if (TD && TD->getDeclContext()->isDependentContext())
+    return true;
+
+  return false;
 }
 
 std::string DeclarationName::getAsString() const {
   std::string Result;
   llvm::raw_string_ostream OS(Result);
-  printName(OS);
+  OS << *this;
   return OS.str();
-}
-
-void DeclarationName::printName(raw_ostream &OS) const {
-  switch (getNameKind()) {
-  case Identifier:
-    if (const IdentifierInfo *II = getAsIdentifierInfo())
-      OS << II->getName();
-    return;
-
-  case ObjCZeroArgSelector:
-  case ObjCOneArgSelector:
-  case ObjCMultiArgSelector:
-    OS << getObjCSelector().getAsString();
-    return;
-
-  case CXXConstructorName: {
-    QualType ClassType = getCXXNameType();
-    if (const RecordType *ClassRec = ClassType->getAs<RecordType>())
-      OS << *ClassRec->getDecl();
-    else
-      OS << ClassType.getAsString();
-    return;
-  }
-
-  case CXXDestructorName: {
-    OS << '~';
-    QualType Type = getCXXNameType();
-    if (const RecordType *Rec = Type->getAs<RecordType>())
-      OS << *Rec->getDecl();
-    else
-      OS << Type.getAsString();
-    return;
-  }
-
-  case CXXOperatorName: {
-    static const char* const OperatorNames[NUM_OVERLOADED_OPERATORS] = {
-      0,
-#define OVERLOADED_OPERATOR(Name,Spelling,Token,Unary,Binary,MemberOnly) \
-      Spelling,
-#include "clang/Basic/OperatorKinds.def"
-    };
-    const char *OpName = OperatorNames[getCXXOverloadedOperator()];
-    assert(OpName && "not an overloaded operator");
-
-    OS << "operator";
-    if (OpName[0] >= 'a' && OpName[0] <= 'z')
-      OS << ' ';
-    OS << OpName;
-    return;
-  }
-
-  case CXXLiteralOperatorName:
-    OS << "operator \"\" " << getCXXLiteralIdentifier()->getName();
-    return;
-
-  case CXXConversionFunctionName: {
-    OS << "operator ";
-    QualType Type = getCXXNameType();
-    if (const RecordType *Rec = Type->getAs<RecordType>())
-      OS << *Rec->getDecl();
-    else
-      OS << Type.getAsString();
-    return;
-  }
-  case CXXUsingDirective:
-    OS << "<using-directive>";
-    return;
-  }
-
-  llvm_unreachable("Unexpected declaration name kind");
 }
 
 QualType DeclarationName::getCXXNameType() const {
@@ -286,6 +342,12 @@ QualType DeclarationName::getCXXNameType() const {
     return CXXName->Type;
   else
     return QualType();
+}
+
+TemplateDecl *DeclarationName::getCXXDeductionGuideTemplate() const {
+  if (auto *Guide = getAsCXXDeductionGuideNameExtra())
+    return Guide->Template;
+  return nullptr;
 }
 
 OverloadedOperatorKind DeclarationName::getCXXOverloadedOperator() const {
@@ -302,36 +364,21 @@ IdentifierInfo *DeclarationName::getCXXLiteralIdentifier() const {
   if (CXXLiteralOperatorIdName *CXXLit = getAsCXXLiteralOperatorIdName())
     return CXXLit->ID;
   else
-    return 0;
+    return nullptr;
 }
 
-Selector DeclarationName::getObjCSelector() const {
-  switch (getNameKind()) {
-  case ObjCZeroArgSelector:
-    return Selector(reinterpret_cast<IdentifierInfo *>(Ptr & ~PtrMask), 0);
-
-  case ObjCOneArgSelector:
-    return Selector(reinterpret_cast<IdentifierInfo *>(Ptr & ~PtrMask), 1);
-
-  case ObjCMultiArgSelector:
-    return Selector(reinterpret_cast<MultiKeywordSelector *>(Ptr & ~PtrMask));
-
-  default:
-    break;
-  }
-
-  return Selector();
-}
-
-void *DeclarationName::getFETokenInfoAsVoid() const {
+void *DeclarationName::getFETokenInfoAsVoidSlow() const {
   switch (getNameKind()) {
   case Identifier:
-    return getAsIdentifierInfo()->getFETokenInfo<void>();
+    llvm_unreachable("Handled by getFETokenInfo()");
 
   case CXXConstructorName:
   case CXXDestructorName:
   case CXXConversionFunctionName:
     return getAsCXXSpecialName()->FETokenInfo;
+
+  case CXXDeductionGuideName:
+    return getAsCXXDeductionGuideNameExtra()->FETokenInfo;
 
   case CXXOperatorName:
     return getAsCXXOperatorIdName()->FETokenInfo;
@@ -354,6 +401,10 @@ void DeclarationName::setFETokenInfo(void *T) {
   case CXXDestructorName:
   case CXXConversionFunctionName:
     getAsCXXSpecialName()->FETokenInfo = T;
+    break;
+
+  case CXXDeductionGuideName:
+    getAsCXXDeductionGuideNameExtra()->FETokenInfo = T;
     break;
 
   case CXXOperatorName:
@@ -380,33 +431,76 @@ DeclarationName DeclarationName::getUsingDirectiveName() {
   return DeclarationName(Ptr);
 }
 
-void DeclarationName::dump() const {
-  printName(llvm::errs());
-  llvm::errs() << '\n';
+LLVM_DUMP_METHOD void DeclarationName::dump() const {
+  llvm::errs() << *this << '\n';
 }
 
 DeclarationNameTable::DeclarationNameTable(const ASTContext &C) : Ctx(C) {
   CXXSpecialNamesImpl = new llvm::FoldingSet<CXXSpecialName>;
   CXXLiteralOperatorNames = new llvm::FoldingSet<CXXLiteralOperatorIdName>;
+  CXXDeductionGuideNames = new llvm::FoldingSet<CXXDeductionGuideNameExtra>;
 
   // Initialize the overloaded operator names.
   CXXOperatorNames = new (Ctx) CXXOperatorIdName[NUM_OVERLOADED_OPERATORS];
   for (unsigned Op = 0; Op < NUM_OVERLOADED_OPERATORS; ++Op) {
     CXXOperatorNames[Op].ExtraKindOrNumArgs
       = Op + DeclarationNameExtra::CXXConversionFunction;
-    CXXOperatorNames[Op].FETokenInfo = 0;
+    CXXOperatorNames[Op].FETokenInfo = nullptr;
   }
 }
 
 DeclarationNameTable::~DeclarationNameTable() {
-  llvm::FoldingSet<CXXSpecialName> *SpecialNames =
-    static_cast<llvm::FoldingSet<CXXSpecialName>*>(CXXSpecialNamesImpl);
-  llvm::FoldingSet<CXXLiteralOperatorIdName> *LiteralNames
-    = static_cast<llvm::FoldingSet<CXXLiteralOperatorIdName>*>
-        (CXXLiteralOperatorNames);
+  auto *SpecialNames =
+      static_cast<llvm::FoldingSet<CXXSpecialName> *>(CXXSpecialNamesImpl);
+  auto *LiteralNames =
+      static_cast<llvm::FoldingSet<CXXLiteralOperatorIdName> *>(
+          CXXLiteralOperatorNames);
+  auto *DeductionGuideNames =
+      static_cast<llvm::FoldingSet<CXXDeductionGuideNameExtra> *>(
+          CXXDeductionGuideNames);
 
   delete SpecialNames;
   delete LiteralNames;
+  delete DeductionGuideNames;
+}
+
+DeclarationName DeclarationNameTable::getCXXConstructorName(CanQualType Ty) {
+  return getCXXSpecialName(DeclarationName::CXXConstructorName,
+                           Ty.getUnqualifiedType());
+}
+
+DeclarationName DeclarationNameTable::getCXXDestructorName(CanQualType Ty) {
+  return getCXXSpecialName(DeclarationName::CXXDestructorName,
+                           Ty.getUnqualifiedType());
+}
+
+DeclarationName
+DeclarationNameTable::getCXXDeductionGuideName(TemplateDecl *Template) {
+  Template = cast<TemplateDecl>(Template->getCanonicalDecl());
+
+  auto *DeductionGuideNames =
+      static_cast<llvm::FoldingSet<CXXDeductionGuideNameExtra> *>(
+          CXXDeductionGuideNames);
+
+  llvm::FoldingSetNodeID ID;
+  ID.AddPointer(Template);
+
+  void *InsertPos = nullptr;
+  if (auto *Name = DeductionGuideNames->FindNodeOrInsertPos(ID, InsertPos))
+    return DeclarationName(Name);
+
+  auto *Name = new (Ctx) CXXDeductionGuideNameExtra;
+  Name->ExtraKindOrNumArgs = DeclarationNameExtra::CXXDeductionGuide;
+  Name->Template = Template;
+  Name->FETokenInfo = nullptr;
+
+  DeductionGuideNames->InsertNode(Name, InsertPos);
+  return DeclarationName(Name);
+}
+
+DeclarationName
+DeclarationNameTable::getCXXConversionFunctionName(CanQualType Ty) {
+  return getCXXSpecialName(DeclarationName::CXXConversionFunctionName, Ty);
 }
 
 DeclarationName
@@ -440,14 +534,14 @@ DeclarationNameTable::getCXXSpecialName(DeclarationName::NameKind Kind,
   ID.AddInteger(EKind);
   ID.AddPointer(Ty.getAsOpaquePtr());
 
-  void *InsertPos = 0;
+  void *InsertPos = nullptr;
   if (CXXSpecialName *Name = SpecialNames->FindNodeOrInsertPos(ID, InsertPos))
     return DeclarationName(Name);
 
   CXXSpecialName *SpecialName = new (Ctx) CXXSpecialName;
   SpecialName->ExtraKindOrNumArgs = EKind;
   SpecialName->Type = Ty;
-  SpecialName->FETokenInfo = 0;
+  SpecialName->FETokenInfo = nullptr;
 
   SpecialNames->InsertNode(SpecialName, InsertPos);
   return DeclarationName(SpecialName);
@@ -467,7 +561,7 @@ DeclarationNameTable::getCXXLiteralOperatorName(IdentifierInfo *II) {
   llvm::FoldingSetNodeID ID;
   ID.AddPointer(II);
 
-  void *InsertPos = 0;
+  void *InsertPos = nullptr;
   if (CXXLiteralOperatorIdName *Name =
                                LiteralNames->FindNodeOrInsertPos(ID, InsertPos))
     return DeclarationName (Name);
@@ -475,26 +569,21 @@ DeclarationNameTable::getCXXLiteralOperatorName(IdentifierInfo *II) {
   CXXLiteralOperatorIdName *LiteralName = new (Ctx) CXXLiteralOperatorIdName;
   LiteralName->ExtraKindOrNumArgs = DeclarationNameExtra::CXXLiteralOperator;
   LiteralName->ID = II;
-  LiteralName->FETokenInfo = 0;
+  LiteralName->FETokenInfo = nullptr;
 
   LiteralNames->InsertNode(LiteralName, InsertPos);
   return DeclarationName(LiteralName);
 }
 
-unsigned
-llvm::DenseMapInfo<clang::DeclarationName>::
-getHashValue(clang::DeclarationName N) {
-  return DenseMapInfo<void*>::getHashValue(N.getAsOpaquePtr());
-}
-
 DeclarationNameLoc::DeclarationNameLoc(DeclarationName Name) {
   switch (Name.getNameKind()) {
   case DeclarationName::Identifier:
+  case DeclarationName::CXXDeductionGuideName:
     break;
   case DeclarationName::CXXConstructorName:
   case DeclarationName::CXXDestructorName:
   case DeclarationName::CXXConversionFunctionName:
-    NamedType.TInfo = 0;
+    NamedType.TInfo = nullptr;
     break;
   case DeclarationName::CXXOperatorName:
     CXXOperatorName.BeginOpNameLoc = SourceLocation().getRawEncoding();
@@ -522,6 +611,7 @@ bool DeclarationNameInfo::containsUnexpandedParameterPack() const {
   case DeclarationName::CXXOperatorName:
   case DeclarationName::CXXLiteralOperatorName:
   case DeclarationName::CXXUsingDirective:
+  case DeclarationName::CXXDeductionGuideName:
     return false;
 
   case DeclarationName::CXXConstructorName:
@@ -544,6 +634,7 @@ bool DeclarationNameInfo::isInstantiationDependent() const {
   case DeclarationName::CXXOperatorName:
   case DeclarationName::CXXLiteralOperatorName:
   case DeclarationName::CXXUsingDirective:
+  case DeclarationName::CXXDeductionGuideName:
     return false;
     
   case DeclarationName::CXXConstructorName:
@@ -573,7 +664,8 @@ void DeclarationNameInfo::printName(raw_ostream &OS) const {
   case DeclarationName::CXXOperatorName:
   case DeclarationName::CXXLiteralOperatorName:
   case DeclarationName::CXXUsingDirective:
-    Name.printName(OS);
+  case DeclarationName::CXXDeductionGuideName:
+    OS << Name;
     return;
 
   case DeclarationName::CXXConstructorName:
@@ -584,10 +676,14 @@ void DeclarationNameInfo::printName(raw_ostream &OS) const {
         OS << '~';
       else if (Name.getNameKind() == DeclarationName::CXXConversionFunctionName)
         OS << "operator ";
-      OS << TInfo->getType().getAsString();
-    }
-    else
-      Name.printName(OS);
+      LangOptions LO;
+      LO.CPlusPlus = true;
+      LO.Bool = true;
+      PrintingPolicy PP(LO);
+      PP.SuppressScope = true;
+      OS << TInfo->getType().getAsString(PP);
+    } else
+      OS << Name;
     return;
   }
   llvm_unreachable("Unexpected declaration name kind");
@@ -596,6 +692,7 @@ void DeclarationNameInfo::printName(raw_ostream &OS) const {
 SourceLocation DeclarationNameInfo::getEndLoc() const {
   switch (Name.getNameKind()) {
   case DeclarationName::Identifier:
+  case DeclarationName::CXXDeductionGuideName:
     return NameLoc;
 
   case DeclarationName::CXXOperatorName: {

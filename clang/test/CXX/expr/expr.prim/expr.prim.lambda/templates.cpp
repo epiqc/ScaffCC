@@ -2,10 +2,11 @@
 
 template<typename T>
 void test_attributes() {
-  auto nrl = []() [[noreturn]] {}; // expected-error{{lambda declared 'noreturn' should not return}}
+  // FIXME: GCC accepts [[gnu::noreturn]] here.
+  auto nrl = []() [[gnu::noreturn]] {}; // expected-warning{{attribute 'noreturn' ignored}}
 }
 
-template void test_attributes<int>(); // expected-note{{in instantiation of function}}
+template void test_attributes<int>();
 
 template<typename T>
 void call_with_zero() {
@@ -37,7 +38,7 @@ template X captures(X, X);
 template<typename T>
 int infer_result(T x, T y) {
   auto lambda = [=](bool b) { return x + y; };
-  return lambda(true); // expected-error{{no viable conversion from 'X' to 'int'}}
+  return lambda(true); // expected-error{{no viable conversion from returned value of type 'X' to function return type 'int'}}
 }
 
 template int infer_result(int, int);
@@ -68,8 +69,7 @@ namespace p2 {
   template<typename T>
   struct Boom {
     Boom(const Boom&) { 
-      T* x = 1; // expected-error{{cannot initialize a variable of type 'int *' with an rvalue of type 'int'}} \
-      // expected-error{{cannot initialize a variable of type 'float *' with an rvalue of type 'int'}}
+      T* x = 1; // expected-error{{cannot initialize a variable of type 'float *' with an rvalue of type 'int'}}
     }
     void tickle() const;
   };
@@ -78,7 +78,7 @@ namespace p2 {
   void odr_used(R &r, Boom<T> boom) {
     const std::type_info &ti
       = typeid([=,&r] () -> R& { // expected-error{{lambda expression in an unevaluated operand}}
-          boom.tickle(); // expected-note{{in instantiation of member function}}
+          boom.tickle();
           return r; 
         }()); 
   }
@@ -145,5 +145,5 @@ namespace NonLocalLambdaInstantation {
 
   X2<int> x2i;
   X2<float> x2f;
-  X2<int*> x2ip; // expected-note{{in instantiation of template class 'NonLocalLambdaInstantation::X2<int *>' requested here}}
+  X2<int*> x2ip; // expected-note{{in instantiation of default member initializer 'NonLocalLambdaInstantation::X2<int *>::x'}}
 }

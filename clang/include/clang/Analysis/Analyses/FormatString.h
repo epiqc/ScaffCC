@@ -16,12 +16,14 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_CLANG_FORMAT_H
-#define LLVM_CLANG_FORMAT_H
+#ifndef LLVM_CLANG_ANALYSIS_ANALYSES_FORMATSTRING_H
+#define LLVM_CLANG_ANALYSIS_ANALYSES_FORMATSTRING_H
 
 #include "clang/AST/CanonicalType.h"
 
 namespace clang {
+
+class TargetInfo;
 
 //===----------------------------------------------------------------------===//
 /// Common components of both fprintf and fscanf format strings.
@@ -33,11 +35,12 @@ class OptionalFlag {
 public:
   OptionalFlag(const char *Representation)
       : representation(Representation), flag(false) {}
-  bool isSet() { return flag; }
+  bool isSet() const { return flag; }
   void set() { flag = true; }
   void clear() { flag = false; }
   void setPosition(const char *position) {
     assert(position);
+    flag = true;
     this->position = position;
   }
   const char *getPosition() const {
@@ -47,7 +50,7 @@ public:
   const char *toString() const { return representation; }
 
   // Overloaded operators for bool like qualities
-  operator bool() const { return flag; }
+  explicit operator bool() const { return flag; }
   OptionalFlag& operator=(const bool &rhs) {
     flag = rhs;
     return *this;  // Return a reference to myself.
@@ -71,14 +74,18 @@ public:
     AsIntMax,     // 'j'
     AsSizeT,      // 'z'
     AsPtrDiff,    // 't'
+    AsInt32,      // 'I32' (MSVCRT, like __int32)
+    AsInt3264,    // 'I'   (MSVCRT, like __int3264 from MIDL)
+    AsInt64,      // 'I64' (MSVCRT, like __int64)
     AsLongDouble, // 'L'
     AsAllocate,   // for '%as', GNU extension to C90 scanf
     AsMAllocate,  // for '%ms', GNU extension to scanf
+    AsWide,       // 'w' (MSVCRT, like l but only for c, C, s, S, or Z
     AsWideChar = AsLong // for '%ls', only makes sense for printf
   };
 
   LengthModifier()
-    : Position(0), kind(None) {}
+    : Position(nullptr), kind(None) {}
   LengthModifier(const char *pos, Kind k)
     : Position(pos), kind(k) {}
 
@@ -93,6 +100,9 @@ public:
       case AsLongLong:
       case AsChar:
         return 2;
+      case AsInt32:
+      case AsInt64:
+        return 3;
       case None:
         return 0;
     }
@@ -112,17 +122,22 @@ class ConversionSpecifier {
 public:
   enum Kind {
     InvalidSpecifier = 0,
-      // C99 conversion specifiers.
+    // C99 conversion specifiers.
     cArg,
     dArg,
+    DArg, // Apple extension
     iArg,
-    IntArgBeg = cArg, IntArgEnd = iArg,
+    IntArgBeg = dArg,
+    IntArgEnd = iArg,
 
     oArg,
+    OArg, // Apple extension
     uArg,
+    UArg, // Apple extension
     xArg,
     XArg,
-    UIntArgBeg = oArg, UIntArgEnd = XArg,
+    UIntArgBeg = oArg,
+    UIntArgEnd = XArg,
 
     fArg,
     FArg,
@@ -132,7 +147,8 @@ public:
     GArg,
     aArg,
     AArg,
-    DoubleArgBeg = fArg, DoubleArgEnd = AArg,
+    DoubleArgBeg = fArg,
+    DoubleArgEnd = AArg,
 
     sArg,
     pArg,
@@ -141,27 +157,44 @@ public:
     CArg,
     SArg,
 
+    // Apple extension: P specifies to os_log that the data being pointed to is
+    // to be copied by os_log. The precision indicates the number of bytes to
+    // copy.
+    PArg,
+
     // ** Printf-specific **
 
+    ZArg, // MS extension
+
     // Objective-C specific specifiers.
-    ObjCObjArg,  // '@'
-    ObjCBeg = ObjCObjArg, ObjCEnd = ObjCObjArg,
+    ObjCObjArg, // '@'
+    ObjCBeg = ObjCObjArg,
+    ObjCEnd = ObjCObjArg,
+
+    // FreeBSD kernel specific specifiers.
+    FreeBSDbArg,
+    FreeBSDDArg,
+    FreeBSDrArg,
+    FreeBSDyArg,
 
     // GlibC specific specifiers.
-    PrintErrno,   // 'm'
+    PrintErrno, // 'm'
 
-    PrintfConvBeg = ObjCObjArg, PrintfConvEnd = PrintErrno,
+    PrintfConvBeg = ObjCObjArg,
+    PrintfConvEnd = PrintErrno,
 
     // ** Scanf-specific **
     ScanListArg, // '['
-    ScanfConvBeg = ScanListArg, ScanfConvEnd = ScanListArg
+    ScanfConvBeg = ScanListArg,
+    ScanfConvEnd = ScanListArg
   };
 
-  ConversionSpecifier(bool isPrintf)
-    : IsPrintf(isPrintf), Position(0), EndScanList(0), kind(InvalidSpecifier) {}
+  ConversionSpecifier(bool isPrintf = true)
+    : IsPrintf(isPrintf), Position(nullptr), EndScanList(nullptr),
+      kind(InvalidSpecifier) {}
 
   ConversionSpecifier(bool isPrintf, const char *pos, Kind k)
-    : IsPrintf(isPrintf), Position(pos), EndScanList(0), kind(k) {}
+    : IsPrintf(isPrintf), Position(pos), EndScanList(nullptr), kind(k) {}
 
   const char *getStart() const {
     return Position;
@@ -175,7 +208,10 @@ public:
     switch (kind) {
       case PrintErrno:
         assert(IsPrintf);
+        return false;
       case PercentArg:
+        return false;
+      case InvalidSpecifier:
         return false;
       default:
         return true;
@@ -187,11 +223,21 @@ public:
   unsigned getLength() const {
     return EndScanList ? EndScanList - Position : 1;
   }
+  void setEndScanList(const char *pos) { EndScanList = pos; }
 
+  bool isIntArg() const { return (kind >= IntArgBeg && kind <= IntArgEnd) ||
+    kind == FreeBSDrArg || kind == FreeBSDyArg; }
   bool isUIntArg() const { return kind >= UIntArgBeg && kind <= UIntArgEnd; }
+  bool isAnyIntArg() const { return kind >= IntArgBeg && kind <= UIntArgEnd; }
+  bool isDoubleArg() const {
+    return kind >= DoubleArgBeg && kind <= DoubleArgEnd;
+  }
+
   const char *toString() const;
 
   bool isPrintfKind() const { return IsPrintf; }
+  
+  Optional<ConversionSpecifier> getStandardSpecifier() const;
 
 protected:
   bool IsPrintf;
@@ -200,33 +246,37 @@ protected:
   Kind kind;
 };
 
-class ArgTypeResult {
+class ArgType {
 public:
   enum Kind { UnknownTy, InvalidTy, SpecificTy, ObjCPointerTy, CPointerTy,
               AnyCharTy, CStrTy, WCStrTy, WIntTy };
+
+  enum MatchKind { NoMatch = 0, Match = 1, NoMatchPedantic };
+
 private:
   const Kind K;
   QualType T;
   const char *Name;
-  ArgTypeResult(bool) : K(InvalidTy), Name(0) {}
+  bool Ptr;
 public:
-  ArgTypeResult(Kind k = UnknownTy) : K(k), Name(0) {}
-  ArgTypeResult(Kind k, const char *n) : K(k), Name(n) {}
-  ArgTypeResult(QualType t) : K(SpecificTy), T(t), Name(0) {}
-  ArgTypeResult(QualType t, const char *n) : K(SpecificTy), T(t), Name(n)  {}
-  ArgTypeResult(CanQualType t) : K(SpecificTy), T(t), Name(0) {}
+  ArgType(Kind k = UnknownTy, const char *n = nullptr)
+      : K(k), Name(n), Ptr(false) {}
+  ArgType(QualType t, const char *n = nullptr)
+      : K(SpecificTy), T(t), Name(n), Ptr(false) {}
+  ArgType(CanQualType t) : K(SpecificTy), T(t), Name(nullptr), Ptr(false) {}
 
-  static ArgTypeResult Invalid() { return ArgTypeResult(true); }
-
+  static ArgType Invalid() { return ArgType(InvalidTy); }
   bool isValid() const { return K != InvalidTy; }
 
-  const QualType *getSpecificType() const {
-    return K == SpecificTy ? &T : 0;
+  /// Create an ArgType which corresponds to the type pointer to A.
+  static ArgType PtrTo(const ArgType& A) {
+    assert(A.K >= InvalidTy && "ArgType cannot be pointer to invalid/unknown");
+    ArgType Res = A;
+    Res.Ptr = true;
+    return Res;
   }
 
-  bool matchesType(ASTContext &C, QualType argTy) const;
-
-  bool matchesAnyObjCObjectRef() const { return K == ObjCPointerTy; }
+  MatchKind matchesType(ASTContext &C, QualType argTy) const;
 
   QualType getRepresentativeType(ASTContext &C) const;
 
@@ -246,7 +296,7 @@ public:
   UsesPositionalArg(usesPositionalArg), UsesDotPrefix(0) {}
 
   OptionalAmount(bool valid = true)
-  : start(0),length(0), hs(valid ? NotSpecified : Invalid), amt(0),
+  : start(nullptr),length(0), hs(valid ? NotSpecified : Invalid), amt(0),
   UsesPositionalArg(0), UsesDotPrefix(0) {}
 
   bool isInvalid() const {
@@ -278,7 +328,7 @@ public:
     return length + UsesDotPrefix;
   }
 
-  ArgTypeResult getArgType(ASTContext &Ctx) const;
+  ArgType getArgType(ASTContext &Ctx) const;
 
   void toString(raw_ostream &os) const;
 
@@ -347,13 +397,19 @@ public:
 
   bool usesPositionalArg() const { return UsesPositionalArg; }
 
-  bool hasValidLengthModifier() const;
+  bool hasValidLengthModifier(const TargetInfo &Target) const;
 
   bool hasStandardLengthModifier() const;
+
+  Optional<LengthModifier> getCorrectedLengthModifier() const;
 
   bool hasStandardConversionSpecifier(const LangOptions &LangOpt) const;
 
   bool hasStandardLengthConversionCombination() const;
+
+  /// For a TypedefType QT, if it is a named integer type such as size_t,
+  /// assign the appropriate value to LM and return true.
+  static bool namedTypeToLengthModifier(QualType QT, LengthModifier &LM);
 };
 
 } // end analyze_format_string namespace
@@ -367,27 +423,21 @@ class PrintfConversionSpecifier :
   public analyze_format_string::ConversionSpecifier  {
 public:
   PrintfConversionSpecifier()
-    : ConversionSpecifier(true, 0, InvalidSpecifier) {}
+    : ConversionSpecifier(true, nullptr, InvalidSpecifier) {}
 
   PrintfConversionSpecifier(const char *pos, Kind k)
     : ConversionSpecifier(true, pos, k) {}
 
   bool isObjCArg() const { return kind >= ObjCBeg && kind <= ObjCEnd; }
-  bool isIntArg() const { return kind >= IntArgBeg && kind <= IntArgEnd; }
   bool isDoubleArg() const { return kind >= DoubleArgBeg &&
                                     kind <= DoubleArgEnd; }
-  unsigned getLength() const {
-      // Conversion specifiers currently only are represented by
-      // single characters, but we be flexible.
-    return 1;
-  }
 
   static bool classof(const analyze_format_string::ConversionSpecifier *CS) {
     return CS->isPrintfKind();
   }
 };
 
-using analyze_format_string::ArgTypeResult;
+using analyze_format_string::ArgType;
 using analyze_format_string::LengthModifier;
 using analyze_format_string::OptionalAmount;
 using analyze_format_string::OptionalFlag;
@@ -399,12 +449,16 @@ class PrintfSpecifier : public analyze_format_string::FormatSpecifier {
   OptionalFlag HasSpacePrefix; // ' '
   OptionalFlag HasAlternativeForm; // '#'
   OptionalFlag HasLeadingZeroes; // '0'
+  OptionalFlag HasObjCTechnicalTerm; // '[tt]'
+  OptionalFlag IsPrivate;            // '{private}'
+  OptionalFlag IsPublic;             // '{public}'
   OptionalAmount Precision;
 public:
-  PrintfSpecifier() :
-    FormatSpecifier(/* isPrintf = */ true),
-    HasThousandsGrouping("'"), IsLeftJustified("-"), HasPlusPrefix("+"),
-    HasSpacePrefix(" "), HasAlternativeForm("#"), HasLeadingZeroes("0") {}
+  PrintfSpecifier()
+      : FormatSpecifier(/* isPrintf = */ true), HasThousandsGrouping("'"),
+        IsLeftJustified("-"), HasPlusPrefix("+"), HasSpacePrefix(" "),
+        HasAlternativeForm("#"), HasLeadingZeroes("0"),
+        HasObjCTechnicalTerm("tt"), IsPrivate("private"), IsPublic("public") {}
 
   static PrintfSpecifier Parse(const char *beg, const char *end);
 
@@ -413,29 +467,28 @@ public:
     CS = cs;
   }
   void setHasThousandsGrouping(const char *position) {
-    HasThousandsGrouping = true;
     HasThousandsGrouping.setPosition(position);
   }
   void setIsLeftJustified(const char *position) {
-    IsLeftJustified = true;
     IsLeftJustified.setPosition(position);
   }
   void setHasPlusPrefix(const char *position) {
-    HasPlusPrefix = true;
     HasPlusPrefix.setPosition(position);
   }
   void setHasSpacePrefix(const char *position) {
-    HasSpacePrefix = true;
     HasSpacePrefix.setPosition(position);
   }
   void setHasAlternativeForm(const char *position) {
-    HasAlternativeForm = true;
     HasAlternativeForm.setPosition(position);
   }
   void setHasLeadingZeros(const char *position) {
-    HasLeadingZeroes = true;
     HasLeadingZeroes.setPosition(position);
   }
+  void setHasObjCTechnicalTerm(const char *position) {
+    HasObjCTechnicalTerm.setPosition(position);
+  }
+  void setIsPrivate(const char *position) { IsPrivate.setPosition(position); }
+  void setIsPublic(const char *position) { IsPublic.setPosition(position); }
   void setUsesPositionalArg() { UsesPositionalArg = true; }
 
     // Methods for querying the format specifier.
@@ -462,7 +515,7 @@ public:
   /// will return null if the format specifier does not have
   /// a matching data argument or the matching argument matches
   /// more than one type.
-  ArgTypeResult getArgType(ASTContext &Ctx, bool IsObjCLiteral) const;
+  ArgType getArgType(ASTContext &Ctx, bool IsObjCLiteral) const;
 
   const OptionalFlag &hasThousandsGrouping() const {
       return HasThousandsGrouping;
@@ -472,6 +525,9 @@ public:
   const OptionalFlag &hasAlternativeForm() const { return HasAlternativeForm; }
   const OptionalFlag &hasLeadingZeros() const { return HasLeadingZeroes; }
   const OptionalFlag &hasSpacePrefix() const { return HasSpacePrefix; }
+  const OptionalFlag &hasObjCTechnicalTerm() const { return HasObjCTechnicalTerm; }
+  const OptionalFlag &isPrivate() const { return IsPrivate; }
+  const OptionalFlag &isPublic() const { return IsPublic; }
   bool usesPositionalArg() const { return UsesPositionalArg; }
 
   /// Changes the specifier and length according to a QualType, retaining any
@@ -504,46 +560,20 @@ class ScanfConversionSpecifier :
     public analyze_format_string::ConversionSpecifier  {
 public:
   ScanfConversionSpecifier()
-    : ConversionSpecifier(false, 0, InvalidSpecifier) {}
+    : ConversionSpecifier(false, nullptr, InvalidSpecifier) {}
 
   ScanfConversionSpecifier(const char *pos, Kind k)
     : ConversionSpecifier(false, pos, k) {}
-
-  void setEndScanList(const char *pos) { EndScanList = pos; }
 
   static bool classof(const analyze_format_string::ConversionSpecifier *CS) {
     return !CS->isPrintfKind();
   }
 };
 
-using analyze_format_string::ArgTypeResult;
+using analyze_format_string::ArgType;
 using analyze_format_string::LengthModifier;
 using analyze_format_string::OptionalAmount;
 using analyze_format_string::OptionalFlag;
-
-class ScanfArgTypeResult : public ArgTypeResult {
-public:
-  enum Kind { UnknownTy, InvalidTy, CStrTy, WCStrTy, PtrToArgTypeResultTy };
-private:
-  Kind K;
-  ArgTypeResult A;
-  const char *Name;
-  QualType getRepresentativeType(ASTContext &C) const;
-public:
-  ScanfArgTypeResult(Kind k = UnknownTy, const char* n = 0) : K(k), Name(n) {}
-  ScanfArgTypeResult(ArgTypeResult a, const char *n = 0)
-      : K(PtrToArgTypeResultTy), A(a), Name(n) {
-    assert(A.isValid());
-  }
-
-  static ScanfArgTypeResult Invalid() { return ScanfArgTypeResult(InvalidTy); }
-
-  bool isValid() const { return K != InvalidTy; }
-
-  bool matchesType(ASTContext& C, QualType argTy) const;
-
-  std::string getRepresentativeTypeName(ASTContext& C) const;
-};
 
 class ScanfSpecifier : public analyze_format_string::FormatSpecifier {
   OptionalFlag SuppressAssignment; // '*'
@@ -553,7 +583,6 @@ public:
     SuppressAssignment("*") {}
 
   void setSuppressAssignment(const char *position) {
-    SuppressAssignment = true;
     SuppressAssignment.setPosition(position);
   }
 
@@ -573,9 +602,10 @@ public:
     return CS.consumesDataArgument() && !SuppressAssignment;
   }
 
-  ScanfArgTypeResult getArgType(ASTContext &Ctx) const;
+  ArgType getArgType(ASTContext &Ctx) const;
 
-  bool fixType(QualType QT, const LangOptions &LangOpt, ASTContext &Ctx);
+  bool fixType(QualType QT, QualType RawQT, const LangOptions &LangOpt,
+               ASTContext &Ctx);
 
   void toString(raw_ostream &os) const;
 
@@ -608,6 +638,15 @@ public:
   virtual void HandleIncompleteSpecifier(const char *startSpecifier,
                                          unsigned specifierLen) {}
 
+  virtual void HandleEmptyObjCModifierFlag(const char *startFlags,
+                                           unsigned flagsLen) {}
+
+  virtual void HandleInvalidObjCModifierFlag(const char *startFlag,
+                                             unsigned flagLen) {}
+
+  virtual void HandleObjCFlagsWithNonObjCConversion(const char *flagsStart,
+                                            const char *flagsEnd,
+                                            const char *conversionPosition) {}
   // Printf-specific handlers.
 
   virtual bool HandleInvalidPrintfConversionSpecifier(
@@ -642,10 +681,15 @@ public:
 };
 
 bool ParsePrintfString(FormatStringHandler &H,
-                       const char *beg, const char *end, const LangOptions &LO);
+                       const char *beg, const char *end, const LangOptions &LO,
+                       const TargetInfo &Target, bool isFreeBSDKPrintf);
+
+bool ParseFormatStringHasSArg(const char *beg, const char *end,
+                              const LangOptions &LO, const TargetInfo &Target);
 
 bool ParseScanfString(FormatStringHandler &H,
-                      const char *beg, const char *end, const LangOptions &LO);
+                      const char *beg, const char *end, const LangOptions &LO,
+                      const TargetInfo &Target);
 
 } // end analyze_format_string namespace
 } // end clang namespace

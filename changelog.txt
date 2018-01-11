@@ -1,3 +1,9 @@
+2017-12-07:
+	Migrated to LLVM 6.0
+	Changed module to qmodule
+	Added make -DISABLE_STATIC=1 to link with shared libraries
+	Added CC=clang CXX=clang++ to use LLVM Toolchain instead of GCC to build
+	Changes made to use LLVM PASS efficiently
 2017-08-06:
 	Release version -v3.0-alpha
 	New software package, braidflash, added - in braidflash/ directory (Unix only)

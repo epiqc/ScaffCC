@@ -1,5 +1,5 @@
 ; PR1015
-; RUN: opt < %s -indvars -S | not grep {ret i32 0}
+; RUN: opt < %s -indvars -S | FileCheck %s
 
 target datalayout = "e-p:32:32"
 target triple = "i686-apple-darwin8"
@@ -8,6 +8,8 @@ target triple = "i686-apple-darwin8"
 
 
 define i32 @test(i32 %J) {
+; CHECK-LABEL: @test(
+; CHECK-NOT: ret i32 0
 entry:
 	br label %bb2
 
@@ -24,8 +26,8 @@ cond_true:		; preds = %bb2
 	br label %bb
 
 cond_next:		; preds = %bb2
-	%tmp2 = getelementptr [5 x i8]* @foo, i32 0, i32 %i.0		; <i8*> [#uses=1]
-	%tmp3 = load i8* %tmp2		; <i8> [#uses=1]
+	%tmp2 = getelementptr [5 x i8], [5 x i8]* @foo, i32 0, i32 %i.0		; <i8*> [#uses=1]
+	%tmp3 = load i8, i8* %tmp2		; <i8> [#uses=1]
 	%tmp5 = icmp eq i8 %tmp3, 0		; <i1> [#uses=1]
 	br i1 %tmp5, label %bb6, label %bb
 

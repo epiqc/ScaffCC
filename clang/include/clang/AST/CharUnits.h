@@ -19,21 +19,20 @@
 #include "llvm/Support/MathExtras.h"
 
 namespace clang {
-  
+
   /// CharUnits - This is an opaque type for sizes expressed in character units.
-  /// Instances of this type represent a quantity as a multiple of the size 
+  /// Instances of this type represent a quantity as a multiple of the size
   /// of the standard C type, char, on the target architecture. As an opaque
   /// type, CharUnits protects you from accidentally combining operations on
-  /// quantities in bit units and character units. 
+  /// quantities in bit units and character units.
   ///
-  /// It should be noted that characters and bytes are distinct concepts. Bytes
-  /// refer to addressable units of data storage on the target machine, and
-  /// characters are members of a set of elements used for the organization,
-  /// control, or representation of data. According to C99, bytes are allowed
-  /// to exceed characters in size, although currently, clang only supports
-  /// architectures where the two are the same size.
-  /// 
-  /// For portability, never assume that a target character is 8 bits wide. Use 
+  /// In both C and C++, an object of type 'char', 'signed char', or 'unsigned
+  /// char' occupies exactly one byte, so 'character unit' and 'byte' refer to
+  /// the same quantity of storage. However, we use the term 'character unit'
+  /// rather than 'byte' to avoid an implication that a character unit is
+  /// exactly 8 bits.
+  ///
+  /// For portability, never assume that a target character is 8 bits wide. Use
   /// CharUnit values wherever you calculate sizes, offsets, or alignments
   /// in character units.
   class CharUnits {
@@ -41,14 +40,14 @@ namespace clang {
       typedef int64_t QuantityType;
 
     private:
-      QuantityType Quantity;
+      QuantityType Quantity = 0;
 
       explicit CharUnits(QuantityType C) : Quantity(C) {}
 
     public:
 
       /// CharUnits - A default constructor.
-      CharUnits() : Quantity(0) {}
+      CharUnits() = default;
 
       /// Zero - Construct a CharUnits quantity of zero.
       static CharUnits Zero() {
@@ -131,12 +130,28 @@ namespace clang {
         return (Quantity & -Quantity) == Quantity;
       }
 
+      /// Test whether this is a multiple of the other value.
+      ///
+      /// Among other things, this promises that
+      /// self.alignTo(N) will just return self.
+      bool isMultipleOf(CharUnits N) const {
+        return (*this % N) == 0;
+      }
+
       // Arithmetic operators.
       CharUnits operator* (QuantityType N) const {
         return CharUnits(Quantity * N);
       }
+      CharUnits &operator*= (QuantityType N) {
+        Quantity *= N;
+        return *this;
+      }
       CharUnits operator/ (QuantityType N) const {
         return CharUnits(Quantity / N);
+      }
+      CharUnits &operator/= (QuantityType N) {
+        Quantity /= N;
+        return *this;
       }
       QuantityType operator/ (const CharUnits &Other) const {
         return Quantity / Other.Quantity;
@@ -163,12 +178,27 @@ namespace clang {
       /// getQuantity - Get the raw integer representation of this quantity.
       QuantityType getQuantity() const { return Quantity; }
 
-      /// RoundUpToAlignment - Returns the next integer (mod 2**64) that is
-      /// greater than or equal to this quantity and is a multiple of \arg
-      /// Align. Align must be non-zero.
-      CharUnits RoundUpToAlignment(const CharUnits &Align) {
-        return CharUnits(llvm::RoundUpToAlignment(Quantity, 
-                                                  Align.Quantity));
+      /// alignTo - Returns the next integer (mod 2**64) that is
+      /// greater than or equal to this quantity and is a multiple of \p Align.
+      /// Align must be non-zero.
+      CharUnits alignTo(const CharUnits &Align) const {
+        return CharUnits(llvm::alignTo(Quantity, Align.Quantity));
+      }
+
+      /// Given that this is a non-zero alignment value, what is the
+      /// alignment at the given offset?
+      CharUnits alignmentAtOffset(CharUnits offset) const {
+        assert(Quantity != 0 && "offsetting from unknown alignment?");
+        return CharUnits(llvm::MinAlign(Quantity, offset.Quantity));
+      }
+
+      /// Given that this is the alignment of the first element of an
+      /// array, return the minimum alignment of any element in the array.
+      CharUnits alignmentOfArrayElement(CharUnits elementSize) const {
+        // Since we don't track offsetted alignments, the alignment of
+        // the second element (or any odd element) will be minimally
+        // aligned.
+        return alignmentAtOffset(elementSize);
       }
 
 

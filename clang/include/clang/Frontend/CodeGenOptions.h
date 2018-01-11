@@ -14,20 +14,47 @@
 #ifndef LLVM_CLANG_FRONTEND_CODEGENOPTIONS_H
 #define LLVM_CLANG_FRONTEND_CODEGENOPTIONS_H
 
+#include "clang/Basic/DebugInfoOptions.h"
+#include "clang/Basic/Sanitizers.h"
+#include "llvm/Support/Regex.h"
+#include "llvm/Target/TargetOptions.h"
+#include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
 namespace clang {
 
+/// \brief Bitfields of CodeGenOptions, split out from CodeGenOptions to ensure
+/// that this large collection of bitfields is a trivial class type.
+class CodeGenOptionsBase {
+public:
+#define CODEGENOPT(Name, Bits, Default) unsigned Name : Bits;
+#define ENUM_CODEGENOPT(Name, Type, Bits, Default)
+#include "clang/Frontend/CodeGenOptions.def"
+
+protected:
+#define CODEGENOPT(Name, Bits, Default)
+#define ENUM_CODEGENOPT(Name, Type, Bits, Default) unsigned Name : Bits;
+#include "clang/Frontend/CodeGenOptions.def"
+};
+
 /// CodeGenOptions - Track various options which control how the code
 /// is optimized and passed to the backend.
-class CodeGenOptions {
+class CodeGenOptions : public CodeGenOptionsBase {
 public:
   enum InliningMethod {
-    NoInlining,         // Perform no inlining whatsoever.
     NormalInlining,     // Use the standard function inlining pass.
+    OnlyHintInlining,   // Inline only (implicitly) hinted functions.
     OnlyAlwaysInlining  // Only run the always inlining pass.
   };
+
+  enum VectorLibrary {
+    NoLibrary,  // Don't use any vector library.
+    Accelerate, // Use the Accelerate framework.
+    SVML        // Intel short vector math library.
+  };
+
 
   enum ObjCDispatchMethodKind {
     Legacy = 0,
@@ -35,91 +62,63 @@ public:
     Mixed = 2
   };
 
-  unsigned AsmVerbose        : 1; /// -dA, -fverbose-asm.
-  unsigned ObjCAutoRefCountExceptions : 1; /// Whether ARC should be EH-safe.
-  unsigned CUDAIsDevice      : 1; /// Set when compiling for CUDA device.
-  unsigned CXAAtExit         : 1; /// Use __cxa_atexit for calling destructors.
-  unsigned CXXCtorDtorAliases: 1; /// Emit complete ctors/dtors as linker
-                                  /// aliases to base ctors when possible.
-  unsigned DataSections      : 1; /// Set when -fdata-sections is enabled
-  unsigned DebugInfo         : 1; /// Should generate debug info (-g).
-  unsigned LimitDebugInfo    : 1; /// Limit generated debug info to reduce size.
-  unsigned DisableFPElim     : 1; /// Set when -fomit-frame-pointer is enabled.
-  unsigned DisableLLVMOpts   : 1; /// Don't run any optimizations, for use in
-                                  /// getting .bc files that correspond to the
-                                  /// internal state before optimizations are
-                                  /// done.
-  unsigned DisableRedZone    : 1; /// Set when -mno-red-zone is enabled.
-  unsigned DisableTailCalls  : 1; /// Do not emit tail calls.
-  unsigned EmitDeclMetadata  : 1; /// Emit special metadata indicating what
-                                  /// Decl* various IR entities came from.  Only
-                                  /// useful when running CodeGen as a
-                                  /// subroutine.
-  unsigned EmitGcovArcs      : 1; /// Emit coverage data files, aka. GCDA.
-  unsigned EmitGcovNotes     : 1; /// Emit coverage "notes" files, aka GCNO.
-  unsigned ForbidGuardVariables : 1; /// Issue errors if C++ guard variables
-                                  /// are required
-  unsigned FunctionSections  : 1; /// Set when -ffunction-sections is enabled
-  unsigned HiddenWeakTemplateVTables : 1; /// Emit weak vtables and RTTI for
-                                  /// template classes with hidden visibility
-  unsigned HiddenWeakVTables : 1; /// Emit weak vtables, RTTI, and thunks with
-                                  /// hidden visibility.
-  unsigned InstrumentFunctions : 1; /// Set when -finstrument-functions is
-                                    /// enabled.
-  unsigned InstrumentForProfiling : 1; /// Set when -pg is enabled
-  unsigned LessPreciseFPMAD  : 1; /// Enable less precise MAD instructions to be
-                                  /// generated.
-  unsigned MergeAllConstants : 1; /// Merge identical constants.
-  unsigned NoCommon          : 1; /// Set when -fno-common or C++ is enabled.
-  unsigned NoDwarf2CFIAsm    : 1; /// Set when -fno-dwarf2-cfi-asm is enabled.
-  unsigned NoDwarfDirectoryAsm : 1; /// Set when -fno-dwarf-directory-asm is
-                                    /// enabled.
-  unsigned NoExecStack       : 1; /// Set when -Wa,--noexecstack is enabled.
-  unsigned NoGlobalMerge     : 1; /// Set when -mno-global-merge is enabled.
-  unsigned NoImplicitFloat   : 1; /// Set when -mno-implicit-float is enabled.
-  unsigned NoInfsFPMath      : 1; /// Assume FP arguments, results not +-Inf.
-  unsigned NoInline          : 1; /// Set when -fno-inline is enabled. Disables
-                                  /// use of the inline keyword.
-  unsigned NoNaNsFPMath      : 1; /// Assume FP arguments, results not NaN.
-  unsigned NoZeroInitializedInBSS : 1; /// -fno-zero-initialized-in-bss
-  unsigned ObjCDispatchMethod : 2; /// Method of Objective-C dispatch to use.
-  unsigned ObjCRuntimeHasARC : 1; /// The target runtime supports ARC natively
-  unsigned ObjCRuntimeHasTerminate : 1; /// The ObjC runtime has objc_terminate
-  unsigned OmitLeafFramePointer : 1; /// Set when -momit-leaf-frame-pointer is
-                                     /// enabled.
-  unsigned OptimizationLevel : 3; /// The -O[0-4] option specified.
-  unsigned OptimizeSize      : 2; /// If -Os (==1) or -Oz (==2) is specified.
-  unsigned RelaxAll          : 1; /// Relax all machine code instructions.
-  unsigned RelaxedAliasing   : 1; /// Set when -fno-strict-aliasing is enabled.
-  unsigned SaveTempLabels    : 1; /// Save temporary labels.
-  unsigned SimplifyLibCalls  : 1; /// Set when -fbuiltin is enabled.
-  unsigned SoftFloat         : 1; /// -soft-float.
-  unsigned StrictEnums       : 1; /// Optimize based on strict enum definition.
-  unsigned TimePasses        : 1; /// Set when -ftime-report is enabled.
-  unsigned UnitAtATime       : 1; /// Unused. For mirroring GCC optimization
-                                  /// selection.
-  unsigned UnrollLoops       : 1; /// Control whether loops are unrolled.
-  unsigned UnsafeFPMath      : 1; /// Allow unsafe floating point optzns.
-  unsigned UnwindTables      : 1; /// Emit unwind tables.
+  enum TLSModel {
+    GeneralDynamicTLSModel,
+    LocalDynamicTLSModel,
+    InitialExecTLSModel,
+    LocalExecTLSModel
+  };
 
-  /// Attempt to use register sized accesses to bit-fields in structures, when
-  /// possible.
-  unsigned UseRegisterSizedBitfieldAccess : 1;
+  /// Clang versions with different platform ABI conformance.
+  enum class ClangABI {
+    /// Attempt to be ABI-compatible with code generated by Clang 3.8.x
+    /// (SVN r257626). This causes <1 x long long> to be passed in an
+    /// integer register instead of an SSE register on x64_64.
+    Ver3_8,
 
-  unsigned VerifyModule      : 1; /// Control whether the module should be run
-                                  /// through the LLVM Verifier.
+    /// Attempt to be ABI-compatible with code generated by Clang 4.0.x
+    /// (SVN r291814). This causes move operations to be ignored when
+    /// determining whether a class type can be passed or returned directly.
+    Ver4,
 
-  unsigned StackRealignment  : 1; /// Control whether to permit stack
-                                  /// realignment.
-  unsigned StackAlignment;        /// Overrides default stack alignment,
-                                  /// if not 0.
+    /// Conform to the underlying platform's C and C++ ABIs as closely
+    /// as we can.
+    Latest
+  };
+
+  enum StructReturnConventionKind {
+    SRCK_Default,  // No special option was passed.
+    SRCK_OnStack,  // Small structs on the stack (-fpcc-struct-return).
+    SRCK_InRegs    // Small structs in registers (-freg-struct-return).
+  };
+
+  enum ProfileInstrKind {
+    ProfileNone,       // Profile instrumentation is turned off.
+    ProfileClangInstr, // Clang instrumentation to generate execution counts
+                       // to use with PGO.
+    ProfileIRInstr,    // IR level PGO instrumentation in LLVM.
+  };
+
+  enum EmbedBitcodeKind {
+    Embed_Off,      // No embedded bitcode.
+    Embed_All,      // Embed both bitcode and commandline in the output.
+    Embed_Bitcode,  // Embed just the bitcode in the output.
+    Embed_Marker    // Embed a marker as a placeholder for bitcode.
+  };
 
   /// The code model to use (-mcmodel).
   std::string CodeModel;
 
-  /// The filename with path we use for coverage files. The extension will be
-  /// replaced.
-  std::string CoverageFile;
+  /// The filename with path we use for coverage data files. The runtime
+  /// allows further manipulation with the GCOV_PREFIX and GCOV_PREFIX_STRIP
+  /// environment variables.
+  std::string CoverageDataFile;
+
+  /// The filename with path we use for coverage notes files.
+  std::string CoverageNotesFile;
+
+  /// The version string to put into coverage files.
+  char CoverageVersion[4];
 
   /// Enable additional debugging information.
   std::string DebugPass;
@@ -131,25 +130,47 @@ public:
   /// non-empty.
   std::string DwarfDebugFlags;
 
+  std::map<std::string, std::string> DebugPrefixMap;
+
   /// The ABI to use for passing floating point arguments.
   std::string FloatABI;
+
+  /// The floating-point denormal mode to use.
+  std::string FPDenormalMode;
 
   /// The float precision limit to use, if non-empty.
   std::string LimitFloatPrecision;
 
-  /// The name of the bitcode file to link before optzns.
-  std::string LinkBitcodeFile;
+  struct BitcodeFileToLink {
+    /// The filename of the bitcode file to link in.
+    std::string Filename;
+    /// If true, we set attributes functions in the bitcode library according to
+    /// our CodeGenOptions, much as we set attrs on functions that we generate
+    /// ourselves.
+    bool PropagateAttrs = false;
+    /// If true, we use LLVM module internalizer.
+    bool Internalize = false;
+    /// Bitwise combination of llvm::Linker::Flags, passed to the LLVM linker.
+    unsigned LinkFlags = 0;
+  };
 
-  /// The kind of inlining to perform.
-  InliningMethod Inlining;
+  /// The files specified here are linked in to the module before optimizations.
+  std::vector<BitcodeFileToLink> LinkBitcodeFiles;
 
   /// The user provided name for the "main file", if non-empty. This is useful
   /// in situations where the input file name does not match the original input
   /// file, for example with -save-temps.
   std::string MainFileName;
 
+  /// The name for the split debug info file that we'll break out. This is used
+  /// in the backend for setting the name in the skeleton cu.
+  std::string SplitDwarfFile;
+
   /// The name of the relocation model to use.
   std::string RelocationModel;
+
+  /// The thread model to use
+  std::string ThreadModel;
 
   /// If not an empty string, trap intrinsics are lowered to calls to this
   /// function instead of to trap instructions.
@@ -158,72 +179,118 @@ public:
   /// A list of command-line options to forward to the LLVM backend.
   std::vector<std::string> BackendOptions;
 
-  /// The user specified number of registers to be used for integral arguments,
-  /// or 0 if unspecified.
-  unsigned NumRegisterParameters;
+  /// A list of dependent libraries.
+  std::vector<std::string> DependentLibraries;
+
+  /// A list of linker options to embed in the object file.
+  std::vector<std::string> LinkerOptions;
+
+  /// Name of the profile file to use as output for -fprofile-instr-generate
+  /// and -fprofile-generate.
+  std::string InstrProfileOutput;
+
+  /// Name of the profile file to use with -fprofile-sample-use.
+  std::string SampleProfileFile;
+
+  /// Name of the profile file to use as input for -fprofile-instr-use
+  std::string ProfileInstrumentUsePath;
+
+  /// Name of the function summary index file to use for ThinLTO function
+  /// importing.
+  std::string ThinLTOIndexFile;
+
+  /// Name of a file that can optionally be written with minimized bitcode
+  /// to be used as input for the ThinLTO thin link step, which only needs
+  /// the summary and module symbol table (and not, e.g. any debug metadata).
+  std::string ThinLinkBitcodeFile;
+
+  /// A list of file names passed with -fcuda-include-gpubinary options to
+  /// forward to CUDA runtime back-end for incorporating them into host-side
+  /// object file.
+  std::vector<std::string> CudaGpuBinaryFileNames;
+
+  /// The name of the file to which the backend should save YAML optimization
+  /// records.
+  std::string OptRecordFile;
+
+  /// Regular expression to select optimizations for which we should enable
+  /// optimization remarks. Transformation passes whose name matches this
+  /// expression (and support this feature), will emit a diagnostic
+  /// whenever they perform a transformation. This is enabled by the
+  /// -Rpass=regexp flag.
+  std::shared_ptr<llvm::Regex> OptimizationRemarkPattern;
+
+  /// Regular expression to select optimizations for which we should enable
+  /// missed optimization remarks. Transformation passes whose name matches this
+  /// expression (and support this feature), will emit a diagnostic
+  /// whenever they tried but failed to perform a transformation. This is
+  /// enabled by the -Rpass-missed=regexp flag.
+  std::shared_ptr<llvm::Regex> OptimizationRemarkMissedPattern;
+
+  /// Regular expression to select optimizations for which we should enable
+  /// optimization analyses. Transformation passes whose name matches this
+  /// expression (and support this feature), will emit a diagnostic
+  /// whenever they want to explain why they decided to apply or not apply
+  /// a given transformation. This is enabled by the -Rpass-analysis=regexp
+  /// flag.
+  std::shared_ptr<llvm::Regex> OptimizationRemarkAnalysisPattern;
+
+  /// Set of files defining the rules for the symbol rewriting.
+  std::vector<std::string> RewriteMapFiles;
+
+  /// Set of sanitizer checks that are non-fatal (i.e. execution should be
+  /// continued when possible).
+  SanitizerSet SanitizeRecover;
+
+  /// Set of sanitizer checks that trap rather than diagnose.
+  SanitizerSet SanitizeTrap;
+
+  /// List of backend command-line options for -fembed-bitcode.
+  std::vector<uint8_t> CmdArgs;
+
+  /// \brief A list of all -fno-builtin-* function names (e.g., memset).
+  std::vector<std::string> NoBuiltinFuncs;
+
+  std::vector<std::string> Reciprocals;
 
 public:
-  CodeGenOptions() {
-    AsmVerbose = 0;
-    CUDAIsDevice = 0;
-    CXAAtExit = 1;
-    CXXCtorDtorAliases = 0;
-    DataSections = 0;
-    DebugInfo = 0;
-    LimitDebugInfo = 0;
-    DisableFPElim = 0;
-    DisableLLVMOpts = 0;
-    DisableRedZone = 0;
-    DisableTailCalls = 0;
-    EmitDeclMetadata = 0;
-    EmitGcovArcs = 0;
-    EmitGcovNotes = 0;
-    ForbidGuardVariables = 0;
-    FunctionSections = 0;
-    HiddenWeakTemplateVTables = 0;
-    HiddenWeakVTables = 0;
-    InstrumentFunctions = 0;
-    InstrumentForProfiling = 0;
-    LessPreciseFPMAD = 0;
-    MergeAllConstants = 1;
-    NoCommon = 0;
-    NoDwarf2CFIAsm = 0;
-    NoImplicitFloat = 0;
-    NoInfsFPMath = 0;
-    NoInline = 0;
-    NoNaNsFPMath = 0;
-    NoZeroInitializedInBSS = 0;
-    NumRegisterParameters = 0;
-    ObjCAutoRefCountExceptions = 0;
-    ObjCDispatchMethod = Legacy;
-    ObjCRuntimeHasARC = 0;
-    ObjCRuntimeHasTerminate = 0;
-    OmitLeafFramePointer = 0;
-    OptimizationLevel = 0;
-    OptimizeSize = 0;
-    RelaxAll = 0;
-    RelaxedAliasing = 0;
-    SaveTempLabels = 0;
-    SimplifyLibCalls = 1;
-    SoftFloat = 0;
-    StrictEnums = 0;
-    TimePasses = 0;
-    UnitAtATime = 1;
-    UnrollLoops = 0;
-    UnsafeFPMath = 0;
-    UnwindTables = 0;
-    UseRegisterSizedBitfieldAccess = 0;
-    VerifyModule = 1;
-    StackRealignment = 0;
-    StackAlignment = 0;
+  // Define accessors/mutators for code generation options of enumeration type.
+#define CODEGENOPT(Name, Bits, Default)
+#define ENUM_CODEGENOPT(Name, Type, Bits, Default) \
+  Type get##Name() const { return static_cast<Type>(Name); } \
+  void set##Name(Type Value) { Name = static_cast<unsigned>(Value); }
+#include "clang/Frontend/CodeGenOptions.def"
 
-    Inlining = NoInlining;
-    RelocationModel = "pic";
+  CodeGenOptions();
+
+  /// \brief Is this a libc/libm function that is no longer recognized as a
+  /// builtin because a -fno-builtin-* option has been specified?
+  bool isNoBuiltinFunc(const char *Name) const;
+
+  const std::vector<std::string> &getNoBuiltinFuncs() const {
+    return NoBuiltinFuncs;
   }
 
-  ObjCDispatchMethodKind getObjCDispatchMethod() const {
-    return ObjCDispatchMethodKind(ObjCDispatchMethod);
+  /// \brief Check if Clang profile instrumenation is on.
+  bool hasProfileClangInstr() const {
+    return getProfileInstr() == ProfileClangInstr;
   }
+
+  /// \brief Check if IR level profile instrumentation is on.
+  bool hasProfileIRInstr() const {
+    return getProfileInstr() == ProfileIRInstr;
+  }
+
+  /// \brief Check if Clang profile use is on.
+  bool hasProfileClangUse() const {
+    return getProfileUse() == ProfileClangInstr;
+  }
+
+  /// \brief Check if IR level profile use is on.
+  bool hasProfileIRUse() const {
+    return getProfileUse() == ProfileIRInstr;
+  }
+
 };
 
 }  // end namespace clang

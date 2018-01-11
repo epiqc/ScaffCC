@@ -1,4 +1,4 @@
-//===--- StmtIterator.h - Iterators for Statements --------------*- C++ -*-===//
+//===- StmtIterator.h - Iterators for Statements ----------------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -11,34 +11,40 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_CLANG_AST_STMT_ITR_H
-#define LLVM_CLANG_AST_STMT_ITR_H
+#ifndef LLVM_CLANG_AST_STMTITERATOR_H
+#define LLVM_CLANG_AST_STMTITERATOR_H
 
-#include "llvm/Support/DataTypes.h"
 #include <cassert>
 #include <cstddef>
+#include <cstdint>
 #include <iterator>
-#include <utility>
 
 namespace clang {
 
-class Stmt;
 class Decl;
+class Stmt;
 class VariableArrayType;
 
 class StmtIteratorBase {
 protected:
-  enum { DeclMode = 0x1, SizeOfTypeVAMode = 0x2, DeclGroupMode = 0x3,
-         Flags = 0x3 };
+  enum {
+    StmtMode = 0x0,
+    SizeOfTypeVAMode = 0x1,
+    DeclGroupMode = 0x2,
+    Flags = 0x3
+  };
   
-  Stmt **stmt;
-  union { Decl *decl; Decl **DGI; };
-  uintptr_t RawVAPtr;
+  union {
+    Stmt **stmt;
+    Decl **DGI;
+  };
+  uintptr_t RawVAPtr = 0;
   Decl **DGE;
   
-  bool inDecl() const {
-    return (RawVAPtr & Flags) == DeclMode;
-  }
+  StmtIteratorBase(Stmt **s) : stmt(s) {}
+  StmtIteratorBase(const VariableArrayType *t);
+  StmtIteratorBase(Decl **dgi, Decl **dge);
+  StmtIteratorBase() : stmt(nullptr) {}
 
   bool inDeclGroup() const {
     return (RawVAPtr & Flags) == DeclGroupMode;
@@ -49,7 +55,7 @@ protected:
   }
 
   bool inStmt() const {
-    return (RawVAPtr & Flags) == 0;
+    return (RawVAPtr & Flags) == StmtMode;
   }
 
   const VariableArrayType *getVAPtr() const {
@@ -57,7 +63,7 @@ protected:
   }
 
   void setVAPtr(const VariableArrayType *P) {
-    assert (inDecl() || inDeclGroup() || inSizeOfTypeVA());
+    assert(inDeclGroup() || inSizeOfTypeVA());
     RawVAPtr = reinterpret_cast<uintptr_t>(P) | (RawVAPtr & Flags);
   }
 
@@ -66,14 +72,7 @@ protected:
   void NextVA();
 
   Stmt*& GetDeclExpr() const;
-
-  StmtIteratorBase(Stmt **s) : stmt(s), decl(0), RawVAPtr(0) {}
-  StmtIteratorBase(Decl *d, Stmt **s);
-  StmtIteratorBase(const VariableArrayType *t);
-  StmtIteratorBase(Decl **dgi, Decl **dge);
-  StmtIteratorBase() : stmt(0), decl(0), RawVAPtr(0) {}
 };
-
 
 template <typename DERIVED, typename REFERENCE>
 class StmtIteratorImpl : public StmtIteratorBase,
@@ -82,11 +81,11 @@ class StmtIteratorImpl : public StmtIteratorBase,
                                               REFERENCE, REFERENCE> {
 protected:
   StmtIteratorImpl(const StmtIteratorBase& RHS) : StmtIteratorBase(RHS) {}
+
 public:
-  StmtIteratorImpl() {}
+  StmtIteratorImpl() = default;
   StmtIteratorImpl(Stmt **s) : StmtIteratorBase(s) {}
   StmtIteratorImpl(Decl **dgi, Decl **dge) : StmtIteratorBase(dgi, dge) {}
-  StmtIteratorImpl(Decl *d, Stmt **s) : StmtIteratorBase(d, s) {}
   StmtIteratorImpl(const VariableArrayType *t) : StmtIteratorBase(t) {}
 
   DERIVED& operator++() {
@@ -107,124 +106,53 @@ public:
   }
 
   bool operator==(const DERIVED& RHS) const {
-    return stmt == RHS.stmt && decl == RHS.decl && RawVAPtr == RHS.RawVAPtr;
+    return stmt == RHS.stmt && DGI == RHS.DGI && RawVAPtr == RHS.RawVAPtr;
   }
 
   bool operator!=(const DERIVED& RHS) const {
-    return stmt != RHS.stmt || decl != RHS.decl || RawVAPtr != RHS.RawVAPtr;
+    return stmt != RHS.stmt || DGI != RHS.DGI || RawVAPtr != RHS.RawVAPtr;
   }
 
   REFERENCE operator*() const {
-    return (REFERENCE) (inStmt() ? *stmt : GetDeclExpr());
+    return inStmt() ? *stmt : GetDeclExpr();
   }
 
   REFERENCE operator->() const { return operator*(); }
 };
 
-struct StmtIterator : public StmtIteratorImpl<StmtIterator,Stmt*&> {
-  explicit StmtIterator() : StmtIteratorImpl<StmtIterator,Stmt*&>() {}
+struct ConstStmtIterator;
 
-  StmtIterator(Stmt** S) : StmtIteratorImpl<StmtIterator,Stmt*&>(S) {}
-
+struct StmtIterator : public StmtIteratorImpl<StmtIterator, Stmt*&> {
+  explicit StmtIterator() = default;
+  StmtIterator(Stmt** S) : StmtIteratorImpl<StmtIterator, Stmt*&>(S) {}
   StmtIterator(Decl** dgi, Decl** dge)
-   : StmtIteratorImpl<StmtIterator,Stmt*&>(dgi, dge) {}
-
+      : StmtIteratorImpl<StmtIterator, Stmt*&>(dgi, dge) {}
   StmtIterator(const VariableArrayType *t)
-    : StmtIteratorImpl<StmtIterator,Stmt*&>(t) {}
+      : StmtIteratorImpl<StmtIterator, Stmt*&>(t) {}
 
-  StmtIterator(Decl* D, Stmt **s = 0)
-    : StmtIteratorImpl<StmtIterator,Stmt*&>(D, s) {}
+private:
+  StmtIterator(const StmtIteratorBase &RHS)
+      : StmtIteratorImpl<StmtIterator, Stmt *&>(RHS) {}
+
+  inline friend StmtIterator
+  cast_away_const(const ConstStmtIterator &RHS);
 };
 
 struct ConstStmtIterator : public StmtIteratorImpl<ConstStmtIterator,
                                                    const Stmt*> {
-  explicit ConstStmtIterator() :
-    StmtIteratorImpl<ConstStmtIterator,const Stmt*>() {}
+  explicit ConstStmtIterator() = default;
+  ConstStmtIterator(const StmtIterator& RHS)
+      : StmtIteratorImpl<ConstStmtIterator, const Stmt*>(RHS) {}
 
-  ConstStmtIterator(const StmtIterator& RHS) :
-    StmtIteratorImpl<ConstStmtIterator,const Stmt*>(RHS) {}
+  ConstStmtIterator(Stmt * const *S)
+      : StmtIteratorImpl<ConstStmtIterator, const Stmt *>(
+            const_cast<Stmt **>(S)) {}
 };
 
-/// A range of statement iterators.
-///
-/// This class provides some extra functionality beyond std::pair
-/// in order to allow the following idiom:
-///   for (StmtRange range = stmt->children(); range; ++range)
-struct StmtRange : std::pair<StmtIterator,StmtIterator> {
-  StmtRange() {}
-  StmtRange(const StmtIterator &begin, const StmtIterator &end)
-    : std::pair<StmtIterator,StmtIterator>(begin, end) {}
+inline StmtIterator cast_away_const(const ConstStmtIterator &RHS) {
+  return RHS;
+}
 
-  bool empty() const { return first == second; }
-  operator bool() const { return !empty(); }
+} // namespace clang
 
-  Stmt *operator->() const { return first.operator->(); }
-  Stmt *&operator*() const { return first.operator*(); }
-
-  StmtRange &operator++() {
-    assert(!empty() && "incrementing on empty range");
-    ++first;
-    return *this;
-  }
-
-  StmtRange operator++(int) {
-    assert(!empty() && "incrementing on empty range");
-    StmtRange copy = *this;
-    ++first;
-    return copy;
-  }
-
-  friend const StmtIterator &begin(const StmtRange &range) {
-    return range.first;
-  }
-  friend const StmtIterator &end(const StmtRange &range) {
-    return range.second;
-  }
-};
-
-/// A range of const statement iterators.
-///
-/// This class provides some extra functionality beyond std::pair
-/// in order to allow the following idiom:
-///   for (ConstStmtRange range = stmt->children(); range; ++range)
-struct ConstStmtRange : std::pair<ConstStmtIterator,ConstStmtIterator> {
-  ConstStmtRange() {}
-  ConstStmtRange(const ConstStmtIterator &begin,
-                 const ConstStmtIterator &end)
-    : std::pair<ConstStmtIterator,ConstStmtIterator>(begin, end) {}
-  ConstStmtRange(const StmtRange &range)
-    : std::pair<ConstStmtIterator,ConstStmtIterator>(range.first, range.second)
-  {}
-  ConstStmtRange(const StmtIterator &begin, const StmtIterator &end)
-    : std::pair<ConstStmtIterator,ConstStmtIterator>(begin, end) {}
-
-  bool empty() const { return first == second; }
-  operator bool() const { return !empty(); }
-
-  const Stmt *operator->() const { return first.operator->(); }
-  const Stmt *operator*() const { return first.operator*(); }
-
-  ConstStmtRange &operator++() {
-    assert(!empty() && "incrementing on empty range");
-    ++first;
-    return *this;
-  }
-
-  ConstStmtRange operator++(int) {
-    assert(!empty() && "incrementing on empty range");
-    ConstStmtRange copy = *this;
-    ++first;
-    return copy;
-  }
-
-  friend const ConstStmtIterator &begin(const ConstStmtRange &range) {
-    return range.first;
-  }
-  friend const ConstStmtIterator &end(const ConstStmtRange &range) {
-    return range.second;
-  }
-};
-
-} // end namespace clang
-
-#endif
+#endif // LLVM_CLANG_AST_STMTITERATOR_H

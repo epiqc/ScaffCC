@@ -1,4 +1,5 @@
-// RUN: %clang_cc1 -analyze -analyzer-checker=core -analyzer-stats %s 2>&1 | FileCheck %s
+// REQUIRES: asserts
+// RUN: %clang_analyze_cc1 -analyzer-checker=core -analyzer-stats %s 2>&1 | FileCheck %s
 
 void foo() {
   int x;

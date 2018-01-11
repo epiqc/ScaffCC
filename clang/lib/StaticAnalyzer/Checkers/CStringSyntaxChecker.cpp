@@ -13,14 +13,14 @@
 //
 //===----------------------------------------------------------------------===//
 #include "ClangSACheckers.h"
-#include "clang/Analysis/AnalysisContext.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/OperationKinds.h"
 #include "clang/AST/StmtVisitor.h"
+#include "clang/Analysis/AnalysisDeclContext.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Basic/TypeTraits.h"
-#include "clang/StaticAnalyzer/Core/Checker.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugReporter.h"
+#include "clang/StaticAnalyzer/Core/Checker.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/AnalysisManager.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
 #include "llvm/ADT/SmallString.h"
@@ -31,48 +31,47 @@ using namespace ento;
 
 namespace {
 class WalkAST: public StmtVisitor<WalkAST> {
+  const CheckerBase *Checker;
   BugReporter &BR;
   AnalysisDeclContext* AC;
-  ASTContext &ASTC;
 
   /// Check if two expressions refer to the same declaration.
-  inline bool sameDecl(const Expr *A1, const Expr *A2) {
-    if (const DeclRefExpr *D1 = dyn_cast<DeclRefExpr>(A1->IgnoreParenCasts()))
-      if (const DeclRefExpr *D2 = dyn_cast<DeclRefExpr>(A2->IgnoreParenCasts()))
+  bool sameDecl(const Expr *A1, const Expr *A2) {
+    if (const auto *D1 = dyn_cast<DeclRefExpr>(A1->IgnoreParenCasts()))
+      if (const auto *D2 = dyn_cast<DeclRefExpr>(A2->IgnoreParenCasts()))
         return D1->getDecl() == D2->getDecl();
     return false;
   }
 
   /// Check if the expression E is a sizeof(WithArg).
-  inline bool isSizeof(const Expr *E, const Expr *WithArg) {
-    if (const UnaryExprOrTypeTraitExpr *UE =
-    dyn_cast<UnaryExprOrTypeTraitExpr>(E))
-      if (UE->getKind() == UETT_SizeOf)
+  bool isSizeof(const Expr *E, const Expr *WithArg) {
+    if (const auto *UE = dyn_cast<UnaryExprOrTypeTraitExpr>(E))
+      if (UE->getKind() == UETT_SizeOf && !UE->isArgumentType())
         return sameDecl(UE->getArgumentExpr(), WithArg);
     return false;
   }
 
   /// Check if the expression E is a strlen(WithArg).
-  inline bool isStrlen(const Expr *E, const Expr *WithArg) {
-    if (const CallExpr *CE = dyn_cast<CallExpr>(E)) {
+  bool isStrlen(const Expr *E, const Expr *WithArg) {
+    if (const auto *CE = dyn_cast<CallExpr>(E)) {
       const FunctionDecl *FD = CE->getDirectCallee();
       if (!FD)
         return false;
-      return (CheckerContext::isCLibraryFunction(FD, "strlen", ASTC)
-          && sameDecl(CE->getArg(0), WithArg));
+      return (CheckerContext::isCLibraryFunction(FD, "strlen") &&
+              sameDecl(CE->getArg(0), WithArg));
     }
     return false;
   }
 
   /// Check if the expression is an integer literal with value 1.
-  inline bool isOne(const Expr *E) {
-    if (const IntegerLiteral *IL = dyn_cast<IntegerLiteral>(E))
+  bool isOne(const Expr *E) {
+    if (const auto *IL = dyn_cast<IntegerLiteral>(E))
       return (IL->getValue().isIntN(1));
     return false;
   }
 
-  inline StringRef getPrintableName(const Expr *E) {
-    if (const DeclRefExpr *D = dyn_cast<DeclRefExpr>(E->IgnoreParenCasts()))
+  StringRef getPrintableName(const Expr *E) {
+    if (const auto *D = dyn_cast<DeclRefExpr>(E->IgnoreParenCasts()))
       return D->getDecl()->getName();
     return StringRef();
   }
@@ -82,9 +81,8 @@ class WalkAST: public StmtVisitor<WalkAST> {
   bool containsBadStrncatPattern(const CallExpr *CE);
 
 public:
-  WalkAST(BugReporter &br, AnalysisDeclContext* ac) :
-      BR(br), AC(ac), ASTC(AC->getASTContext()) {
-  }
+  WalkAST(const CheckerBase *Checker, BugReporter &BR, AnalysisDeclContext *AC)
+      : Checker(Checker), BR(BR), AC(AC) {}
 
   // Statement visitor methods.
   void VisitChildren(Stmt *S);
@@ -102,13 +100,14 @@ public:
 //   - strncat(dst, src, sizeof(dst) - 1);
 //   - strncat(dst, src, sizeof(dst));
 bool WalkAST::containsBadStrncatPattern(const CallExpr *CE) {
+  if (CE->getNumArgs() != 3)
+    return false;
   const Expr *DstArg = CE->getArg(0);
   const Expr *SrcArg = CE->getArg(1);
   const Expr *LenArg = CE->getArg(2);
 
   // Identify wrong size expressions, which are commonly used instead.
-  if (const BinaryOperator *BE =
-              dyn_cast<BinaryOperator>(LenArg->IgnoreParenCasts())) {
+  if (const auto *BE = dyn_cast<BinaryOperator>(LenArg->IgnoreParenCasts())) {
     // - sizeof(dst) - strlen(dst)
     if (BE->getOpcode() == BO_Sub) {
       const Expr *L = BE->getLHS();
@@ -136,11 +135,10 @@ void WalkAST::VisitCallExpr(CallExpr *CE) {
   if (!FD)
     return;
 
-  if (CheckerContext::isCLibraryFunction(FD, "strncat", ASTC)) {
+  if (CheckerContext::isCLibraryFunction(FD, "strncat")) {
     if (containsBadStrncatPattern(CE)) {
       const Expr *DstArg = CE->getArg(0);
       const Expr *LenArg = CE->getArg(2);
-      SourceRange R = LenArg->getSourceRange();
       PathDiagnosticLocation Loc =
         PathDiagnosticLocation::createBegin(LenArg, BR.getSourceManager(), AC);
 
@@ -157,8 +155,9 @@ void WalkAST::VisitCallExpr(CallExpr *CE) {
         os << "U";
       os << "se a safer 'strlcat' API";
 
-      BR.EmitBasicReport(FD, "Anti-pattern in the argument", "C String API",
-                         os.str(), Loc, &R, 1);
+      BR.EmitBasicReport(FD, Checker, "Anti-pattern in the argument",
+                         "C String API", os.str(), Loc,
+                         LenArg->getSourceRange());
     }
   }
 
@@ -167,10 +166,9 @@ void WalkAST::VisitCallExpr(CallExpr *CE) {
 }
 
 void WalkAST::VisitChildren(Stmt *S) {
-  for (Stmt::child_iterator I = S->child_begin(), E = S->child_end(); I != E;
-      ++I)
-    if (Stmt *child = *I)
-      Visit(child);
+  for (Stmt *Child : S->children())
+    if (Child)
+      Visit(Child);
 }
 
 namespace {
@@ -179,7 +177,7 @@ public:
 
   void checkASTCodeBody(const Decl *D, AnalysisManager& Mgr,
       BugReporter &BR) const {
-    WalkAST walker(BR, Mgr.getAnalysisDeclContext(D));
+    WalkAST walker(this, BR, Mgr.getAnalysisDeclContext(D));
     walker.Visit(D->getBody());
   }
 };

@@ -214,7 +214,7 @@ class TypePrinter:
                 yield '(%s) 1'%(t.name,)
         elif isinstance(t, EnumType):
             for i in range(0, len(t.enumerators)):
-                yield 'enum%dval%d' % (t.index, i)
+                yield 'enum%dval%d_%d' % (t.index, i, t.unique_id)
         elif isinstance(t, RecordType):
             nonPadding = [f for f in t.fields 
                           if not f.isPaddingBitField()]
@@ -482,7 +482,7 @@ def main():
     if not opts.useRandomSeed:
         random.seed(opts.seed)
 
-    # Contruct type generator
+    # Construct type generator
     builtins = []
     if opts.useBuiltins:
         ints = []

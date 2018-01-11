@@ -1,4 +1,22 @@
-// RUN: llvm-mc -filetype=obj -triple i686-pc-mingw32 %s | coff-dump.py | FileCheck %s
+// RUN: llvm-mc -filetype=obj -triple i686-pc-mingw32 %s | llvm-readobj -s -sr -sd | FileCheck %s
+
+.section baz, "xr"
+	.def	X
+	.scl	2;
+	.type	32;
+	.endef
+	.globl	X
+X:
+	mov	Y-X+42,	%eax
+	retl
+
+	.def	Y
+	.scl	2;
+	.type	32;
+	.endef
+	.globl	Y
+Y:
+	retl
 
 	.def	 _foobar;
 	.scl	2;
@@ -9,7 +27,7 @@
 	.globl	_foobar
 	.align	16, 0x90
 _foobar:                                # @foobar
-# BB#0:
+# %bb.0:
 	ret
 
 	.data
@@ -21,26 +39,19 @@ _rust_crate:
 	.long	_foobar-_rust_crate
 	.long	_foobar-_rust_crate
 
-// CHECK:      Name                     = .data
-// CHECK:      SectionData              =
-// CHECK-NEXT:   00 00 00 00 00 00 00 00 - 1C 00 00 00 20 00 00 00 |............ ...|
-// CHECK:        Relocations              = [
-// CHECK-NEXT:   0 = {
-// CHECK-NEXT:     VirtualAddress           = 0x4
-// CHECK-NEXT:     SymbolTableIndex         =
-// CHECK-NEXT:     Type                     = IMAGE_REL_I386_DIR32 (6)
-// CHECK-NEXT:     SymbolName               = _foobar
-// CHECK-NEXT:   }
-// CHECK-NEXT:   1 = {
-// CHECK-NEXT:     VirtualAddress           = 0x8
-// CHECK-NEXT:     SymbolTableIndex         = 0
-// CHECK-NEXT:     Type                     = IMAGE_REL_I386_REL32 (20)
-// CHECK-NEXT:     SymbolName               = .text
-// CHECK-NEXT:   }
-// CHECK-NEXT:   2 = {
-// CHECK-NEXT:     VirtualAddress           = 0xC
-// CHECK-NEXT:     SymbolTableIndex         = 0
-// CHECK-NEXT:     Type                     = IMAGE_REL_I386_REL32 (20)
-// CHECK-NEXT:     SymbolName               = .text
-// CHECK-NEXT:   }
-// CHECK-NEXT: ]
+// CHECK:        Name: .data
+// CHECK:        Relocations [
+// CHECK-NEXT:     0x4 IMAGE_REL_I386_DIR32 _foobar
+// CHECK-NEXT:     0x8 IMAGE_REL_I386_REL32 _foobar
+// CHECK-NEXT:     0xC IMAGE_REL_I386_REL32 _foobar
+// CHECK-NEXT:   ]
+// CHECK:        SectionData (
+// CHECK-NEXT:     0000: 00000000 00000000 0C000000 10000000
+// CHECK-NEXT:   )
+
+// CHECK:        Name: baz
+// CHECK:        Relocations [
+// CHECK-NEXT:   ]
+// CHECK:        SectionData (
+// CHECK-NEXT:     0000: A1300000 00C3C3
+// CHECK-NEXT:   )

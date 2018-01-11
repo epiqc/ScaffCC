@@ -1,5 +1,4 @@
-; RUN: opt < %s -analyze -scalar-evolution \
-; RUN:  | FileCheck %s
+; RUN: opt < %s -analyze -scalar-evolution | FileCheck %s
 ; PR4569
 
 define i16 @main() nounwind {
@@ -7,11 +6,15 @@ entry:
         br label %bb.i
 
 bb.i:           ; preds = %bb1.i, %bb.nph
+; We should be able to find the range for this expression.
+; CHECK: %l_95.0.i1 = phi i8
+; CHECK: -->  {0,+,-1}<%bb.i> U: [2,1) S: [2,1){{ *}}Exits: 2
+
         %l_95.0.i1 = phi i8 [ %tmp1, %bb.i ], [ 0, %entry ]
 
 ; This cast shouldn't be folded into the addrec.
 ; CHECK: %tmp = zext i8 %l_95.0.i1 to i16
-; CHECK: -->  (zext i8 {0,+,-1}<%bb.i> to i16)    Exits: 2
+; CHECK: -->  (zext i8 {0,+,-1}<nw><%bb.i> to i16){{ U: [^ ]+ S: [^ ]+}}{{ *}}Exits: 2
 
         %tmp = zext i8 %l_95.0.i1 to i16
 

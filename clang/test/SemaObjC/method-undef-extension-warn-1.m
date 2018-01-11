@@ -1,6 +1,6 @@
 // RUN: %clang_cc1 -fsyntax-only -verify -Wno-objc-root-class %s
 
-@interface MyClass // expected-note {{required for direct or indirect protocol 'P'}}
+@interface MyClass
 @end
 
 @protocol P
@@ -10,7 +10,7 @@
 
 // Class extension
 @interface MyClass () <P>
-- (void)meth2; // expected-note {{method definition for 'meth2' not found}}
+- (void)meth2; // expected-note {{method 'meth2' declared here}}
 @end
 
 // Add a category to test that clang does not emit warning for this method.
@@ -18,7 +18,7 @@
 - (void)categoryMethod;
 @end
 
-@implementation MyClass // expected-warning {{incomplete implementation}}  \
-			// expected-warning {{method 'Pmeth1' in protocol not implemented}}
+@implementation MyClass // expected-warning {{method 'Pmeth1' in protocol 'P' not implemented}} \
+                        // expected-warning {{method definition for 'meth2' not found}}
 - (void)Pmeth {}
 @end

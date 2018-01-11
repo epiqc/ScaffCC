@@ -5,7 +5,7 @@
 ; the exit value of the loop will be for some value, allowing us to substitute
 ; it directly into users outside of the loop, making the loop dead.
 
-; CHECK: @linear_setne
+; CHECK-LABEL: @linear_setne(
 ; CHECK: ret i32 100
 
 define i32 @linear_setne() {
@@ -22,7 +22,7 @@ loopexit:		; preds = %loop
 	ret i32 %i
 }
 
-; CHECK: @linear_setne_2
+; CHECK-LABEL: @linear_setne_2(
 ; CHECK: ret i32 100
 
 define i32 @linear_setne_2() {
@@ -39,7 +39,7 @@ loopexit:		; preds = %loop
 	ret i32 %i
 }
 
-; CHECK: @linear_setne_overflow
+; CHECK-LABEL: @linear_setne_overflow(
 ; CHECK: ret i32 0
 
 define i32 @linear_setne_overflow() {
@@ -56,7 +56,7 @@ loopexit:		; preds = %loop
 	ret i32 %i
 }
 
-; CHECK: @linear_setlt
+; CHECK-LABEL: @linear_setlt(
 ; CHECK: ret i32 100
 
 define i32 @linear_setlt() {
@@ -73,7 +73,7 @@ loopexit:		; preds = %loop
 	ret i32 %i
 }
 
-; CHECK: @quadratic_setlt
+; CHECK-LABEL: @quadratic_setlt(
 ; CHECK: ret i32 34
 
 define i32 @quadratic_setlt() {
@@ -91,7 +91,7 @@ loopexit:		; preds = %loop
 	ret i32 %i
 }
 
-; CHECK: @chained
+; CHECK-LABEL: @chained(
 ; CHECK: ret i32 200
 
 define i32 @chained() {
@@ -117,7 +117,7 @@ loopexit2:		; preds = %loop2
 	ret i32 %j
 }
 
-; CHECK: @chained4
+; CHECK-LABEL: @chained4(
 ; CHECK: ret i32 400
 
 define i32 @chained4() {
@@ -160,3 +160,34 @@ loop9:                                            ; preds = %loop2, %loopexit
 loopexit9:                                        ; preds = %loop2
   ret i32 %l.next
 }
+
+; PR18449. Check that the early exit is reduced to never taken.
+;
+; CHECK-LABEL: @twoexit
+; CHECK-LABEL: loop:
+; CHECK: phi
+; CHECK: br i1 false
+; CHECK: br
+; CHECK: ret
+define void @twoexit() {
+"function top level":
+  br label %loop
+
+loop:                                             ; preds = %body, %"function top level"
+  %0 = phi i64 [ 0, %"function top level" ], [ %2, %body ]
+  %1 = icmp ugt i64 %0, 2
+  br i1 %1, label %fail, label %body
+
+fail:                                             ; preds = %loop
+  tail call void @bounds_fail()
+  unreachable
+
+body:                                             ; preds = %loop
+  %2 = add i64 %0, 1
+  %3 = icmp slt i64 %2, 3
+  br i1 %3, label %loop, label %out
+
+out:                                              ; preds = %body
+  ret void
+}
+declare void @bounds_fail()

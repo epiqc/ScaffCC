@@ -7,7 +7,7 @@ target triple = "x86_64-apple-darwin10.0.0"
 
 ; IVUsers should not consider tmp128 a valid user because it is not in a
 ; simplified loop nest.
-; CHECK: @nopreheader
+; CHECK-LABEL: @nopreheader(
 ; CHECK: for.cond:
 ; CHECK: %tmp128 = add i64 %0, %indvar65
 define void @nopreheader(i8* %cmd) nounwind ssp {
@@ -34,8 +34,8 @@ lor.lhs.false184:                                 ; preds = %lor.lhs.false177
 for.cond:                                         ; preds = %for.inc, %lor.lhs.false184, %if.end152
   %indvar65 = phi i64 [ %indvar.next66, %for.inc ], [ 0, %lor.lhs.false184 ], [ 0, %if.end152 ]
   %tmp128 = add i64 %0, %indvar65
-  %s.4 = getelementptr i8* %cmd, i64 %tmp128
-  %tmp195 = load i8* %s.4, align 1
+  %s.4 = getelementptr i8, i8* %cmd, i64 %tmp128
+  %tmp195 = load i8, i8* %s.4, align 1
   indirectbr i8* undef, [label %return, label %land.rhs198]
 
 land.rhs198:                                      ; preds = %for.cond

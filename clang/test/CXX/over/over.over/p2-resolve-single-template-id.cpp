@@ -125,7 +125,7 @@ int main()
 
 namespace member_pointers {
   struct S {
-    template <typename T> bool f(T) { return false; }
+    template <typename T> bool f(T) { return false; } // expected-note 4 {{possible target for call}}
     template <typename T> static bool g(T) { return false; }
 
     template <typename T> bool h(T) { return false; }  // expected-note 3 {{possible target for call}}
@@ -180,12 +180,12 @@ namespace member_pointers {
     { bool b = &s.g<int>; }
 
     { bool b = S::h<42>; }
-    { bool b = S::h<int>; } // expected-error {{can't form member pointer of type 'bool' without '&' and class name}}
+    { bool b = S::h<int>; } // expected-error {{cannot form member pointer of type 'bool' without '&' and class name}}
     { bool b = &S::h<42>; }
     { bool b = &S::h<int>; }
     { bool b = s.h<42>; }
-    { bool b = s.h<int>; } // expected-error {{can't form member pointer of type 'bool' without '&' and class name}}
+    { bool b = s.h<int>; } // expected-error {{cannot form member pointer of type 'bool' without '&' and class name}}
     { bool b = &s.h<42>; }
-    { bool b = &s.h<int>; } // expected-error {{can't form member pointer of type 'bool' without '&' and class name}}
+    { bool b = &s.h<int>; } // expected-error {{cannot form member pointer of type 'bool' without '&' and class name}}
   }
 }

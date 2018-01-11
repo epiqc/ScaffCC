@@ -1,29 +1,34 @@
 ; RUN: llc -O0 -mtriple=x86_64-apple-darwin10 < %s - | FileCheck %s
 ; Radar 8286101
-; CHECK: .file   2 "<stdin>"
+; CHECK: .file   {{[0-9]+}} "<stdin>"
 
-define i32 @foo() nounwind ssp {
+define i32 @foo() nounwind ssp !dbg !0 {
 entry:
   ret i32 42, !dbg !8
 }
 
-define i32 @bar() nounwind ssp {
+define i32 @bar() nounwind ssp !dbg !6 {
 entry:
   ret i32 21, !dbg !10
 }
 
-!llvm.dbg.sp = !{!0, !6}
+!llvm.dbg.cu = !{!2}
+!llvm.module.flags = !{!17}
 
-!0 = metadata !{i32 524334, i32 0, metadata !1, metadata !"foo", metadata !"foo", metadata !"foo", metadata !1, i32 53, metadata !3, i1 false, i1 true, i32 0, i32 0, null, i1 false, i1 false, i32 ()* @foo} ; [ DW_TAG_subprogram ]
-!1 = metadata !{i32 524329, metadata !"", metadata !"/private/tmp", metadata !2} ; [ DW_TAG_file_type ]
-!2 = metadata !{i32 524305, i32 0, i32 12, metadata !"bug.c", metadata !"/private/tmp", metadata !"clang version 2.9 (trunk 114084)", i1 true, i1 false, metadata !"", i32 0} ; [ DW_TAG_compile_unit ]
-!3 = metadata !{i32 524309, metadata !1, metadata !"", metadata !1, i32 0, i64 0, i64 0, i64 0, i32 0, null, metadata !4, i32 0, null} ; [ DW_TAG_subroutine_type ]
-!4 = metadata !{metadata !5}
-!5 = metadata !{i32 524324, metadata !1, metadata !"int", metadata !1, i32 0, i64 32, i64 32, i64 0, i32 0, i32 5} ; [ DW_TAG_base_type ]
-!6 = metadata !{i32 524334, i32 0, metadata !7, metadata !"bar", metadata !"bar", metadata !"bar", metadata !7, i32 4, metadata !3, i1 false, i1 true, i32 0, i32 0, null, i1 false, i1 false, i32 ()* @bar} ; [ DW_TAG_subprogram ]
-!7 = metadata !{i32 524329, metadata !"bug.c", metadata !"/private/tmp", metadata !2} ; [ DW_TAG_file_type ]
-!8 = metadata !{i32 53, i32 13, metadata !9, null}
-!9 = metadata !{i32 524299, metadata !0, i32 53, i32 11, metadata !1, i32 0} ; [ DW_TAG_lexical_block ]
-!10 = metadata !{i32 4, i32 13, metadata !11, null}
-!11 = metadata !{i32 524299, metadata !12, i32 4, i32 13, metadata !7, i32 2} ; [ DW_TAG_lexical_block ]
-!12 = metadata !{i32 524299, metadata !6, i32 4, i32 11, metadata !7, i32 1} ; [ DW_TAG_lexical_block ]
+!0 = distinct !DISubprogram(name: "foo", linkageName: "foo", line: 53, isLocal: false, isDefinition: true, virtualIndex: 6, isOptimized: false, unit: !2, file: !14, scope: !1, type: !3)
+!1 = !DIFile(filename: "", directory: "/private/tmp")
+!2 = distinct !DICompileUnit(language: DW_LANG_C99, producer: "clang version 2.9 (trunk 114084)", isOptimized: false, emissionKind: FullDebug, file: !15, enums: !16, retainedTypes: !16)
+!3 = !DISubroutineType(types: !4)
+!4 = !{!5}
+!5 = !DIBasicType(tag: DW_TAG_base_type, name: "int", size: 32, align: 32, encoding: DW_ATE_signed)
+!6 = distinct !DISubprogram(name: "bar", linkageName: "bar", line: 4, isLocal: false, isDefinition: true, virtualIndex: 6, isOptimized: false, unit: !2, file: !15, scope: !7, type: !3)
+!7 = !DIFile(filename: "bug.c", directory: "/private/tmp")
+!8 = !DILocation(line: 53, column: 13, scope: !9)
+!9 = distinct !DILexicalBlock(line: 53, column: 11, file: !14, scope: !0)
+!10 = !DILocation(line: 4, column: 13, scope: !11)
+!11 = distinct !DILexicalBlock(line: 4, column: 13, file: !15, scope: !12)
+!12 = distinct !DILexicalBlock(line: 4, column: 11, file: !15, scope: !6)
+!14 = !DIFile(filename: "", directory: "/private/tmp")
+!15 = !DIFile(filename: "bug.c", directory: "/private/tmp")
+!16 = !{}
+!17 = !{i32 1, !"Debug Info Version", i32 3}

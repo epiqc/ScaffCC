@@ -1,13 +1,13 @@
-; RUN: llc -O0 < %s
-; RUN: llc < %s
+; RUN: llc -O0 < %s -verify-machineinstrs
+; RUN: llc < %s -verify-machineinstrs
 target triple = "x86_64-apple-macosx10.7"
 
 ; This test case extracts a sub_8bit_hi sub-register:
 ;
-;	%R8B<def> = COPY %BH, %EBX<imp-use,kill>
-;	%ESI<def> = MOVZX32_NOREXrr8 %R8B<kill>
+;	%r8b<def> = COPY %bh, %ebx<imp-use,kill>
+;	%esi<def> = MOVZX32_NOREXrr8 %r8b<kill>
 ;
-; The register allocation above is invalid, %BH can only be encoded without an
+; The register allocation above is invalid, %bh can only be encoded without an
 ; REX prefix, so the destination register must be GR8_NOREX.  The code above
 ; triggers an assertion in copyPhysReg.
 ;
@@ -15,17 +15,17 @@ target triple = "x86_64-apple-macosx10.7"
 
 define void @f() nounwind uwtable ssp {
 entry:
-  %0 = load i32* undef, align 4
+  %0 = load i32, i32* undef, align 4
   %add = add i32 0, %0
   %conv1 = trunc i32 %add to i16
   %bf.value = and i16 %conv1, 255
   %1 = and i16 %bf.value, 255
   %2 = shl i16 %1, 8
-  %3 = load i16* undef, align 1
+  %3 = load i16, i16* undef, align 1
   %4 = and i16 %3, 255
   %5 = or i16 %4, %2
   store i16 %5, i16* undef, align 1
-  %6 = load i16* undef, align 1
+  %6 = load i16, i16* undef, align 1
   %7 = lshr i16 %6, 8
   %bf.clear2 = and i16 %7, 255
   %conv3 = zext i16 %bf.clear2 to i32
@@ -41,10 +41,10 @@ entry:
 
 ; This test case extracts a sub_8bit_hi sub-register:
 ;
-;       %vreg2<def> = COPY %vreg1:sub_8bit_hi; GR8:%vreg2 GR64_ABCD:%vreg1
-;       TEST8ri %vreg2, 1, %EFLAGS<imp-def>; GR8:%vreg2
+;       %2<def> = COPY %1:sub_8bit_hi; GR8:%2 GR64_ABCD:%1
+;       TEST8ri %2, 1, %eflags<imp-def>; GR8:%2
 ;
-; %vreg2 must be constrained to GR8_NOREX, or the COPY could become impossible.
+; %2 must be constrained to GR8_NOREX, or the COPY could become impossible.
 ;
 ; PR11088
 

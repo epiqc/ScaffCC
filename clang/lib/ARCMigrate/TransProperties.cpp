@@ -1,4 +1,4 @@
-//===--- TransProperties.cpp - Tranformations to ARC mode -----------------===//
+//===--- TransProperties.cpp - Transformations to ARC mode ----------------===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -32,9 +32,9 @@
 
 #include "Transforms.h"
 #include "Internals.h"
-#include "clang/Sema/SemaDiagnostic.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Lex/Lexer.h"
+#include "clang/Sema/SemaDiagnostic.h"
 #include <map>
 
 using namespace clang;
@@ -61,7 +61,8 @@ class PropertiesRewriter {
     ObjCIvarDecl *IvarD;
     ObjCPropertyImplDecl *ImplD;
 
-    PropData(ObjCPropertyDecl *propD) : PropD(propD), IvarD(0), ImplD(0) { }
+    PropData(ObjCPropertyDecl *propD)
+      : PropD(propD), IvarD(nullptr), ImplD(nullptr) {}
   };
 
   typedef SmallVector<PropData, 2> PropsTy;
@@ -74,18 +75,16 @@ public:
     : MigrateCtx(MigrateCtx), Pass(MigrateCtx.Pass) { }
 
   static void collectProperties(ObjCContainerDecl *D, AtPropDeclsTy &AtProps,
-                                AtPropDeclsTy *PrevAtProps = 0) {
-    for (ObjCInterfaceDecl::prop_iterator
-           propI = D->prop_begin(),
-           propE = D->prop_end(); propI != propE; ++propI) {
-      if (propI->getAtLoc().isInvalid())
+                                AtPropDeclsTy *PrevAtProps = nullptr) {
+    for (auto *Prop : D->instance_properties()) {
+      if (Prop->getAtLoc().isInvalid())
         continue;
-      unsigned RawLoc = propI->getAtLoc().getRawEncoding();
+      unsigned RawLoc = Prop->getAtLoc().getRawEncoding();
       if (PrevAtProps)
         if (PrevAtProps->find(RawLoc) != PrevAtProps->end())
           continue;
       PropsTy &props = AtProps[RawLoc];
-      props.push_back(*propI);
+      props.push_back(Prop);
     }
   }
 
@@ -96,6 +95,10 @@ public:
       return;
 
     collectProperties(iface, AtProps);
+
+    // Look through extensions.
+    for (auto *Ext : iface->visible_extensions())
+      collectProperties(Ext, AtProps);
 
     typedef DeclContext::specific_decl_iterator<ObjCPropertyImplDecl>
         prop_impl_iterator;
@@ -138,21 +141,6 @@ public:
       Transaction Trans(Pass.TA);
       rewriteProperty(props, atLoc);
     }
-
-    AtPropDeclsTy AtExtProps;
-    // Look through extensions.
-    for (ObjCCategoryDecl *Cat = iface->getCategoryList();
-           Cat; Cat = Cat->getNextClassCategory())
-      if (Cat->IsClassExtension())
-        collectProperties(Cat, AtExtProps, &AtProps);
-
-    for (AtPropDeclsTy::iterator
-           I = AtExtProps.begin(), E = AtExtProps.end(); I != E; ++I) {
-      SourceLocation atLoc = SourceLocation::getFromRawEncoding(I->first);
-      PropsTy &props = I->second;
-      Transaction Trans(Pass.TA);
-      doActionForExtensionProp(props, atLoc);
-    }
   }
 
 private:
@@ -178,15 +166,6 @@ private:
     case PropAction_MaybeAddWeakOrUnsafe:
       return maybeAddWeakOrUnsafeUnretainedAttr(props, atLoc);
     }
-  }
-
-  void doActionForExtensionProp(PropsTy &props, SourceLocation atLoc) {
-    llvm::DenseMap<IdentifierInfo *, PropActionKind>::iterator I;
-    I = ActionOnProp.find(props[0].PropD->getIdentifier());
-    if (I == ActionOnProp.end())
-      return;
-
-    doPropAction(I->second, props, atLoc, false);
   }
 
   void rewriteProperty(PropsTy &props, SourceLocation atLoc) {
@@ -226,8 +205,10 @@ private:
 
     for (PropsTy::iterator I = props.begin(), E = props.end(); I != E; ++I) {
       if (I->ImplD)
-        Pass.TA.clearDiagnostic(diag::err_arc_assign_property_ownership,
-                                I->ImplD->getLocation());
+        Pass.TA.clearDiagnostic(diag::err_arc_strong_property_ownership,
+                                diag::err_arc_assign_property_ownership,
+                                diag::err_arc_inconsistent_property_ownership,
+                                I->IvarD->getLocation());
     }
   }
 
@@ -253,8 +234,10 @@ private:
         }
       }
       if (I->ImplD)
-        Pass.TA.clearDiagnostic(diag::err_arc_assign_property_ownership,
-                                I->ImplD->getLocation());
+        Pass.TA.clearDiagnostic(diag::err_arc_strong_property_ownership,
+                                diag::err_arc_assign_property_ownership,
+                                diag::err_arc_inconsistent_property_ownership,
+                                I->IvarD->getLocation());
     }
   }
 
@@ -276,8 +259,10 @@ private:
                          canUseWeak ? "__weak " : "__unsafe_unretained ");
       }
       if (I->ImplD) {
-        Pass.TA.clearDiagnostic(diag::err_arc_assign_property_ownership,
-                                I->ImplD->getLocation());
+        Pass.TA.clearDiagnostic(diag::err_arc_strong_property_ownership,
+                                diag::err_arc_assign_property_ownership,
+                                diag::err_arc_inconsistent_property_ownership,
+                                I->IvarD->getLocation());
         Pass.TA.clearDiagnostic(
                            diag::err_arc_objc_property_default_assign_on_object,
                            I->ImplD->getLocation());
@@ -309,17 +294,8 @@ private:
         if (RE->getDecl() != Ivar)
           return true;
 
-      if (ObjCMessageExpr *
-            ME = dyn_cast<ObjCMessageExpr>(E->getRHS()->IgnoreParenCasts()))
-        if (ME->getMethodFamily() == OMF_retain)
+        if (isPlusOneAssign(E))
           return false;
-
-      ImplicitCastExpr *implCE = dyn_cast<ImplicitCastExpr>(E->getRHS());
-      while (implCE && implCE->getCastKind() ==  CK_BitCast)
-        implCE = dyn_cast<ImplicitCastExpr>(implCE->getSubExpr());
-
-      if (implCE && implCE->getCastKind() == CK_ARCConsumeObject)
-        return false;
       }
 
       return true;
@@ -352,14 +328,6 @@ private:
     }
 
     return false;    
-  }
-
-  bool hasAllIvarsBacked(PropsTy &props) const {
-    for (PropsTy::iterator I = props.begin(), E = props.end(); I != E; ++I)
-      if (!isUserDeclared(I->IvarD))
-        return false;
-
-    return true;
   }
 
   // \brief Returns true if all declarations in the @property have GC __weak.

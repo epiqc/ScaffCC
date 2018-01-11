@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 %s -triple x86_64-apple-darwin10 -emit-llvm -o - | FileCheck %s
+// RUN: %clang_cc1 -std=c++98 %s -triple x86_64-apple-darwin10 -emit-llvm -o - | FileCheck %s
 
 struct A {
   virtual ~A();
@@ -74,7 +74,7 @@ namespace ptrmem {
     int S::*mem2;
   };
 
-  // CHECK: define i32 @_ZN6ptrmem4testEPNS_1SE
+  // CHECK-LABEL: define i32 @_ZN6ptrmem4testEPNS_1SE
   int test(S *s) {
     // CHECK: call void @llvm.memcpy.p0i8.p0i8.i64
     // CHECK: getelementptr
@@ -99,7 +99,7 @@ struct Test2 {
 
 struct Test3 : public Test { };
 
-// CHECK: define void @_ZN6PR98011fEv
+// CHECK-LABEL: define void @_ZN6PR98011fEv
 void f() {
   // CHECK-NOT: call void @llvm.memset.p0i8.i64
   // CHECK: call void @_ZN6PR98014TestC1Ei
@@ -131,7 +131,7 @@ void f() {
 namespace zeroinit {
   struct S { int i; };
 
-  // CHECK: define i32 @_ZN8zeroinit4testEv()
+  // CHECK-LABEL: define i32 @_ZN8zeroinit4testEv()
   int test() {
     // CHECK: call void @llvm.memset.p0i8.i64
     // CHECK: ret i32 0
@@ -148,7 +148,7 @@ namespace zeroinit {
     void f();
   };
 
-  // CHECK: define void @_ZN8zeroinit9testX0_X1Ev
+  // CHECK-LABEL: define void @_ZN8zeroinit9testX0_X1Ev
   void testX0_X1() {
     // CHECK: call void @llvm.memset.p0i8.i64
     // CHECK-NEXT: call void @_ZN8zeroinit2X1C1Ev
@@ -169,7 +169,7 @@ namespace zeroinit {
   };
   
 
-  // CHECK: define void @_ZN8zeroinit9testX0_X3Ev
+  // CHECK-LABEL: define void @_ZN8zeroinit9testX0_X3Ev
   void testX0_X3() {
     // CHECK-NOT: call void @llvm.memset
     // CHECK: call void @_ZN8zeroinit2X3IiEC1Ev
@@ -201,37 +201,37 @@ namespace test6 {
   void test() {
     A arr[10][20] = { 5 };
   };
-  // CHECK:    define void @_ZN5test64testEv()
+  // CHECK-LABEL:    define void @_ZN5test64testEv()
   // CHECK:      [[ARR:%.*]] = alloca [10 x [20 x [[A:%.*]]]],
 
-  // CHECK-NEXT: [[INNER:%.*]] = getelementptr inbounds [10 x [20 x [[A]]]]* [[ARR]], i64 0, i64 0
-  // CHECK-NEXT: [[T0:%.*]] = getelementptr inbounds [20 x [[A]]]* [[INNER]], i64 0, i64 0
+  // CHECK-NEXT: [[INNER:%.*]] = getelementptr inbounds [10 x [20 x [[A]]]], [10 x [20 x [[A]]]]* [[ARR]], i64 0, i64 0
+  // CHECK-NEXT: [[T0:%.*]] = getelementptr inbounds [20 x [[A]]], [20 x [[A]]]* [[INNER]], i64 0, i64 0
   // CHECK-NEXT: call void @_ZN5test61AC1Ei([[A]]* [[T0]], i32 5)
-  // CHECK-NEXT: [[BEGIN:%.*]] = getelementptr inbounds [[A]]* [[T0]], i64 1
-  // CHECK-NEXT: [[END:%.*]] = getelementptr inbounds [[A]]* [[T0]], i64 20
+  // CHECK-NEXT: [[BEGIN:%.*]] = getelementptr inbounds [[A]], [[A]]* [[T0]], i64 1
+  // CHECK-NEXT: [[END:%.*]] = getelementptr inbounds [[A]], [[A]]* [[T0]], i64 20
   // CHECK-NEXT: br label
   // CHECK:      [[CUR:%.*]] = phi [[A]]* [ [[BEGIN]], {{%.*}} ], [ [[NEXT:%.*]], {{%.*}} ]
   // CHECK-NEXT: call void @_ZN5test61AC1Ev([[A]]* [[CUR]])
-  // CHECK-NEXT: [[NEXT]] = getelementptr inbounds [[A]]* [[CUR]], i64 1
+  // CHECK-NEXT: [[NEXT]] = getelementptr inbounds [[A]], [[A]]* [[CUR]], i64 1
   // CHECK-NEXT: [[T0:%.*]] = icmp eq [[A]]* [[NEXT]], [[END]]
   // CHECK-NEXT: br i1
 
-  // CHECK:      [[BEGIN:%.*]] = getelementptr inbounds [20 x [[A]]]* [[INNER]], i64 1
-  // CHECK-NEXT: [[END:%.*]] = getelementptr inbounds [20 x [[A]]]* [[INNER]], i64 10
+  // CHECK:      [[BEGIN:%.*]] = getelementptr inbounds [20 x [[A]]], [20 x [[A]]]* [[INNER]], i64 1
+  // CHECK-NEXT: [[END:%.*]] = getelementptr inbounds [20 x [[A]]], [20 x [[A]]]* [[INNER]], i64 10
   // CHECK-NEXT: br label
   // CHECK:      [[CUR:%.*]] = phi [20 x [[A]]]* [ [[BEGIN]], {{%.*}} ], [ [[NEXT:%.*]], {{%.*}} ]
 
   // Inner loop.
-  // CHECK-NEXT: [[IBEGIN:%.*]] = getelementptr inbounds [20 x [[A]]]* [[CUR]], i32 0, i32 0
-  // CHECK-NEXT: [[IEND:%.*]] = getelementptr inbounds [[A]]* [[IBEGIN]], i64 20
+  // CHECK-NEXT: [[IBEGIN:%.*]] = getelementptr inbounds [20 x [[A]]], [20 x [[A]]]* [[CUR]], i32 0, i32 0
+  // CHECK-NEXT: [[IEND:%.*]] = getelementptr inbounds [[A]], [[A]]* [[IBEGIN]], i64 20
   // CHECK-NEXT: br label
   // CHECK:      [[ICUR:%.*]] = phi [[A]]* [ [[IBEGIN]], {{%.*}} ], [ [[INEXT:%.*]], {{%.*}} ]
   // CHECK-NEXT: call void @_ZN5test61AC1Ev([[A]]* [[ICUR]])
-  // CHECK-NEXT: [[INEXT:%.*]] = getelementptr inbounds [[A]]* [[ICUR]], i64 1
+  // CHECK-NEXT: [[INEXT:%.*]] = getelementptr inbounds [[A]], [[A]]* [[ICUR]], i64 1
   // CHECK-NEXT: [[T0:%.*]] = icmp eq [[A]]* [[INEXT]], [[IEND]]
   // CHECK-NEXT: br i1 [[T0]],
 
-  // CHECK:      [[NEXT]] = getelementptr inbounds [20 x [[A]]]* [[CUR]], i64 1
+  // CHECK:      [[NEXT]] = getelementptr inbounds [20 x [[A]]], [20 x [[A]]]* [[CUR]], i64 1
   // CHECK-NEXT: [[T0:%.*]] = icmp eq [20 x [[A]]]* [[NEXT]], [[END]]
   // CHECK-NEXT: br i1 [[T0]]
   // CHECK:      ret void
@@ -243,7 +243,7 @@ namespace PR11124 {
   struct B : virtual A { int b; };
   struct C : B { C(); };      
   C::C() : A(3), B() {}
-  // CHECK: define void @_ZN7PR111241CC1Ev
+  // CHECK-LABEL: define void @_ZN7PR111241CC1Ev
   // CHECK: call void @llvm.memset.p0i8.i64(i8* {{.*}}, i8 0, i64 12, i32 8, i1 false)
   // CHECK-NEXT: call void @_ZN7PR111241BC2Ev
   // Make sure C::C doesn't overwrite parts of A while it is zero-initializing B
@@ -251,12 +251,79 @@ namespace PR11124 {
   struct B2 : virtual A { int B::*b; };
   struct C2 : B2 { C2(); };      
   C2::C2() : A(3), B2() {}
-  // CHECK: define void @_ZN7PR111242C2C1Ev
+  // CHECK-LABEL: define void @_ZN7PR111242C2C1Ev
   // CHECK: call void @llvm.memcpy.p0i8.p0i8.i64(i8* %{{.*}}, i8* {{.*}}, i64 16, i32 8, i1 false)
   // CHECK-NEXT: call void @_ZN7PR111242B2C2Ev
 }
 
-// CHECK: define linkonce_odr void @_ZN8zeroinit2X3IiEC2Ev(%"struct.zeroinit::X3"* %this) unnamed_addr
+// Ensure we produce an i1 here, and don't assert.
+// CHECK-LABEL: define void @_Z9r170806_bv(
+// CHECK: call void @_Z9r170806_ab(i1 zeroext false)
+void r170806_a(bool b = bool());
+void r170806_b() { r170806_a(); }
+
+namespace PR20256 {
+  struct data { int i; };
+
+  template<typename T = int>
+  data g() {
+    data d; // not value-init
+    return d;
+  }
+  template data g();
+  // CHECK-LABEL: define {{.*}} @_ZN7PR202561gIiEENS_4dataEv(
+  // CHECK-NOT: store
+  // CHECK-NOT: memset
+  // CHECK: }
+
+  template<typename ...T>
+  data h(T ...t) {
+    data d(t...); // value-init
+    return d;
+  }
+  template data h();
+  // CHECK-LABEL: define {{.*}} @_ZN7PR202561hIJEEENS_4dataEDpT_(
+  // CHECK: call void @llvm.memset
+  // CHECK: }
+
+
+  template<typename T = int>
+  data j() {
+    data d = {}; // value-init
+    return d;
+  }
+  template data j();
+  // CHECK-LABEL: define {{.*}} @_ZN7PR202561jIiEENS_4dataEv(
+  // CHECK: call void @llvm.memset
+  // CHECK: }
+
+  data f() {
+    data d; // not value-init
+    return d;
+  }
+  // CHECK-LABEL: define {{.*}} @_ZN7PR202561fEv(
+  // CHECK-NOT: store
+  // CHECK-NOT: memset
+  // CHECK: }
+
+  data i() {
+    data d = {}; // value-init
+    return d;
+  }
+  // CHECK-LABEL: define {{.*}} @_ZN7PR202561iEv(
+  // CHECK: call void @llvm.memset
+  // CHECK: }
+}
+
+// CHECK-LABEL: define {{.*}}@_Z20explicitly_defaultedv
+int explicitly_defaulted() {
+  struct A { A() = default; int n; };
+  // CHECK: call void @llvm.memset
+  A a = A();
+  return a.n;
+} // CHECK-LABEL: }
+
+// CHECK-LABEL: define linkonce_odr void @_ZN8zeroinit2X3IiEC2Ev(%"struct.zeroinit::X3"* %this) unnamed_addr
 // CHECK: call void @llvm.memset.p0i8.i64
 // CHECK-NEXT: call void @_ZN8zeroinit2X2IiEC2Ev
 // CHECK-NEXT: ret void

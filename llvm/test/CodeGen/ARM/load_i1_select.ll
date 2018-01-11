@@ -6,12 +6,12 @@ target triple = "thumbv7-apple-ios0.0.0"
 ; Codegen should only compare one bit of the loaded value.
 ; rdar://10887484
 
-; CHECK: foo:
+; CHECK-LABEL: foo:
 ; CHECK: ldrb r[[R0:[0-9]+]], [r0]
 ; CHECK: tst.w r[[R0]], #1
 define void @foo(i8* %call, double* %p) nounwind {
 entry:
-  %tmp2 = load i8* %call
+  %tmp2 = load i8, i8* %call
   %tmp3 = trunc i8 %tmp2 to i1
   %cond = select i1 %tmp3, double 2.000000e+00, double 1.000000e+00
   store double %cond, double* %p

@@ -41,7 +41,7 @@ def process_qasm(fname):
     pattern_qg = re.compile(r"\s*((\w+|\w+\[(.*?)\])\s*\=)*\s*(?P<func_name>\w+)\s*\(\s*(?P<array_size>(.*?))\s*\)\s*;")
     pattern_qbit_arg = re.compile(r"(.*?)\((.*?)\bqbit\b\s*(.*?)\)(.*?)")
     pattern_meas = re.compile(r"\s*(?P<func_ret>(\w+|\w+\[(.*?)\])\s*\=)*\s*(\bqg_MeasX|qg_MeasZ\b)\s*\(\s*(?P<array_size>(.*?))\s*\)\s*;")
-    pattern_main = re.compile(r"\s*(\bvoid|module\b)\s+(\bmain|main1\b)\s*\((.*?)\)\s*(\{)*\s*")
+    pattern_main = re.compile(r"\s*(\bvoid|qmodule\b)\s+(\bmain|main1\b)\s*\((.*?)\)\s*(\{)*\s*")
     pattern_comment = re.compile(r"\s*//--//--(.*?)--//--//\s*")
 
     fout_name = re.sub('\.qasmh$','_qasm.scaffold',fname)
@@ -133,7 +133,7 @@ def process_qasm(fname):
         m = re.match(pattern_main,b)
         if(m):
             inMainFunc = True
-            b = re.sub(r"\bvoid|module\b","int ",b)
+            b = re.sub(r"\bvoid|qmodule\b","int ",b)
 
         m = re.match(pattern_qbit_decl,b)
 

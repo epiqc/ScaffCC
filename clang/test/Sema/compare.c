@@ -77,7 +77,7 @@ int ints(long a, unsigned long b) {
          ((int) a == (unsigned int) B) +
          ((short) a == (unsigned short) B) +
          ((signed char) a == (unsigned char) B) +
-         (a < (unsigned long) B) +  // expected-warning {{comparison of integers of different signs}}
+         (a < (unsigned long) B) +  // expected-warning {{comparison of unsigned expression < 0 is always false}}
          (a < (unsigned int) B) +
          (a < (unsigned short) B) +
          (a < (unsigned char) B) +
@@ -85,16 +85,16 @@ int ints(long a, unsigned long b) {
          ((int) a < B) +
          ((short) a < B) +
          ((signed char) a < B) +
-         ((long) a < (unsigned long) B) +  // expected-warning {{comparison of integers of different signs}}
-         ((int) a < (unsigned int) B) +  // expected-warning {{comparison of integers of different signs}}
+         ((long) a < (unsigned long) B) +  // expected-warning {{comparison of unsigned expression < 0 is always false}}
+         ((int) a < (unsigned int) B) +  // expected-warning {{comparison of unsigned expression < 0 is always false}}
          ((short) a < (unsigned short) B) +
          ((signed char) a < (unsigned char) B) +
 
          // (C,b)
          (C == (unsigned long) b) +
          (C == (unsigned int) b) +
-         (C == (unsigned short) b) +
-         (C == (unsigned char) b) +
+         (C == (unsigned short) b) + // expected-warning {{comparison of constant 'C' (65536) with expression of type 'unsigned short' is always false}}
+         (C == (unsigned char) b) + // expected-warning {{comparison of constant 'C' (65536) with expression of type 'unsigned char' is always false}}
          ((long) C == b) +
          ((int) C == b) +
          ((short) C == b) +
@@ -105,8 +105,8 @@ int ints(long a, unsigned long b) {
          ((signed char) C == (unsigned char) b) +
          (C < (unsigned long) b) +
          (C < (unsigned int) b) +
-         (C < (unsigned short) b) +
-         (C < (unsigned char) b) +
+         (C < (unsigned short) b) + // expected-warning {{comparison of constant 'C' (65536) with expression of type 'unsigned short' is always false}}
+         (C < (unsigned char) b) + // expected-warning {{comparison of constant 'C' (65536) with expression of type 'unsigned char' is always false}}
          ((long) C < b) +
          ((int) C < b) +
          ((short) C < b) +
@@ -123,8 +123,8 @@ int ints(long a, unsigned long b) {
          (a == (unsigned char) C) +
          ((long) a == C) +
          ((int) a == C) +
-         ((short) a == C) +
-         ((signed char) a == C) +
+         ((short) a == C) + // expected-warning {{comparison of constant 'C' (65536) with expression of type 'short' is always false}}
+         ((signed char) a == C) + // expected-warning {{comparison of constant 'C' (65536) with expression of type 'signed char' is always false}}
          ((long) a == (unsigned long) C) +
          ((int) a == (unsigned int) C) +
          ((short) a == (unsigned short) C) +
@@ -135,8 +135,8 @@ int ints(long a, unsigned long b) {
          (a < (unsigned char) C) +
          ((long) a < C) +
          ((int) a < C) +
-         ((short) a < C) +
-         ((signed char) a < C) +
+         ((short) a < C) + // expected-warning {{comparison of constant 'C' (65536) with expression of type 'short' is always true}}
+         ((signed char) a < C) + // expected-warning {{comparison of constant 'C' (65536) with expression of type 'signed char' is always true}}
          ((long) a < (unsigned long) C) +  // expected-warning {{comparison of integers of different signs}}
          ((int) a < (unsigned int) C) +  // expected-warning {{comparison of integers of different signs}}
          ((short) a < (unsigned short) C) +
@@ -145,8 +145,8 @@ int ints(long a, unsigned long b) {
          // (0x80000,b)
          (0x80000 == (unsigned long) b) +
          (0x80000 == (unsigned int) b) +
-         (0x80000 == (unsigned short) b) +
-         (0x80000 == (unsigned char) b) +
+         (0x80000 == (unsigned short) b) + // expected-warning {{comparison of constant 524288 with expression of type 'unsigned short' is always false}}
+         (0x80000 == (unsigned char) b) + // expected-warning {{comparison of constant 524288 with expression of type 'unsigned char' is always false}}
          ((long) 0x80000 == b) +
          ((int) 0x80000 == b) +
          ((short) 0x80000 == b) +
@@ -157,8 +157,8 @@ int ints(long a, unsigned long b) {
          ((signed char) 0x80000 == (unsigned char) b) +
          (0x80000 < (unsigned long) b) +
          (0x80000 < (unsigned int) b) +
-         (0x80000 < (unsigned short) b) +
-         (0x80000 < (unsigned char) b) +
+         (0x80000 < (unsigned short) b) + // expected-warning {{comparison of constant 524288 with expression of type 'unsigned short' is always false}}
+         (0x80000 < (unsigned char) b) + // expected-warning {{comparison of constant 524288 with expression of type 'unsigned char' is always false}}
          ((long) 0x80000 < b) +
          ((int) 0x80000 < b) +
          ((short) 0x80000 < b) +
@@ -175,8 +175,8 @@ int ints(long a, unsigned long b) {
          (a == (unsigned char) 0x80000) +
          ((long) a == 0x80000) +
          ((int) a == 0x80000) +
-         ((short) a == 0x80000) +
-         ((signed char) a == 0x80000) +
+         ((short) a == 0x80000) + // expected-warning {{comparison of constant 524288 with expression of type 'short' is always false}}
+         ((signed char) a == 0x80000) + // expected-warning {{comparison of constant 524288 with expression of type 'signed char' is always false}}
          ((long) a == (unsigned long) 0x80000) +
          ((int) a == (unsigned int) 0x80000) +
          ((short) a == (unsigned short) 0x80000) +
@@ -187,8 +187,8 @@ int ints(long a, unsigned long b) {
          (a < (unsigned char) 0x80000) +
          ((long) a < 0x80000) +
          ((int) a < 0x80000) +
-         ((short) a < 0x80000) +
-         ((signed char) a < 0x80000) +
+         ((short) a < 0x80000) + // expected-warning {{comparison of constant 524288 with expression of type 'short' is always true}}
+         ((signed char) a < 0x80000) + // expected-warning {{comparison of constant 524288 with expression of type 'signed char' is always true}}
          ((long) a < (unsigned long) 0x80000) +  // expected-warning {{comparison of integers of different signs}}
          ((int) a < (unsigned int) 0x80000) +  // expected-warning {{comparison of integers of different signs}}
          ((short) a < (unsigned short) 0x80000) +
@@ -308,8 +308,59 @@ int rdar8414119_bar(unsigned x) {
 int rdar8511238() {
   enum A { A_foo, A_bar };
   enum A a;
+
+  if (a == 0)
+      return 0;
+  if (a != 0)
+      return 0;
   if (a < 0) // expected-warning {{comparison of unsigned enum expression < 0 is always false}}
-    return 0;
+      return 0;
+  if (a <= 0)
+      return 0;
+  if (a > 0)
+      return 0;
+  if (a >= 0) // expected-warning {{comparison of unsigned enum expression >= 0 is always true}}
+      return 0;
+
+  if (0 == a)
+      return 0;
+  if (0 != a)
+      return 0;
+  if (0 < a)
+      return 0;
+  if (0 <= a) // expected-warning {{comparison of 0 <= unsigned enum expression is always true}}
+      return 0;
+  if (0 > a) // expected-warning {{comparison of 0 > unsigned enum expression is always false}}
+      return 0;
+  if (0 >= a)
+      return 0;
+
+  if (a == 0U)
+      return 0;
+  if (a != 0U)
+      return 0;
+  if (a < 0U) // expected-warning {{comparison of unsigned enum expression < 0 is always false}}
+      return 0;
+  if (a <= 0U)
+      return 0;
+  if (a > 0U)
+      return 0;
+  if (a >= 0U) // expected-warning {{comparison of unsigned enum expression >= 0 is always true}}
+      return 0;
+
+  if (0U == a)
+      return 0;
+  if (0U != a)
+      return 0;
+  if (0U < a)
+      return 0;
+  if (0U <= a) // expected-warning {{comparison of 0 <= unsigned enum expression is always true}}
+      return 0;
+  if (0U > a) // expected-warning {{comparison of 0 > unsigned enum expression is always false}}
+      return 0;
+  if (0U >= a)
+      return 0;
+
   return 20;
 }
 
@@ -332,4 +383,11 @@ void test10(void) {
 struct test11S { unsigned x : 30; };
 int test11(unsigned y, struct test11S *p) {
   return y > (p->x >> 24); // no-warning
+}
+
+typedef char one_char[1];
+typedef char two_chars[2];
+
+void test12(unsigned a) {
+  if (0 && -1 > a) { }
 }

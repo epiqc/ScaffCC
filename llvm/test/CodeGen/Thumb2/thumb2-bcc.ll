@@ -1,10 +1,10 @@
-; RUN: llc < %s -march=thumb -mattr=+thumb2 | FileCheck %s
+; RUN: llc -mtriple=thumb-eabi -mcpu=arm1156t2-s -mattr=+thumb2 %s -o - | FileCheck %s
 ; If-conversion defeats the purpose of this test, which is to check CBZ
 ; generation, so use memory barrier instruction to make sure it doesn't
 ; happen and we get actual branches.
 
 define i32 @t1(i32 %a, i32 %b, i32 %c) {
-; CHECK: t1:
+; CHECK-LABEL: t1:
 ; CHECK: cbz
   %tmp2 = icmp eq i32 %a, 0
   br i1 %tmp2, label %cond_false, label %cond_true

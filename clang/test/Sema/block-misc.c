@@ -131,7 +131,7 @@ void test14() {
   static void *P = ^{  // expected-error {{initializer element is not a compile-time constant}}
 
     void *Q = ^{
-      // References test14's "X": outer block is non constant.
+      // References test14's "X": outer block is non-constant.
       return X+4;
     };
   };
@@ -184,13 +184,13 @@ void test17() {
 }
 
 void test18() {
-  void (^const  blockA)(void) = ^{ };
-  blockA = ^{ }; // expected-error {{read-only variable is not assignable}}
+  void (^const  blockA)(void) = ^{ };  // expected-note {{variable 'blockA' declared const here}}
+  blockA = ^{ }; // expected-error {{cannot assign to variable 'blockA' with const-qualified type 'void (^const)(void)}}
 }
 
 // rdar://7072507
 int test19() {
-  goto L0;       // expected-error {{goto into protected scope}}
+  goto L0;       // expected-error {{cannot jump}}
   
   __block int x; // expected-note {{jump bypasses setup of __block variable}}
 L0:

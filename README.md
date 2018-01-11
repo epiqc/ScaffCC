@@ -19,7 +19,7 @@ ScaffCC is currently in an *alpha* release. Specifically, the release details ar
 
 -   Version 3.0
 
--   Release Date: August, 2017
+-   Release Date: Release Date: August, 2017
 
 -   Release Note: The current version is still an alpha release. Multiple new features are in active developement. For instance, .qasmf formart conforming to standardized QASM and optimization to parallel scheduler are expected to be included in the near term.
 
@@ -160,11 +160,10 @@ Once you have all of the required libraries, simply run
 
 or
 
-        make USE_GCC=1
+        make DISABLE_STATIC=1
 
-at the root of the repository. The `USE_GCC` flag will force the
-Makefile to use GCC to compile instead, and this has been seen to be
-faster on some systems.
+at the root of the repository. The `DISABLE_STATIC` flag will force the
+ Makefile to use boost, gmp, and mpfr's shared libraries and build with clang.
 
 Verifying Installation
 ----------------------

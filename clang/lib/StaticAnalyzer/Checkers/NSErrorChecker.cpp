@@ -16,14 +16,15 @@
 //===----------------------------------------------------------------------===//
 
 #include "ClangSACheckers.h"
+#include "clang/AST/Decl.h"
+#include "clang/AST/DeclObjC.h"
+#include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
 #include "clang/StaticAnalyzer/Core/Checker.h"
 #include "clang/StaticAnalyzer/Core/CheckerManager.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/ProgramStateTrait.h"
-#include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
-#include "clang/AST/DeclObjC.h"
-#include "clang/AST/Decl.h"
-#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/SmallString.h"
+#include "llvm/Support/raw_ostream.h"
 
 using namespace clang;
 using namespace ento;
@@ -41,7 +42,7 @@ class NSErrorMethodChecker
   mutable IdentifierInfo *II;
 
 public:
-  NSErrorMethodChecker() : II(0) { }
+  NSErrorMethodChecker() : II(nullptr) {}
 
   void checkASTDecl(const ObjCMethodDecl *D,
                     AnalysisManager &mgr, BugReporter &BR) const;
@@ -53,16 +54,15 @@ void NSErrorMethodChecker::checkASTDecl(const ObjCMethodDecl *D,
                                         BugReporter &BR) const {
   if (!D->isThisDeclarationADefinition())
     return;
-  if (!D->getResultType()->isVoidType())
+  if (!D->getReturnType()->isVoidType())
     return;
 
   if (!II)
-    II = &D->getASTContext().Idents.get("NSError"); 
+    II = &D->getASTContext().Idents.get("NSError");
 
   bool hasNSError = false;
-  for (ObjCMethodDecl::param_const_iterator
-         I = D->param_begin(), E = D->param_end(); I != E; ++I)  {
-    if (IsNSError((*I)->getType(), II)) {
+  for (const auto *I : D->parameters())  {
+    if (IsNSError(I->getType(), II)) {
       hasNSError = true;
       break;
     }
@@ -74,7 +74,7 @@ void NSErrorMethodChecker::checkASTDecl(const ObjCMethodDecl *D,
         "error occurred";
     PathDiagnosticLocation L =
       PathDiagnosticLocation::create(D, BR.getSourceManager());
-    BR.EmitBasicReport(D, "Bad return type when passing NSError**",
+    BR.EmitBasicReport(D, this, "Bad return type when passing NSError**",
                        "Coding conventions (Apple)", err, L);
   }
 }
@@ -89,7 +89,7 @@ class CFErrorFunctionChecker
   mutable IdentifierInfo *II;
 
 public:
-  CFErrorFunctionChecker() : II(0) { }
+  CFErrorFunctionChecker() : II(nullptr) {}
 
   void checkASTDecl(const FunctionDecl *D,
                     AnalysisManager &mgr, BugReporter &BR) const;
@@ -101,16 +101,15 @@ void CFErrorFunctionChecker::checkASTDecl(const FunctionDecl *D,
                                         BugReporter &BR) const {
   if (!D->doesThisDeclarationHaveABody())
     return;
-  if (!D->getResultType()->isVoidType())
+  if (!D->getReturnType()->isVoidType())
     return;
 
   if (!II)
-    II = &D->getASTContext().Idents.get("CFErrorRef"); 
+    II = &D->getASTContext().Idents.get("CFErrorRef");
 
   bool hasCFError = false;
-  for (FunctionDecl::param_const_iterator
-         I = D->param_begin(), E = D->param_end(); I != E; ++I)  {
-    if (IsCFError((*I)->getType(), II)) {
+  for (auto I : D->parameters())  {
+    if (IsCFError(I->getType(), II)) {
       hasCFError = true;
       break;
     }
@@ -122,7 +121,7 @@ void CFErrorFunctionChecker::checkASTDecl(const FunctionDecl *D,
         "error occurred";
     PathDiagnosticLocation L =
       PathDiagnosticLocation::create(D, BR.getSourceManager());
-    BR.EmitBasicReport(D, "Bad return type when passing CFErrorRef*",
+    BR.EmitBasicReport(D, this, "Bad return type when passing CFErrorRef*",
                        "Coding conventions (Apple)", err, L);
   }
 }
@@ -135,14 +134,16 @@ namespace {
 
 class NSErrorDerefBug : public BugType {
 public:
-  NSErrorDerefBug() : BugType("NSError** null dereference",
-                              "Coding conventions (Apple)") {}
+  NSErrorDerefBug(const CheckerBase *Checker)
+      : BugType(Checker, "NSError** null dereference",
+                "Coding conventions (Apple)") {}
 };
 
 class CFErrorDerefBug : public BugType {
 public:
-  CFErrorDerefBug() : BugType("CFErrorRef* null dereference",
-                              "Coding conventions (Apple)") {}
+  CFErrorDerefBug(const CheckerBase *Checker)
+      : BugType(Checker, "CFErrorRef* null dereference",
+                "Coding conventions (Apple)") {}
 };
 
 }
@@ -152,9 +153,11 @@ class NSOrCFErrorDerefChecker
     : public Checker< check::Location,
                         check::Event<ImplicitNullDerefEvent> > {
   mutable IdentifierInfo *NSErrorII, *CFErrorII;
+  mutable std::unique_ptr<NSErrorDerefBug> NSBT;
+  mutable std::unique_ptr<CFErrorDerefBug> CFBT;
 public:
   bool ShouldCheckNSError, ShouldCheckCFError;
-  NSOrCFErrorDerefChecker() : NSErrorII(0), CFErrorII(0),
+  NSOrCFErrorDerefChecker() : NSErrorII(nullptr), CFErrorII(nullptr),
                               ShouldCheckNSError(0), ShouldCheckCFError(0) { }
 
   void checkLocation(SVal loc, bool isLoad, const Stmt *S,
@@ -163,23 +166,9 @@ public:
 };
 }
 
-namespace { struct NSErrorOut {}; }
-namespace { struct CFErrorOut {}; }
-
 typedef llvm::ImmutableMap<SymbolRef, unsigned> ErrorOutFlag;
-
-namespace clang {
-namespace ento {
-  template <>
-  struct ProgramStateTrait<NSErrorOut> : public ProgramStatePartialTrait<ErrorOutFlag> {  
-    static void *GDMIndex() { static int index = 0; return &index; }
-  };
-  template <>
-  struct ProgramStateTrait<CFErrorOut> : public ProgramStatePartialTrait<ErrorOutFlag> {  
-    static void *GDMIndex() { static int index = 0; return &index; }
-  };
-}
-}
+REGISTER_TRAIT_WITH_PROGRAMSTATE(NSErrorOut, ErrorOutFlag)
+REGISTER_TRAIT_WITH_PROGRAMSTATE(CFErrorOut, ErrorOutFlag)
 
 template <typename T>
 static bool hasFlag(SVal val, ProgramStateRef state) {
@@ -199,7 +188,7 @@ static void setFlag(ProgramStateRef state, SVal val, CheckerContext &C) {
 static QualType parameterTypeFromSVal(SVal val, CheckerContext &C) {
   const StackFrameContext *
     SFC = C.getLocationContext()->getCurrentStackFrame();
-  if (const loc::MemRegionVal* X = dyn_cast<loc::MemRegionVal>(&val)) {
+  if (Optional<loc::MemRegionVal> X = val.getAs<loc::MemRegionVal>()) {
     const MemRegion* R = X->getRegion();
     if (const VarRegion *VR = R->getAs<VarRegion>())
       if (const StackArgumentsSpaceRegion *
@@ -216,7 +205,7 @@ void NSOrCFErrorDerefChecker::checkLocation(SVal loc, bool isLoad,
                                             CheckerContext &C) const {
   if (!isLoad)
     return;
-  if (loc.isUndef() || !isa<Loc>(loc))
+  if (loc.isUndef() || !loc.getAs<Loc>())
     return;
 
   ASTContext &Ctx = C.getASTContext();
@@ -238,12 +227,12 @@ void NSOrCFErrorDerefChecker::checkLocation(SVal loc, bool isLoad,
     CFErrorII = &Ctx.Idents.get("CFErrorRef");
 
   if (ShouldCheckNSError && IsNSError(parmT, NSErrorII)) {
-    setFlag<NSErrorOut>(state, state->getSVal(cast<Loc>(loc)), C);
+    setFlag<NSErrorOut>(state, state->getSVal(loc.castAs<Loc>()), C);
     return;
   }
 
   if (ShouldCheckCFError && IsCFError(parmT, CFErrorII)) {
-    setFlag<CFErrorOut>(state, state->getSVal(cast<Loc>(loc)), C);
+    setFlag<CFErrorOut>(state, state->getSVal(loc.castAs<Loc>()), C);
     return;
   }
 }
@@ -265,27 +254,28 @@ void NSOrCFErrorDerefChecker::checkEvent(ImplicitNullDerefEvent event) const {
     return;
 
   // Storing to possible null NSError/CFErrorRef out parameter.
+  SmallString<128> Buf;
+  llvm::raw_svector_ostream os(Buf);
 
-  // Emit an error.
-  std::string err;
-  llvm::raw_string_ostream os(err);
-    os << "Potential null dereference.  According to coding standards ";
+  os << "Potential null dereference.  According to coding standards ";
+  os << (isNSError
+         ? "in 'Creating and Returning NSError Objects' the parameter"
+         : "documented in CoreFoundation/CFError.h the parameter");
 
-  if (isNSError)
-    os << "in 'Creating and Returning NSError Objects' the parameter '";
-  else
-    os << "documented in CoreFoundation/CFError.h the parameter '";
+  os  << " may be null";
 
-  os  << "' may be null.";
-
-  BugType *bug = 0;
-  if (isNSError)
-    bug = new NSErrorDerefBug();
-  else
-    bug = new CFErrorDerefBug();
-  BugReport *report = new BugReport(*bug, os.str(),
-                                                    event.SinkNode);
-  BR.EmitReport(report);
+  BugType *bug = nullptr;
+  if (isNSError) {
+    if (!NSBT)
+      NSBT.reset(new NSErrorDerefBug(this));
+    bug = NSBT.get();
+  }
+  else {
+    if (!CFBT)
+      CFBT.reset(new CFErrorDerefBug(this));
+    bug = CFBT.get();
+  }
+  BR.emitReport(llvm::make_unique<BugReport>(*bug, os.str(), event.SinkNode));
 }
 
 static bool IsNSError(QualType T, IdentifierInfo *II) {
@@ -321,14 +311,14 @@ static bool IsCFError(QualType T, IdentifierInfo *II) {
 
 void ento::registerNSErrorChecker(CheckerManager &mgr) {
   mgr.registerChecker<NSErrorMethodChecker>();
-  NSOrCFErrorDerefChecker *
-    checker = mgr.registerChecker<NSOrCFErrorDerefChecker>();
+  NSOrCFErrorDerefChecker *checker =
+      mgr.registerChecker<NSOrCFErrorDerefChecker>();
   checker->ShouldCheckNSError = true;
 }
 
 void ento::registerCFErrorChecker(CheckerManager &mgr) {
   mgr.registerChecker<CFErrorFunctionChecker>();
-  NSOrCFErrorDerefChecker *
-    checker = mgr.registerChecker<NSOrCFErrorDerefChecker>();
+  NSOrCFErrorDerefChecker *checker =
+      mgr.registerChecker<NSOrCFErrorDerefChecker>();
   checker->ShouldCheckCFError = true;
 }

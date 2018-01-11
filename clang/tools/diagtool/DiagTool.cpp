@@ -13,7 +13,6 @@
 
 #include "DiagTool.h"
 #include "llvm/ADT/StringMap.h"
-#include "llvm/ADT/SmallString.h"
 #include <vector>
 
 using namespace diagtool;
@@ -32,11 +31,11 @@ DiagTools::~DiagTools() { delete getTools(tools); }
 
 DiagTool *DiagTools::getTool(llvm::StringRef toolCmd) {
   ToolMap::iterator it = getTools(tools)->find(toolCmd);
-  return (it == getTools(tools)->end()) ? 0 : it->getValue();
+  return (it == getTools(tools)->end()) ? nullptr : it->getValue();
 }
 
 void DiagTools::registerTool(DiagTool *tool) {
-  getTools(tools)->GetOrCreateValue(tool->getName(), tool);  
+  (*getTools(tools))[tool->getName()] = tool;
 }
 
 void DiagTools::printCommands(llvm::raw_ostream &out) {

@@ -9,9 +9,9 @@ struct S {
 
   void f() throw (auto); // expected-error{{'auto' not allowed here}}
 
-  friend auto; // expected-error{{'auto' not allowed in non-static struct member}}
+  friend auto; // expected-error{{'auto' not allowed in friend declaration}}
 
-  operator auto(); // expected-error{{'auto' not allowed here}}
+  operator auto(); // expected-error{{'auto' not allowed in conversion function type}}
 };
 
 // PR 9278: auto is not allowed in typedefs, except with a trailing return type.
@@ -64,5 +64,4 @@ template<typename T = auto> struct G { }; // expected-error{{'auto' not allowed 
 
 using A = auto; // expected-error{{'auto' not allowed in type alias}}
 
-// FIXME: don't issue the second diagnostic for this error.
-auto k() -> auto; // expected-error{{'auto' not allowed in function return type}} unexpected-error{{without trailing return type}}
+auto k() -> auto; // expected-error{{'auto' not allowed in function return type}}

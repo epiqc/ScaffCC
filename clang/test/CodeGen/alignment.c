@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -emit-llvm %s -o - | FileCheck %s
+// RUN: %clang_cc1 -triple i386-unknown-linux-gnu -emit-llvm %s -o - | FileCheck %s
 
 __attribute((aligned(16))) float a[128];
 union {int a[4]; __attribute((aligned(16))) float b[4];} b;
@@ -6,7 +6,8 @@ union {int a[4]; __attribute((aligned(16))) float b[4];} b;
 // CHECK: @a = {{.*}}zeroinitializer, align 16
 // CHECK: @b = {{.*}}zeroinitializer, align 16
 
-
+long long int test5[1024];
+// CHECK-DAG: @test5 = common global [1024 x i64] zeroinitializer, align 8
 
 // PR5279 - Reduced alignment on typedef.
 typedef int myint __attribute__((aligned(1)));
@@ -22,7 +23,7 @@ int test1a(myint *p) {
   return *p;
 }
 // CHECK: @test1a(
-// CHECK: load i32* {{.*}}, align 1
+// CHECK: load i32, i32* {{.*}}, align 1
 // CHECK: ret i32
 
 
@@ -43,7 +44,8 @@ void test3(packedfloat3 *p) {
   *p = (packedfloat3) { 3.2f, 2.3f, 0.1f };
 }
 // CHECK: @test3(
-// CHECK: store <3 x float> {{.*}}, align 4
+// CHECK: %{{.*}} = bitcast <3 x float>* %{{.*}} to <4 x float>*
+// CHECK: store <4 x float> {{.*}}, align 4
 // CHECK: ret void
 
 
@@ -57,3 +59,11 @@ void test4(float4align64 *p) {
 // CHECK: @test4(
 // CHECK: store <4 x float> {{.*}}, <4 x float>* {{.*}}, align 64
 
+// PR24944 - Typedef alignment not honored on no-op cast.
+typedef float __attribute__((vector_size(16), aligned(16))) float4align16;
+typedef float __attribute__((vector_size(16), aligned(2))) float4align2;
+void test6(float4align64 *p) {
+    float4align64 vec = *(float4align2*) p;
+}
+// CHECK-LABEL: @test6
+// CHECK:       load <4 x float>, <4 x float>* {{.*}}, align 2

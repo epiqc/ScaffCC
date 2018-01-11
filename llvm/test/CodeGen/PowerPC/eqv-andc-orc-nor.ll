@@ -1,12 +1,12 @@
-; RUN: llc < %s -march=ppc32 | \
+; RUN: llc -verify-machineinstrs < %s -mtriple=ppc32-- | \
 ; RUN:   grep eqv | count 3
-; RUN: llc < %s -march=ppc32 -mcpu=g5 | \
+; RUN: llc -verify-machineinstrs < %s -mtriple=ppc32-- -mcpu=g5 | \
 ; RUN:   grep andc | count 3
-; RUN: llc < %s -march=ppc32 | \
+; RUN: llc -verify-machineinstrs < %s -mtriple=ppc32-- | \
 ; RUN:   grep orc | count 2
-; RUN: llc < %s -march=ppc32 -mcpu=g5 | \
+; RUN: llc -verify-machineinstrs < %s -mtriple=ppc32-- -mcpu=g5 | \
 ; RUN:   grep nor | count 3
-; RUN: llc < %s -march=ppc32 | \
+; RUN: llc -verify-machineinstrs < %s -mtriple=ppc32-- | \
 ; RUN:   grep nand | count 1
 
 define i32 @EQV1(i32 %X, i32 %Y) nounwind {
@@ -69,9 +69,9 @@ define i32 @NAND1(i32 %X, i32 %Y) nounwind {
 }
 
 define void @VNOR(<4 x float>* %P, <4 x float>* %Q) nounwind {
-	%tmp = load <4 x float>* %P		; <<4 x float>> [#uses=1]
+	%tmp = load <4 x float>, <4 x float>* %P		; <<4 x float>> [#uses=1]
 	%tmp.upgrd.1 = bitcast <4 x float> %tmp to <4 x i32>		; <<4 x i32>> [#uses=1]
-	%tmp2 = load <4 x float>* %Q		; <<4 x float>> [#uses=1]
+	%tmp2 = load <4 x float>, <4 x float>* %Q		; <<4 x float>> [#uses=1]
 	%tmp2.upgrd.2 = bitcast <4 x float> %tmp2 to <4 x i32>		; <<4 x i32>> [#uses=1]
 	%tmp3 = or <4 x i32> %tmp.upgrd.1, %tmp2.upgrd.2		; <<4 x i32>> [#uses=1]
 	%tmp4 = xor <4 x i32> %tmp3, < i32 -1, i32 -1, i32 -1, i32 -1 >		; <<4 x i32>> [#uses=1]
@@ -81,9 +81,9 @@ define void @VNOR(<4 x float>* %P, <4 x float>* %Q) nounwind {
 }
 
 define void @VANDC(<4 x float>* %P, <4 x float>* %Q) nounwind {
-	%tmp = load <4 x float>* %P		; <<4 x float>> [#uses=1]
+	%tmp = load <4 x float>, <4 x float>* %P		; <<4 x float>> [#uses=1]
 	%tmp.upgrd.4 = bitcast <4 x float> %tmp to <4 x i32>		; <<4 x i32>> [#uses=1]
-	%tmp2 = load <4 x float>* %Q		; <<4 x float>> [#uses=1]
+	%tmp2 = load <4 x float>, <4 x float>* %Q		; <<4 x float>> [#uses=1]
 	%tmp2.upgrd.5 = bitcast <4 x float> %tmp2 to <4 x i32>		; <<4 x i32>> [#uses=1]
 	%tmp4 = xor <4 x i32> %tmp2.upgrd.5, < i32 -1, i32 -1, i32 -1, i32 -1 >		; <<4 x i32>> [#uses=1]
 	%tmp3 = and <4 x i32> %tmp.upgrd.4, %tmp4		; <<4 x i32>> [#uses=1]

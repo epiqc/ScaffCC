@@ -1,9 +1,12 @@
+; REQUIRES: asserts
 ; The old instruction selector used to load all arguments to a call up in 
 ; registers, then start pushing them all onto the stack.  This is bad news as
 ; it makes a ton of annoying overlapping live ranges.  This code should not
 ; cause spills!
 ;
-; RUN: llc < %s -march=x86 -stats |& not grep spilled
+; RUN: llc < %s -mtriple=i686-- -stats 2>&1 | FileCheck %s
+
+; CHECK-NOT: spilled
 
 target datalayout = "e-p:32:32"
 

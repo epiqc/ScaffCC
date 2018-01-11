@@ -6,7 +6,7 @@
 
 void bar(_AS2 int a); // expected-error {{parameter may not be qualified with an address space}}
 
-void foo(_AS3 float *a, 
+void foo(_AS3 float *a,
          _AS1 float b) // expected-error {{parameter may not be qualified with an address space}}
 {
   _AS2 *x;// expected-warning {{type specifier missing, defaults to 'int'}}
@@ -20,7 +20,7 @@ void foo(_AS3 float *a,
   _AS1 int arrarr[5][5]; // expected-error {{automatic variable qualified with an address space}}
 
   __attribute__((address_space(-1))) int *_boundsA; // expected-error {{address space is negative}}
-  __attribute__((address_space(0xFFFFFF))) int *_boundsB;
+  __attribute__((address_space(0x7FFFFF))) int *_boundsB; // expected-error {{address space is larger than the maximum supported}}
   __attribute__((address_space(0x1000000))) int *_boundsC; // expected-error {{address space is larger than the maximum supported}}
   // chosen specifically to overflow 32 bits and come out reasonable
   __attribute__((address_space(4294967500))) int *_boundsD; // expected-error {{address space is larger than the maximum supported}}
@@ -48,3 +48,27 @@ void test3(void) {
 typedef void ft(void);
 _AS1 ft qf; // expected-error {{function type may not be qualified with an address space}}
 typedef _AS1 ft qft; // expected-error {{function type may not be qualified with an address space}}
+
+
+typedef _AS2 int AS2Int;
+
+struct HasASFields
+{
+  _AS2 int as_field; // expected-error {{field may not be qualified with an address space}}
+   AS2Int typedef_as_field; // expected-error {{field may not be qualified with an address space}}
+};
+
+// Assertion failure was when the field was accessed
+void access_as_field()
+{
+    struct HasASFields x;
+    (void) bar.as_field;
+}
+
+typedef int PR4997 __attribute__((address_space(Foobar))); // expected-error {{use of undeclared identifier 'Foobar'}}
+__attribute__((address_space("12"))) int *i; // expected-error {{'address_space' attribute requires an integer constant}}
+
+// Clang extension doesn't forbid operations on pointers to different address spaces.
+char* cmp(_AS1 char *x,  _AS2 char *y) {
+  return x < y ? x : y; // expected-warning {{pointer type mismatch ('__attribute__((address_space(1))) char *' and '__attribute__((address_space(2))) char *')}}
+}

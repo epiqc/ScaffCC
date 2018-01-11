@@ -26,10 +26,10 @@ declare i8* @returner()
 ; retain is an objc_retainAutoreleasedReturnValue, since it's
 ; better to do the RV optimization.
 
-; CHECK:      define void @test0(
+; CHECK-LABEL:      define void @test0(
 ; CHECK-NEXT: entry:
 ; CHECK-NEXT:   %x = call i8* @returner
-; CHECK-NEXT:   %0 = tail call i8* @objc_retainAutoreleasedReturnValue(i8* %x) nounwind
+; CHECK-NEXT:   %0 = tail call i8* @objc_retainAutoreleasedReturnValue(i8* %x) [[NUW:#[0-9]+]]
 ; CHECK: t:
 ; CHECK-NOT: @objc_
 ; CHECK: return:
@@ -54,7 +54,7 @@ return:
 
 ; Delete no-ops.
 
-; CHECK: define void @test2
+; CHECK-LABEL: define void @test2(
 ; CHECK-NOT: @objc_
 ; CHECK: }
 define void @test2() {
@@ -67,7 +67,7 @@ define void @test2() {
 ; Delete a redundant retainRV,autoreleaseRV when forwaring a call result
 ; directly to a return value.
 
-; CHECK: define i8* @test3
+; CHECK-LABEL: define i8* @test3(
 ; CHECK: call i8* @returner()
 ; CHECK-NEXT: ret i8* %call
 define i8* @test3() {
@@ -81,7 +81,7 @@ entry:
 ; Delete a redundant retain,autoreleaseRV when forwaring a call result
 ; directly to a return value.
 
-; CHECK: define i8* @test4
+; CHECK-LABEL: define i8* @test4(
 ; CHECK: call i8* @returner()
 ; CHECK-NEXT: ret i8* %call
 define i8* @test4() {
@@ -114,18 +114,18 @@ entry:
 ; into objc_retainAutoreleasedReturnValueAutoreleaseReturnValue?
 ; Those entrypoints don't exist yet though.
 
-; CHECK: define i8* @test7(
+; CHECK-LABEL: define i8* @test7(
 ; CHECK: call i8* @objc_retainAutoreleasedReturnValue(i8* %p)
 ; CHECK: %t = tail call i8* @objc_autoreleaseReturnValue(i8* %p)
 define i8* @test7() {
   %p = call i8* @returner()
   call i8* @objc_retainAutoreleasedReturnValue(i8* %p)
   %t = call i8* @objc_autoreleaseReturnValue(i8* %p)
-  call void @use_pointer(i8* %t)
+  call void @use_pointer(i8* %p)
   ret i8* %t
 }
 
-; CHECK: define i8* @test7b(
+; CHECK-LABEL: define i8* @test7b(
 ; CHECK: call i8* @objc_retain(i8* %p)
 ; CHECK: %t = tail call i8* @objc_autoreleaseReturnValue(i8* %p)
 define i8* @test7b() {
@@ -133,34 +133,23 @@ define i8* @test7b() {
   call void @use_pointer(i8* %p)
   call i8* @objc_retainAutoreleasedReturnValue(i8* %p)
   %t = call i8* @objc_autoreleaseReturnValue(i8* %p)
-  ret i8* %t
-}
-
-; Turn objc_retain into objc_retainAutoreleasedReturnValue if its operand
-; is a return value.
-
-; CHECK: define void @test8()
-; CHECK: tail call i8* @objc_retainAutoreleasedReturnValue(i8* %p)
-define void @test8() {
-  %p = call i8* @returner()
-  call i8* @objc_retain(i8* %p)
-  ret void
+  ret i8* %p
 }
 
 ; Don't apply the RV optimization to autorelease if there's no retain.
 
 ; CHECK: define i8* @test9(i8* %p)
-; CHECK: tail call i8* @objc_autorelease(i8* %p)
+; CHECK: call i8* @objc_autorelease(i8* %p)
 define i8* @test9(i8* %p) {
   call i8* @objc_autorelease(i8* %p)
   ret i8* %p
 }
 
-; Apply the RV optimization.
+; Do not apply the RV optimization.
 
 ; CHECK: define i8* @test10(i8* %p)
-; CHECK: tail call i8* @objc_retain(i8* %p) nounwind
-; CHECK: tail call i8* @objc_autoreleaseReturnValue(i8* %p) nounwind
+; CHECK: tail call i8* @objc_retain(i8* %p) [[NUW]]
+; CHECK: call i8* @objc_autorelease(i8* %p) [[NUW]]
 ; CHECK-NEXT: ret i8* %p
 define i8* @test10(i8* %p) {
   %1 = call i8* @objc_retain(i8* %p)
@@ -174,7 +163,7 @@ define i8* @test10(i8* %p) {
 ; CHECK: define i8* @test11(i8* %p)
 ; CHECK: tail call i8* @objc_retain(i8* %p)
 ; CHECK-NEXT: call void @use_pointer(i8* %p)
-; CHECK: tail call i8* @objc_autorelease(i8* %p)
+; CHECK: call i8* @objc_autorelease(i8* %p)
 ; CHECK-NEXT: ret i8* %p
 define i8* @test11(i8* %p) {
   %1 = call i8* @objc_retain(i8* %p)
@@ -199,9 +188,9 @@ define i8* @test12(i8* %p) {
 
 ; Don't zap the objc_retainAutoreleasedReturnValue.
 
-; CHECK: define i8* @test13(
+; CHECK-LABEL: define i8* @test13(
 ; CHECK: tail call i8* @objc_retainAutoreleasedReturnValue(i8* %p)
-; CHECK: tail call i8* @objc_autorelease(i8* %p)
+; CHECK: call i8* @objc_autorelease(i8* %p)
 ; CHECK: ret i8* %p
 define i8* @test13() {
   %p = call i8* @returner()
@@ -214,8 +203,8 @@ define i8* @test13() {
 ; Convert objc_retainAutoreleasedReturnValue to objc_retain if its
 ; argument is not a return value.
 
-; CHECK: define void @test14(
-; CHECK-NEXT: tail call i8* @objc_retain(i8* %p) nounwind
+; CHECK-LABEL: define void @test14(
+; CHECK-NEXT: tail call i8* @objc_retain(i8* %p) [[NUW]]
 ; CHECK-NEXT: ret void
 define void @test14(i8* %p) {
   call i8* @objc_retainAutoreleasedReturnValue(i8* %p)
@@ -225,52 +214,13 @@ define void @test14(i8* %p) {
 ; Don't convert objc_retainAutoreleasedReturnValue to objc_retain if its
 ; argument is a return value.
 
-; CHECK: define void @test15(
+; CHECK-LABEL: define void @test15(
 ; CHECK-NEXT: %y = call i8* @returner()
-; CHECK-NEXT: tail call i8* @objc_retainAutoreleasedReturnValue(i8* %y) nounwind
+; CHECK-NEXT: tail call i8* @objc_retainAutoreleasedReturnValue(i8* %y) [[NUW]]
 ; CHECK-NEXT: ret void
 define void @test15() {
   %y = call i8* @returner()
   call i8* @objc_retainAutoreleasedReturnValue(i8* %y)
-  ret void
-}
-
-; Convert objc_retain to objc_retainAutoreleasedReturnValue if its
-; argument is a return value.
-
-; CHECK: define void @test16(
-; CHECK-NEXT: %y = call i8* @returner()
-; CHECK-NEXT: tail call i8* @objc_retainAutoreleasedReturnValue(i8* %y) nounwind
-; CHECK-NEXT: ret void
-define void @test16() {
-  %y = call i8* @returner()
-  call i8* @objc_retain(i8* %y)
-  ret void
-}
-
-; Don't convert objc_retain to objc_retainAutoreleasedReturnValue if its
-; argument is not a return value.
-
-; CHECK: define void @test17(
-; CHECK-NEXT: tail call i8* @objc_retain(i8* %y) nounwind
-; CHECK-NEXT: ret void
-define void @test17(i8* %y) {
-  call i8* @objc_retain(i8* %y)
-  ret void
-}
-
-; Don't Convert objc_retain to objc_retainAutoreleasedReturnValue if it
-; isn't next to the call providing its return value.
-
-; CHECK: define void @test18(
-; CHECK-NEXT: %y = call i8* @returner()
-; CHECK-NEXT: call void @callee()
-; CHECK-NEXT: tail call i8* @objc_retain(i8* %y) nounwind
-; CHECK-NEXT: ret void
-define void @test18() {
-  %y = call i8* @returner()
-  call void @callee()
-  call i8* @objc_retain(i8* %y)
   ret void
 }
 
@@ -322,8 +272,8 @@ define i8* @test22(i8* %p) {
 
 ; Convert autoreleaseRV to autorelease.
 
-; CHECK: define void @test23(
-; CHECK: tail call i8* @objc_autorelease(i8* %p) nounwind
+; CHECK-LABEL: define void @test23(
+; CHECK: call i8* @objc_autorelease(i8* %p) [[NUW]]
 define void @test23(i8* %p) {
   store i8 0, i8* %p
   call i8* @objc_autoreleaseReturnValue(i8* %p)
@@ -333,10 +283,56 @@ define void @test23(i8* %p) {
 ; Don't convert autoreleaseRV to autorelease if the result is returned,
 ; even through a bitcast.
 
-; CHECK: define {}* @test24(
+; CHECK-LABEL: define {}* @test24(
 ; CHECK: tail call i8* @objc_autoreleaseReturnValue(i8* %p)
 define {}* @test24(i8* %p) {
   %t = call i8* @objc_autoreleaseReturnValue(i8* %p)
   %s = bitcast i8* %p to {}*
   ret {}* %s
 }
+
+declare i8* @first_test25();
+declare i8* @second_test25(i8*);
+declare void @somecall_test25();
+
+; ARC optimizer used to move the last release between the call to second_test25
+; and the call to objc_retainAutoreleasedReturnValue, causing %second to be
+; released prematurely when %first and %second were pointing to the same object.
+
+; CHECK-LABEL: define void @test25(
+; CHECK: %[[CALL1:.*]] = call i8* @second_test25(
+; CHECK-NEXT: tail call i8* @objc_retainAutoreleasedReturnValue(i8* %[[CALL1]])
+
+define void @test25() {
+  %first = call i8* @first_test25()
+  %v0 = call i8* @objc_retain(i8* %first)
+  call void @somecall_test25()
+  %second = call i8* @second_test25(i8* %first)
+  %call2 = call i8* @objc_retainAutoreleasedReturnValue(i8* %second)
+  call void @objc_release(i8* %second), !clang.imprecise_release !0
+  call void @objc_release(i8* %first), !clang.imprecise_release !0
+  ret void
+}
+
+; Check that ObjCARCOpt::OptimizeReturns removes the redundant calls even when
+; they are not in the same basic block. This code used to cause an assertion
+; failure.
+
+; CHECK-LABEL: define i8* @test26()
+; CHECK: call i8* @returner()
+; CHECK-NOT:  call
+define i8* @test26() {
+bb0:
+  %v0 = call i8* @returner()
+  %v1 = tail call i8* @objc_retain(i8* %v0)
+  br label %bb1
+bb1:
+  %v2 = tail call i8* @objc_autoreleaseReturnValue(i8* %v1)
+  br label %bb2
+bb2:
+  ret i8* %v2
+}
+
+!0 = !{}
+
+; CHECK: attributes [[NUW]] = { nounwind }

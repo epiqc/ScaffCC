@@ -1,7 +1,11 @@
-// RUN: %clang_cc1 -triple i386-apple-darwin10 -analyze -analyzer-checker=security.insecureAPI,security.FloatLoopCounter %s -verify
-// RUN: %clang_cc1 -triple i386-apple-darwin10 -analyze -DUSE_BUILTINS -analyzer-checker=security.insecureAPI,security.FloatLoopCounter %s -verify
-// RUN: %clang_cc1 -triple i386-apple-darwin10 -analyze -DVARIANT -analyzer-checker=security.insecureAPI,security.FloatLoopCounter %s -verify
-// RUN: %clang_cc1 -triple i386-apple-darwin10 -analyze -DUSE_BUILTINS -DVARIANT -analyzer-checker=security.insecureAPI,security.FloatLoopCounter %s -verify
+// RUN: %clang_analyze_cc1 -triple i386-apple-darwin10 -analyzer-checker=security.insecureAPI,security.FloatLoopCounter %s -verify
+// RUN: %clang_analyze_cc1 -triple i386-apple-darwin10 -DUSE_BUILTINS -analyzer-checker=security.insecureAPI,security.FloatLoopCounter %s -verify
+// RUN: %clang_analyze_cc1 -triple i386-apple-darwin10 -DVARIANT -analyzer-checker=security.insecureAPI,security.FloatLoopCounter %s -verify
+// RUN: %clang_analyze_cc1 -triple i386-apple-darwin10 -DUSE_BUILTINS -DVARIANT -analyzer-checker=security.insecureAPI,security.FloatLoopCounter %s -verify
+// RUN: %clang_analyze_cc1 -triple x86_64-unknown-cloudabi -analyzer-checker=security.insecureAPI,security.FloatLoopCounter %s -verify
+// RUN: %clang_analyze_cc1 -triple x86_64-unknown-cloudabi -DUSE_BUILTINS -analyzer-checker=security.insecureAPI,security.FloatLoopCounter %s -verify
+// RUN: %clang_analyze_cc1 -triple x86_64-unknown-cloudabi -DVARIANT -analyzer-checker=security.insecureAPI,security.FloatLoopCounter %s -verify
+// RUN: %clang_analyze_cc1 -triple x86_64-unknown-cloudabi -DUSE_BUILTINS -DVARIANT -analyzer-checker=security.insecureAPI,security.FloatLoopCounter %s -verify
 
 #ifdef USE_BUILTINS
 # define BUILTIN(f) __builtin_ ## f
@@ -46,7 +50,7 @@ int getpw(unsigned int uid, char *buf);
 
 void test_getpw() {
   char buff[1024];
-  getpw(2, buff); // expected-warning{{The getpw() function is dangerous as it may overflow the provided buffer. It is obsoleted by getpwuid().}}
+  getpw(2, buff); // expected-warning{{The getpw() function is dangerous as it may overflow the provided buffer. It is obsoleted by getpwuid()}}
 }
 
 // <rdar://problem/6337132> CWE-273: Failure to Check Whether Privileges Were
@@ -82,10 +86,11 @@ void test_setuid()
 }
 
 // <rdar://problem/6337100> CWE-338: Use of cryptographically weak prng
+typedef  unsigned short *ushort_ptr_t;  // Test that sugar doesn't confuse the warning.
 int      rand(void);
 double   drand48(void);
 double   erand48(unsigned short[3]);
-long     jrand48(unsigned short[3]);
+long     jrand48(ushort_ptr_t);
 void     lcong48(unsigned short[7]);
 long     lrand48(void);
 long     mrand48(void);
@@ -138,7 +143,7 @@ void test_strcpy() {
   char x[4];
   char *y;
 
-  strcpy(x, y); //expected-warning{{Call to function 'strcpy' is insecure as it does not provide bounding of the memory buffer. Replace unbounded copy functions with analogous functions that support length arguments such as 'strlcpy'. CWE-119.}}
+  strcpy(x, y); //expected-warning{{Call to function 'strcpy' is insecure as it does not provide bounding of the memory buffer. Replace unbounded copy functions with analogous functions that support length arguments such as 'strlcpy'. CWE-119}}
 }
 
 //===----------------------------------------------------------------------===
@@ -162,7 +167,7 @@ void test_strcat() {
   char x[4];
   char *y;
 
-  strcat(x, y); //expected-warning{{Call to function 'strcat' is insecure as it does not provide bounding of the memory buffer. Replace unbounded copy functions with analogous functions that support length arguments such as 'strlcat'. CWE-119.}}
+  strcat(x, y); //expected-warning{{Call to function 'strcat' is insecure as it does not provide bounding of the memory buffer. Replace unbounded copy functions with analogous functions that support length arguments such as 'strlcat'. CWE-119}}
 }
 
 //===----------------------------------------------------------------------===
@@ -173,7 +178,7 @@ typedef __int32_t pid_t;
 pid_t vfork(void);
 
 void test_vfork() {
-  vfork(); //expected-warning{{Call to function 'vfork' is insecure as it can lead to denial of service situations in the parent process.}}
+  vfork(); //expected-warning{{Call to function 'vfork' is insecure as it can lead to denial of service situations in the parent process}}
 }
 
 //===----------------------------------------------------------------------===

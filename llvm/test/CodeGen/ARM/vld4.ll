@@ -1,4 +1,4 @@
-; RUN: llc < %s -march=arm -mattr=+neon | FileCheck %s
+; RUN: llc -mtriple=arm-eabi -mattr=+neon %s -o - | FileCheck %s
 
 %struct.__neon_int8x8x4_t = type { <8 x i8>,  <8 x i8>,  <8 x i8>, <8 x i8> }
 %struct.__neon_int16x4x4_t = type { <4 x i16>, <4 x i16>, <4 x i16>, <4 x i16> }
@@ -12,10 +12,10 @@
 %struct.__neon_float32x4x4_t = type { <4 x float>, <4 x float>, <4 x float>, <4 x float> }
 
 define <8 x i8> @vld4i8(i8* %A) nounwind {
-;CHECK: vld4i8:
+;CHECK-LABEL: vld4i8:
 ;Check the alignment value.  Max for this instruction is 256 bits:
-;CHECK: vld4.8 {d16, d17, d18, d19}, [r0, :64]
-	%tmp1 = call %struct.__neon_int8x8x4_t @llvm.arm.neon.vld4.v8i8(i8* %A, i32 8)
+;CHECK: vld4.8 {d16, d17, d18, d19}, [{{r[0-9]+|lr}}:64]
+	%tmp1 = call %struct.__neon_int8x8x4_t @llvm.arm.neon.vld4.v8i8.p0i8(i8* %A, i32 8)
         %tmp2 = extractvalue %struct.__neon_int8x8x4_t %tmp1, 0
         %tmp3 = extractvalue %struct.__neon_int8x8x4_t %tmp1, 2
         %tmp4 = add <8 x i8> %tmp2, %tmp3
@@ -24,24 +24,24 @@ define <8 x i8> @vld4i8(i8* %A) nounwind {
 
 ;Check for a post-increment updating load with register increment.
 define <8 x i8> @vld4i8_update(i8** %ptr, i32 %inc) nounwind {
-;CHECK: vld4i8_update:
-;CHECK: vld4.8 {d16, d17, d18, d19}, [r2, :128], r1
-	%A = load i8** %ptr
-	%tmp1 = call %struct.__neon_int8x8x4_t @llvm.arm.neon.vld4.v8i8(i8* %A, i32 16)
+;CHECK-LABEL: vld4i8_update:
+;CHECK: vld4.8 {d16, d17, d18, d19}, [{{r[0-9]+|lr}}:128], r1
+	%A = load i8*, i8** %ptr
+	%tmp1 = call %struct.__neon_int8x8x4_t @llvm.arm.neon.vld4.v8i8.p0i8(i8* %A, i32 16)
 	%tmp2 = extractvalue %struct.__neon_int8x8x4_t %tmp1, 0
 	%tmp3 = extractvalue %struct.__neon_int8x8x4_t %tmp1, 2
 	%tmp4 = add <8 x i8> %tmp2, %tmp3
-	%tmp5 = getelementptr i8* %A, i32 %inc
+	%tmp5 = getelementptr i8, i8* %A, i32 %inc
 	store i8* %tmp5, i8** %ptr
 	ret <8 x i8> %tmp4
 }
 
 define <4 x i16> @vld4i16(i16* %A) nounwind {
-;CHECK: vld4i16:
+;CHECK-LABEL: vld4i16:
 ;Check the alignment value.  Max for this instruction is 256 bits:
-;CHECK: vld4.16 {d16, d17, d18, d19}, [r0, :128]
+;CHECK: vld4.16 {d16, d17, d18, d19}, [{{r[0-9]+|lr}}:128]
 	%tmp0 = bitcast i16* %A to i8*
-	%tmp1 = call %struct.__neon_int16x4x4_t @llvm.arm.neon.vld4.v4i16(i8* %tmp0, i32 16)
+	%tmp1 = call %struct.__neon_int16x4x4_t @llvm.arm.neon.vld4.v4i16.p0i8(i8* %tmp0, i32 16)
         %tmp2 = extractvalue %struct.__neon_int16x4x4_t %tmp1, 0
         %tmp3 = extractvalue %struct.__neon_int16x4x4_t %tmp1, 2
         %tmp4 = add <4 x i16> %tmp2, %tmp3
@@ -49,11 +49,11 @@ define <4 x i16> @vld4i16(i16* %A) nounwind {
 }
 
 define <2 x i32> @vld4i32(i32* %A) nounwind {
-;CHECK: vld4i32:
+;CHECK-LABEL: vld4i32:
 ;Check the alignment value.  Max for this instruction is 256 bits:
-;CHECK: vld4.32 {d16, d17, d18, d19}, [r0, :256]
+;CHECK: vld4.32 {d16, d17, d18, d19}, [{{r[0-9]+|lr}}:256]
 	%tmp0 = bitcast i32* %A to i8*
-	%tmp1 = call %struct.__neon_int32x2x4_t @llvm.arm.neon.vld4.v2i32(i8* %tmp0, i32 32)
+	%tmp1 = call %struct.__neon_int32x2x4_t @llvm.arm.neon.vld4.v2i32.p0i8(i8* %tmp0, i32 32)
         %tmp2 = extractvalue %struct.__neon_int32x2x4_t %tmp1, 0
         %tmp3 = extractvalue %struct.__neon_int32x2x4_t %tmp1, 2
         %tmp4 = add <2 x i32> %tmp2, %tmp3
@@ -61,10 +61,10 @@ define <2 x i32> @vld4i32(i32* %A) nounwind {
 }
 
 define <2 x float> @vld4f(float* %A) nounwind {
-;CHECK: vld4f:
+;CHECK-LABEL: vld4f:
 ;CHECK: vld4.32
 	%tmp0 = bitcast float* %A to i8*
-	%tmp1 = call %struct.__neon_float32x2x4_t @llvm.arm.neon.vld4.v2f32(i8* %tmp0, i32 1)
+	%tmp1 = call %struct.__neon_float32x2x4_t @llvm.arm.neon.vld4.v2f32.p0i8(i8* %tmp0, i32 1)
         %tmp2 = extractvalue %struct.__neon_float32x2x4_t %tmp1, 0
         %tmp3 = extractvalue %struct.__neon_float32x2x4_t %tmp1, 2
         %tmp4 = fadd <2 x float> %tmp2, %tmp3
@@ -72,23 +72,36 @@ define <2 x float> @vld4f(float* %A) nounwind {
 }
 
 define <1 x i64> @vld4i64(i64* %A) nounwind {
-;CHECK: vld4i64:
+;CHECK-LABEL: vld4i64:
 ;Check the alignment value.  Max for this instruction is 256 bits:
-;CHECK: vld1.64 {d16, d17, d18, d19}, [r0, :256]
+;CHECK: vld1.64 {d16, d17, d18, d19}, [{{r[0-9]+|lr}}:256]
 	%tmp0 = bitcast i64* %A to i8*
-	%tmp1 = call %struct.__neon_int64x1x4_t @llvm.arm.neon.vld4.v1i64(i8* %tmp0, i32 64)
+	%tmp1 = call %struct.__neon_int64x1x4_t @llvm.arm.neon.vld4.v1i64.p0i8(i8* %tmp0, i32 64)
         %tmp2 = extractvalue %struct.__neon_int64x1x4_t %tmp1, 0
         %tmp3 = extractvalue %struct.__neon_int64x1x4_t %tmp1, 2
         %tmp4 = add <1 x i64> %tmp2, %tmp3
 	ret <1 x i64> %tmp4
 }
 
+define <1 x i64> @vld4i64_update(i64** %ptr, i64* %A) nounwind {
+;CHECK-LABEL: vld4i64_update:
+;CHECK: vld1.64 {d16, d17, d18, d19}, [{{r[0-9]+|lr}}:256]!
+        %tmp0 = bitcast i64* %A to i8*
+        %tmp1 = call %struct.__neon_int64x1x4_t @llvm.arm.neon.vld4.v1i64.p0i8(i8* %tmp0, i32 64)
+        %tmp5 = getelementptr i64, i64* %A, i32 4
+        store i64* %tmp5, i64** %ptr
+        %tmp2 = extractvalue %struct.__neon_int64x1x4_t %tmp1, 0
+        %tmp3 = extractvalue %struct.__neon_int64x1x4_t %tmp1, 2
+        %tmp4 = add <1 x i64> %tmp2, %tmp3
+        ret <1 x i64> %tmp4
+}
+
 define <16 x i8> @vld4Qi8(i8* %A) nounwind {
-;CHECK: vld4Qi8:
+;CHECK-LABEL: vld4Qi8:
 ;Check the alignment value.  Max for this instruction is 256 bits:
-;CHECK: vld4.8 {d16, d18, d20, d22}, [r0, :256]!
-;CHECK: vld4.8 {d17, d19, d21, d23}, [r0, :256]
-	%tmp1 = call %struct.__neon_int8x16x4_t @llvm.arm.neon.vld4.v16i8(i8* %A, i32 64)
+;CHECK: vld4.8 {d16, d18, d20, d22}, [{{r[0-9]+|lr}}:256]!
+;CHECK: vld4.8 {d17, d19, d21, d23}, [{{r[0-9]+|lr}}:256]
+	%tmp1 = call %struct.__neon_int8x16x4_t @llvm.arm.neon.vld4.v16i8.p0i8(i8* %A, i32 64)
         %tmp2 = extractvalue %struct.__neon_int8x16x4_t %tmp1, 0
         %tmp3 = extractvalue %struct.__neon_int8x16x4_t %tmp1, 2
         %tmp4 = add <16 x i8> %tmp2, %tmp3
@@ -96,12 +109,12 @@ define <16 x i8> @vld4Qi8(i8* %A) nounwind {
 }
 
 define <8 x i16> @vld4Qi16(i16* %A) nounwind {
-;CHECK: vld4Qi16:
+;CHECK-LABEL: vld4Qi16:
 ;Check for no alignment specifier.
-;CHECK: vld4.16 {d16, d18, d20, d22}, [r0]!
-;CHECK: vld4.16 {d17, d19, d21, d23}, [r0]
+;CHECK: vld4.16 {d16, d18, d20, d22}, [{{r[0-9]+|lr}}]!
+;CHECK: vld4.16 {d17, d19, d21, d23}, [{{r[0-9]+|lr}}]
 	%tmp0 = bitcast i16* %A to i8*
-	%tmp1 = call %struct.__neon_int16x8x4_t @llvm.arm.neon.vld4.v8i16(i8* %tmp0, i32 1)
+	%tmp1 = call %struct.__neon_int16x8x4_t @llvm.arm.neon.vld4.v8i16.p0i8(i8* %tmp0, i32 1)
         %tmp2 = extractvalue %struct.__neon_int16x8x4_t %tmp1, 0
         %tmp3 = extractvalue %struct.__neon_int16x8x4_t %tmp1, 2
         %tmp4 = add <8 x i16> %tmp2, %tmp3
@@ -110,26 +123,26 @@ define <8 x i16> @vld4Qi16(i16* %A) nounwind {
 
 ;Check for a post-increment updating load. 
 define <8 x i16> @vld4Qi16_update(i16** %ptr) nounwind {
-;CHECK: vld4Qi16_update:
-;CHECK: vld4.16 {d16, d18, d20, d22}, [r1, :64]!
-;CHECK: vld4.16 {d17, d19, d21, d23}, [r1, :64]!
-	%A = load i16** %ptr
+;CHECK-LABEL: vld4Qi16_update:
+;CHECK: vld4.16 {d16, d18, d20, d22}, [{{r[0-9]+|lr}}:64]!
+;CHECK: vld4.16 {d17, d19, d21, d23}, [{{r[0-9]+|lr}}:64]!
+	%A = load i16*, i16** %ptr
 	%tmp0 = bitcast i16* %A to i8*
-	%tmp1 = call %struct.__neon_int16x8x4_t @llvm.arm.neon.vld4.v8i16(i8* %tmp0, i32 8)
+	%tmp1 = call %struct.__neon_int16x8x4_t @llvm.arm.neon.vld4.v8i16.p0i8(i8* %tmp0, i32 8)
 	%tmp2 = extractvalue %struct.__neon_int16x8x4_t %tmp1, 0
 	%tmp3 = extractvalue %struct.__neon_int16x8x4_t %tmp1, 2
 	%tmp4 = add <8 x i16> %tmp2, %tmp3
-	%tmp5 = getelementptr i16* %A, i32 32
+	%tmp5 = getelementptr i16, i16* %A, i32 32
 	store i16* %tmp5, i16** %ptr
 	ret <8 x i16> %tmp4
 }
 
 define <4 x i32> @vld4Qi32(i32* %A) nounwind {
-;CHECK: vld4Qi32:
+;CHECK-LABEL: vld4Qi32:
 ;CHECK: vld4.32
 ;CHECK: vld4.32
 	%tmp0 = bitcast i32* %A to i8*
-	%tmp1 = call %struct.__neon_int32x4x4_t @llvm.arm.neon.vld4.v4i32(i8* %tmp0, i32 1)
+	%tmp1 = call %struct.__neon_int32x4x4_t @llvm.arm.neon.vld4.v4i32.p0i8(i8* %tmp0, i32 1)
         %tmp2 = extractvalue %struct.__neon_int32x4x4_t %tmp1, 0
         %tmp3 = extractvalue %struct.__neon_int32x4x4_t %tmp1, 2
         %tmp4 = add <4 x i32> %tmp2, %tmp3
@@ -137,24 +150,24 @@ define <4 x i32> @vld4Qi32(i32* %A) nounwind {
 }
 
 define <4 x float> @vld4Qf(float* %A) nounwind {
-;CHECK: vld4Qf:
+;CHECK-LABEL: vld4Qf:
 ;CHECK: vld4.32
 ;CHECK: vld4.32
 	%tmp0 = bitcast float* %A to i8*
-	%tmp1 = call %struct.__neon_float32x4x4_t @llvm.arm.neon.vld4.v4f32(i8* %tmp0, i32 1)
+	%tmp1 = call %struct.__neon_float32x4x4_t @llvm.arm.neon.vld4.v4f32.p0i8(i8* %tmp0, i32 1)
         %tmp2 = extractvalue %struct.__neon_float32x4x4_t %tmp1, 0
         %tmp3 = extractvalue %struct.__neon_float32x4x4_t %tmp1, 2
         %tmp4 = fadd <4 x float> %tmp2, %tmp3
 	ret <4 x float> %tmp4
 }
 
-declare %struct.__neon_int8x8x4_t @llvm.arm.neon.vld4.v8i8(i8*, i32) nounwind readonly
-declare %struct.__neon_int16x4x4_t @llvm.arm.neon.vld4.v4i16(i8*, i32) nounwind readonly
-declare %struct.__neon_int32x2x4_t @llvm.arm.neon.vld4.v2i32(i8*, i32) nounwind readonly
-declare %struct.__neon_float32x2x4_t @llvm.arm.neon.vld4.v2f32(i8*, i32) nounwind readonly
-declare %struct.__neon_int64x1x4_t @llvm.arm.neon.vld4.v1i64(i8*, i32) nounwind readonly
+declare %struct.__neon_int8x8x4_t @llvm.arm.neon.vld4.v8i8.p0i8(i8*, i32) nounwind readonly
+declare %struct.__neon_int16x4x4_t @llvm.arm.neon.vld4.v4i16.p0i8(i8*, i32) nounwind readonly
+declare %struct.__neon_int32x2x4_t @llvm.arm.neon.vld4.v2i32.p0i8(i8*, i32) nounwind readonly
+declare %struct.__neon_float32x2x4_t @llvm.arm.neon.vld4.v2f32.p0i8(i8*, i32) nounwind readonly
+declare %struct.__neon_int64x1x4_t @llvm.arm.neon.vld4.v1i64.p0i8(i8*, i32) nounwind readonly
 
-declare %struct.__neon_int8x16x4_t @llvm.arm.neon.vld4.v16i8(i8*, i32) nounwind readonly
-declare %struct.__neon_int16x8x4_t @llvm.arm.neon.vld4.v8i16(i8*, i32) nounwind readonly
-declare %struct.__neon_int32x4x4_t @llvm.arm.neon.vld4.v4i32(i8*, i32) nounwind readonly
-declare %struct.__neon_float32x4x4_t @llvm.arm.neon.vld4.v4f32(i8*, i32) nounwind readonly
+declare %struct.__neon_int8x16x4_t @llvm.arm.neon.vld4.v16i8.p0i8(i8*, i32) nounwind readonly
+declare %struct.__neon_int16x8x4_t @llvm.arm.neon.vld4.v8i16.p0i8(i8*, i32) nounwind readonly
+declare %struct.__neon_int32x4x4_t @llvm.arm.neon.vld4.v4i32.p0i8(i8*, i32) nounwind readonly
+declare %struct.__neon_float32x4x4_t @llvm.arm.neon.vld4.v4f32.p0i8(i8*, i32) nounwind readonly

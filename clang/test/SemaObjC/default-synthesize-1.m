@@ -1,4 +1,5 @@
-// RUN: %clang_cc1 -fsyntax-only -fobjc-default-synthesize-properties -verify -Wno-objc-root-class %s
+// RUN: %clang_cc1 -fsyntax-only -Wobjc-missing-property-synthesis -verify -Wno-objc-root-class -triple=x86_64-apple-macos10.10 %s
+// rdar://11295716
 
 @interface NSObject 
 - (void) release;
@@ -7,21 +8,21 @@
 @class NSString;
 
 @interface SynthItAll : NSObject
-@property int howMany;
-@property (retain) NSString* what;
+@property int howMany; // expected-warning {{auto property synthesis is synthesizing property not explicitly synthesized}}
+@property (retain) NSString* what; // expected-warning {{auto property synthesis is synthesizing property not explicitly synthesized}}
 @end
 
-@implementation SynthItAll
+@implementation SynthItAll // expected-note 2 {{detected while default synthesizing properties in class implementation}}
 //@synthesize howMany, what;
 @end
 
 
 @interface SynthSetter : NSObject
-@property (nonatomic) int howMany;  // REM: nonatomic to avoid warnings about only implementing one of the pair
-@property (nonatomic, retain) NSString* what;
+@property (nonatomic) int howMany;   // expected-warning {{auto property synthesis is synthesizing property not explicitly synthesized}}
+@property (nonatomic, retain) NSString* what;  // expected-warning {{auto property synthesis is synthesizing property not explicitly synthesized}}
 @end
 
-@implementation SynthSetter
+@implementation SynthSetter // expected-note 2 {{detected while default synthesizing properties in class implementation}}
 //@synthesize howMany, what;
 
 - (int) howMany {
@@ -37,11 +38,11 @@
 
 
 @interface SynthGetter : NSObject
-@property (nonatomic) int howMany;  // REM: nonatomic to avoid warnings about only implementing one of the pair
-@property (nonatomic, retain) NSString* what;
+@property (nonatomic) int howMany; // expected-warning {{auto property synthesis is synthesizing property not explicitly synthesized}} 
+@property (nonatomic, retain) NSString* what; // expected-warning {{auto property synthesis is synthesizing property not explicitly synthesized}}
 @end
 
-@implementation SynthGetter
+@implementation SynthGetter // expected-note 2 {{detected while default synthesizing properties in class implementation}}
 //@synthesize howMany, what;
 
 // - (int) howMany
@@ -114,3 +115,43 @@
 }
 @end
 
+@interface rdar11333367
+@property enum A x; // expected-note {{forward declaration of 'enum A'}} expected-note {{property declared here}}
+@property struct B y; // expected-note {{forward declaration of 'struct B'}} expected-note {{property declared here}} \
+                      // expected-warning {{auto property synthesis is synthesizing property not explicitly synthesized}}
+@end
+@implementation rdar11333367 // expected-error {{cannot synthesize property 'y' with incomplete type 'struct B'}} \
+                             // expected-note {{detected while default synthesizing properties in class implementation}}
+@synthesize x; // expected-error {{cannot synthesize property 'x' with incomplete type 'enum A'}}
+@end
+
+// rdar://17774815
+@interface ZXParsedResult
+@property (nonatomic, copy, readonly) NSString *description; // expected-note {{property declared here}}
+@end
+
+@interface ZXCalendarParsedResult : ZXParsedResult
+
+@property (nonatomic, copy, readonly) NSString *description; // expected-warning {{auto property synthesis will not synthesize property 'description'; it will be implemented by its superclass}}
+
+@end
+
+@implementation ZXCalendarParsedResult // expected-note {{detected while default synthesizing properties in class implementation}}
+- (NSString *) Meth {
+    return _description; // expected-error {{use of undeclared identifier '_description'}}
+}
+@end
+
+@interface DontWarnOnUnavailable
+
+// No warning expected:
+@property (nonatomic, readonly) int un1 __attribute__((unavailable));
+@property (readwrite) int un2 __attribute__((availability(macos, unavailable)));
+
+@property (readwrite) int un3 __attribute__((availability(ios, unavailable))); // expected-warning {{auto property synthesis is synthesizing property not explicitly synthesized}}
+
+@end
+
+@implementation DontWarnOnUnavailable // expected-note {{detected while default synthesizing properties in class implementation}}
+
+@end

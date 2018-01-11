@@ -1,87 +1,101 @@
 -------QASM Generation Pass:
 
-module assign_value_of_0_to_a_i16_i32_impl ( qbit target , int size  ,  ) {
- 	qbit ancilla_zero_zero[1];
-	qbit ancilla_zero_garbage[1];
-	CNOT ( target , ancilla_zero_garbage[0] );
- 	CNOT ( ancilla_zero_garbage[0] , target );
- 	CNOT ( ancilla_zero_zero[0] , target );
- }
-
-module assign_value_of_1_to_a_i16_i32_impl ( qbit target , int size  ,  ) {
- 	qbit ancilla_one_one[1];
-	qbit ancilla_zero_garbage[1];
-	CNOT ( target , ancilla_zero_garbage[0] );
- 	CNOT ( ancilla_zero_garbage[0] , target );
- 	CNOT ( ancilla_one_one[0] , target );
- }
-
-module assign_value_of_b_to_a_i16_i16_i32_impl ( qbit target , qbit control ,  ) {
- 	qbit ancilla_zg[1];
-	CNOT ( target , ancilla_zg[0] );
- 	CNOT ( ancilla_zg[0] , target );
- 	CNOT ( control , target );
- }
-
-module a_swap_b_i16_i16_i32_impl ( qbit target0 , qbit target1 ,  ) {
- 	CNOT ( target0 , target1 );
- 	CNOT ( target1 , target0 );
- 	CNOT ( target0 , target1 );
- }
-
-module ToffoliImpl_Q_A_Q ( qbit target , qbit control1 , qbit control2 ,  ) {
- 	H ( target );
- 	Tdag ( control1 );
- 	T ( control2 );
- 	T ( target );
- 	CNOT ( control2 , control1 );
- 	CNOT ( control1 , target );
- 	Tdag ( control1 );
- 	CNOT ( target , control2 );
- 	CNOT ( control1 , control2 );
- 	Tdag ( control1 );
- 	Tdag ( control2 );
- 	T ( target );
- 	CNOT ( control1 , target );
- 	S ( control1 );
- 	CNOT ( target , control2 );
- 	CNOT ( control2 , control1 );
- 	H ( target );
- }
-
-module a_eq_a_plus_b_i16_i16_i32_impl ( qbit target , qbit control , int size  ,  ) {
- 	qbit ancilla_zg[1];
-	qbit ancilla_zz[1];
-	CNOT ( target , ancilla_zg[0] );
- 	CNOT ( control , ancilla_zz[0] );
- 	CNOT ( target , control );
- 	ToffoliImpl_Q_A_Q ( control , ancilla_zg[0] , target );
- 	CNOT ( ancilla_zz[0] , ancilla_zg[0] );
- 	CNOT ( ancilla_zz[0] , control );
- 	CNOT ( ancilla_zz[0] , control );
- 	CNOT ( control , ancilla_zz[0] );
- 	CNOT ( ancilla_zz[0] , control );
- 	CNOT ( ancilla_zg[0] , target );
- 	CNOT ( target , ancilla_zg[0] );
- 	CNOT ( ancilla_zg[0] , target );
- }
-
-module allLibraryFuncs ( qbit* a ,  ) {
- 	assign_value_of_0_to_a_i16_i32_impl ( a[0] , 1 );
- 	assign_value_of_1_to_a_i16_i32_impl ( a[0] , 1 );
- 	assign_value_of_b_to_a_i16_i16_i32_impl ( a[0] , a[1] );
- 	a_swap_b_i16_i16_i32_impl ( a[1] , a[0] );
- 	a_eq_a_plus_b_i16_i16_i32_impl ( a[1] , a[0] , 1 );
- 	assign_value_of_0_to_a_i16_i32_impl ( a[0] , 1 );
- 	assign_value_of_1_to_a_i16_i32_impl ( a[1] , 1 );
- 	assign_value_of_b_to_a_i16_i16_i32_impl ( a[1] , a[2] );
- 	a_swap_b_i16_i16_i32_impl ( a[2] , a[1] );
- 	a_eq_a_plus_b_i16_i16_i32_impl ( a[2] , a[1] , 1 );
- }
-
-module main (  ) {
- 	qbit h0[32];
-	allLibraryFuncs ( h0 );
- }
+qmodule main() {
+  qbit ancilla_zero_zero_i8_i_i[1];
+  qbit ancilla_zero_garbage_i9_i_i[1];
+  qbit ancilla_one_one_i6_i_i[1];
+  qbit ancilla_zero_garbage_i7_i_i[1];
+  qbit ancilla_zg_i5_i_i[1];
+  qbit ancilla_zg_i3_i_i[1];
+  qbit ancilla_zz_i4_i_i[1];
+  qbit ancilla_zero_zero_i_i_i[1];
+  qbit ancilla_zero_garbage_i2_i_i[1];
+  qbit ancilla_one_one_i_i_i[1];
+  qbit ancilla_zero_garbage_i_i_i[1];
+  qbit ancilla_zg_i1_i_i[1];
+  qbit ancilla_zg_i_i_i[1];
+  qbit ancilla_zz_i_i_i[1];
+  qbit h0_i[32];
+  CNOT(h0_i[0], ancilla_zero_garbage_i9_i_i[0]);
+  CNOT(ancilla_zero_garbage_i9_i_i[0], h0_i[0]);
+  CNOT(ancilla_zero_zero_i8_i_i[0], h0_i[0]);
+  CNOT(h0_i[0], ancilla_zero_garbage_i7_i_i[0]);
+  CNOT(ancilla_zero_garbage_i7_i_i[0], h0_i[0]);
+  CNOT(ancilla_one_one_i6_i_i[0], h0_i[0]);
+  CNOT(h0_i[0], ancilla_zg_i5_i_i[0]);
+  CNOT(ancilla_zg_i5_i_i[0], h0_i[0]);
+  CNOT(h0_i[1], h0_i[0]);
+  CNOT(h0_i[1], h0_i[0]);
+  CNOT(h0_i[0], h0_i[1]);
+  CNOT(h0_i[1], h0_i[0]);
+  CNOT(h0_i[1], ancilla_zg_i3_i_i[0]);
+  CNOT(h0_i[0], ancilla_zz_i4_i_i[0]);
+  CNOT(h0_i[1], h0_i[0]);
+  H(h0_i[0]);
+  Tdag(ancilla_zg_i3_i_i[0]);
+  T(h0_i[1]);
+  T(h0_i[0]);
+  CNOT(h0_i[1], ancilla_zg_i3_i_i[0]);
+  CNOT(ancilla_zg_i3_i_i[0], h0_i[0]);
+  Tdag(ancilla_zg_i3_i_i[0]);
+  CNOT(h0_i[0], h0_i[1]);
+  CNOT(ancilla_zg_i3_i_i[0], h0_i[1]);
+  Tdag(ancilla_zg_i3_i_i[0]);
+  Tdag(h0_i[1]);
+  T(h0_i[0]);
+  CNOT(ancilla_zg_i3_i_i[0], h0_i[0]);
+  S(ancilla_zg_i3_i_i[0]);
+  CNOT(h0_i[0], h0_i[1]);
+  CNOT(h0_i[1], ancilla_zg_i3_i_i[0]);
+  H(h0_i[0]);
+  CNOT(ancilla_zz_i4_i_i[0], ancilla_zg_i3_i_i[0]);
+  CNOT(ancilla_zz_i4_i_i[0], h0_i[0]);
+  CNOT(ancilla_zz_i4_i_i[0], h0_i[0]);
+  CNOT(h0_i[0], ancilla_zz_i4_i_i[0]);
+  CNOT(ancilla_zz_i4_i_i[0], h0_i[0]);
+  CNOT(ancilla_zg_i3_i_i[0], h0_i[1]);
+  CNOT(h0_i[1], ancilla_zg_i3_i_i[0]);
+  CNOT(ancilla_zg_i3_i_i[0], h0_i[1]);
+  CNOT(h0_i[0], ancilla_zero_garbage_i2_i_i[0]);
+  CNOT(ancilla_zero_garbage_i2_i_i[0], h0_i[0]);
+  CNOT(ancilla_zero_zero_i_i_i[0], h0_i[0]);
+  CNOT(h0_i[1], ancilla_zero_garbage_i_i_i[0]);
+  CNOT(ancilla_zero_garbage_i_i_i[0], h0_i[1]);
+  CNOT(ancilla_one_one_i_i_i[0], h0_i[1]);
+  CNOT(h0_i[1], ancilla_zg_i1_i_i[0]);
+  CNOT(ancilla_zg_i1_i_i[0], h0_i[1]);
+  CNOT(h0_i[2], h0_i[1]);
+  CNOT(h0_i[2], h0_i[1]);
+  CNOT(h0_i[1], h0_i[2]);
+  CNOT(h0_i[2], h0_i[1]);
+  CNOT(h0_i[2], ancilla_zg_i_i_i[0]);
+  CNOT(h0_i[1], ancilla_zz_i_i_i[0]);
+  CNOT(h0_i[2], h0_i[1]);
+  H(h0_i[1]);
+  Tdag(ancilla_zg_i_i_i[0]);
+  T(h0_i[2]);
+  T(h0_i[1]);
+  CNOT(h0_i[2], ancilla_zg_i_i_i[0]);
+  CNOT(ancilla_zg_i_i_i[0], h0_i[1]);
+  Tdag(ancilla_zg_i_i_i[0]);
+  CNOT(h0_i[1], h0_i[2]);
+  CNOT(ancilla_zg_i_i_i[0], h0_i[2]);
+  Tdag(ancilla_zg_i_i_i[0]);
+  Tdag(h0_i[2]);
+  T(h0_i[1]);
+  CNOT(ancilla_zg_i_i_i[0], h0_i[1]);
+  S(ancilla_zg_i_i_i[0]);
+  CNOT(h0_i[1], h0_i[2]);
+  CNOT(h0_i[2], ancilla_zg_i_i_i[0]);
+  H(h0_i[1]);
+  CNOT(ancilla_zz_i_i_i[0], ancilla_zg_i_i_i[0]);
+  CNOT(ancilla_zz_i_i_i[0], h0_i[1]);
+  CNOT(ancilla_zz_i_i_i[0], h0_i[1]);
+  CNOT(h0_i[1], ancilla_zz_i_i_i[0]);
+  CNOT(ancilla_zz_i_i_i[0], h0_i[1]);
+  CNOT(ancilla_zg_i_i_i[0], h0_i[2]);
+  CNOT(h0_i[2], ancilla_zg_i_i_i[0]);
+  CNOT(ancilla_zg_i_i_i[0], h0_i[2]);
+}
 
 --------End of QASM generation

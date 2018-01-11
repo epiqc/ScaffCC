@@ -1,5 +1,32 @@
-add_llvm_loadable_module( LLVMScaffold
-    FunctionClone.cpp
-    GateCount.cpp
-    Rotations.cpp
-  )
+add_definitions("-g")
+
+add_llvm_loadable_module(LLVMScaffold
+  CriticalResourceCount.cpp
+  DynCriticalPath.cpp
+  DynGenQASMLoops.cpp
+  DynRollupLoops.cpp
+  DynRollupRepLoops.cpp
+  FlattenModule.cpp
+  FunctionClone.cpp
+  FunctionDuplicate.cpp
+  GateCount.cpp
+  GenLPFSSchedule.cpp
+  GenQASM.cpp
+  GenQASMLoops.cpp
+  GenRKQC.cpp
+  GenSIMDScheduleCG.cpp
+  GenSIMDSchedule.cpp
+  GetCriticalPath.cpp
+  InlineModule.cpp
+  Optimize.cpp
+  ResourceCount2.cpp
+  ResourceCount.cpp
+  Reverse.cpp
+  Rotations.cpp
+  RuntimeFrequencyEstimationHybrid.cpp
+  RuntimeResourceEst.cpp
+  RuntimeResourceEst-Memoized.cpp
+  SortCloneArguments.cpp
+  Toffoli.cpp
+  XformCbitStores.cpp
+)

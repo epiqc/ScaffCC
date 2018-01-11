@@ -1,4 +1,6 @@
 ; RUN: opt < %s -adce -disable-output
+; RUN: opt < %s -adce -adce-remove-loops=true -disable-output
+
 target datalayout = "e-p:32:32"
 	%struct..CppObjTypeDesc = type { i32, i16, i16 }
 	%struct..TypeToken = type { i32, i16, i16 }
@@ -30,6 +32,7 @@ loopentry.1:		; preds = %then.53, %endif.14
 	br i1 false, label %no_exit.1, label %loopentry.0
 
 no_exit.1:		; preds = %loopentry.1
+; CHECK: switch
 	switch i32 0, label %label.17 [
 		 i32 2, label %label.11
 		 i32 19, label %label.10
@@ -48,8 +51,8 @@ shortcirc_next.4:		; preds = %then.44
 	br i1 false, label %no_exit.2, label %loopexit.2
 
 no_exit.2:		; preds = %shortcirc_next.4
-	%tmp.897 = getelementptr i32* %SubArrays.10, i64 0		; <i32*> [#uses=1]
-	%tmp.899 = load i32* %tmp.897		; <i32> [#uses=1]
+	%tmp.897 = getelementptr i32, i32* %SubArrays.10, i64 0		; <i32*> [#uses=1]
+	%tmp.899 = load i32, i32* %tmp.897		; <i32> [#uses=1]
 	store i32 %tmp.899, i32* null
 	ret i32 0
 
@@ -79,7 +82,7 @@ shortcirc_next.8:		; preds = %shortcirc_next.7
 
 then.53:		; preds = %shortcirc_next.7, %label.17
 	%SubArrays.8 = phi i32* [ %SubArrays.10, %shortcirc_next.7 ], [ %SubArrays.10, %label.17 ]		; <i32*> [#uses=1]
-	%tmp.1023 = load i32* null		; <i32> [#uses=1]
+	%tmp.1023 = load i32, i32* null		; <i32> [#uses=1]
 	switch i32 %tmp.1023, label %loopentry.1 [
 	]
 

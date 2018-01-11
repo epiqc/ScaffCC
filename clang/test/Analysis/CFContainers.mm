@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -analyze -analyzer-checker=osx.coreFoundation.containers.PointerSizedValues,osx.coreFoundation.containers.OutOfBounds -analyzer-store=region -triple x86_64-apple-darwin -verify %s
+// RUN: %clang_analyze_cc1 -analyzer-checker=osx.coreFoundation.containers.PointerSizedValues,osx.coreFoundation.containers.OutOfBounds -analyzer-store=region -triple x86_64-apple-darwin -verify %s
 
 typedef const struct __CFAllocator * CFAllocatorRef;
 typedef const struct __CFString * CFStringRef;
@@ -19,6 +19,7 @@ typedef struct {
 } CFArrayCallBacks;
 typedef const struct __CFArray * CFArrayRef;
 CFArrayRef CFArrayCreate(CFAllocatorRef allocator, const void **values, CFIndex numValues, const CFArrayCallBacks *callBacks);
+typedef struct __CFArray * CFMutableArrayRef;
 typedef const struct __CFString * CFStringRef;
 enum {
     kCFNumberSInt8Type = 1,
@@ -94,16 +95,16 @@ CFSetRef CFSetCreate(CFAllocatorRef allocator, const void **values, CFIndex numV
 #define NULL __null
 
 // Done with the headers. 
-// Test experimental.osx.cocoa.ContainerAPI checker.
+// Test alpha.osx.cocoa.ContainerAPI checker.
 void testContainers(int **xNoWarn, CFIndex count) {
   int x[] = { 1, 2, 3 };
-  CFArrayRef foo = CFArrayCreate(kCFAllocatorDefault, (const void **) x, sizeof(x) / sizeof(x[0]), 0);// expected-warning {{The first argument to 'CFArrayCreate' must be a C array of pointer-sized}}
+  CFArrayRef foo = CFArrayCreate(kCFAllocatorDefault, (const void **) x, sizeof(x) / sizeof(x[0]), 0);// expected-warning {{The second argument to 'CFArrayCreate' must be a C array of pointer-sized}}
 
   CFArrayRef fooNoWarn = CFArrayCreate(kCFAllocatorDefault, (const void **) xNoWarn, sizeof(xNoWarn) / sizeof(xNoWarn[0]), 0); // no warning
   CFArrayRef fooNoWarn2 = CFArrayCreate(kCFAllocatorDefault, 0, sizeof(xNoWarn) / sizeof(xNoWarn[0]), 0);// no warning, passing in 0
   CFArrayRef fooNoWarn3 = CFArrayCreate(kCFAllocatorDefault, NULL, sizeof(xNoWarn) / sizeof(xNoWarn[0]), 0);// no warning, passing in NULL
 
-  CFSetRef set = CFSetCreate(NULL, (const void **)x, 3, &kCFTypeSetCallBacks); // expected-warning {{The first argument to 'CFSetCreate' must be a C array of pointer-sized values}}
+  CFSetRef set = CFSetCreate(NULL, (const void **)x, 3, &kCFTypeSetCallBacks); // expected-warning {{The second argument to 'CFSetCreate' must be a C array of pointer-sized values}}
   CFArrayRef* pairs = new CFArrayRef[count];
   CFSetRef fSet = CFSetCreate(kCFAllocatorDefault, (const void**) pairs, count - 1, &kCFTypeSetCallBacks);// no warning
 }
@@ -125,8 +126,8 @@ void CreateDict(int *elems) {
   const CFDictionaryKeyCallBacks keyCB = kCFCopyStringDictionaryKeyCallBacks;
   const CFDictionaryValueCallBacks valCB = kCFTypeDictionaryValueCallBacks;
   CFDictionaryRef dict1 = CFDictionaryCreate(kCFAllocatorDefault, (const void**)keys, (const void**)values, numValues, &keyCB, &valCB); // no warning
-  CFDictionaryRef dict2 = CFDictionaryCreate(kCFAllocatorDefault, (const void**)elems[0], (const void**)values, numValues, &keyCB, &valCB); //expected-warning {{The first argument to 'CFDictionaryCreate' must be a C array of}}
-  CFDictionaryRef dict3 = CFDictionaryCreate(kCFAllocatorDefault, (const void**)keys, (const void**)elems, numValues, &keyCB, &valCB); // expected-warning {{The second argument to 'CFDictionaryCreate' must be a C array of pointer-sized values}}
+  CFDictionaryRef dict2 = CFDictionaryCreate(kCFAllocatorDefault, (const void**)elems[0], (const void**)values, numValues, &keyCB, &valCB); //expected-warning {{The second argument to 'CFDictionaryCreate' must be a C array of}} expected-warning {{cast to 'const void **' from smaller integer type 'int'}}
+  CFDictionaryRef dict3 = CFDictionaryCreate(kCFAllocatorDefault, (const void**)keys, (const void**)elems, numValues, &keyCB, &valCB); // expected-warning {{The third argument to 'CFDictionaryCreate' must be a C array of pointer-sized values}}
 }
 
 void OutOfBoundsSymbolicOffByOne(const void ** input, CFIndex S) {
@@ -177,11 +178,11 @@ void TestPointerToArray(int *elems, void *p1, void *p2, void *p3, unsigned count
 
   CFArrayCreate(0, (const void **) &fn, count, 0); // false negative
   CFArrayCreate(0, (const void **) fn, count, 0); // no warning
-  CFArrayCreate(0, (const void **) cp, count, 0); // expected-warning {{The first argument to 'CFArrayCreate' must be a C array of pointer-sized}}
+  CFArrayCreate(0, (const void **) cp, count, 0); // expected-warning {{The second argument to 'CFArrayCreate' must be a C array of pointer-sized}}
 
   char cc[] = { 0, 2, 3 };
-  CFArrayCreate(0, (const void **) &cc, count, 0); // expected-warning {{The first argument to 'CFArrayCreate' must be a C array of pointer-sized}}
-  CFArrayCreate(0, (const void **) cc, count, 0); // expected-warning {{The first argument to 'CFArrayCreate' must be a C array of pointer-sized}}
+  CFArrayCreate(0, (const void **) &cc, count, 0); // expected-warning {{The second argument to 'CFArrayCreate' must be a C array of pointer-sized}}
+  CFArrayCreate(0, (const void **) cc, count, 0); // expected-warning {{The second argument to 'CFArrayCreate' must be a C array of pointer-sized}}
 }
 
 void TestUndef(CFArrayRef A, CFIndex sIndex, void* x[]) {
@@ -201,4 +202,25 @@ void TestConst(CFArrayRef A, CFIndex sIndex, void* x[]) {
 
 void TestNullArray() {
   CFArrayGetValueAtIndex(0, 0);
+}
+
+void ArrayRefMutableEscape(CFMutableArrayRef a);
+void ArrayRefEscape(CFArrayRef a);
+
+void TestCFMutableArrayRefEscapeViaMutableArgument(CFMutableArrayRef a) {
+  CFIndex aLen = CFArrayGetCount(a);
+  ArrayRefMutableEscape(a);
+
+  // ArrayRefMutableEscape could mutate a to make it have
+  // at least aLen + 1 elements, so do not report an error here.
+  CFArrayGetValueAtIndex(a, aLen);
+}
+
+void TestCFMutableArrayRefEscapeViaImmutableArgument(CFMutableArrayRef a) {
+  CFIndex aLen = CFArrayGetCount(a);
+  ArrayRefEscape(a);
+
+  // ArrayRefEscape is declared to take a CFArrayRef (i.e, an immutable array)
+  // so we assume it does not change the length of a.
+  CFArrayGetValueAtIndex(a, aLen); // expected-warning {{Index is out of bounds}}
 }

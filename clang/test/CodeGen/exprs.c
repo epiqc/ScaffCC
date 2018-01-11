@@ -121,27 +121,28 @@ void f10() {
 }
 
 // rdar://7530813
-// CHECK: define i32 @f11
+// CHECK-LABEL: define i32 @f11
 int f11(long X) {
   int A[100];
   return A[X];
 
 // CHECK: [[Xaddr:%[^ ]+]] = alloca i64, align 8
-// CHECK: load {{.*}}* [[Xaddr]]
-// CHECK-NEXT: getelementptr inbounds [100 x i32]* %A, i32 0, 
-// CHECK-NEXT: load i32*
+// CHECK: [[A:%.*]] = alloca [100 x i32], align
+// CHECK: [[X:%.*]] = load {{.*}}, {{.*}}* [[Xaddr]]
+// CHECK-NEXT: [[T0:%.*]] = getelementptr inbounds [100 x i32], [100 x i32]* [[A]], i64 0, i64 [[X]]
+// CHECK-NEXT: load i32, i32* [[T0]], align 4
 }
 
 int f12() {
   // PR3150
-  // CHECK: define i32 @f12
+  // CHECK-LABEL: define i32 @f12
   // CHECK: ret i32 1
   return 1||1;
 }
 
 // Make sure negate of fp uses -0.0 for proper -0 handling.
 double f13(double X) {
-  // CHECK: define double @f13
+  // CHECK-LABEL: define double @f13
   // CHECK: fsub double -0.0
   return -X;
 }
@@ -151,7 +152,7 @@ void f14(struct s14 *a) {
   (void) &*a;
 }
 
-// CHECK: define void @f15
+// CHECK-LABEL: define void @f15
 void f15() {
   extern void f15_start(void);
   f15_start();
@@ -168,9 +169,30 @@ void f15() {
 }
 
 // PR8967: this was crashing
-// CHECK: define void @f16()
+// CHECK-LABEL: define void @f16()
 void f16() {
   __extension__({ goto lbl; });
  lbl:
   ;
 }
+
+// PR13704: negative increment in i128 is not preserved.
+// CHECK-LABEL: define void @f17()
+void f17() {
+  extern void extfunc(__int128);
+  __int128 x = 2;
+  x--;
+  extfunc(x);
+// CHECK: add nsw i128 %{{.}}, -1
+}
+
+// PR23597: We should evaluate union cast operands even if the cast is unused.
+typedef union u {
+    int i;
+} strct;
+int returns_int(void);
+void f18() {
+  (strct)returns_int();
+}
+// CHECK-LABEL: define void @f18()
+// CHECK: call i32 @returns_int()

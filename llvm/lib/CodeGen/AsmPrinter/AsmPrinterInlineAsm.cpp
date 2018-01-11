@@ -11,56 +11,60 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "asm-printer"
+#include "llvm/ADT/SmallString.h"
+#include "llvm/ADT/Twine.h"
 #include "llvm/CodeGen/AsmPrinter.h"
-#include "llvm/Constants.h"
-#include "llvm/InlineAsm.h"
-#include "llvm/LLVMContext.h"
-#include "llvm/Module.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
+#include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
+#include "llvm/CodeGen/TargetInstrInfo.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
+#include "llvm/CodeGen/TargetSubtargetInfo.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/DataLayout.h"
+#include "llvm/IR/InlineAsm.h"
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/Module.h"
 #include "llvm/MC/MCAsmInfo.h"
+#include "llvm/MC/MCParser/MCTargetAsmParser.h"
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/MC/MCSymbol.h"
-#include "llvm/MC/MCTargetAsmParser.h"
-#include "llvm/Target/TargetMachine.h"
-#include "llvm/ADT/OwningPtr.h"
-#include "llvm/ADT/SmallString.h"
-#include "llvm/ADT/Twine.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Target/TargetMachine.h"
 using namespace llvm;
 
-namespace {
-  struct SrcMgrDiagInfo {
-    const MDNode *LocInfo;
-    LLVMContext::InlineAsmDiagHandlerTy DiagHandler;
-    void *DiagContext;
-  };
-}
+#define DEBUG_TYPE "asm-printer"
 
-/// SrcMgrDiagHandler - This callback is invoked when the SourceMgr for an
+/// srcMgrDiagHandler - This callback is invoked when the SourceMgr for an
 /// inline asm has an error in it.  diagInfo is a pointer to the SrcMgrDiagInfo
 /// struct above.
-static void SrcMgrDiagHandler(const SMDiagnostic &Diag, void *diagInfo) {
-  SrcMgrDiagInfo *DiagInfo = static_cast<SrcMgrDiagInfo *>(diagInfo);
+static void srcMgrDiagHandler(const SMDiagnostic &Diag, void *diagInfo) {
+  AsmPrinter::SrcMgrDiagInfo *DiagInfo =
+      static_cast<AsmPrinter::SrcMgrDiagInfo *>(diagInfo);
   assert(DiagInfo && "Diagnostic context not passed down?");
+
+  // Look up a LocInfo for the buffer this diagnostic is coming from.
+  unsigned BufNum = DiagInfo->SrcMgr.FindBufferContainingLoc(Diag.getLoc());
+  const MDNode *LocInfo = nullptr;
+  if (BufNum > 0 && BufNum <= DiagInfo->LocInfos.size())
+    LocInfo = DiagInfo->LocInfos[BufNum-1];
 
   // If the inline asm had metadata associated with it, pull out a location
   // cookie corresponding to which line the error occurred on.
   unsigned LocCookie = 0;
-  if (const MDNode *LocInfo = DiagInfo->LocInfo) {
+  if (LocInfo) {
     unsigned ErrorLine = Diag.getLineNo()-1;
     if (ErrorLine >= LocInfo->getNumOperands())
       ErrorLine = 0;
 
     if (LocInfo->getNumOperands() != 0)
       if (const ConstantInt *CI =
-          dyn_cast<ConstantInt>(LocInfo->getOperand(ErrorLine)))
+              mdconst::dyn_extract<ConstantInt>(LocInfo->getOperand(ErrorLine)))
         LocCookie = CI->getZExtValue();
   }
 
@@ -68,7 +72,10 @@ static void SrcMgrDiagHandler(const SMDiagnostic &Diag, void *diagInfo) {
 }
 
 /// EmitInlineAsm - Emit a blob of inline asm to the output streamer.
-void AsmPrinter::EmitInlineAsm(StringRef Str, const MDNode *LocMDNode) const {
+void AsmPrinter::EmitInlineAsm(StringRef Str, const MCSubtargetInfo &STI,
+                               const MCTargetOptions &MCOptions,
+                               const MDNode *LocMDNode,
+                               InlineAsm::AsmDialect Dialect) const {
   assert(!Str.empty() && "Can't emit empty inline asm block");
 
   // Remember if the buffer is nul terminated or not so we can avoid a copy.
@@ -76,130 +83,210 @@ void AsmPrinter::EmitInlineAsm(StringRef Str, const MDNode *LocMDNode) const {
   if (isNullTerminated)
     Str = Str.substr(0, Str.size()-1);
 
-  // If the output streamer is actually a .s file, just emit the blob textually.
+  // If the output streamer does not have mature MC support or the integrated
+  // assembler has been disabled, just emit the blob textually.
+  // Otherwise parse the asm and emit it via MC support.
   // This is useful in case the asm parser doesn't handle something but the
   // system assembler does.
-  if (OutStreamer.hasRawTextSupport()) {
-    OutStreamer.EmitRawText(Str);
+  const MCAsmInfo *MCAI = TM.getMCAsmInfo();
+  assert(MCAI && "No MCAsmInfo");
+  if (!MCAI->useIntegratedAssembler() &&
+      !OutStreamer->isIntegratedAssemblerRequired()) {
+    emitInlineAsmStart();
+    OutStreamer->EmitRawText(Str);
+    emitInlineAsmEnd(STI, nullptr);
     return;
   }
 
-  SourceMgr SrcMgr;
-  SrcMgrDiagInfo DiagInfo;
+  if (!DiagInfo) {
+    DiagInfo = make_unique<SrcMgrDiagInfo>();
 
-  // If the current LLVMContext has an inline asm handler, set it in SourceMgr.
-  LLVMContext &LLVMCtx = MMI->getModule()->getContext();
-  bool HasDiagHandler = false;
-  if (LLVMCtx.getInlineAsmDiagnosticHandler() != 0) {
-    // If the source manager has an issue, we arrange for SrcMgrDiagHandler
-    // to be invoked, getting DiagInfo passed into it.
-    DiagInfo.LocInfo = LocMDNode;
-    DiagInfo.DiagHandler = LLVMCtx.getInlineAsmDiagnosticHandler();
-    DiagInfo.DiagContext = LLVMCtx.getInlineAsmDiagnosticContext();
-    SrcMgr.setDiagHandler(SrcMgrDiagHandler, &DiagInfo);
-    HasDiagHandler = true;
-  }
+    MCContext &Context = MMI->getContext();
+    Context.setInlineSourceManager(&DiagInfo->SrcMgr);
 
-  MemoryBuffer *Buffer;
-  if (isNullTerminated)
-    Buffer = MemoryBuffer::getMemBuffer(Str, "<inline asm>");
-  else
-    Buffer = MemoryBuffer::getMemBufferCopy(Str, "<inline asm>");
-
-  // Tell SrcMgr about this buffer, it takes ownership of the buffer.
-  SrcMgr.AddNewSourceBuffer(Buffer, SMLoc());
-
-  OwningPtr<MCAsmParser> Parser(createMCAsmParser(SrcMgr,
-                                                  OutContext, OutStreamer,
-                                                  *MAI));
-
-  // FIXME: It would be nice if we can avoid createing a new instance of
-  // MCSubtargetInfo here given TargetSubtargetInfo is available. However,
-  // we have to watch out for asm directives which can change subtarget
-  // state. e.g. .code 16, .code 32.
-  OwningPtr<MCSubtargetInfo>
-    STI(TM.getTarget().createMCSubtargetInfo(TM.getTargetTriple(),
-                                             TM.getTargetCPU(),
-                                             TM.getTargetFeatureString()));
-  OwningPtr<MCTargetAsmParser>
-    TAP(TM.getTarget().createMCAsmParser(*STI, *Parser));
-  if (!TAP)
-    report_fatal_error("Inline asm not supported by this streamer because"
-                       " we don't have an asm parser for this target\n");
-  Parser->setTargetParser(*TAP.get());
-
-  // Don't implicitly switch to the text section before the asm.
-  int Res = Parser->Run(/*NoInitialTextSection*/ true,
-                        /*NoFinalize*/ true);
-  if (Res && !HasDiagHandler)
-    report_fatal_error("Error parsing inline asm\n");
-}
-
-
-/// EmitInlineAsm - This method formats and emits the specified machine
-/// instruction that is an inline asm.
-void AsmPrinter::EmitInlineAsm(const MachineInstr *MI) const {
-  assert(MI->isInlineAsm() && "printInlineAsm only works on inline asms");
-
-  unsigned NumOperands = MI->getNumOperands();
-
-  // Count the number of register definitions to find the asm string.
-  unsigned NumDefs = 0;
-  for (; MI->getOperand(NumDefs).isReg() && MI->getOperand(NumDefs).isDef();
-       ++NumDefs)
-    assert(NumDefs != NumOperands-2 && "No asm string?");
-
-  assert(MI->getOperand(NumDefs).isSymbol() && "No asm string?");
-
-  // Disassemble the AsmStr, printing out the literal pieces, the operands, etc.
-  const char *AsmStr = MI->getOperand(NumDefs).getSymbolName();
-
-  // If this asmstr is empty, just print the #APP/#NOAPP markers.
-  // These are useful to see where empty asm's wound up.
-  if (AsmStr[0] == 0) {
-    // Don't emit the comments if writing to a .o file.
-    if (!OutStreamer.hasRawTextSupport()) return;
-
-    OutStreamer.EmitRawText(Twine("\t")+MAI->getCommentString()+
-                            MAI->getInlineAsmStart());
-    OutStreamer.EmitRawText(Twine("\t")+MAI->getCommentString()+
-                            MAI->getInlineAsmEnd());
-    return;
-  }
-
-  // Emit the #APP start marker.  This has to happen even if verbose-asm isn't
-  // enabled, so we use EmitRawText.
-  if (OutStreamer.hasRawTextSupport())
-    OutStreamer.EmitRawText(Twine("\t")+MAI->getCommentString()+
-                            MAI->getInlineAsmStart());
-
-  // Get the !srcloc metadata node if we have it, and decode the loc cookie from
-  // it.
-  unsigned LocCookie = 0;
-  const MDNode *LocMD = 0;
-  for (unsigned i = MI->getNumOperands(); i != 0; --i) {
-    if (MI->getOperand(i-1).isMetadata() &&
-        (LocMD = MI->getOperand(i-1).getMetadata()) &&
-        LocMD->getNumOperands() != 0) {
-      if (const ConstantInt *CI = dyn_cast<ConstantInt>(LocMD->getOperand(0))) {
-        LocCookie = CI->getZExtValue();
-        break;
-      }
+    LLVMContext &LLVMCtx = MMI->getModule()->getContext();
+    if (LLVMCtx.getInlineAsmDiagnosticHandler()) {
+      DiagInfo->DiagHandler = LLVMCtx.getInlineAsmDiagnosticHandler();
+      DiagInfo->DiagContext = LLVMCtx.getInlineAsmDiagnosticContext();
+      DiagInfo->SrcMgr.setDiagHandler(srcMgrDiagHandler, DiagInfo.get());
     }
   }
 
-  // Emit the inline asm to a temporary string so we can emit it through
-  // EmitInlineAsm.
-  SmallString<256> StringData;
-  raw_svector_ostream OS(StringData);
+  SourceMgr &SrcMgr = DiagInfo->SrcMgr;
+  SrcMgr.setIncludeDirs(MCOptions.IASSearchPaths);
 
-  OS << '\t';
+  std::unique_ptr<MemoryBuffer> Buffer;
+  // The inline asm source manager will outlive Str, so make a copy of the
+  // string for SourceMgr to own.
+  Buffer = MemoryBuffer::getMemBufferCopy(Str, "<inline asm>");
 
-  // The variant of the current asmprinter.
-  int AsmPrinterVariant = MAI->getAssemblerDialect();
+  // Tell SrcMgr about this buffer, it takes ownership of the buffer.
+  unsigned BufNum = SrcMgr.AddNewSourceBuffer(std::move(Buffer), SMLoc());
 
+  // Store LocMDNode in DiagInfo, using BufNum as an identifier.
+  if (LocMDNode) {
+    DiagInfo->LocInfos.resize(BufNum);
+    DiagInfo->LocInfos[BufNum-1] = LocMDNode;
+  }
+
+  std::unique_ptr<MCAsmParser> Parser(
+      createMCAsmParser(SrcMgr, OutContext, *OutStreamer, *MAI, BufNum));
+
+  // We create a new MCInstrInfo here since we might be at the module level
+  // and not have a MachineFunction to initialize the TargetInstrInfo from and
+  // we only need MCInstrInfo for asm parsing. We create one unconditionally
+  // because it's not subtarget dependent.
+  std::unique_ptr<MCInstrInfo> MII(TM.getTarget().createMCInstrInfo());
+  std::unique_ptr<MCTargetAsmParser> TAP(TM.getTarget().createMCAsmParser(
+      STI, *Parser, *MII, MCOptions));
+  if (!TAP)
+    report_fatal_error("Inline asm not supported by this streamer because"
+                       " we don't have an asm parser for this target\n");
+  Parser->setAssemblerDialect(Dialect);
+  Parser->setTargetParser(*TAP.get());
+  Parser->setEnablePrintSchedInfo(EnablePrintSchedInfo);
+  if (Dialect == InlineAsm::AD_Intel)
+    // We need this flag to be able to parse numbers like "0bH"
+    Parser->setParsingInlineAsm(true);
+  if (MF) {
+    const TargetRegisterInfo *TRI = MF->getSubtarget().getRegisterInfo();
+    TAP->SetFrameRegister(TRI->getFrameRegister(*MF));
+  }
+
+  emitInlineAsmStart();
+  // Don't implicitly switch to the text section before the asm.
+  int Res = Parser->Run(/*NoInitialTextSection*/ true,
+                        /*NoFinalize*/ true);
+  emitInlineAsmEnd(STI, &TAP->getSTI());
+
+  if (Res && !DiagInfo->DiagHandler)
+    report_fatal_error("Error parsing inline asm\n");
+}
+
+static void EmitMSInlineAsmStr(const char *AsmStr, const MachineInstr *MI,
+                               MachineModuleInfo *MMI, int InlineAsmVariant,
+                               AsmPrinter *AP, unsigned LocCookie,
+                               raw_ostream &OS) {
+  // Switch to the inline assembly variant.
+  OS << "\t.intel_syntax\n\t";
+
+  const char *LastEmitted = AsmStr; // One past the last character emitted.
+  unsigned NumOperands = MI->getNumOperands();
+
+  while (*LastEmitted) {
+    switch (*LastEmitted) {
+    default: {
+      // Not a special case, emit the string section literally.
+      const char *LiteralEnd = LastEmitted+1;
+      while (*LiteralEnd && *LiteralEnd != '{' && *LiteralEnd != '|' &&
+             *LiteralEnd != '}' && *LiteralEnd != '$' && *LiteralEnd != '\n')
+        ++LiteralEnd;
+
+      OS.write(LastEmitted, LiteralEnd-LastEmitted);
+      LastEmitted = LiteralEnd;
+      break;
+    }
+    case '\n':
+      ++LastEmitted;   // Consume newline character.
+      OS << '\n';      // Indent code with newline.
+      break;
+    case '$': {
+      ++LastEmitted;   // Consume '$' character.
+      bool Done = true;
+
+      // Handle escapes.
+      switch (*LastEmitted) {
+      default: Done = false; break;
+      case '$':
+        ++LastEmitted;  // Consume second '$' character.
+        break;
+      }
+      if (Done) break;
+
+      // If we have ${:foo}, then this is not a real operand reference, it is a
+      // "magic" string reference, just like in .td files.  Arrange to call
+      // PrintSpecial.
+      if (LastEmitted[0] == '{' && LastEmitted[1] == ':') {
+        LastEmitted += 2;
+        const char *StrStart = LastEmitted;
+        const char *StrEnd = strchr(StrStart, '}');
+        if (!StrEnd)
+          report_fatal_error("Unterminated ${:foo} operand in inline asm"
+                             " string: '" + Twine(AsmStr) + "'");
+
+        std::string Val(StrStart, StrEnd);
+        AP->PrintSpecial(MI, OS, Val.c_str());
+        LastEmitted = StrEnd+1;
+        break;
+      }
+
+      const char *IDStart = LastEmitted;
+      const char *IDEnd = IDStart;
+      while (*IDEnd >= '0' && *IDEnd <= '9') ++IDEnd;
+
+      unsigned Val;
+      if (StringRef(IDStart, IDEnd-IDStart).getAsInteger(10, Val))
+        report_fatal_error("Bad $ operand number in inline asm string: '" +
+                           Twine(AsmStr) + "'");
+      LastEmitted = IDEnd;
+
+      if (Val >= NumOperands-1)
+        report_fatal_error("Invalid $ operand number in inline asm string: '" +
+                           Twine(AsmStr) + "'");
+
+      // Okay, we finally have a value number.  Ask the target to print this
+      // operand!
+      unsigned OpNo = InlineAsm::MIOp_FirstOperand;
+
+      bool Error = false;
+
+      // Scan to find the machine operand number for the operand.
+      for (; Val; --Val) {
+        if (OpNo >= MI->getNumOperands()) break;
+        unsigned OpFlags = MI->getOperand(OpNo).getImm();
+        OpNo += InlineAsm::getNumOperandRegisters(OpFlags) + 1;
+      }
+
+      // We may have a location metadata attached to the end of the
+      // instruction, and at no point should see metadata at any
+      // other point while processing. It's an error if so.
+      if (OpNo >= MI->getNumOperands() ||
+          MI->getOperand(OpNo).isMetadata()) {
+        Error = true;
+      } else {
+        unsigned OpFlags = MI->getOperand(OpNo).getImm();
+        ++OpNo;  // Skip over the ID number.
+
+        if (InlineAsm::isMemKind(OpFlags)) {
+          Error = AP->PrintAsmMemoryOperand(MI, OpNo, InlineAsmVariant,
+                                            /*Modifier*/ nullptr, OS);
+        } else {
+          Error = AP->PrintAsmOperand(MI, OpNo, InlineAsmVariant,
+                                      /*Modifier*/ nullptr, OS);
+        }
+      }
+      if (Error) {
+        std::string msg;
+        raw_string_ostream Msg(msg);
+        Msg << "invalid operand in inline asm: '" << AsmStr << "'";
+        MMI->getModule()->getContext().emitError(LocCookie, Msg.str());
+      }
+      break;
+    }
+    }
+  }
+  OS << "\n\t.att_syntax\n" << (char)0;  // null terminate string.
+}
+
+static void EmitGCCInlineAsmStr(const char *AsmStr, const MachineInstr *MI,
+                                MachineModuleInfo *MMI, int InlineAsmVariant,
+                                int AsmPrinterVariant, AsmPrinter *AP,
+                                unsigned LocCookie, raw_ostream &OS) {
   int CurVariant = -1;            // The number of the {.|.|.} region we are in.
   const char *LastEmitted = AsmStr; // One past the last character emitted.
+  unsigned NumOperands = MI->getNumOperands();
+
+  OS << '\t';
 
   while (*LastEmitted) {
     switch (*LastEmitted) {
@@ -267,12 +354,12 @@ void AsmPrinter::EmitInlineAsm(const MachineInstr *MI) const {
         ++LastEmitted;
         const char *StrStart = LastEmitted;
         const char *StrEnd = strchr(StrStart, '}');
-        if (StrEnd == 0)
+        if (!StrEnd)
           report_fatal_error("Unterminated ${:foo} operand in inline asm"
                              " string: '" + Twine(AsmStr) + "'");
 
         std::string Val(StrStart, StrEnd);
-        PrintSpecial(MI, OS, Val.c_str());
+        AP->PrintSpecial(MI, OS, Val.c_str());
         LastEmitted = StrEnd+1;
         break;
       }
@@ -326,28 +413,28 @@ void AsmPrinter::EmitInlineAsm(const MachineInstr *MI) const {
           OpNo += InlineAsm::getNumOperandRegisters(OpFlags) + 1;
         }
 
-	// We may have a location metadata attached to the end of the
-	// instruction, and at no point should see metadata at any
-	// other point while processing. It's an error if so.
+        // We may have a location metadata attached to the end of the
+        // instruction, and at no point should see metadata at any
+        // other point while processing. It's an error if so.
         if (OpNo >= MI->getNumOperands() ||
-	    MI->getOperand(OpNo).isMetadata()) {
+            MI->getOperand(OpNo).isMetadata()) {
           Error = true;
         } else {
           unsigned OpFlags = MI->getOperand(OpNo).getImm();
           ++OpNo;  // Skip over the ID number.
 
-          if (Modifier[0] == 'l')  // labels are target independent
+          if (Modifier[0] == 'l') { // Labels are target independent.
             // FIXME: What if the operand isn't an MBB, report error?
-            OS << *MI->getOperand(OpNo).getMBB()->getSymbol();
-          else {
-            AsmPrinter *AP = const_cast<AsmPrinter*>(this);
+            const MCSymbol *Sym = MI->getOperand(OpNo).getMBB()->getSymbol();
+            Sym->print(OS, AP->MAI);
+          } else {
             if (InlineAsm::isMemKind(OpFlags)) {
-              Error = AP->PrintAsmMemoryOperand(MI, OpNo, AsmPrinterVariant,
-                                                Modifier[0] ? Modifier : 0,
+              Error = AP->PrintAsmMemoryOperand(MI, OpNo, InlineAsmVariant,
+                                                Modifier[0] ? Modifier : nullptr,
                                                 OS);
             } else {
-              Error = AP->PrintAsmOperand(MI, OpNo, AsmPrinterVariant,
-                                          Modifier[0] ? Modifier : 0, OS);
+              Error = AP->PrintAsmOperand(MI, OpNo, InlineAsmVariant,
+                                          Modifier[0] ? Modifier : nullptr, OS);
             }
           }
         }
@@ -363,13 +450,78 @@ void AsmPrinter::EmitInlineAsm(const MachineInstr *MI) const {
     }
   }
   OS << '\n' << (char)0;  // null terminate string.
-  EmitInlineAsm(OS.str(), LocMD);
+}
+
+/// EmitInlineAsm - This method formats and emits the specified machine
+/// instruction that is an inline asm.
+void AsmPrinter::EmitInlineAsm(const MachineInstr *MI) const {
+  assert(MI->isInlineAsm() && "printInlineAsm only works on inline asms");
+
+  // Count the number of register definitions to find the asm string.
+  unsigned NumDefs = 0;
+  for (; MI->getOperand(NumDefs).isReg() && MI->getOperand(NumDefs).isDef();
+       ++NumDefs)
+    assert(NumDefs != MI->getNumOperands()-2 && "No asm string?");
+
+  assert(MI->getOperand(NumDefs).isSymbol() && "No asm string?");
+
+  // Disassemble the AsmStr, printing out the literal pieces, the operands, etc.
+  const char *AsmStr = MI->getOperand(NumDefs).getSymbolName();
+
+  // If this asmstr is empty, just print the #APP/#NOAPP markers.
+  // These are useful to see where empty asm's wound up.
+  if (AsmStr[0] == 0) {
+    OutStreamer->emitRawComment(MAI->getInlineAsmStart());
+    OutStreamer->emitRawComment(MAI->getInlineAsmEnd());
+    return;
+  }
+
+  // Emit the #APP start marker.  This has to happen even if verbose-asm isn't
+  // enabled, so we use emitRawComment.
+  OutStreamer->emitRawComment(MAI->getInlineAsmStart());
+
+  // Get the !srcloc metadata node if we have it, and decode the loc cookie from
+  // it.
+  unsigned LocCookie = 0;
+  const MDNode *LocMD = nullptr;
+  for (unsigned i = MI->getNumOperands(); i != 0; --i) {
+    if (MI->getOperand(i-1).isMetadata() &&
+        (LocMD = MI->getOperand(i-1).getMetadata()) &&
+        LocMD->getNumOperands() != 0) {
+      if (const ConstantInt *CI =
+              mdconst::dyn_extract<ConstantInt>(LocMD->getOperand(0))) {
+        LocCookie = CI->getZExtValue();
+        break;
+      }
+    }
+  }
+
+  // Emit the inline asm to a temporary string so we can emit it through
+  // EmitInlineAsm.
+  SmallString<256> StringData;
+  raw_svector_ostream OS(StringData);
+
+  // The variant of the current asmprinter.
+  int AsmPrinterVariant = MAI->getAssemblerDialect();
+  InlineAsm::AsmDialect InlineAsmVariant = MI->getInlineAsmDialect();
+  AsmPrinter *AP = const_cast<AsmPrinter*>(this);
+  if (InlineAsmVariant == InlineAsm::AD_ATT)
+    EmitGCCInlineAsmStr(AsmStr, MI, MMI, InlineAsmVariant, AsmPrinterVariant,
+                        AP, LocCookie, OS);
+  else
+    EmitMSInlineAsmStr(AsmStr, MI, MMI, InlineAsmVariant, AP, LocCookie, OS);
+
+  // Reset SanitizeAddress based on the function's attribute.
+  MCTargetOptions MCOptions = TM.Options.MCOptions;
+  MCOptions.SanitizeAddress =
+      MF->getFunction()->hasFnAttribute(Attribute::SanitizeAddress);
+
+  EmitInlineAsm(OS.str(), getSubtargetInfo(), MCOptions, LocMD,
+                MI->getInlineAsmDialect());
 
   // Emit the #NOAPP end marker.  This has to happen even if verbose-asm isn't
-  // enabled, so we use EmitRawText.
-  if (OutStreamer.hasRawTextSupport())
-    OutStreamer.EmitRawText(Twine("\t")+MAI->getCommentString()+
-                            MAI->getInlineAsmEnd());
+  // enabled, so we use emitRawComment.
+  OutStreamer->emitRawComment(MAI->getInlineAsmEnd());
 }
 
 
@@ -382,7 +534,8 @@ void AsmPrinter::EmitInlineAsm(const MachineInstr *MI) const {
 void AsmPrinter::PrintSpecial(const MachineInstr *MI, raw_ostream &OS,
                               const char *Code) const {
   if (!strcmp(Code, "private")) {
-    OS << MAI->getPrivateGlobalPrefix();
+    const DataLayout &DL = MF->getDataLayout();
+    OS << DL.getPrivateGlobalPrefix();
   } else if (!strcmp(Code, "comment")) {
     OS << MAI->getCommentString();
   } else if (!strcmp(Code, "uid")) {
@@ -411,7 +564,31 @@ void AsmPrinter::PrintSpecial(const MachineInstr *MI, raw_ostream &OS,
 bool AsmPrinter::PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,
                                  unsigned AsmVariant, const char *ExtraCode,
                                  raw_ostream &O) {
-  // Target doesn't support this yet!
+  // Does this asm operand have a single letter operand modifier?
+  if (ExtraCode && ExtraCode[0]) {
+    if (ExtraCode[1] != 0) return true; // Unknown modifier.
+
+    const MachineOperand &MO = MI->getOperand(OpNo);
+    switch (ExtraCode[0]) {
+    default:
+      return true;  // Unknown modifier.
+    case 'c': // Substitute immediate value without immediate syntax
+      if (MO.getType() != MachineOperand::MO_Immediate)
+        return true;
+      O << MO.getImm();
+      return false;
+    case 'n':  // Negate the immediate constant.
+      if (MO.getType() != MachineOperand::MO_Immediate)
+        return true;
+      O << -MO.getImm();
+      return false;
+    case 's':  // The GCC deprecated s modifier
+      if (MO.getType() != MachineOperand::MO_Immediate)
+        return true;
+      O << ((32 - MO.getImm()) & 31);
+      return false;
+    }
+  }
   return true;
 }
 
@@ -422,3 +599,7 @@ bool AsmPrinter::PrintAsmMemoryOperand(const MachineInstr *MI, unsigned OpNo,
   return true;
 }
 
+void AsmPrinter::emitInlineAsmStart() const {}
+
+void AsmPrinter::emitInlineAsmEnd(const MCSubtargetInfo &StartInfo,
+                                  const MCSubtargetInfo *EndInfo) const {}

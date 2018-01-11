@@ -1,5 +1,5 @@
-
-// RUN: %clang -x objective-c-header %S/Inputs/cindex-from-source.h -o %t.pfx.h.gch
+// REQUIRES: native
+// RUN: c-index-test -write-pch %t.pfx.h.gch -x objective-c-header %S/Inputs/cindex-from-source.h
 // RUN: c-index-test -test-load-source local %s -include %t.pfx.h > %t
 // RUN: FileCheck %s < %t
 // CHECK: cindex-from-source.m:{{.*}}:{{.*}}: StructDecl=s0:{{.*}}:{{.*}}

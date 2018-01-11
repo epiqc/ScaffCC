@@ -1,5 +1,4 @@
-// RUN: %clang_cc1 -analyze -analyzer-checker=core,experimental.core.CastToStruct -analyzer-store=region -analyzer-constraints=basic -verify %s
-// RUN: %clang_cc1 -analyze -analyzer-checker=core,experimental.core.CastToStruct -analyzer-store=region -analyzer-constraints=range -verify %s
+// RUN: %clang_analyze_cc1 -analyzer-checker=core,alpha.core.CastToStruct -analyzer-store=region -verify %s
 
 struct s {
   int data;
@@ -136,6 +135,17 @@ void f14() {
 
 void bar(int*);
 
+struct s3 gets3() {
+  struct s3 s;
+  return s;
+}
+
+void accessArrayFieldNoCrash() {
+  bar(gets3().a);
+  bar((gets3().a));
+  bar(((gets3().a)));  
+}
+
 // Test if the array is correctly invalidated.
 void f15() {
   int a[10];
@@ -151,7 +161,7 @@ struct s3 p[1];
 // an ElementRegion of type 'char'. Then load a nonloc::SymbolVal from it and
 // assigns to 'a'. 
 void f16(struct s3 *p) {
-  struct s3 a = *((struct s3*) ((char*) &p[0])); // expected-warning{{Casting a non-structure type to a structure type and accessing a field can lead to memory access errors or data corruption.}}
+  struct s3 a = *((struct s3*) ((char*) &p[0])); // expected-warning{{Casting a non-structure type to a structure type and accessing a field can lead to memory access errors or data corruption}}
 }
 
 void inv(struct s1 *);
@@ -176,3 +186,27 @@ void f18() {
   if (*q) { // no-warning
   }
 }
+
+
+// [PR13927] offsetof replacement macro flagged as "dereference of a null pointer"
+int offset_of_data_array(void)
+{
+  return ((char *)&(((struct s*)0)->data_array)) - ((char *)0); // no-warning
+}
+
+int testPointerArithmeticOnVoid(void *bytes) {
+  int p = 0;
+  if (&bytes[0] == &bytes[1])
+    return 6/p; // no-warning
+  return 0;
+}
+
+int testRValueArraySubscriptExpr(void *bytes) {
+  int *p = (int*)&bytes[0];
+  *p = 0;
+  if (*(int*)&bytes[0] == 0)
+    return 0;
+  return 5/(*p); // no-warning
+}
+
+

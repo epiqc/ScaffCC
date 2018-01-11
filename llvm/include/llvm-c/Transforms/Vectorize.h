@@ -20,7 +20,7 @@
 #ifndef LLVM_C_TRANSFORMS_VECTORIZE_H
 #define LLVM_C_TRANSFORMS_VECTORIZE_H
 
-#include "llvm-c/Core.h"
+#include "llvm-c/Types.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -33,8 +33,14 @@ extern "C" {
  * @{
  */
 
-/** See llvm::createBBVectorizePass function. */
+/** DEPRECATED - Use LLVMAddSLPVectorizePass */
 void LLVMAddBBVectorizePass(LLVMPassManagerRef PM);
+
+/** See llvm::createLoopVectorizePass function. */
+void LLVMAddLoopVectorizePass(LLVMPassManagerRef PM);
+
+/** See llvm::createSLPVectorizerPass function. */
+void LLVMAddSLPVectorizePass(LLVMPassManagerRef PM);
 
 /**
  * @}
@@ -45,4 +51,3 @@ void LLVMAddBBVectorizePass(LLVMPassManagerRef PM);
 #endif /* defined(__cplusplus) */
 
 #endif
-

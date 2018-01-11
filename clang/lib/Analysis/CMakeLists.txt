@@ -1,15 +1,23 @@
-set(LLVM_USED_LIBS clangBasic clangAST)
+set(LLVM_LINK_COMPONENTS
+  Support
+  )
 
 add_clang_library(clangAnalysis
   AnalysisDeclContext.cpp
-  CallGraph.cpp
+  BodyFarm.cpp
   CFG.cpp
   CFGReachabilityAnalysis.cpp
   CFGStmtMap.cpp
+  CallGraph.cpp
+  CloneDetection.cpp
   CocoaConventions.cpp
+  Consumed.cpp
+  CodeInjector.cpp
   Dominators.cpp
   FormatString.cpp
   LiveVariables.cpp
+  OSLog.cpp
+  ObjCNoReturn.cpp
   PostOrderCFGView.cpp
   PrintfFormatString.cpp
   ProgramPoint.cpp
@@ -17,8 +25,13 @@ add_clang_library(clangAnalysis
   ReachableCode.cpp
   ScanfFormatString.cpp
   ThreadSafety.cpp
+  ThreadSafetyCommon.cpp
+  ThreadSafetyLogical.cpp
+  ThreadSafetyTIL.cpp
   UninitializedValues.cpp
-  )
 
-add_dependencies(clangAnalysis ClangAttrClasses ClangAttrList
-                 ClangDiagnosticAnalysis ClangDeclNodes ClangStmtNodes)
+  LINK_LIBS
+  clangAST
+  clangBasic
+  clangLex
+  )

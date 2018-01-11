@@ -1,8 +1,9 @@
 ; RUN: opt < %s -inline -S | FileCheck %s
+; RUN: opt < %s -passes='cgscc(devirt<4>(inline))' -S | FileCheck %s
 ; PR4834
 
 define i32 @test1() {
-  %funcall1_ = call fastcc i32 ()* ()* @f1()
+  %funcall1_ = call fastcc i32 ()* () @f1()
   %executecommandptr1_ = call i32 %funcall1_()
   ret i32 %executecommandptr1_
 }
@@ -40,5 +41,5 @@ define i32 @test2(i8* %this) ssp align 2 {
   ret i32 %X
 }
 
-; CHECK: @test2
+; CHECK-LABEL: @test2(
 ; CHECK-NEXT: ret i32 41

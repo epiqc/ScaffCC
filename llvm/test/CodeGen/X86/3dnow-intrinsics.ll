@@ -1,4 +1,4 @@
-; RUN: llc < %s -march=x86 -mattr=+3dnow | FileCheck %s
+; RUN: llc < %s -mtriple=i686-- -mattr=+3dnow | FileCheck %s
 
 define <8 x i8> @test_pavgusb(x86_mmx %a.coerce, x86_mmx %b.coerce) nounwind readnone {
 ; CHECK: pavgusb
@@ -277,7 +277,7 @@ entry:
 declare x86_mmx @llvm.x86.3dnowa.pi2fw(x86_mmx) nounwind readnone
 
 define <2 x float> @test_pswapdsf(<2 x float> %a) nounwind readnone {
-; CHECK: pswapd
+; CHECK: pswapd {{.*#+}} mm0 = mem[1,0]
 entry:
   %0 = bitcast <2 x float> %a to x86_mmx
   %1 = tail call x86_mmx @llvm.x86.3dnowa.pswapd(x86_mmx %0)
@@ -286,7 +286,7 @@ entry:
 }
 
 define <2 x i32> @test_pswapdsi(<2 x i32> %a) nounwind readnone {
-; CHECK: pswapd
+; CHECK: pswapd {{.*#+}} mm0 = mem[1,0]
 entry:
   %0 = bitcast <2 x i32> %a to x86_mmx
   %1 = tail call x86_mmx @llvm.x86.3dnowa.pswapd(x86_mmx %0)

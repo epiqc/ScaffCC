@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 %s -fsyntax-only -verify
+// RUN: %clang_cc1 %s -fsyntax-only -Wprivate-extern -verify
 
 // PR3310
 struct a x1; // expected-note 2{{forward declaration of 'struct a'}}
@@ -23,7 +23,7 @@ int i1 = 1; // expected-note {{previous definition is here}}
 int i1 = 2; // expected-error {{redefinition of 'i1'}}
 int i1;
 int i1;
-extern int i5; // expected-note {{previous definition is here}}
+extern int i5; // expected-note {{previous declaration is here}}
 static int i5; // expected-error{{static declaration of 'i5' follows non-static declaration}}
 
 static int i2 = 5; // expected-note 1 {{previous definition is here}}
@@ -32,7 +32,9 @@ int i2 = 3; // expected-error{{non-static declaration of 'i2' follows static dec
 static int i3 = 5;
 extern int i3;
 
-__private_extern__ int pExtern;
+// rdar://7703982
+__private_extern__ int pExtern; // expected-warning {{use of __private_extern__ on a declaration may not produce external symbol private to the linkage unit and is deprecated}} \
+// expected-note {{use __attribute__((visibility("hidden"))) attribute instead}}
 int pExtern = 0;
 
 int i4;
@@ -47,7 +49,7 @@ int redef[];  // expected-note {{previous definition is here}}
 int redef[11]; // expected-error{{redefinition of 'redef'}}
 
 void func() {
-  extern int i6; // expected-note {{previous definition is here}}
+  extern int i6; // expected-note {{previous declaration is here}}
   static int i6; // expected-error{{static declaration of 'i6' follows non-static declaration}}
 }
 

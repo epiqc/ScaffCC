@@ -1,21 +1,8 @@
-set(LLVM_TARGET_DEFINITIONS Intrinsics.td)
+add_subdirectory(IR)
+add_subdirectory(Support)
 
-tablegen(LLVM Intrinsics.gen -gen-intrinsic)
-
-add_custom_target(intrinsics_gen ALL
-  DEPENDS ${llvm_builded_incs_dir}/Intrinsics.gen)
-set_target_properties(intrinsics_gen PROPERTIES FOLDER "Tablegenning")
-
-set(LLVM_COMMON_DEPENDS ${LLVM_COMMON_DEPENDS} intrinsics_gen PARENT_SCOPE)
-
-if( MSVC_IDE OR XCODE )
-  # Creates a dummy target containing all headers for the benefit of
-  # Visual Studio users.
-  file(GLOB_RECURSE headers *.h)
-  add_td_sources(headers)
-  add_library(llvm_headers_do_not_build EXCLUDE_FROM_ALL
-    # We need at least one source file:
-    ${LLVM_MAIN_SRC_DIR}/lib/Transforms/Hello/Hello.cpp
-    ${headers})
-  set_target_properties(llvm_headers_do_not_build PROPERTIES FOLDER "Misc")
-endif()
+# If we're doing an out-of-tree build, copy a module map for generated
+# header files into the build area.
+if (NOT "${CMAKE_SOURCE_DIR}" STREQUAL "${CMAKE_BINARY_DIR}")
+  configure_file(module.modulemap.build module.modulemap COPYONLY)
+endif (NOT "${CMAKE_SOURCE_DIR}" STREQUAL "${CMAKE_BINARY_DIR}")

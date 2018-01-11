@@ -12,15 +12,17 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CLANG_LITERALSUPPORT_H
-#define CLANG_LITERALSUPPORT_H
+#ifndef LLVM_CLANG_LEX_LITERALSUPPORT_H
+#define LLVM_CLANG_LEX_LITERALSUPPORT_H
 
+#include "clang/Basic/CharInfo.h"
 #include "clang/Basic/LLVM.h"
-#include "llvm/ADT/APFloat.h"
-#include "llvm/ADT/SmallString.h"
-#include "llvm/Support/DataTypes.h"
 #include "clang/Basic/TokenKinds.h"
-#include <cctype>
+#include "llvm/ADT/APFloat.h"
+#include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/SmallString.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/Support/DataTypes.h"
 
 namespace clang {
 
@@ -31,6 +33,9 @@ class SourceLocation;
 class TargetInfo;
 class SourceManager;
 class LangOptions;
+
+/// Copy characters from Input to Buf, expanding any UCNs.
+void expandUCNs(SmallVectorImpl<char> &Buf, StringRef Input);
 
 /// NumericLiteralParser - This performs strict semantic analysis of the content
 /// of a ppnumber, classifying it as either integer, floating, or erroneous,
@@ -47,16 +52,22 @@ class NumericLiteralParser {
 
   bool saw_exponent, saw_period, saw_ud_suffix;
 
+  SmallString<32> UDSuffixBuf;
+
 public:
-  NumericLiteralParser(const char *begin, const char *end,
-                       SourceLocation Loc, Preprocessor &PP);
-  bool hadError;
-  bool isUnsigned;
-  bool isLong;        // This is *not* set for long long.
-  bool isLongLong;
-  bool isFloat;       // 1.0f
-  bool isImaginary;   // 1.0i
-  bool isMicrosoftInteger;  // Microsoft suffix extension i8, i16, i32, or i64.
+  NumericLiteralParser(StringRef TokSpelling,
+                       SourceLocation TokLoc,
+                       Preprocessor &PP);
+  bool hadError : 1;
+  bool isUnsigned : 1;
+  bool isLong : 1;          // This is *not* set for long long.
+  bool isLongLong : 1;
+  bool isHalf : 1;          // 1.0h
+  bool isFloat : 1;         // 1.0f
+  bool isImaginary : 1;     // 1.0i
+  bool isFloat16 : 1;       // 1.0f16
+  bool isFloat128 : 1;      // 1.0q
+  uint8_t MicrosoftInteger; // Microsoft suffix extension i8, i16, i32, or i64.
 
   bool isIntegerLiteral() const {
     return !saw_period && !saw_exponent;
@@ -70,12 +81,14 @@ public:
   }
   StringRef getUDSuffix() const {
     assert(saw_ud_suffix);
-    return StringRef(SuffixBegin, ThisTokEnd - SuffixBegin);
+    return UDSuffixBuf;
   }
   unsigned getUDSuffixOffset() const {
     assert(saw_ud_suffix);
     return SuffixBegin - ThisTokBegin;
   }
+
+  static bool isValidUDSuffix(const LangOptions &LangOpts, StringRef Suffix);
 
   unsigned getRadix() const { return radix; }
 
@@ -95,11 +108,26 @@ public:
 private:
 
   void ParseNumberStartingWithZero(SourceLocation TokLoc);
+  void ParseDecimalOrOctalCommon(SourceLocation TokLoc);
+
+  static bool isDigitSeparator(char C) { return C == '\''; }
+
+  /// \brief Determine whether the sequence of characters [Start, End) contains
+  /// any real digits (not digit separators).
+  bool containsDigits(const char *Start, const char *End) {
+    return Start != End && (Start + 1 != End || !isDigitSeparator(Start[0]));
+  }
+
+  enum CheckSeparatorKind { CSK_BeforeDigits, CSK_AfterDigits };
+
+  /// \brief Ensure that we don't have a digit separator here.
+  void checkSeparator(SourceLocation TokLoc, const char *Pos,
+                      CheckSeparatorKind IsAfterDigits);
 
   /// SkipHexDigits - Read and skip over any hex digits, up to End.
   /// Return a pointer to the first non-hex digit or End.
   const char *SkipHexDigits(const char *ptr) {
-    while (ptr != ThisTokEnd && isxdigit(*ptr))
+    while (ptr != ThisTokEnd && (isHexDigit(*ptr) || isDigitSeparator(*ptr)))
       ptr++;
     return ptr;
   }
@@ -107,7 +135,8 @@ private:
   /// SkipOctalDigits - Read and skip over any octal digits, up to End.
   /// Return a pointer to the first non-hex digit or End.
   const char *SkipOctalDigits(const char *ptr) {
-    while (ptr != ThisTokEnd && ((*ptr >= '0') && (*ptr <= '7')))
+    while (ptr != ThisTokEnd &&
+           ((*ptr >= '0' && *ptr <= '7') || isDigitSeparator(*ptr)))
       ptr++;
     return ptr;
   }
@@ -115,7 +144,7 @@ private:
   /// SkipDigits - Read and skip over any digits, up to End.
   /// Return a pointer to the first non-hex digit or End.
   const char *SkipDigits(const char *ptr) {
-    while (ptr != ThisTokEnd && isdigit(*ptr))
+    while (ptr != ThisTokEnd && (isDigit(*ptr) || isDigitSeparator(*ptr)))
       ptr++;
     return ptr;
   }
@@ -123,7 +152,8 @@ private:
   /// SkipBinaryDigits - Read and skip over any binary digits, up to End.
   /// Return a pointer to the first non-binary digit or End.
   const char *SkipBinaryDigits(const char *ptr) {
-    while (ptr != ThisTokEnd && (*ptr == '0' || *ptr == '1'))
+    while (ptr != ThisTokEnd &&
+           (*ptr == '0' || *ptr == '1' || isDigitSeparator(*ptr)))
       ptr++;
     return ptr;
   }
@@ -147,6 +177,7 @@ public:
   bool hadError() const { return HadError; }
   bool isAscii() const { return Kind == tok::char_constant; }
   bool isWide() const { return Kind == tok::wide_char_constant; }
+  bool isUTF8() const { return Kind == tok::utf8_char_constant; }
   bool isUTF16() const { return Kind == tok::utf16_char_constant; }
   bool isUTF32() const { return Kind == tok::utf32_char_constant; }
   bool isMultiChar() const { return IsMultiChar; }
@@ -177,15 +208,16 @@ class StringLiteralParser {
   unsigned UDSuffixToken;
   unsigned UDSuffixOffset;
 public:
-  StringLiteralParser(const Token *StringToks, unsigned NumStringToks,
+  StringLiteralParser(ArrayRef<Token> StringToks,
                       Preprocessor &PP, bool Complain = true);
-  StringLiteralParser(const Token *StringToks, unsigned NumStringToks,
+  StringLiteralParser(ArrayRef<Token> StringToks,
                       const SourceManager &sm, const LangOptions &features,
-                      const TargetInfo &target, DiagnosticsEngine *diags = 0)
+                      const TargetInfo &target,
+                      DiagnosticsEngine *diags = nullptr)
     : SM(sm), Features(features), Target(target), Diags(diags),
       MaxTokenLength(0), SizeBound(0), CharByteWidth(0), Kind(tok::unknown),
       ResultPtr(ResultBuf.data()), hadError(false), Pascal(false) {
-    init(StringToks, NumStringToks);
+    init(StringToks);
   }
     
 
@@ -228,10 +260,13 @@ public:
     return UDSuffixOffset;
   }
 
+  static bool isValidUDSuffix(const LangOptions &LangOpts, StringRef Suffix);
+
 private:
-  void init(const Token *StringToks, unsigned NumStringToks);
-  bool CopyStringFragment(StringRef Fragment);
-  bool DiagnoseBadString(const Token& Tok);
+  void init(ArrayRef<Token> StringToks);
+  bool CopyStringFragment(const Token &Tok, const char *TokBegin,
+                          StringRef Fragment);
+  void DiagnoseLexingError(SourceLocation Loc);
 };
 
 }  // end namespace clang

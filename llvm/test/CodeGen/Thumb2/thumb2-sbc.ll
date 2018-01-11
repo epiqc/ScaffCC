@@ -1,4 +1,4 @@
-; RUN: llc -march=thumb -mattr=+thumb2 < %s | FileCheck %s
+; RUN: llc -mtriple=thumb-eabi -mcpu=arm1156t2-s -mattr=+thumb2 %s -o - | FileCheck %s
 
 define i64 @f1(i64 %a, i64 %b) {
 ; CHECK: f1
@@ -54,7 +54,7 @@ define i64 @f6(i64 %a) {
 
 ; Example from numerics code that manually computes wider-than-64 values.
 ;
-; CHECK: livecarry:
+; CHECK-LABEL: livecarry:
 ; CHECK: adds
 ; CHECK: adc
 define i64 @livecarry(i64 %carry, i32 %digit) nounwind {

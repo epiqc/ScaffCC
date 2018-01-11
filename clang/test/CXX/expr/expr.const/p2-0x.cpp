@@ -33,11 +33,11 @@ struct NonConstexpr3 {
   int m : NonConstexpr2().n; // expected-error {{constant expression}} expected-note {{undefined constructor 'NonConstexpr2'}}
 };
 struct NonConstexpr4 {
-  NonConstexpr4(); // expected-note {{declared here}}
+  NonConstexpr4();
   int n;
 };
 struct NonConstexpr5 {
-  int n : NonConstexpr4().n; // expected-error {{constant expression}} expected-note {{non-constexpr constructor 'NonConstexpr4' cannot be used in a constant expression}}
+  int n : NonConstexpr4().n; // expected-error {{constant expression}} expected-note {{non-literal type 'NonConstexpr4' cannot be used in a constant expression}}
 };
 
 // - an invocation of an undefined constexpr function or an undefined
@@ -118,7 +118,7 @@ namespace IncompleteClassTypeAddr {
   constexpr S (*p2)[] = &sArr; // ok
 
   struct S {
-    constexpr S *operator&() { return nullptr; }
+    constexpr S *operator&() const { return nullptr; }
   };
   constexpr S *q = &s; // ok
   static_assert(!q, "");
@@ -138,22 +138,22 @@ namespace UndefinedBehavior {
     case (int)(unsigned)(long long)4.4e9: // ok
     case (int)(float)1e300: // expected-error {{constant expression}} expected-note {{value 1.0E+300 is outside the range of representable values of type 'float'}}
     case (int)((float)1e37 / 1e30): // ok
-    case (int)(__fp16)65536: // expected-error {{constant expression}} expected-note {{value 65536 is outside the range of representable values of type 'half'}}
+    case (int)(__fp16)65536: // expected-error {{constant expression}} expected-note {{value 65536 is outside the range of representable values of type '__fp16'}}
       break;
     }
   }
 
   constexpr int int_min = ~0x7fffffff;
   constexpr int minus_int_min = -int_min; // expected-error {{constant expression}} expected-note {{value 2147483648 is outside the range}}
-  constexpr int div0 = 3 / 0; // expected-error {{constant expression}} expected-note {{division by zero}} expected-warning {{undefined}}
-  constexpr int mod0 = 3 % 0; // expected-error {{constant expression}} expected-note {{division by zero}} expected-warning {{undefined}}
+  constexpr int div0 = 3 / 0; // expected-error {{constant expression}} expected-note {{division by zero}}
+  constexpr int mod0 = 3 % 0; // expected-error {{constant expression}} expected-note {{division by zero}}
   constexpr int int_min_div_minus_1 = int_min / -1; // expected-error {{constant expression}} expected-note {{value 2147483648 is outside the range}}
   constexpr int int_min_mod_minus_1 = int_min % -1; // expected-error {{constant expression}} expected-note {{value 2147483648 is outside the range}}
 
-  constexpr int shl_m1 = 0 << -1; // expected-error {{constant expression}} expected-note {{negative shift count -1}} expected-warning {{negative}}
+  constexpr int shl_m1 = 0 << -1; // expected-error {{constant expression}} expected-note {{negative shift count -1}}
   constexpr int shl_0 = 0 << 0; // ok
   constexpr int shl_31 = 0 << 31; // ok
-  constexpr int shl_32 = 0 << 32; // expected-error {{constant expression}} expected-note {{shift count 32 >= width of type 'int' (32}} expected-warning {{>= width of type}}
+  constexpr int shl_32 = 0 << 32; // expected-error {{constant expression}} expected-note {{shift count 32 >= width of type 'int' (32}}
   constexpr int shl_unsigned_negative = unsigned(-3) << 1; // ok
   constexpr int shl_unsigned_into_sign = 1u << 31; // ok
   constexpr int shl_unsigned_overflow = 1024u << 31; // ok
@@ -166,10 +166,10 @@ namespace UndefinedBehavior {
   constexpr int shl_signed_overflow = 1024 << 31; // expected-error {{constant expression}} expected-note {{signed left shift discards bits}} expected-warning {{requires 43 bits to represent}}
   constexpr int shl_signed_ok2 = 1024 << 20; // ok
 
-  constexpr int shr_m1 = 0 >> -1; // expected-error {{constant expression}} expected-note {{negative shift count -1}} expected-warning {{negative}}
+  constexpr int shr_m1 = 0 >> -1; // expected-error {{constant expression}} expected-note {{negative shift count -1}}
   constexpr int shr_0 = 0 >> 0; // ok
   constexpr int shr_31 = 0 >> 31; // ok
-  constexpr int shr_32 = 0 >> 32; // expected-error {{constant expression}} expected-note {{shift count 32 >= width of type}} expected-warning {{>= width of type}}
+  constexpr int shr_32 = 0 >> 32; // expected-error {{constant expression}} expected-note {{shift count 32 >= width of type}}
 
   struct S {
     int m;
@@ -202,10 +202,12 @@ namespace UndefinedBehavior {
     static_assert((A*)nb == 0, "");
     static_assert((B*)na == 0, "");
     constexpr const int &nf = nb->n; // expected-error {{constant expression}} expected-note {{cannot access field of null pointer}}
-    constexpr const int &np = (*(int(*)[4])nullptr)[2]; // expected-error {{constant expression}} expected-note {{cannot access array element of null pointer}}
+    constexpr const int *np1 = (int*)nullptr + 0; // ok
+    constexpr const int *np2 = &(*(int(*)[4])nullptr)[0]; // ok
+    constexpr const int *np3 = &(*(int(*)[4])nullptr)[2]; // expected-error {{constant expression}} expected-note {{cannot perform pointer arithmetic on null pointer}}
 
     struct C {
-      constexpr int f() { return 0; }
+      constexpr int f() const { return 0; }
     } constexpr c = C();
     constexpr int k1 = c.f(); // ok
     constexpr int k2 = ((C*)nullptr)->f(); // expected-error {{constant expression}} expected-note {{cannot call member function on null pointer}}
@@ -240,8 +242,8 @@ namespace UndefinedBehavior {
     constexpr int n13 = n5 + n5; // expected-error {{constant expression}} expected-note {{value -4294967296 is outside the range of }}
     constexpr int n14 = n3 - n5; // expected-error {{constant expression}} expected-note {{value 4294967295 is outside the range of }}
     constexpr int n15 = n5 * n5; // expected-error {{constant expression}} expected-note {{value 4611686018427387904 is outside the range of }}
-    constexpr signed char c1 = 100 * 2; // ok
-    constexpr signed char c2 = '\x64' * '\2'; // also ok
+    constexpr signed char c1 = 100 * 2; // ok expected-warning{{changes value}}
+    constexpr signed char c2 = '\x64' * '\2'; // also ok  expected-warning{{changes value}}
     constexpr long long ll1 = 0x7fffffffffffffff; // ok
     constexpr long long ll2 = ll1 + 1; // expected-error {{constant}} expected-note {{ 9223372036854775808 }}
     constexpr long long ll3 = -ll1 - 1; // ok
@@ -275,9 +277,7 @@ namespace UndefinedBehavior {
 
 // - a lambda-expression (5.1.2);
 struct Lambda {
-  // FIXME: clang crashes when trying to parse this! Revisit this check once
-  // lambdas are fully implemented.
-  //int n : []{ return 1; }();
+  int n : []{ return 1; }(); // expected-error {{constant expression}} expected-error {{integral constant expression}} expected-note {{non-literal type}}
 };
 
 // - an lvalue-to-rvalue conversion (4.1) unless it is applied to
@@ -321,8 +321,8 @@ namespace LValueToRValue {
   //   temporary object whose lifetime has not ended, initialized with a
   //   constant expression;
   constexpr volatile S f() { return S(); }
-  static_assert(f().i, ""); // ok! there's no lvalue-to-rvalue conversion here!
-  static_assert(((volatile const S&&)(S)0).i, ""); // expected-error {{constant expression}}
+  static_assert(f().i, ""); // expected-error {{constant expression}} expected-note {{read of volatile-qualified type}}
+  static_assert(((volatile const S&&)(S)0).i, ""); // expected-error {{constant expression}} expected-note {{read of volatile-qualified type}}
 }
 
 // DR1312: The proposed wording for this defect has issues, so we ignore this
@@ -461,14 +461,14 @@ namespace UnspecifiedRelations {
   constexpr bool u2 = p > q; // expected-error {{constant expression}}
   constexpr bool u3 = p <= q; // expected-error {{constant expression}}
   constexpr bool u4 = p >= q; // expected-error {{constant expression}}
-  constexpr bool u5 = p < 0; // expected-error {{constant expression}}
-  constexpr bool u6 = p <= 0; // expected-error {{constant expression}}
-  constexpr bool u7 = p > 0; // expected-error {{constant expression}}
-  constexpr bool u8 = p >= 0; // expected-error {{constant expression}}
-  constexpr bool u9 = 0 < q; // expected-error {{constant expression}}
-  constexpr bool u10 = 0 <= q; // expected-error {{constant expression}}
-  constexpr bool u11 = 0 > q; // expected-error {{constant expression}}
-  constexpr bool u12 = 0 >= q; // expected-error {{constant expression}}
+  constexpr bool u5 = p < (int*)0; // expected-error {{constant expression}}
+  constexpr bool u6 = p <= (int*)0; // expected-error {{constant expression}}
+  constexpr bool u7 = p > (int*)0; // expected-error {{constant expression}}
+  constexpr bool u8 = p >= (int*)0; // expected-error {{constant expression}}
+  constexpr bool u9 = (int*)0 < q; // expected-error {{constant expression}}
+  constexpr bool u10 = (int*)0 <= q; // expected-error {{constant expression}}
+  constexpr bool u11 = (int*)0 > q; // expected-error {{constant expression}}
+  constexpr bool u12 = (int*)0 >= q; // expected-error {{constant expression}}
   void f(), g();
 
   constexpr void (*pf)() = &f, (*pg)() = &g;
@@ -481,17 +481,19 @@ namespace UnspecifiedRelations {
   public:
     constexpr A() : a(0), b(0) {}
     int a;
-    constexpr bool cmp() { return &a < &b; } // expected-error {{constexpr function never produces a constant expression}} expected-note {{comparison of address of fields 'a' and 'b' of 'A' with differing access specifiers (public vs private) has unspecified value}}
+    constexpr bool cmp() const { return &a < &b; } // expected-note {{comparison of address of fields 'a' and 'b' of 'A' with differing access specifiers (public vs private) has unspecified value}}
   private:
     int b;
   };
+  static_assert(A().cmp(), ""); // expected-error {{constant expression}} expected-note {{in call}}
   class B {
   public:
     A a;
-    constexpr bool cmp() { return &a.a < &b.a; } // expected-error {{constexpr function never produces a constant expression}} expected-note {{comparison of address of fields 'a' and 'b' of 'B' with differing access specifiers (public vs protected) has unspecified value}}
+    constexpr bool cmp() const { return &a.a < &b.a; } // expected-note {{comparison of address of fields 'a' and 'b' of 'B' with differing access specifiers (public vs protected) has unspecified value}}
   protected:
     A b;
   };
+  static_assert(B().cmp(), ""); // expected-error {{constant expression}} expected-note {{in call}}
 
   // If two pointers point to different base sub-objects of the same object, or
   // one points to a base subobject and the other points to a member, the result
@@ -520,7 +522,7 @@ namespace UnspecifiedRelations {
   constexpr void *null = 0;
   constexpr void *pv = (void*)&s.a;
   constexpr void *qv = (void*)&s.b;
-  constexpr bool v1 = null < 0;
+  constexpr bool v1 = null < (int*)0;
   constexpr bool v2 = null < pv; // expected-error {{constant expression}}
   constexpr bool v3 = null == pv; // ok
   constexpr bool v4 = qv == pv; // ok
@@ -594,3 +596,16 @@ static const bool or_value = and_or<true>::or_value;
 
 static_assert(and_value == false, "");
 static_assert(or_value == true, "");
+
+namespace rdar13090123 {
+  typedef __INTPTR_TYPE__ intptr_t;
+
+  constexpr intptr_t f(intptr_t x) {
+    return (((x) >> 21) * 8);
+  }
+
+  extern "C" int foo;
+
+  constexpr intptr_t i = f((intptr_t)&foo - 10); // expected-error{{constexpr variable 'i' must be initialized by a constant expression}} \
+  // expected-note{{reinterpret_cast}}
+}

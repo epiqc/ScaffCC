@@ -1,6 +1,5 @@
-// RUN: %clang_cc1 -fcxx-exceptions -fexceptions -analyze -analyzer-checker=deadcode.DeadStores -verify -Wno-unreachable-code %s
-// RUN: %clang_cc1 -fcxx-exceptions -fexceptions -analyze -analyzer-store=region -analyzer-constraints=basic -analyzer-checker=deadcode.DeadStores -verify -Wno-unreachable-code %s
-// RUN: %clang_cc1 -fcxx-exceptions -fexceptions -analyze -analyzer-store=region -analyzer-constraints=range -analyzer-checker=deadcode.DeadStores -verify -Wno-unreachable-code %s
+// RUN: %clang_analyze_cc1 -fcxx-exceptions -fexceptions -fblocks -std=c++11 -analyzer-checker=deadcode.DeadStores -verify -Wno-unreachable-code %s
+// RUN: %clang_analyze_cc1 -fcxx-exceptions -fexceptions -fblocks -std=c++11 -analyzer-store=region -analyzer-checker=deadcode.DeadStores -verify -Wno-unreachable-code %s
 
 //===----------------------------------------------------------------------===//
 // Basic dead store checking (but in C++ mode).
@@ -108,5 +107,98 @@ namespace foo {
     x = 2;
     return x;
   }
+}
+
+//===----------------------------------------------------------------------===//
+// Dead stores in with EH code.
+//===----------------------------------------------------------------------===//
+
+void test_5_Aux();
+int test_5() {
+  int x = 0;
+  try {
+    x = 2; // no-warning
+    test_5_Aux();
+  }
+  catch (int z) {
+    return x + z;
+  }
+  return 1;
+}
+
+
+int test_6_aux(unsigned x);
+
+void test_6() {
+  unsigned currDestLen = 0;  // no-warning
+  try {
+    while (test_6_aux(currDestLen)) {
+      currDestLen += 2; // no-warning
+    } 
+  }
+  catch (void *) {}
+}
+
+void test_6b() {
+  unsigned currDestLen = 0;  // no-warning
+  try {
+    while (test_6_aux(currDestLen)) {
+      currDestLen += 2; // expected-warning {{Value stored to 'currDestLen' is never read}}
+      break;
+    } 
+  }
+  catch (void *) {}
+}
+
+
+void testCXX11Using() {
+  using Int = int;
+  Int value;
+  value = 1; // expected-warning {{never read}}
+}
+
+//===----------------------------------------------------------------------===//
+// Dead stores in template instantiations (do not warn).
+//===----------------------------------------------------------------------===//
+
+template <bool f> int radar13213575_testit(int i) {
+  int x = 5+i; // warning: Value stored to 'x' during its initialization is never read
+  int y = 7;
+  if (f)
+    return x;
+  else
+    return y;
+}
+
+int radar_13213575() {
+  return radar13213575_testit<true>(5) + radar13213575_testit<false>(3);
+}
+
+template <class T>
+void test_block_in_dependent_context(typename T::some_t someArray) {
+  ^{
+     int i = someArray[0]; // no-warning
+  }();
+}
+
+void test_block_in_non_dependent_context(int *someArray) {
+  ^{
+     int i = someArray[0]; // expected-warning {{Value stored to 'i' during its initialization is never read}}
+  }();
+}
+
+
+//===----------------------------------------------------------------------===//
+// Dead store checking involving lambdas.
+//===----------------------------------------------------------------------===//
+
+int basicLambda(int i, int j) {
+  i = 5; // no warning
+  j = 6; // no warning
+  [i] { (void)i; }();
+  [&j] { (void)j; }();
+  i = 2;
+  j = 3;
+  return i + j;
 }
 

@@ -1,4 +1,3 @@
-// RUN: %clang_cc1 -fsyntax-only -verify -triple x86_64-pc-linux-gnu %s
 // RUN: %clang_cc1 -fsyntax-only -verify -triple i686-apple-darwin10 %s
 
 // CC qualifier can be applied only to functions
@@ -7,7 +6,7 @@ int __attribute__((fastcall)) var2; // expected-warning{{'fastcall' only applies
 
 // Different CC qualifiers are not compatible
 void __attribute__((stdcall, fastcall)) foo3(void); // expected-error{{fastcall and stdcall attributes are not compatible}}
-void __attribute__((stdcall)) foo4(); // expected-note{{previous declaration is here}}
+void __attribute__((stdcall)) foo4(); // expected-note{{previous declaration is here}} expected-warning{{function with no prototype cannot use the stdcall calling convention}}
 void __attribute__((fastcall)) foo4(void); // expected-error{{function declared 'fastcall' here was previously declared 'stdcall'}}
 
 // rdar://8876096

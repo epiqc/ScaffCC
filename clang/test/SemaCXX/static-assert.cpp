@@ -34,3 +34,37 @@ static_assert(false, u"\U000317FF"); // expected-error {{static_assert failed u"
 static_assert(false, u8"Ω"); // expected-error {{static_assert failed u8"\316\251"}}
 static_assert(false, L"\u1234"); // expected-error {{static_assert failed L"\x1234"}}
 static_assert(false, L"\x1ff" "0\x123" "fx\xfffff" "goop"); // expected-error {{static_assert failed L"\x1FF""0\x123""fx\xFFFFFgoop"}}
+
+template<typename T> struct AlwaysFails {
+  // Only give one error here.
+  static_assert(false, ""); // expected-error {{static_assert failed}}
+};
+AlwaysFails<int> alwaysFails;
+
+template<typename T> struct StaticAssertProtected {
+  static_assert(__is_literal(T), ""); // expected-error {{static_assert failed}}
+  static constexpr T t = {}; // no error here
+};
+struct X { ~X(); };
+StaticAssertProtected<int> sap1;
+StaticAssertProtected<X> sap2; // expected-note {{instantiation}}
+
+static_assert(true); // expected-warning {{C++17 extension}}
+static_assert(false); // expected-error-re {{failed{{$}}}} expected-warning {{extension}}
+
+
+// Diagnostics for static_assert with multiple conditions
+template<typename T> struct first_trait {
+  static const bool value = false;
+};
+
+template<>
+struct first_trait<X> {
+  static const bool value = true;
+};
+
+template<typename T> struct second_trait {
+  static const bool value = false;
+};
+
+static_assert(first_trait<X>::value && second_trait<X>::value, "message"); // expected-error{{static_assert failed due to requirement 'second_trait<X>::value' "message"}}

@@ -6,30 +6,32 @@ target triple = "x86_64-apple-macosx10.7.0"
 
 %"class.N1::A" = type { i8 }
 
-define void @_Z3barN2N11AE() nounwind uwtable ssp {
+define void @_Z3barN2N11AE() nounwind uwtable ssp !dbg !5 {
 entry:
   %youra = alloca %"class.N1::A", align 1
-  call void @llvm.dbg.declare(metadata !{%"class.N1::A"* %youra}, metadata !9), !dbg !13
+  call void @llvm.dbg.declare(metadata %"class.N1::A"* %youra, metadata !9, metadata !DIExpression()), !dbg !13
   ret void, !dbg !14
 }
 
-declare void @llvm.dbg.declare(metadata, metadata) nounwind readnone
+declare void @llvm.dbg.declare(metadata, metadata, metadata) nounwind readnone
 
 !llvm.dbg.cu = !{!0}
+!llvm.module.flags = !{!18}
 
-!0 = metadata !{i32 720913, i32 0, i32 4, metadata !"n2.c", metadata !"/private/tmp", metadata !"clang version 3.0 (trunk 137954)", i1 true, i1 false, metadata !"", i32 0, metadata !1, metadata !1, metadata !3, metadata !1} ; [ DW_TAG_compile_unit ]
-!1 = metadata !{metadata !2}
-!2 = metadata !{i32 0}
-!3 = metadata !{metadata !4}
-!4 = metadata !{metadata !5}
-!5 = metadata !{i32 720942, i32 0, metadata !6, metadata !"bar", metadata !"bar", metadata !"_Z3barN2N11AE", metadata !6, i32 4, metadata !7, i1 false, i1 true, i32 0, i32 0, i32 0, i32 256, i1 false, void ()* @_Z3barN2N11AE, null, null} ; [ DW_TAG_subprogram ]
-!6 = metadata !{i32 720937, metadata !"n2.c", metadata !"/private/tmp", null} ; [ DW_TAG_file_type ]
-!7 = metadata !{i32 720917, metadata !6, metadata !"", metadata !6, i32 0, i64 0, i64 0, i32 0, i32 0, i32 0, metadata !8, i32 0, i32 0} ; [ DW_TAG_subroutine_type ]
-!8 = metadata !{null}
-!9 = metadata !{i32 721153, metadata !5, metadata !"youra", metadata !6, i32 16777220, metadata !10, i32 0, i32 0} ; [ DW_TAG_arg_variable ]
-!10 = metadata !{i32 720898, metadata !11, metadata !"A", metadata !12, i32 3, i64 8, i64 8, i32 0, i32 0, null, metadata !2, i32 0, null, null} ; [ DW_TAG_class_type ]
-!11 = metadata !{i32 720953, null, metadata !"N1", metadata !12, i32 2} ; [ DW_TAG_namespace ]
-!12 = metadata !{i32 720937, metadata !"./n.h", metadata !"/private/tmp", null} ; [ DW_TAG_file_type ]
-!13 = metadata !{i32 4, i32 12, metadata !5, null}
-!14 = metadata !{i32 4, i32 20, metadata !15, null}
-!15 = metadata !{i32 720907, metadata !5, i32 4, i32 19, metadata !6, i32 0} ; [ DW_TAG_lexical_block ]
+!0 = distinct !DICompileUnit(language: DW_LANG_C_plus_plus, producer: "clang version 3.0 (trunk 137954)", isOptimized: true, emissionKind: FullDebug, file: !16, enums: !2, retainedTypes: !2, globals: !2)
+!1 = !{!2}
+!2 = !{}
+!5 = distinct !DISubprogram(name: "bar", linkageName: "_Z3barN2N11AE", file: !16, line: 4, isLocal: false, isDefinition: true, virtualIndex: 6, flags: DIFlagPrototyped, isOptimized: false, unit: !0, scope: !6, type: !7)
+!6 = !DIFile(filename: "n2.c", directory: "/private/tmp")
+!7 = !DISubroutineType(types: !8)
+!8 = !{null}
+!9 = !DILocalVariable(name: "youra", line: 4, arg: 1, scope: !5, file: !6, type: !10)
+!10 = !DICompositeType(tag: DW_TAG_class_type, name: "A", line: 3, size: 8, align: 8, file: !17, scope: !11, elements: !2)
+!11 = !DINamespace(name: "N1", scope: null)
+!12 = !DIFile(filename: "./n.h", directory: "/private/tmp")
+!13 = !DILocation(line: 4, column: 12, scope: !5)
+!14 = !DILocation(line: 4, column: 20, scope: !15)
+!15 = distinct !DILexicalBlock(line: 4, column: 19, file: !16, scope: !5)
+!16 = !DIFile(filename: "n2.c", directory: "/private/tmp")
+!17 = !DIFile(filename: "./n.h", directory: "/private/tmp")
+!18 = !{i32 1, !"Debug Info Version", i32 3}

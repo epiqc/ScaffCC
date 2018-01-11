@@ -1,18 +1,19 @@
-; RUN: llc < %s -mtriple=thumbv7-none-linux-gnueabi | FileCheck %s
+; RUN: llc < %s -mtriple=thumbv7-none-linux-gnueabi -arm-atomic-cfg-tidy=0 | FileCheck %s
 ; PR4659
 ; PR4682
 
 define hidden i32 @__gcov_execlp(i8* %path, i8* %arg, ...) nounwind {
 entry:
-; CHECK: __gcov_execlp:
+; CHECK-LABEL: __gcov_execlp:
 ; CHECK: sub sp, #8
 ; CHECK: push
-; CHECK: add r7, sp, #4
-; CHECK: sub.w r4, r7, #4
+; CHECK: add r7, sp, #8
+; CHECK: sub.w r4, r7, #8
 ; CHECK: mov sp, r4
 ; CHECK-NOT: mov sp, r7
 ; CHECK: add sp, #8
 	call void @__gcov_flush() nounwind
+	call void @llvm.va_start(i8* null)
 	br i1 undef, label %bb5, label %bb
 
 bb:		; preds = %bb, %entry
@@ -27,3 +28,5 @@ bb5:		; preds = %bb, %entry
 declare hidden void @__gcov_flush()
 
 declare i32 @execvp(i8*, i8**) nounwind
+
+declare void @llvm.va_start(i8*) nounwind

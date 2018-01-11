@@ -1,4 +1,4 @@
-//===-- MipsMachineFunctionInfo.h - Private data used for Mips ----*- C++ -*-=//
+//===- MipsMachineFunctionInfo.h - Private data used for Mips ---*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -11,101 +11,116 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef MIPS_MACHINE_FUNCTION_INFO_H
-#define MIPS_MACHINE_FUNCTION_INFO_H
+#ifndef LLVM_LIB_TARGET_MIPS_MIPSMACHINEFUNCTION_H
+#define LLVM_LIB_TARGET_MIPS_MIPSMACHINEFUNCTION_H
 
+#include "Mips16HardFloatInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
-#include "llvm/CodeGen/MachineFrameInfo.h"
-#include <utility>
+#include "llvm/CodeGen/MachineMemOperand.h"
+#include <map>
 
 namespace llvm {
 
 /// MipsFunctionInfo - This class is derived from MachineFunction private
 /// Mips target-specific information for each MachineFunction.
 class MipsFunctionInfo : public MachineFunctionInfo {
-  virtual void anchor();
-
-  MachineFunction& MF;
-  /// SRetReturnReg - Some subtargets require that sret lowering includes
-  /// returning the value of the returned struct in a register. This field
-  /// holds the virtual register into which the sret argument is passed.
-  unsigned SRetReturnReg;
-
-  /// GlobalBaseReg - keeps track of the virtual register initialized for
-  /// use as the global base register. This is used for PIC in some PIC
-  /// relocation models.
-  unsigned GlobalBaseReg;
-
-  /// VarArgsFrameIndex - FrameIndex for start of varargs area.
-  int VarArgsFrameIndex;
-
-  // Range of frame object indices.
-  // InArgFIRange: Range of indices of all frame objects created during call to
-  //               LowerFormalArguments.
-  // OutArgFIRange: Range of indices of all frame objects created during call to
-  //                LowerCall except for the frame object for restoring $gp.
-  std::pair<int, int> InArgFIRange, OutArgFIRange;
-  int GPFI; // Index of the frame object for restoring $gp
-  mutable int DynAllocFI; // Frame index of dynamically allocated stack area.
-  unsigned MaxCallFrameSize;
-
-  bool EmitNOAT;
-
 public:
-  MipsFunctionInfo(MachineFunction& MF)
-  : MF(MF), SRetReturnReg(0), GlobalBaseReg(0),
-    VarArgsFrameIndex(0), InArgFIRange(std::make_pair(-1, 0)),
-    OutArgFIRange(std::make_pair(-1, 0)), GPFI(0), DynAllocFI(0),
-    MaxCallFrameSize(0), EmitNOAT(false)
-  {}
+  MipsFunctionInfo(MachineFunction &MF) : MF(MF) {}
 
-  bool isInArgFI(int FI) const {
-    return FI <= InArgFIRange.first && FI >= InArgFIRange.second;
-  }
-  void setLastInArgFI(int FI) { InArgFIRange.second = FI; }
-
-  bool isOutArgFI(int FI) const {
-    return FI <= OutArgFIRange.first && FI >= OutArgFIRange.second;
-  }
-  void extendOutArgFIRange(int FirstFI, int LastFI) {
-    if (!OutArgFIRange.second)
-      // this must be the first time this function was called.
-      OutArgFIRange.first = FirstFI;
-    OutArgFIRange.second = LastFI;
-  }
-
-  int getGPFI() const { return GPFI; }
-  void setGPFI(int FI) { GPFI = FI; }
-  bool needGPSaveRestore() const { return getGPFI(); }
-  bool isGPFI(int FI) const { return GPFI && GPFI == FI; }
-
-  // The first call to this function creates a frame object for dynamically
-  // allocated stack area.
-  int getDynAllocFI() const {
-    if (!DynAllocFI)
-      DynAllocFI = MF.getFrameInfo()->CreateFixedObject(4, 0, true);
-
-    return DynAllocFI;
-  }
-  bool isDynAllocFI(int FI) const { return DynAllocFI && DynAllocFI == FI; }
+  ~MipsFunctionInfo() override;
 
   unsigned getSRetReturnReg() const { return SRetReturnReg; }
   void setSRetReturnReg(unsigned Reg) { SRetReturnReg = Reg; }
 
-  bool globalBaseRegFixed() const;
   bool globalBaseRegSet() const;
   unsigned getGlobalBaseReg();
 
   int getVarArgsFrameIndex() const { return VarArgsFrameIndex; }
   void setVarArgsFrameIndex(int Index) { VarArgsFrameIndex = Index; }
 
-  unsigned getMaxCallFrameSize() const { return MaxCallFrameSize; }
-  void setMaxCallFrameSize(unsigned S) { MaxCallFrameSize = S; }
+  bool hasByvalArg() const { return HasByvalArg; }
+  void setFormalArgInfo(unsigned Size, bool HasByval) {
+    IncomingArgSize = Size;
+    HasByvalArg = HasByval;
+  }
 
-  bool getEmitNOAT() const { return EmitNOAT; }
-  void setEmitNOAT() { EmitNOAT = true; }
+  unsigned getIncomingArgSize() const { return IncomingArgSize; }
+
+  bool callsEhReturn() const { return CallsEhReturn; }
+  void setCallsEhReturn() { CallsEhReturn = true; }
+
+  void createEhDataRegsFI();
+  int getEhDataRegFI(unsigned Reg) const { return EhDataRegFI[Reg]; }
+  bool isEhDataRegFI(int FI) const;
+
+  /// Create a MachinePointerInfo that has an ExternalSymbolPseudoSourceValue
+  /// object representing a GOT entry for an external function.
+  MachinePointerInfo callPtrInfo(const char *ES);
+
+  // Functions with the "interrupt" attribute require special prologues,
+  // epilogues and additional spill slots.
+  bool isISR() const { return IsISR; }
+  void setISR() { IsISR = true; }
+  void createISRRegFI();
+  int getISRRegFI(unsigned Reg) const { return ISRDataRegFI[Reg]; }
+  bool isISRRegFI(int FI) const;
+
+  /// Create a MachinePointerInfo that has a GlobalValuePseudoSourceValue object
+  /// representing a GOT entry for a global function.
+  MachinePointerInfo callPtrInfo(const GlobalValue *GV);
+
+  void setSaveS2() { SaveS2 = true; }
+  bool hasSaveS2() const { return SaveS2; }
+
+  int getMoveF64ViaSpillFI(const TargetRegisterClass *RC);
+
+  std::map<const char *, const Mips16HardFloatInfo::FuncSignature *>
+  StubsNeeded;
+
+private:
+  virtual void anchor();
+
+  MachineFunction& MF;
+
+  /// SRetReturnReg - Some subtargets require that sret lowering includes
+  /// returning the value of the returned struct in a register. This field
+  /// holds the virtual register into which the sret argument is passed.
+  unsigned SRetReturnReg = 0;
+
+  /// GlobalBaseReg - keeps track of the virtual register initialized for
+  /// use as the global base register. This is used for PIC in some PIC
+  /// relocation models.
+  unsigned GlobalBaseReg = 0;
+
+  /// VarArgsFrameIndex - FrameIndex for start of varargs area.
+  int VarArgsFrameIndex = 0;
+
+  /// True if function has a byval argument.
+  bool HasByvalArg;
+
+  /// Size of incoming argument area.
+  unsigned IncomingArgSize;
+
+  /// CallsEhReturn - Whether the function calls llvm.eh.return.
+  bool CallsEhReturn = false;
+
+  /// Frame objects for spilling eh data registers.
+  int EhDataRegFI[4];
+
+  /// ISR - Whether the function is an Interrupt Service Routine.
+  bool IsISR = false;
+
+  /// Frame objects for spilling C0_STATUS, C0_EPC
+  int ISRDataRegFI[2];
+
+  // saveS2
+  bool SaveS2 = false;
+
+  /// FrameIndex for expanding BuildPairF64 nodes to spill and reload when the
+  /// O32 FPXX ABI is enabled. -1 is used to denote invalid index.
+  int MoveF64ViaSpillFI = -1;
 };
 
-} // end of namespace llvm
+} // end namespace llvm
 
-#endif // MIPS_MACHINE_FUNCTION_INFO_H
+#endif // LLVM_LIB_TARGET_MIPS_MIPSMACHINEFUNCTION_H

@@ -11,21 +11,21 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CODEGEN_INSTRUCTION_H
-#define CODEGEN_INSTRUCTION_H
+#ifndef LLVM_UTILS_TABLEGEN_CODEGENINSTRUCTION_H
+#define LLVM_UTILS_TABLEGEN_CODEGENINSTRUCTION_H
 
-#include "llvm/CodeGen/ValueTypes.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/Support/SourceMgr.h"
+#include "llvm/CodeGen/MachineValueType.h"
+#include "llvm/Support/SMLoc.h"
 #include <string>
-#include <vector>
 #include <utility>
+#include <vector>
 
 namespace llvm {
+template <typename T> class ArrayRef;
   class Record;
   class DagInit;
   class CodeGenTarget;
-  class StringRef;
 
   class CGIOperandList {
   public:
@@ -149,10 +149,16 @@ namespace llvm {
     OperandInfo &back() { return OperandList.back(); }
     const OperandInfo &back() const { return OperandList.back(); }
 
+    typedef std::vector<OperandInfo>::iterator iterator;
+    typedef std::vector<OperandInfo>::const_iterator const_iterator;
+    iterator begin() { return OperandList.begin(); }
+    const_iterator begin() const { return OperandList.begin(); }
+    iterator end() { return OperandList.end(); }
+    const_iterator end() const { return OperandList.end(); }
 
     /// getOperandNamed - Return the index of the operand with the specified
     /// non-empty name.  If the instruction does not have an operand with the
-    /// specified name, throw an exception.
+    /// specified name, abort.
     unsigned getOperandNamed(StringRef Name) const;
 
     /// hasOperandNamed - Query whether the instruction has an operand of the
@@ -162,9 +168,8 @@ namespace llvm {
 
     /// ParseOperandName - Parse an operand name like "$foo" or "$foo.bar",
     /// where $foo is a whole operand and $foo.bar refers to a suboperand.
-    /// This throws an exception if the name is invalid.  If AllowWholeOp is
-    /// true, references to operands with suboperands are allowed, otherwise
-    /// not.
+    /// This aborts if the name is invalid.  If AllowWholeOp is true, references
+    /// to operands with suboperands are allowed, otherwise not.
     std::pair<unsigned,unsigned> ParseOperandName(const std::string &Op,
                                                   bool AllowWholeOp = true);
 
@@ -201,7 +206,7 @@ namespace llvm {
   class CodeGenInstruction {
   public:
     Record *TheDef;            // The actual record defining this instruction.
-    std::string Namespace;     // The namespace the instruction is in.
+    StringRef Namespace;       // The namespace the instruction is in.
 
     /// AsmString - The format string used to emit a .s file for the
     /// instruction.
@@ -216,34 +221,55 @@ namespace llvm {
     std::vector<Record*> ImplicitDefs, ImplicitUses;
 
     // Various boolean values we track for the instruction.
-    bool isReturn;
-    bool isBranch;
-    bool isIndirectBranch;
-    bool isCompare;
-    bool isMoveImm;
-    bool isBitcast;
-    bool isBarrier;
-    bool isCall;
-    bool canFoldAsLoad;
-    bool mayLoad, mayStore;
-    bool isPredicable;
-    bool isConvertibleToThreeAddress;
-    bool isCommutable;
-    bool isTerminator;
-    bool isReMaterializable;
-    bool hasDelaySlot;
-    bool usesCustomInserter;
-    bool hasPostISelHook;
-    bool hasCtrlDep;
-    bool isNotDuplicable;
-    bool hasSideEffects;
-    bool neverHasSideEffects;
-    bool isAsCheapAsAMove;
-    bool hasExtraSrcRegAllocReq;
-    bool hasExtraDefRegAllocReq;
-    bool isCodeGenOnly;
-    bool isPseudo;
+    bool isReturn : 1;
+    bool isBranch : 1;
+    bool isIndirectBranch : 1;
+    bool isCompare : 1;
+    bool isMoveImm : 1;
+    bool isBitcast : 1;
+    bool isSelect : 1;
+    bool isBarrier : 1;
+    bool isCall : 1;
+    bool isAdd : 1;
+    bool canFoldAsLoad : 1;
+    bool mayLoad : 1;
+    bool mayLoad_Unset : 1;
+    bool mayStore : 1;
+    bool mayStore_Unset : 1;
+    bool isPredicable : 1;
+    bool isConvertibleToThreeAddress : 1;
+    bool isCommutable : 1;
+    bool isTerminator : 1;
+    bool isReMaterializable : 1;
+    bool hasDelaySlot : 1;
+    bool usesCustomInserter : 1;
+    bool hasPostISelHook : 1;
+    bool hasCtrlDep : 1;
+    bool isNotDuplicable : 1;
+    bool hasSideEffects : 1;
+    bool hasSideEffects_Unset : 1;
+    bool isAsCheapAsAMove : 1;
+    bool hasExtraSrcRegAllocReq : 1;
+    bool hasExtraDefRegAllocReq : 1;
+    bool isCodeGenOnly : 1;
+    bool isPseudo : 1;
+    bool isRegSequence : 1;
+    bool isExtractSubreg : 1;
+    bool isInsertSubreg : 1;
+    bool isConvergent : 1;
+    bool hasNoSchedulingInfo : 1;
 
+    std::string DeprecatedReason;
+    bool HasComplexDeprecationPredicate;
+
+    /// Are there any undefined flags?
+    bool hasUndefFlags() const {
+      return mayLoad_Unset || mayStore_Unset || hasSideEffects_Unset;
+    }
+
+    // The record used to infer instruction flags, or NULL if no flag values
+    // have been inferred.
+    Record *InferredFrom;
 
     CodeGenInstruction(Record *R);
 
@@ -258,6 +284,12 @@ namespace llvm {
     /// include text from the specified variant, returning the new string.
     static std::string FlattenAsmStringVariants(StringRef AsmString,
                                                 unsigned Variant);
+
+    // Is the specified operand in a generic instruction implicitly a pointer.
+    // This can be used on intructions that use typeN or ptypeN to identify
+    // operands that should be considered as pointers even though SelectionDAG
+    // didn't make a distinction between integer and pointers.
+    bool isOperandAPointer(unsigned i) const;
   };
 
 
@@ -280,7 +312,7 @@ namespace llvm {
 
     struct ResultOperand {
     private:
-      StringRef Name;
+      std::string Name;
       Record *R;
 
       int64_t Imm;
@@ -291,7 +323,8 @@ namespace llvm {
         K_Reg
       } Kind;
 
-      ResultOperand(StringRef N, Record *r) : Name(N), R(r), Kind(K_Record) {}
+      ResultOperand(std::string N, Record *r)
+          : Name(std::move(N)), R(r), Kind(K_Record) {}
       ResultOperand(int64_t I) : Imm(I), Kind(K_Imm) {}
       ResultOperand(Record *r) : R(r), Kind(K_Reg) {}
 
@@ -303,6 +336,8 @@ namespace llvm {
       Record *getRecord() const { assert(isRecord()); return R; }
       int64_t getImm() const { assert(isImm()); return Imm; }
       Record *getRegister() const { assert(isReg()); return R; }
+
+      unsigned getMINumOperands() const;
     };
 
     /// ResultOperands - The decoded operands for the result instruction.
@@ -315,10 +350,10 @@ namespace llvm {
     /// of them are matched by the operand, the second value should be -1.
     std::vector<std::pair<unsigned, int> > ResultInstOperandIndex;
 
-    CodeGenInstAlias(Record *R, CodeGenTarget &T);
+    CodeGenInstAlias(Record *R, unsigned Variant, CodeGenTarget &T);
 
     bool tryAliasOpMatch(DagInit *Result, unsigned AliasOpNo,
-                         Record *InstOpRec, bool hasSubOps, SMLoc Loc,
+                         Record *InstOpRec, bool hasSubOps, ArrayRef<SMLoc> Loc,
                          CodeGenTarget &T, ResultOperand &ResOp);
   };
 }

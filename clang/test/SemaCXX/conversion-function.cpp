@@ -1,4 +1,7 @@
-// RUN: %clang_cc1 -fsyntax-only -verify %s
+// RUN: %clang_cc1 -triple %itanium_abi_triple -fsyntax-only -Wbind-to-temporary-copy -verify %s 
+// RUN: %clang_cc1 -triple %itanium_abi_triple -fsyntax-only -Wbind-to-temporary-copy -verify -std=c++98 %s
+// RUN: %clang_cc1 -triple %itanium_abi_triple -fsyntax-only -Wbind-to-temporary-copy -verify -std=c++11 %s
+
 class X { 
 public:
   operator bool();
@@ -11,6 +14,8 @@ public:
   float g() {
     return operator float(); // expected-error{{use of undeclared 'operator float'}}
   }
+
+  static operator short(); // expected-error{{conversion function must be a non-static member function}}
 };
 
 operator int(); // expected-error{{conversion function must be a non-static member function}}
@@ -24,6 +29,9 @@ class Y {
 public:
   void operator bool(int, ...) const; // expected-error{{conversion function cannot have a return type}} \
   // expected-error{{conversion function cannot have any parameters}}
+
+  operator bool(int a = 4, int b = 6) const; // expected-error{{conversion function cannot have any parameters}}
+  
   
   operator float(...) const;  // expected-error{{conversion function cannot be variadic}}
   
@@ -128,7 +136,12 @@ private:
 
 A1 f() {
   // FIXME: redundant diagnostics!
-  return "Hello"; // expected-error {{calling a private constructor}} expected-warning {{an accessible copy constructor}}
+  return "Hello"; // expected-error {{calling a private constructor}}
+#if __cplusplus <= 199711L
+  // expected-warning@-2 {{an accessible copy constructor}}
+#else
+  // expected-warning@-4 {{copying parameter of type 'A1' when binding a reference to a temporary would invoke an inaccessible constructor in C++98}}
+#endif
 }
 
 namespace source_locations {
@@ -167,12 +180,16 @@ namespace source_locations {
 
 namespace crazy_declarators {
   struct A {
-    (&operator bool())(); // expected-error {{must use a typedef to declare a conversion to 'bool (&)()'}}
+    (&operator bool())(); // expected-error {{use a typedef to declare a conversion to 'bool (&)()'}}
+    *operator int();  // expected-error {{put the complete type after 'operator'}}
+    // No suggestion of using a typedef here; that's not possible.
+    template<typename T> (&operator T())();
+#if __cplusplus <= 199711L
+    // expected-error-re@-2 {{cannot specify any part of a return type in the declaration of a conversion function{{$}}}}
+#else
+    // expected-error-re@-4 {{cannot specify any part of a return type in the declaration of a conversion function; use an alias template to declare a conversion to 'T (&)()'{{$}}}}
+#endif
 
-    // FIXME: This diagnostic is misleading (the correct spelling
-    // would be 'operator int*'), but it's a corner case of a
-    // rarely-used syntax extension.
-    *operator int();  // expected-error {{must use a typedef to declare a conversion to 'int *'}}
   };
 }
 
@@ -190,6 +207,10 @@ namespace smart_ptr {
   };
 
   struct X { // expected-note{{candidate constructor (the implicit copy constructor) not}}
+#if __cplusplus >= 201103L
+  // expected-note@-2 {{candidate constructor (the implicit move constructor) not}}
+#endif
+
     explicit X(Y);
   };
 
@@ -212,7 +233,12 @@ struct Other {
 };
 
 void test_any() {
-  Any any = Other(); // expected-error{{cannot pass object of non-POD type 'Other' through variadic constructor; call will abort at runtime}}
+  Any any = Other();
+#if __cplusplus <= 199711L
+  // expected-error@-2 {{cannot pass object of non-POD type 'Other' through variadic constructor; call will abort at runtime}}
+#else
+  // expected-error@-4 {{cannot pass object of non-trivial type 'Other' through variadic constructor; call will abort at runtime}}
+#endif
 }
 
 namespace PR7055 {
@@ -391,4 +417,30 @@ namespace PR8800 {
     A& a3 = static_cast<A&>(c);
     A& a4 = (A&)c;
   }
+}
+
+namespace PR12712 {
+  struct A {};
+  struct B {
+    operator A();
+    operator A() const;
+  };
+  struct C : B {};
+
+  A f(const C c) { return c; }
+}
+
+namespace PR18234 {
+  struct A {
+    operator enum E { e } (); // expected-error {{'PR18234::A::E' cannot be defined in a type specifier}}
+    operator struct S { int n; } (); // expected-error {{'PR18234::A::S' cannot be defined in a type specifier}}
+    // expected-note@-1 {{candidate constructor (the implicit copy constructor) not viable: no known conversion from 'struct A' to 'const PR18234::A::S &' for 1st argument}}
+#if __cplusplus >= 201103L
+  // expected-note@-3 {{candidate constructor (the implicit move constructor) not viable: no known conversion from 'struct A' to 'PR18234::A::S &&' for 1st argument}}
+#endif
+  } a;
+  A::S s = a; // expected-error {{no viable conversion from 'struct A' to 'A::S'}}
+  A::E e = a;
+  bool k1 = e == A::e; // expected-error {{no member named 'e'}}
+  bool k2 = e.n == 0;
 }

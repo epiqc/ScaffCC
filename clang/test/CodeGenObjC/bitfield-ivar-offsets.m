@@ -1,4 +1,3 @@
-// RUNX: llvm-gcc -m64  -emit-llvm -S -o %t %s &&
 // RUN: %clang_cc1 -triple x86_64-apple-darwin10 -emit-llvm -o %t %s
 // RUN: grep -F '@"OBJC_IVAR_$_I0._b0" = global i64 0, section "__DATA, __objc_ivar", align 8' %t
 // RUN: grep -F '@"OBJC_IVAR_$_I0._b1" = global i64 0, section "__DATA, __objc_ivar", align 8' %t
@@ -7,7 +6,7 @@
 // RUN: grep -F '@"OBJC_IVAR_$_I0._b3" = global i64 4, section "__DATA, __objc_ivar", align 8' %t
 // RUN: grep -F '@"OBJC_IVAR_$_I0._y" = global i64 6, section "__DATA, __objc_ivar", align 8' %t
 // RUN: grep -F '@"OBJC_IVAR_$_I0._b4" = global i64 7, section "__DATA, __objc_ivar", align 8' %t
-// RUN: grep -F '@"OBJC_IVAR_$_I0." = global' %t | count 0
+// RUN: not grep -F '@"OBJC_IVAR_$_I0." = global' %t
 
 @interface I0 {
   unsigned _b0:4;

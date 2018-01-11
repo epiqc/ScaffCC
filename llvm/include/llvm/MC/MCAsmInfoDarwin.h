@@ -1,4 +1,4 @@
-//===---- MCAsmInfoDarwin.h - Darwin asm properties -------------*- C++ -*-===//
+//===- MCAsmInfoDarwin.h - Darwin asm properties ----------------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -12,18 +12,20 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_DARWIN_TARGET_ASM_INFO_H
-#define LLVM_DARWIN_TARGET_ASM_INFO_H
+#ifndef LLVM_MC_MCASMINFODARWIN_H
+#define LLVM_MC_MCASMINFODARWIN_H
 
 #include "llvm/MC/MCAsmInfo.h"
 
 namespace llvm {
-  class MCAsmInfoDarwin : public MCAsmInfo {
-    virtual void anchor();
-  public:
-    explicit MCAsmInfoDarwin();
-  };
-}
 
+class MCAsmInfoDarwin : public MCAsmInfo {
+public:
+  explicit MCAsmInfoDarwin();
 
-#endif // LLVM_DARWIN_TARGET_ASM_INFO_H
+  bool isSectionAtomizableBySymbols(const MCSection &Section) const override;
+};
+
+} // end namespace llvm
+
+#endif // LLVM_MC_MCASMINFODARWIN_H

@@ -1,4 +1,4 @@
-; RUN: opt -basicaa -aa-eval -disable-output < %s >& /dev/null
+; RUN: opt -basicaa -aa-eval -disable-output < %s > /dev/null 2>&1
 
 ; BasicAA shouldn't infinitely recurse on the use-def cycles in
 ; unreachable code.
@@ -11,6 +11,6 @@ bb:
   %t = select i1 undef, i32* %t, i32* undef
   %p = select i1 undef, i32* %p, i32* %p
   %q = select i1 undef, i32* undef, i32* %p
-  %a = getelementptr i8* %a, i32 0
+  %a = getelementptr i8, i8* %a, i32 0
   unreachable
 }

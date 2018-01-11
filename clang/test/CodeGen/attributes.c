@@ -26,7 +26,7 @@ int t6 __attribute__((visibility("protected")));
 // CHECK: @t12 = global i32 0, section "SECT"
 int t12 __attribute__((section("SECT")));
 
-// CHECK: @t9 = alias weak bitcast (void ()* @__t8 to void (...)*)
+// CHECK: @t9 = weak alias void (...), bitcast (void ()* @__t8 to void (...)*)
 void __t8() {}
 void t9() __attribute__((weak, alias("__t8")));
 
@@ -36,39 +36,46 @@ int t17() {
   return t15() + t16;
 }
 
-// CHECK: define void @t1() noreturn nounwind {
+// CHECK: define void @t1() [[NR:#[0-9]+]] {
 void t1() __attribute__((noreturn));
 void t1() { while (1) {} }
 
-// CHECK: define void @t2() nounwind {
+// CHECK: define void @t2() [[NUW:#[0-9]+]] {
 void t2() __attribute__((nothrow));
 void t2() {}
 
-// CHECK: define weak void @t3() nounwind {
+// CHECK: define weak void @t3() [[NUW]] {
 void t3() __attribute__((weak));
 void t3() {}
 
-// CHECK: define hidden void @t4() nounwind {
+// CHECK: define hidden void @t4() [[NUW]] {
 void t4() __attribute__((visibility("hidden")));
 void t4() {}
 
-// CHECK: define void @t7() noreturn nounwind {
+// CHECK: define void @t7() [[NR]] {
 void t7() __attribute__((noreturn, nothrow));
 void t7() { while (1) {} }
 
-// CHECK: define void @t10() nounwind section "SECT" {
+// CHECK: define void @t72() [[COLDDEF:#[0-9]+]] {
+void t71(void) __attribute__((cold));
+void t72() __attribute__((cold));
+void t72() { t71(); }
+// CHECK: call void @t71() [[COLDSITE:#[0-9]+]]
+// CHECK: declare void @t71() [[COLDDECL:#[0-9]+]]
+
+// CHECK: define void @t10() [[NUW]] section "SECT" {
 void t10(void) __attribute__((section("SECT")));
 void t10(void) {}
-// CHECK: define void @t11() nounwind section "SECT" {
+// CHECK: define void @t11() [[NUW]] section "SECT" {
 void __attribute__((section("SECT"))) t11(void) {}
 
-// CHECK: define i32 @t19() nounwind {
+// CHECK: define i32 @t19() [[NUW]] {
 extern int t19(void) __attribute__((weak_import));
 int t19(void) {
   return 10;
 }
 
-// CHECK:define void @t20() nounwind {
+// CHECK:define void @t20() [[NUW]] {
 // CHECK: call void @abort()
 // CHECK-NEXT: unreachable
 void t20(void) {
@@ -79,5 +86,19 @@ void (__attribute__((fastcall)) *fptr)(int);
 void t21(void) {
   fptr(10);
 }
-// CHECK: [[FPTRVAR:%[a-z0-9]+]] = load void (i32)** @fptr
-// CHECK-NEXT: call x86_fastcallcc void [[FPTRVAR]](i32 10)
+// CHECK: [[FPTRVAR:%[a-z0-9]+]] = load void (i32)*, void (i32)** @fptr
+// CHECK-NEXT: call x86_fastcallcc void [[FPTRVAR]](i32 inreg 10)
+
+
+// PR9356: We might want to err on this, but for now at least make sure we
+// use the section in the definition.
+void __attribute__((section(".foo"))) t22(void);
+void __attribute__((section(".bar"))) t22(void) {}
+
+// CHECK: define void @t22() [[NUW]] section ".bar"
+
+// CHECK: attributes [[NUW]] = { noinline nounwind{{.*}} }
+// CHECK: attributes [[NR]] = { noinline noreturn nounwind{{.*}} }
+// CHECK: attributes [[COLDDEF]] = { cold {{.*}}}
+// CHECK: attributes [[COLDDECL]] = { cold {{.*}}}
+// CHECK: attributes [[COLDSITE]] = { cold {{.*}}}

@@ -1,4 +1,4 @@
-// RUN: %clang_cc1_only -ast-print %s | FileCheck %s
+// RUN: %clang_cc1 -ast-print %s | FileCheck %s
 
 // This testcase checks the functionality of 
 // Sema::ActOn{Start,End}FunctionDeclarator, specifically checking that
@@ -7,7 +7,7 @@
 
 // CHECK: typedef void (*g)();
 typedef void (*g) ();
-// CHECK: enum {
+// CHECK: enum
 enum {
   k = -1
 };

@@ -1,4 +1,4 @@
-; RUN: llc < %s -mtriple=thumbv7-apple-ios -mcpu=cortex-a9 | FileCheck %s
+; RUN: llc < %s -mtriple=thumbv7-apple-ios -mcpu=cortex-a9 -jump-table-density=40 | FileCheck %s
 ; Test that ldmia_ret preserves implicit operands for return values.
 ;
 ; This CFG is reduced from a benchmark miscompile. With current
@@ -14,7 +14,7 @@ declare i1 @getbool()
 declare void @foo(i32)
 declare i32 @bar(i32)
 
-define i32 @test(i32 %in1, i32 %in2) nounwind {
+define i32 @test(i32 %in1, i32 %in2) nounwind "no-frame-pointer-elim"="true" {
 entry:
   %call = tail call zeroext i1 @getbool() nounwind
   br i1 %call, label %sw.bb18, label %sw.bb2
@@ -42,7 +42,7 @@ if.then:                                          ; preds = %land.lhs.true
 ; If-convert the return
 ; CHECK: it	ne
 ; Fold the CSR+return into a pop
-; CHECK: popne	{r4, r5, r7, pc}
+; CHECK: pop {r4, r5, r7, pc}
 sw.bb18:
   %call20 = tail call i32 @bar(i32 %in2) nounwind
   switch i32 %call20, label %sw.default56 [

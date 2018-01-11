@@ -1,12 +1,12 @@
-// RUN: %clang -target le32-unknown-nacl -ccc-clang-archs le32 -ccc-echo %s -emit-llvm-only -c 2>&1 | FileCheck %s -check-prefix=ECHO
-// RUN: %clang -target le32-unknown-nacl -ccc-clang-archs le32 %s -emit-llvm -S -c -o - | FileCheck %s
-// RUN: %clang -target le32-unknown-nacl -ccc-clang-archs le32 %s -emit-llvm -S -c -pthread -o - | FileCheck %s -check-prefix=THREADS
+// RUN: %clang -target le32-unknown-nacl -### %s -emit-llvm-only -c 2>&1 | FileCheck %s -check-prefix=ECHO
+// RUN: %clang -target le32-unknown-nacl %s -emit-llvm -S -c -o - | FileCheck %s
+// RUN: %clang -target le32-unknown-nacl %s -emit-llvm -S -c -pthread -o - | FileCheck %s -check-prefix=THREADS
 
-// ECHO: {{.*}} -cc1 {{.*}}le32-unknown-nacl.c
+// ECHO: {{.*}} "-cc1" {{.*}}le32-unknown-nacl.c
 
-// Check platform defines
-#include <stdarg.h>
-#include <stddef.h>
+typedef __builtin_va_list va_list;
+typedef __SIZE_TYPE__ size_t;
+typedef __PTRDIFF_TYPE__ ptrdiff_t;
 
 extern "C" {
 

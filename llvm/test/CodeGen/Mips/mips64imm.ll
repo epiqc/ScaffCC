@@ -1,3 +1,4 @@
+; RUN: llc -march=mips64el -mcpu=mips4 < %s | FileCheck %s
 ; RUN: llc -march=mips64el -mcpu=mips64 < %s | FileCheck %s
 
 define i32 @foo1() nounwind readnone {
@@ -12,7 +13,7 @@ define i64 @foo3() nounwind readnone {
 entry:
 ; CHECK: foo3
 ; CHECK: lui $[[R0:[0-9]+]], 4660
-; CHECK: daddiu ${{[0-9]+}}, $[[R0]], 22136
+; CHECK: ori ${{[0-9]+}}, $[[R0]], 22136
   ret i64 305419896
 }
 

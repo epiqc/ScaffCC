@@ -20,8 +20,8 @@ static T getU(uint32_t *offset_ptr, const DataExtractor *de,
   uint32_t offset = *offset_ptr;
   if (de->isValidOffsetForDataOfSize(offset, sizeof(val))) {
     std::memcpy(&val, &Data[offset], sizeof(val));
-    if (sys::isLittleEndianHost() != isLittleEndian)
-      val = sys::SwapByteOrder(val);
+    if (sys::IsLittleEndianHost != isLittleEndian)
+      sys::swapByteOrder(val);
 
     // Advance the offset
     *offset_ptr += sizeof(val);
@@ -44,7 +44,7 @@ static T *getUs(uint32_t *offset_ptr, T *dst, uint32_t count,
     // success
     return dst;
   }
-  return NULL;
+  return nullptr;
 }
 
 uint8_t DataExtractor::getU8(uint32_t *offset_ptr) const {
@@ -66,6 +66,13 @@ uint16_t *DataExtractor::getU16(uint32_t *offset_ptr, uint16_t *dst,
                                 uint32_t count) const {
   return getUs<uint16_t>(offset_ptr, dst, count, this, IsLittleEndian,
                         Data.data());
+}
+
+uint32_t DataExtractor::getU24(uint32_t *offset_ptr) const {
+  uint24_t ExtractedVal =
+      getU<uint24_t>(offset_ptr, this, IsLittleEndian, Data.data());
+  // The 3 bytes are in the correct byte order for the host.
+  return ExtractedVal.getAsUint32(sys::IsLittleEndianHost);
 }
 
 uint32_t DataExtractor::getU32(uint32_t *offset_ptr) const {
@@ -125,7 +132,17 @@ const char *DataExtractor::getCStr(uint32_t *offset_ptr) const {
     *offset_ptr = pos + 1;
     return Data.data() + offset;
   }
-  return NULL;
+  return nullptr;
+}
+
+StringRef DataExtractor::getCStrRef(uint32_t *OffsetPtr) const {
+  uint32_t Start = *OffsetPtr;
+  StringRef::size_type Pos = Data.find('\0', Start);
+  if (Pos != StringRef::npos) {
+    *OffsetPtr = Pos + 1;
+    return StringRef(Data.data() + Start, Pos - Start);
+  }
+  return StringRef();
 }
 
 uint64_t DataExtractor::getULEB128(uint32_t *offset_ptr) const {
@@ -139,7 +156,7 @@ uint64_t DataExtractor::getULEB128(uint32_t *offset_ptr) const {
 
   while (isValidOffset(offset)) {
     byte = Data[offset++];
-    result |= (byte & 0x7f) << shift;
+    result |= uint64_t(byte & 0x7f) << shift;
     shift += 7;
     if ((byte & 0x80) == 0)
       break;
@@ -160,7 +177,7 @@ int64_t DataExtractor::getSLEB128(uint32_t *offset_ptr) const {
 
   while (isValidOffset(offset)) {
     byte = Data[offset++];
-    result |= (byte & 0x7f) << shift;
+    result |= uint64_t(byte & 0x7f) << shift;
     shift += 7;
     if ((byte & 0x80) == 0)
       break;
@@ -168,7 +185,7 @@ int64_t DataExtractor::getSLEB128(uint32_t *offset_ptr) const {
 
   // Sign bit of byte is 2nd high order bit (0x40)
   if (shift < 64 && (byte & 0x40))
-    result |= -(1 << shift);
+    result |= -(1ULL << shift);
 
   *offset_ptr = offset;
   return result;

@@ -1,4 +1,4 @@
-; RUN: llc -march=x86-64 < %s | FileCheck %s
+; RUN: llc -mtriple=x86_64-- < %s | FileCheck %s
 
 ; Codegen should be able to use a 32-bit shift instead of a 64-bit shift.
 ; CHECK: shll $16
@@ -17,7 +17,7 @@ if.end523:                                        ; preds = %if.end453
   ret void
 }
 
-; CHECK: foo:
+; CHECK-LABEL: foo:
 
 declare void @bar(i64)
 

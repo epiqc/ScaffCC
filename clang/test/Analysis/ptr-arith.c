@@ -1,8 +1,7 @@
-// RUN: %clang_cc1 -analyze -analyzer-checker=experimental.core.FixedAddr,experimental.core.PointerArithm,experimental.core.PointerSub -analyzer-store=region -verify -triple x86_64-apple-darwin9 %s
-// RUN: %clang_cc1 -analyze -analyzer-checker=experimental.core.FixedAddr,experimental.core.PointerArithm,experimental.core.PointerSub -analyzer-store=region -verify -triple i686-apple-darwin9 %s
+// RUN: %clang_analyze_cc1 -analyzer-checker=alpha.core.FixedAddr,alpha.core.PointerArithm,alpha.core.PointerSub,debug.ExprInspection -analyzer-store=region -verify -triple x86_64-apple-darwin9 -Wno-tautological-pointer-compare %s
+// RUN: %clang_analyze_cc1 -analyzer-checker=alpha.core.FixedAddr,alpha.core.PointerArithm,alpha.core.PointerSub,debug.ExprInspection -analyzer-store=region -verify -triple i686-apple-darwin9 -Wno-tautological-pointer-compare %s
 
-// Used to trigger warnings for unreachable paths.
-#define WARN do { int a, b; int c = &b-&a; } while (0)
+void clang_analyzer_eval(int);
 
 void f1() {
   int a[10];
@@ -37,7 +36,7 @@ domain_port (const char *domain_b, const char *domain_e,
 
 void f3() {
   int x, y;
-  int d = &y - &x; // expected-warning{{Subtraction of two pointers that do not point to the same memory chunk may cause incorrect result.}}
+  int d = &y - &x; // expected-warning{{Subtraction of two pointers that do not point to the same memory chunk may cause incorrect result}}
 
   int a[10];
   int *p = &a[2];
@@ -47,13 +46,13 @@ void f3() {
 
 void f4() {
   int *p;
-  p = (int*) 0x10000; // expected-warning{{Using a fixed address is not portable because that address will probably not be valid in all environments or platforms.}}
+  p = (int*) 0x10000; // expected-warning{{Using a fixed address is not portable because that address will probably not be valid in all environments or platforms}}
 }
 
 void f5() {
   int x, y;
   int *p;
-  p = &x + 1;  // expected-warning{{Pointer arithmetic done on non-array variables means reliance on memory layout, which is dangerous.}}
+  p = &x + 1;  // expected-warning{{Pointer arithmetic on non-array variables relies on memory layout, which is dangerous}}
 
   int a[10];
   p = a + 1; // no-warning
@@ -67,111 +66,48 @@ void f6(int *p, int *q) {
 void null_operand(int *a) {
 start:
   // LHS is a label, RHS is NULL
-  if (&&start == 0)
-    WARN; // no-warning
-  if (&&start <  0)
-    WARN; // no-warning
-  if (&&start <= 0)
-    WARN; // no-warning
-  if (!(&&start != 0))
-    WARN; // no-warning
-  if (!(&&start >  0))
-    WARN; // no-warning
-  if (!(&&start >= 0))
-    WARN; // no-warning
-  if (!(&&start - 0))
-    WARN; // no-warning
+  clang_analyzer_eval(&&start != 0); // expected-warning{{TRUE}}
+  clang_analyzer_eval(&&start >= 0); // expected-warning{{TRUE}}
+  clang_analyzer_eval(&&start > 0); // expected-warning{{TRUE}}
+  clang_analyzer_eval((&&start - 0) != 0); // expected-warning{{TRUE}}
 
   // LHS is a non-symbolic value, RHS is NULL
-  if (&a == 0)
-    WARN; // no-warning
-  if (&a <  0)
-    WARN; // no-warning
-  if (&a <= 0)
-    WARN; // no-warning
-  if (!(&a != 0))
-    WARN; // no-warning
-  if (!(&a >  0))
-    WARN; // no-warning
-  if (!(&a >= 0))
-    WARN; // no-warning
-
-  if (!(&a - 0)) // expected-warning{{Pointer arithmetic done on non-array variables}}
-    WARN; // no-warning
+  clang_analyzer_eval(&a != 0); // expected-warning{{TRUE}}
+  clang_analyzer_eval(&a >= 0); // expected-warning{{TRUE}}
+  clang_analyzer_eval(&a > 0); // expected-warning{{TRUE}}
+  clang_analyzer_eval((&a - 0) != 0); // expected-warning{{TRUE}}
 
   // LHS is NULL, RHS is non-symbolic
   // The same code is used for labels and non-symbolic values.
-  if (0 == &a)
-    WARN; // no-warning
-  if (0 >  &a)
-    WARN; // no-warning
-  if (0 >= &a)
-    WARN; // no-warning
-  if (!(0 != &a))
-    WARN; // no-warning
-  if (!(0 <  &a))
-    WARN; // no-warning
-  if (!(0 <= &a))
-    WARN; // no-warning
+  clang_analyzer_eval(0 != &a); // expected-warning{{TRUE}}
+  clang_analyzer_eval(0 <= &a); // expected-warning{{TRUE}}
+  clang_analyzer_eval(0 < &a); // expected-warning{{TRUE}}
 
   // LHS is a symbolic value, RHS is NULL
-  if (a == 0)
-    WARN; // expected-warning{{}}
-  if (a <  0)
-    WARN; // no-warning
-  if (a <= 0)
-    WARN; // expected-warning{{}}
-  if (!(a != 0))
-    WARN; // expected-warning{{}}
-  if (!(a >  0))
-    WARN; // expected-warning{{}}
-  if (!(a >= 0))
-    WARN; // no-warning
-  if (!(a - 0))
-    WARN; // expected-warning{{}}
+  clang_analyzer_eval(a != 0); // expected-warning{{UNKNOWN}}
+  clang_analyzer_eval(a >= 0); // expected-warning{{TRUE}}
+  clang_analyzer_eval(a <= 0); // expected-warning{{UNKNOWN}}
+  clang_analyzer_eval((a - 0) != 0); // expected-warning{{UNKNOWN}}
 
   // LHS is NULL, RHS is a symbolic value
-  if (0 == a)
-    WARN; // expected-warning{{}}
-  if (0 >  a)
-    WARN; // no-warning
-  if (0 >= a)
-    WARN; // expected-warning{{}}
-  if (!(0 != a))
-    WARN; // expected-warning{{}}
-  if (!(0 <  a))
-    WARN; // expected-warning{{}}
-  if (!(0 <= a))
-    WARN; // no-warning
+  clang_analyzer_eval(0 != a); // expected-warning{{UNKNOWN}}
+  clang_analyzer_eval(0 <= a); // expected-warning{{TRUE}}
+  clang_analyzer_eval(0 < a); // expected-warning{{UNKNOWN}}
 }
 
 void const_locs() {
   char *a = (char*)0x1000;
   char *b = (char*)0x1100;
 start:
-  if (a==b)
-    WARN; // no-warning
-  if (!(a!=b))
-    WARN; // no-warning
-  if (a>b)
-    WARN; // no-warning
-  if (b<a)
-    WARN; // no-warning
-  if (a>=b)
-    WARN; // no-warning
-  if (b<=a)
-    WARN; // no-warning
-  if (b-a != 0x100)
-    WARN; // no-warning
+  clang_analyzer_eval(a != b); // expected-warning{{TRUE}}
+  clang_analyzer_eval(a < b); // expected-warning{{TRUE}}
+  clang_analyzer_eval(a <= b); // expected-warning{{TRUE}}
+  clang_analyzer_eval((b-a) == 0x100); // expected-warning{{TRUE}}
 
-  if (&&start == a)
-    WARN; // expected-warning{{}}
-  if (a == &&start)
-    WARN; // expected-warning{{}}
-  if (&a == (char**)a)
-    WARN; // expected-warning{{}}
-  if ((char**)a == &a)
-    WARN; // expected-warning{{}}
+  clang_analyzer_eval(&&start == a); // expected-warning{{UNKNOWN}}
+  clang_analyzer_eval(a == &&start); // expected-warning{{UNKNOWN}}
+  clang_analyzer_eval(&a == (char**)a); // expected-warning{{UNKNOWN}}
+  clang_analyzer_eval((char**)a == &a); // expected-warning{{UNKNOWN}}
 }
 
 void array_matching_types() {
@@ -179,20 +115,10 @@ void array_matching_types() {
   int *a = &array[2];
   int *b = &array[5];
 
-  if (a==b)
-    WARN; // no-warning
-  if (!(a!=b))
-    WARN; // no-warning
-  if (a>b)
-    WARN; // no-warning
-  if (b<a)
-    WARN; // no-warning
-  if (a>=b)
-    WARN; // no-warning
-  if (b<=a)
-    WARN; // no-warning
-  if ((b-a) == 0)
-    WARN; // no-warning
+  clang_analyzer_eval(a != b); // expected-warning{{TRUE}}
+  clang_analyzer_eval(a < b); // expected-warning{{TRUE}}
+  clang_analyzer_eval(a <= b); // expected-warning{{TRUE}}
+  clang_analyzer_eval((b-a) != 0); // expected-warning{{TRUE}}
 }
 
 // This takes a different code path than array_matching_types()
@@ -201,49 +127,22 @@ void array_different_types() {
   int *a = &array[2];
   char *b = (char*)&array[5];
 
-  if (a==b) // expected-warning{{comparison of distinct pointer types}}
-    WARN; // no-warning
-  if (!(a!=b)) // expected-warning{{comparison of distinct pointer types}}
-    WARN; // no-warning
-  if (a>b) // expected-warning{{comparison of distinct pointer types}}
-    WARN; // no-warning
-  if (b<a) // expected-warning{{comparison of distinct pointer types}}
-    WARN; // no-warning
-  if (a>=b) // expected-warning{{comparison of distinct pointer types}}
-    WARN; // no-warning
-  if (b<=a) // expected-warning{{comparison of distinct pointer types}}
-    WARN; // no-warning
+  clang_analyzer_eval(a != b); // expected-warning{{TRUE}} expected-warning{{comparison of distinct pointer types}}
+  clang_analyzer_eval(a < b); // expected-warning{{TRUE}} expected-warning{{comparison of distinct pointer types}}
+  clang_analyzer_eval(a <= b); // expected-warning{{TRUE}} expected-warning{{comparison of distinct pointer types}}
 }
 
 struct test { int x; int y; };
 void struct_fields() {
   struct test a, b;
 
-  if (&a.x == &a.y)
-    WARN; // no-warning
-  if (!(&a.x != &a.y))
-    WARN; // no-warning
-  if (&a.x > &a.y)
-    WARN; // no-warning
-  if (&a.y < &a.x)
-    WARN; // no-warning
-  if (&a.x >= &a.y)
-    WARN; // no-warning
-  if (&a.y <= &a.x)
-    WARN; // no-warning
+  clang_analyzer_eval(&a.x != &a.y); // expected-warning{{TRUE}}
+  clang_analyzer_eval(&a.x < &a.y); // expected-warning{{TRUE}}
+  clang_analyzer_eval(&a.x <= &a.y); // expected-warning{{TRUE}}
 
-  if (&a.x == &b.x)
-    WARN; // no-warning
-  if (!(&a.x != &b.x))
-    WARN; // no-warning
-  if (&a.x > &b.x)
-    WARN; // expected-warning{{}}
-  if (&b.x < &a.x)
-    WARN; // expected-warning{{}}
-  if (&a.x >= &b.x)
-    WARN; // expected-warning{{}}
-  if (&b.x <= &a.x)
-    WARN; // expected-warning{{}}
+  clang_analyzer_eval(&a.x != &b.x); // expected-warning{{TRUE}}
+  clang_analyzer_eval(&a.x > &b.x); // expected-warning{{UNKNOWN}}
+  clang_analyzer_eval(&a.x >= &b.x); // expected-warning{{UNKNOWN}}
 }
 
 void mixed_region_types() {
@@ -251,38 +150,200 @@ void mixed_region_types() {
   int array[2];
   void *a = &array, *b = &s;
 
-  if (&a == &b)
-    WARN; // no-warning
-  if (!(&a != &b))
-    WARN; // no-warning
-  if (&a > &b)
-    WARN; // expected-warning{{}}
-  if (&b < &a)
-    WARN; // expected-warning{{}}
-  if (&a >= &b)
-    WARN; // expected-warning{{}}
-  if (&b <= &a)
-    WARN; // expected-warning{{}}
+  clang_analyzer_eval(&a != &b); // expected-warning{{TRUE}}
+  clang_analyzer_eval(&a > &b); // expected-warning{{UNKNOWN}}
+  clang_analyzer_eval(&a >= &b); // expected-warning{{UNKNOWN}}
 }
 
 void symbolic_region(int *p) {
   int a;
 
-  if (&a == p)
-    WARN; // no-warning
-  if (&a != p)
-    WARN; // expected-warning{{}}
-  if (&a > p)
-    WARN; // expected-warning{{}}
-  if (&a < p)
-    WARN; // expected-warning{{}}
-  if (&a >= p)
-    WARN; // expected-warning{{}}
-  if (&a <= p)
-    WARN; // expected-warning{{}}
+  clang_analyzer_eval(&a != p); // expected-warning{{TRUE}}
+  clang_analyzer_eval(&a > p); // expected-warning{{UNKNOWN}}
+  clang_analyzer_eval(&a >= p); // expected-warning{{UNKNOWN}}
 }
 
 void PR7527 (int *p) {
   if (((int) p) & 1) // not crash
     return;
+}
+
+void use_symbols(int *lhs, int *rhs) {
+  clang_analyzer_eval(lhs < rhs); // expected-warning{{UNKNOWN}}
+  if (lhs < rhs)
+    return;
+  clang_analyzer_eval(lhs < rhs); // expected-warning{{FALSE}}
+
+  clang_analyzer_eval(lhs - rhs); // expected-warning{{UNKNOWN}}
+  if ((lhs - rhs) != 5)
+    return;
+  clang_analyzer_eval((lhs - rhs) == 5); // expected-warning{{TRUE}}
+}
+
+void equal_implies_zero(int *lhs, int *rhs) {
+  clang_analyzer_eval(lhs == rhs); // expected-warning{{UNKNOWN}}
+  if (lhs == rhs) {
+    clang_analyzer_eval(lhs != rhs); // expected-warning{{FALSE}}
+    clang_analyzer_eval((rhs - lhs) == 0); // expected-warning{{TRUE}}
+    return;
+  }
+  clang_analyzer_eval(lhs == rhs); // expected-warning{{FALSE}}
+  clang_analyzer_eval(lhs != rhs); // expected-warning{{TRUE}}
+  clang_analyzer_eval((rhs - lhs) == 0); // expected-warning{{FALSE}}
+}
+
+void zero_implies_equal(int *lhs, int *rhs) {
+  clang_analyzer_eval((rhs - lhs) == 0); // expected-warning{{UNKNOWN}}
+  if ((rhs - lhs) == 0) {
+    clang_analyzer_eval(lhs != rhs); // expected-warning{{FALSE}}
+    clang_analyzer_eval(lhs == rhs); // expected-warning{{TRUE}}
+    return;
+  }
+  clang_analyzer_eval((rhs - lhs) == 0); // expected-warning{{FALSE}}
+  clang_analyzer_eval(lhs == rhs); // expected-warning{{FALSE}}
+  clang_analyzer_eval(lhs != rhs); // expected-warning{{TRUE}}
+}
+
+void comparisons_imply_size(int *lhs, int *rhs) {
+  clang_analyzer_eval(lhs <= rhs); // expected-warning{{UNKNOWN}}
+
+  if (lhs > rhs) {
+    clang_analyzer_eval((rhs - lhs) == 0); // expected-warning{{FALSE}}
+    return;
+  }
+
+  clang_analyzer_eval(lhs <= rhs); // expected-warning{{TRUE}}
+// FIXME: In Z3ConstraintManager, ptrdiff_t is mapped to signed bitvector. However, this does not directly imply the unsigned comparison.
+#ifdef ANALYZER_CM_Z3
+  clang_analyzer_eval((rhs - lhs) >= 0); // expected-warning{{UNKNOWN}}
+#else
+  clang_analyzer_eval((rhs - lhs) >= 0); // expected-warning{{TRUE}}
+#endif
+  clang_analyzer_eval((rhs - lhs) > 0); // expected-warning{{UNKNOWN}}
+
+  if (lhs >= rhs) {
+    clang_analyzer_eval((rhs - lhs) == 0); // expected-warning{{TRUE}}
+    return;
+  }
+
+  clang_analyzer_eval(lhs == rhs); // expected-warning{{FALSE}}
+  clang_analyzer_eval(lhs < rhs); // expected-warning{{TRUE}}
+#ifdef ANALYZER_CM_Z3
+  clang_analyzer_eval((rhs - lhs) > 0); // expected-warning{{UNKNOWN}}
+#else
+  clang_analyzer_eval((rhs - lhs) > 0); // expected-warning{{TRUE}}
+#endif
+}
+
+void size_implies_comparison(int *lhs, int *rhs) {
+  clang_analyzer_eval(lhs <= rhs); // expected-warning{{UNKNOWN}}
+
+  if ((rhs - lhs) < 0) {
+    clang_analyzer_eval(lhs == rhs); // expected-warning{{FALSE}}
+    return;
+  }
+
+#ifdef ANALYZER_CM_Z3
+  clang_analyzer_eval(lhs <= rhs); // expected-warning{{UNKNOWN}}
+#else
+  clang_analyzer_eval(lhs <= rhs); // expected-warning{{TRUE}}
+#endif
+  clang_analyzer_eval((rhs - lhs) >= 0); // expected-warning{{TRUE}}
+  clang_analyzer_eval((rhs - lhs) > 0); // expected-warning{{UNKNOWN}}
+
+  if ((rhs - lhs) <= 0) {
+    clang_analyzer_eval(lhs == rhs); // expected-warning{{TRUE}}
+    return;
+  }
+
+  clang_analyzer_eval(lhs == rhs); // expected-warning{{FALSE}}
+#ifdef ANALYZER_CM_Z3
+  clang_analyzer_eval(lhs < rhs); // expected-warning{{UNKNOWN}}
+#else
+  clang_analyzer_eval(lhs < rhs); // expected-warning{{TRUE}}
+#endif
+  clang_analyzer_eval((rhs - lhs) > 0); // expected-warning{{TRUE}}
+}
+
+//-------------------------------
+// False positives
+//-------------------------------
+
+void zero_implies_reversed_equal(int *lhs, int *rhs) {
+  clang_analyzer_eval((rhs - lhs) == 0); // expected-warning{{UNKNOWN}}
+  if ((rhs - lhs) == 0) {
+#ifdef ANALYZER_CM_Z3
+    clang_analyzer_eval(rhs != lhs); // expected-warning{{FALSE}}
+    clang_analyzer_eval(rhs == lhs); // expected-warning{{TRUE}}
+#else
+    clang_analyzer_eval(rhs != lhs); // expected-warning{{UNKNOWN}}
+    clang_analyzer_eval(rhs == lhs); // expected-warning{{UNKNOWN}}
+#endif
+    return;
+  }
+  clang_analyzer_eval((rhs - lhs) == 0); // expected-warning{{FALSE}}
+#ifdef ANALYZER_CM_Z3
+  clang_analyzer_eval(rhs == lhs); // expected-warning{{FALSE}}
+  clang_analyzer_eval(rhs != lhs); // expected-warning{{TRUE}}
+#else
+  clang_analyzer_eval(rhs == lhs); // expected-warning{{UNKNOWN}}
+  clang_analyzer_eval(rhs != lhs); // expected-warning{{UNKNOWN}}
+#endif
+}
+
+void canonical_equal(int *lhs, int *rhs) {
+  clang_analyzer_eval(lhs == rhs); // expected-warning{{UNKNOWN}}
+  if (lhs == rhs) {
+#ifdef ANALYZER_CM_Z3
+    clang_analyzer_eval(rhs == lhs); // expected-warning{{TRUE}}
+#else
+    clang_analyzer_eval(rhs == lhs); // expected-warning{{UNKNOWN}}
+#endif
+    return;
+  }
+  clang_analyzer_eval(lhs == rhs); // expected-warning{{FALSE}}
+
+#ifdef ANALYZER_CM_Z3
+  clang_analyzer_eval(rhs == lhs); // expected-warning{{FALSE}}
+#else
+  clang_analyzer_eval(rhs == lhs); // expected-warning{{UNKNOWN}}
+#endif
+}
+
+void compare_element_region_and_base(int *p) {
+  int *q = p - 1;
+  clang_analyzer_eval(p == q); // expected-warning{{FALSE}}
+}
+
+struct Point {
+  int x;
+  int y;
+};
+void symbolicFieldRegion(struct Point *points, int i, int j) {
+  clang_analyzer_eval(&points[i].x == &points[j].x);// expected-warning{{UNKNOWN}}
+  clang_analyzer_eval(&points[i].x == &points[i].y);// expected-warning{{FALSE}}
+  clang_analyzer_eval(&points[i].x < &points[i].y);// expected-warning{{TRUE}}
+}
+
+void negativeIndex(char *str) {
+  *(str + 1) = 'a';
+  clang_analyzer_eval(*(str + 1) == 'a'); // expected-warning{{TRUE}}
+  clang_analyzer_eval(*(str - 1) == 'a'); // expected-warning{{UNKNOWN}}
+
+  char *ptr1 = str - 1;
+  clang_analyzer_eval(*ptr1 == 'a'); // expected-warning{{UNKNOWN}}
+
+  char *ptr2 = str;
+  ptr2 -= 1;
+  clang_analyzer_eval(*ptr2 == 'a'); // expected-warning{{UNKNOWN}}
+
+  char *ptr3 = str;
+  --ptr3;
+  clang_analyzer_eval(*ptr3 == 'a'); // expected-warning{{UNKNOWN}}
+}
+
+void test_no_crash_on_pointer_to_label() {
+  char *a = &&label;
+  a[0] = 0;
+label:;
 }

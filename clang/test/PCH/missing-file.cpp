@@ -7,16 +7,11 @@
 // RUN: rm %t.h
 
 // Check diagnostic with location in original source:
-// RUN: %clang_cc1 -include-pch %t.h.pch -Wpadded -emit-obj -o %t.o %s 2> %t.stderr
-// RUN: grep 'bytes to align' %t.stderr
+// RUN: not %clang_cc1 -include-pch %t.h.pch -emit-obj -o %t.o %s 2> %t.stderr
+// RUN: grep 'could not find file' %t.stderr
 
-// Check diagnostic with 2nd location in original source:
-// RUN: not %clang_cc1 -DREDECL -include-pch %t.h.pch -emit-obj -o %t.o %s 2> %t.stderr
-// RUN: grep 'previous definition is here' %t.stderr
-
-// Check diagnostic with instantiation location in original source:
-// RUN: not %clang_cc1 -DINSTANTIATION -include-pch %t.h.pch -emit-obj -o %t.o %s 2> %t.stderr
-// RUN: grep 'cannot be used prior to' %t.stderr
+// Oftentimes on Windows there are open handles, and deletion will fail.
+// REQUIRES: can-remove-opened-file
 
 void qq(S*) {}
 

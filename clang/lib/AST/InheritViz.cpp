@@ -17,14 +17,14 @@
 #include "clang/AST/Decl.h"
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/TypeOrdering.h"
+#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/GraphWriter.h"
 #include "llvm/Support/raw_ostream.h"
 #include <map>
+#include <set>
+using namespace clang;
 
-using namespace llvm;
-
-namespace clang {
-
+namespace {
 /// InheritanceHierarchyWriter - Helper class that writes out a
 /// GraphViz file that diagrams the inheritance hierarchy starting at
 /// a given C++ class type. Note that we do not use LLVM's
@@ -42,7 +42,8 @@ public:
     : Context(Context), Out(Out) { }
 
   void WriteGraph(QualType Type) {
-    Out << "digraph \"" << DOT::EscapeString(Type.getAsString()) << "\" {\n";
+    Out << "digraph \"" << llvm::DOT::EscapeString(Type.getAsString())
+        << "\" {\n";
     WriteNode(Type, false);
     Out << "}\n";
   }
@@ -57,6 +58,7 @@ protected:
   /// (only) virtual base.
   raw_ostream& WriteNodeReference(QualType Type, bool FromVirtual);
 };
+} // namespace
 
 void InheritanceHierarchyWriter::WriteNode(QualType Type, bool FromVirtual) {
   QualType CanonType = Context.getCanonicalType(Type);
@@ -76,7 +78,7 @@ void InheritanceHierarchyWriter::WriteNode(QualType Type, bool FromVirtual) {
 
   // Give the node a label based on the name of the class.
   std::string TypeName = Type.getAsString();
-  Out << " [ shape=\"box\", label=\"" << DOT::EscapeString(TypeName);
+  Out << " [ shape=\"box\", label=\"" << llvm::DOT::EscapeString(TypeName);
 
   // If the name of the class was a typedef or something different
   // from the "real" class name, show the real class name in
@@ -91,26 +93,25 @@ void InheritanceHierarchyWriter::WriteNode(QualType Type, bool FromVirtual) {
   // Display the base classes.
   const CXXRecordDecl *Decl
     = static_cast<const CXXRecordDecl *>(Type->getAs<RecordType>()->getDecl());
-  for (CXXRecordDecl::base_class_const_iterator Base = Decl->bases_begin();
-       Base != Decl->bases_end(); ++Base) {
-    QualType CanonBaseType = Context.getCanonicalType(Base->getType());
+  for (const auto &Base : Decl->bases()) {
+    QualType CanonBaseType = Context.getCanonicalType(Base.getType());
 
     // If this is not virtual inheritance, bump the direct base
     // count for the type.
-    if (!Base->isVirtual())
+    if (!Base.isVirtual())
       ++DirectBaseCount[CanonBaseType];
 
     // Write out the node (if we need to).
-    WriteNode(Base->getType(), Base->isVirtual());
+    WriteNode(Base.getType(), Base.isVirtual());
 
     // Write out the edge.
     Out << "  ";
     WriteNodeReference(Type, FromVirtual);
     Out << " -> ";
-    WriteNodeReference(Base->getType(), Base->isVirtual());
+    WriteNodeReference(Base.getType(), Base.isVirtual());
 
     // Write out edge attributes to show the kind of inheritance.
-    if (Base->isVirtual()) {
+    if (Base.isVirtual()) {
       Out << " [ style=\"dashed\" ]";
     }
     Out << ";";
@@ -134,35 +135,26 @@ InheritanceHierarchyWriter::WriteNodeReference(QualType Type,
 /// viewInheritance - Display the inheritance hierarchy of this C++
 /// class using GraphViz.
 void CXXRecordDecl::viewInheritance(ASTContext& Context) const {
-  QualType Self = Context.getTypeDeclType(const_cast<CXXRecordDecl *>(this));
-  std::string ErrMsg;
-  sys::Path Filename = sys::Path::GetTemporaryDirectory(&ErrMsg);
-  if (Filename.isEmpty()) {
-    llvm::errs() << "Error: " << ErrMsg << "\n";
-    return;
-  }
-  Filename.appendComponent(Self.getAsString() + ".dot");
-  if (Filename.makeUnique(true,&ErrMsg)) {
-    llvm::errs() << "Error: " << ErrMsg << "\n";
+  QualType Self = Context.getTypeDeclType(this);
+
+  int FD;
+  SmallString<128> Filename;
+  if (std::error_code EC = llvm::sys::fs::createTemporaryFile(
+          Self.getAsString(), "dot", FD, Filename)) {
+    llvm::errs() << "Error: " << EC.message() << "\n";
     return;
   }
 
-  llvm::errs() << "Writing '" << Filename.c_str() << "'... ";
+  llvm::errs() << "Writing '" << Filename << "'... ";
 
-  llvm::raw_fd_ostream O(Filename.c_str(), ErrMsg);
+  llvm::raw_fd_ostream O(FD, true);
 
-  if (ErrMsg.empty()) {
-    InheritanceHierarchyWriter Writer(Context, O);
-    Writer.WriteGraph(Self);
-    llvm::errs() << " done. \n";
+  InheritanceHierarchyWriter Writer(Context, O);
+  Writer.WriteGraph(Self);
+  llvm::errs() << " done. \n";
 
-    O.close();
+  O.close();
 
-    // Display the graph
-    DisplayGraph(Filename);
-  } else {
-    llvm::errs() << "error opening file for writing!\n";
-  }
-}
-
+  // Display the graph
+  DisplayGraph(Filename);
 }

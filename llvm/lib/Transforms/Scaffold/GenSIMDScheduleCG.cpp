@@ -1,5 +1,5 @@
-//===----------------- GenSIMDSchedCG.cpp ----------------------===//
-// This file implements the Scaffold Pass of counting the number 
+//===----------------- GenSIMDScheduleCG.cpp ------------------------------===//
+// This file implements the Scaffold Pass of counting the number
 //  of critical timesteps and gate parallelism in program
 //  in callgraph post-order.
 //
@@ -11,52 +11,51 @@
 //===----------------------------------------------------------------------===//
 
 #define DEBUG_TYPE "GenSIMDSchedCG"
-#include <vector>
-#include <sstream>
-#include <fstream>
-#include <string>
-#include <limits>
-#include "llvm/Pass.h"
-#include "llvm/Function.h"
-#include "llvm/Module.h"
-#include "llvm/BasicBlock.h"
-#include "llvm/Instruction.h"
-#include "llvm/Instructions.h"
-#include "llvm/Support/raw_ostream.h"
-#include "llvm/ADT/Statistic.h"
-#include "llvm/Support/InstIterator.h"
-#include "llvm/PassAnalysisSupport.h"
-#include "llvm/Analysis/CallGraph.h"
-#include "llvm/Support/CFG.h"
 #include "llvm/ADT/SCCIterator.h"
-#include "llvm/Argument.h"
+#include "llvm/ADT/Statistic.h"
 #include "llvm/ADT/ilist.h"
-#include "llvm/Constants.h"
-#include "llvm/IntrinsicInst.h"
+#include "llvm/Analysis/CallGraph.h"
+#include "llvm/IR/Argument.h"
+#include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/Instruction.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/IR/IntrinsicInst.h"
+#include "llvm/IR/Module.h"
+#include "llvm/Pass.h"
+#include "llvm/PassAnalysisSupport.h"
+#include "llvm/IR/CFG.h"
 #include "llvm/Support/CommandLine.h"
-
+#include "llvm/IR/InstIterator.h"
+#include "llvm/Support/raw_ostream.h"
+#include <fstream>
+#include <limits>
+#include <sstream>
+#include <string>
+#include <vector>
 
 using namespace llvm;
 using namespace std;
 
-
-static cl::opt<unsigned>
-RES_CONSTRAINT("simd-kconstraint-cg", cl::init(10), cl::Hidden,
+static cl::opt<unsigned> RES_CONSTRAINT(
+    "simd-kconstraint-cg", cl::init(10), cl::Hidden,
     cl::desc("k in SIMD-k Coarse-Grained Resource Constrained Scheduling"));
 
-static cl::opt<unsigned>
-DATA_CONSTRAINT("simd-dconstraint-cg", cl::init(1024), cl::Hidden,
+static cl::opt<unsigned> DATA_CONSTRAINT(
+    "simd-dconstraint-cg", cl::init(1024), cl::Hidden,
     cl::desc("d in SIMD-k Coarse-Grained Resource Constrained Scheduling"));
 
-static cl::opt<unsigned>
-MOVE_WEIGHT("move-weight-cg", cl::init(4), cl::Hidden,
+static cl::opt<unsigned> MOVE_WEIGHT(
+    "move-weight-cg", cl::init(4), cl::Hidden,
     cl::desc("the communication weighting applied to a move operation"));
 
-#define MAX_RES_CONSTRAINT 128 
+#define MAX_RES_CONSTRAINT 128
 #define SSCHED_THRESH 10000000
 
 #define MAX_GATE_ARGS 30
-#define MAX_BT_COUNT 15 //max backtrace allowed - to avoid infinite recursive loops
+#define MAX_BT_COUNT                                                           \
+  15 // max backtrace allowed - to avoid infinite recursive loops
 #define NUM_QGATES 17
 #define _CNOT 0
 #define _H 1
@@ -80,370 +79,368 @@ bool debugGenSIMDSchedCG = false;
 
 namespace {
 
-  typedef pair<Instruction*, uint64_t> InstPri; //instpriority
+typedef pair<Instruction *, uint64_t> InstPri; // instpriority
 
-  struct CompareInstPriByValue {
-    bool operator() (const InstPri& a, const InstPri& b) const {
-      return a.second < b.second;
-    };
+struct CompareInstPriByValue {
+  bool operator()(const InstPri &a, const InstPri &b) const {
+    return a.second < b.second;
   };
+};
 
-  struct modularInfo{
-    uint64_t width;
-    uint64_t length;
-    uint64_t moves;
-    uint64_t mts;
-    //uint64_t ancilla;
-    uint64_t tgates;
-    uint64_t tgates_ub;
-    uint64_t tgates_par;
-    uint64_t tgates_par_ub;
-    //TODO add field for the move information
-    vector<uint64_t> moveInfo;
+struct modularInfo {
+  uint64_t width;
+  uint64_t length;
+  uint64_t moves;
+  uint64_t mts;
+  // uint64_t ancilla;
+  uint64_t tgates;
+  uint64_t tgates_ub;
+  uint64_t tgates_par;
+  uint64_t tgates_par_ub;
+  // TODO add field for the move information
+  vector<uint64_t> moveInfo;
 
-    modularInfo(): width(0), length(0), moves(0), mts(0), tgates(0), tgates_ub(0), tgates_par(0), tgates_par_ub(0) {}
-  };
+  modularInfo()
+      : width(0), length(0), moves(0), mts(0), tgates(0), tgates_ub(0),
+        tgates_par(0), tgates_par_ub(0) {}
+};
 
+struct qGateArg { // arguments to qgate calls
+  Value *argPtr;
+  int argNum;
+  bool isQbit;
+  bool isCbit;
+  bool isUndef;
+  bool isPtr;
+  int valOrIndex; // Value if not Qbit, Index if Qbit & not a Ptr
+  double angle;
+  qGateArg()
+      : argPtr(NULL), argNum(-1), isQbit(false), isCbit(false), isUndef(false),
+        isPtr(false), valOrIndex(-1), angle(0.0) {}
+};
 
-  struct qGateArg{ //arguments to qgate calls
-    Value* argPtr;
-    int argNum;
-    bool isQbit;
-    bool isCbit;
-    bool isUndef;
-    bool isPtr;
-    int valOrIndex; //Value if not Qbit, Index if Qbit & not a Ptr
-    double angle;
-    qGateArg(): argPtr(NULL), argNum(-1), isQbit(false), isCbit(false), isUndef(false), isPtr(false), valOrIndex(-1), angle(0.0){ }
-  };
+struct qArgInfo {
+  string name;
+  int index;
+  qArgInfo() : name("none"), index(-1) {}
+};
 
-  struct qArgInfo{
-    string name;
-    int index;
-    qArgInfo(): name("none"), index(-1){ }
-  };
+struct qGate {
+  Function *qFunc;
+  int numArgs;
+  qArgInfo args[MAX_GATE_ARGS];
+  double angle;
+  qGate() : qFunc(NULL), numArgs(0), angle(0.0) {}
+};
 
-  struct qGate{
-    Function* qFunc;
-    int numArgs;
-    qArgInfo args[MAX_GATE_ARGS];
-    double angle;
-    qGate():qFunc(NULL), numArgs(0), angle(0.0) { }
-  };
+struct ArrParGates {
+  int typeOfGate[MAX_RES_CONSTRAINT];
+  uint64_t numGates[MAX_RES_CONSTRAINT];
+};
 
-  struct ArrParGates{
-    int typeOfGate[MAX_RES_CONSTRAINT];
-    uint64_t numGates[MAX_RES_CONSTRAINT];
-  };
+struct GenSIMDSchedCG : public ModulePass {
+  static char ID; // Pass identification
 
-  struct GenSIMDSchedCG : public ModulePass {
-    static char ID; // Pass identification
+  string gate_name[NUM_QGATES];
+  vector<qGateArg> tmpDepQbit;
+  vector<Value *> vectQbit;
 
-    string gate_name[NUM_QGATES];
-    vector<qGateArg> tmpDepQbit;
-    vector<Value*> vectQbit;
+  int btCount; // backtrace count
 
-    int btCount; //backtrace count
+  modularInfo totalSched;
+  modularInfo currSched;
 
-    modularInfo totalSched;
-    modularInfo currSched;
+  map<string, int> gate_index;
 
-    map<string, int> gate_index;    
+  map<string, map<int, uint64_t> > funcQbits; // qbits in current function
+  map<Function *, map<unsigned int, map<int, uint64_t> > > tableFuncQbits;
+  map<string, unsigned int> funcArgs;
 
-    map<string, map<int,uint64_t> > funcQbits; //qbits in current function
-    map<Function*, map<unsigned int, map<int,uint64_t> > > tableFuncQbits;
-    map<string, unsigned int> funcArgs;
+  vector<ArrParGates> currArrParGates;
 
-    vector<ArrParGates> currArrParGates;
+  map<Instruction *, qGate> mapInstSet;
+  vector<InstPri> priorityVector;
 
-    map<Instruction*, qGate> mapInstSet;
-    vector<InstPri> priorityVector;
+  vector<Instruction *> vectCalls;
 
-    vector<Instruction*> vectCalls;
+  map<Function *, modularInfo> funcInfo;
+  vector<Function *> isLeaf;
+  bool hasPrimitivesOnly;
 
-    map<Function*, modularInfo> funcInfo;
-    vector<Function*> isLeaf;
-    bool hasPrimitivesOnly;
+  bool isFirstMeas;
 
-    bool isFirstMeas;
+  vector<uint64_t> histogramData;
 
-    vector<uint64_t> histogramData;
+  map<string, modularInfo> fileContents;
 
-    map<string, modularInfo > fileContents;
+  GenSIMDSchedCG() : ModulePass(ID) {}
 
-    GenSIMDSchedCG() : ModulePass(ID) {}
+  bool backtraceOperand(Value *opd, int opOrIndex);
+  void analyzeAllocInst(Function *F, Instruction *pinst);
+  void analyzeCallInst(
+      Function *F,
+      Instruction *pinst); // TODO: modify for corrected timing calcs
+  void getFunctionArguments(Function *F);
 
-    bool backtraceOperand(Value* opd, int opOrIndex);
-    void analyzeAllocInst(Function* F,Instruction* pinst);
-    void analyzeCallInst(Function* F,Instruction* pinst);   // TODO: modify for corrected timing calcs
-    void getFunctionArguments(Function *F);
+  void saveTableFuncQbits(Function *F);
+  void print_tableFuncQbits();
+  void print_parallelism(Function *F);
+  void print_ArrParGates();
+  void cleanupCurrArrParGates();
+  bool checkIfIntrinsic(Function *CF);
 
-    void saveTableFuncQbits(Function* F);
-    void print_tableFuncQbits();
-    void print_parallelism(Function* F);
-    void print_ArrParGates();
-    void cleanupCurrArrParGates();
-    bool checkIfIntrinsic(Function* CF);
+  void read_schedule_file();
 
-    void read_schedule_file();
+  void init_gate_names() {
+    gate_name[_CNOT] = "CNOT";
+    gate_name[_H] = "H";
+    gate_name[_S] = "S";
+    gate_name[_T] = "T";
+    gate_name[_Toffoli] = "Toffoli";
+    gate_name[_X] = "X";
+    gate_name[_Y] = "Y";
+    gate_name[_Z] = "Z";
+    gate_name[_MeasX] = "MeasX";
+    gate_name[_MeasZ] = "MeasZ";
+    gate_name[_PrepX] = "PrepX";
+    gate_name[_PrepZ] = "PrepZ";
+    gate_name[_Sdag] = "Sdag";
+    gate_name[_Tdag] = "Tdag";
+    gate_name[_Fredkin] = "Fredkin";
+    gate_name[_Rz] = "Rz";
+    gate_name[_All] = "All";
 
-    void init_gate_names(){
-      gate_name[_CNOT] = "CNOT";
-      gate_name[_H] = "H";
-      gate_name[_S] = "S";
-      gate_name[_T] = "T";
-      gate_name[_Toffoli] = "Toffoli";
-      gate_name[_X] = "X";
-      gate_name[_Y] = "Y";
-      gate_name[_Z] = "Z";
-      gate_name[_MeasX] = "MeasX";
-      gate_name[_MeasZ] = "MeasZ";
-      gate_name[_PrepX] = "PrepX";
-      gate_name[_PrepZ] = "PrepZ";
-      gate_name[_Sdag] = "Sdag";
-      gate_name[_Tdag] = "Tdag";
-      gate_name[_Fredkin] = "Fredkin";
-      gate_name[_Rz] = "Rz";
-      gate_name[_All] = "All";                    
+    gate_index["CNOT"] = _CNOT;
+    gate_index["H"] = _H;
+    gate_index["S"] = _S;
+    gate_index["T"] = _T;
+    gate_index["Toffoli"] = _Toffoli;
+    gate_index["X"] = _X;
+    gate_index["Y"] = _Y;
+    gate_index["Z"] = _Z;
+    gate_index["Sdag"] = _Sdag;
+    gate_index["Tdag"] = _Tdag;
+    gate_index["MeasX"] = _MeasX;
+    gate_index["MeasZ"] = _MeasZ;
+    gate_index["PrepX"] = _PrepX;
+    gate_index["PrepZ"] = _PrepZ;
+    gate_index["Fredkin"] = _Fredkin;
+    gate_index["Rz"] = _Rz;
+    gate_index["All"] = _All;
+  }
 
-      gate_index["CNOT"] = _CNOT;        
-      gate_index["H"] = _H;
-      gate_index["S"] = _S;
-      gate_index["T"] = _T;
-      gate_index["Toffoli"] = _Toffoli;
-      gate_index["X"] = _X;
-      gate_index["Y"] = _Y;
-      gate_index["Z"] = _Z;
-      gate_index["Sdag"] = _Sdag;
-      gate_index["Tdag"] = _Tdag;
-      gate_index["MeasX"] = _MeasX;
-      gate_index["MeasZ"] = _MeasZ;
-      gate_index["PrepX"] = _PrepX;
-      gate_index["PrepZ"] = _PrepZ;
-      gate_index["Fredkin"] = _Fredkin;
-      gate_index["Rz"] = _Rz;
-      gate_index["All"] = _All;                    
-    }
+  void init_gates_as_functions();
+  void init_critical_path_algo(Function *F);
+  void calc_critical_time(
+      Function *F, qGate qg,
+      bool isLeafFunc); // TODO: modify for correct time measurement
+  void print_funcQbits();
+  void print_qgate(qGate qg);
+  void print_critical_info();
 
+  void print_scheduled_gate(qGate qg, uint64_t ts);
 
+  uint64_t find_max_funcQbits();
+  void memset_funcQbits(uint64_t val);
+  uint64_t get_ts_to_schedule(Function *F, uint64_t ts, Function *funcToSched,
+                              uint64_t &first_step);
+  uint64_t get_ts_to_schedule_leaf(Function *F, uint64_t ts,
+                                   Function *funcToSched, uint64_t &first_step);
 
-    void init_gates_as_functions();    
-    void init_critical_path_algo(Function* F);
-    void calc_critical_time(Function* F, qGate qg, bool isLeafFunc);        // TODO: modify for correct time measurement
-    void print_funcQbits();
-    void print_qgate(qGate qg);
-    void print_critical_info(); 
+  void save_blackbox_info(Function *F);
+  uint64_t calc_critical_time_unbounded(Function *F, qGate qg);
 
-    void print_scheduled_gate(qGate qg, uint64_t ts);
+  bool check_if_pre_schedule(Function *F);
 
-    uint64_t find_max_funcQbits();
-    void memset_funcQbits(uint64_t val);
-    uint64_t get_ts_to_schedule(Function* F, uint64_t ts, Function* funcToSched, uint64_t& first_step);
-    uint64_t get_ts_to_schedule_leaf(Function* F, uint64_t ts, Function* funcToSched, uint64_t& first_step);
+  void print_qgateArg(qGateArg qg) {
+    errs() << "Printing QGate Argument:\n";
+    if (qg.argPtr)
+      errs() << "  Name: " << qg.argPtr->getName() << "\n";
+    errs() << "  Arg Num: " << qg.argNum << "\n"
+           << "  isUndef: " << qg.isUndef << "  isQbit: " << qg.isQbit
+           << "  isCbit: " << qg.isCbit << "  isPtr: " << qg.isPtr << "\n"
+           << "  Value or Index: " << qg.valOrIndex << "\n";
+  }
 
-    void save_blackbox_info(Function* F);
-    uint64_t calc_critical_time_unbounded(Function* F, qGate qg);        
+  uint64_t getNumCritSteps(Function *F) {
+    map<Function *, modularInfo>::iterator mf = funcInfo.find(F);
+    assert(mf != funcInfo.end());
+    return (mf->second.length);
+  }
 
-    bool check_if_pre_schedule(Function* F);
+  void CountCriticalFunctionResources(Function *F);
 
-    void print_qgateArg(qGateArg qg)
-    {
-      errs()<< "Printing QGate Argument:\n";
-      if(qg.argPtr) errs() << "  Name: "<<qg.argPtr->getName()<<"\n";
-      errs() << "  Arg Num: "<<qg.argNum<<"\n"
-        << "  isUndef: "<<qg.isUndef
-        << "  isQbit: "<<qg.isQbit
-        << "  isCbit: "<<qg.isCbit
-        << "  isPtr: "<<qg.isPtr << "\n"
-        << "  Value or Index: "<<qg.valOrIndex<<"\n";
-    }                    
+  bool runOnModule(Module &M);
 
-    uint64_t getNumCritSteps(Function* F){
-      map<Function*, modularInfo>::iterator mf = funcInfo.find(F);
-      assert(mf!=funcInfo.end());
-      return (mf->second.length);
-    }
+  virtual void getAnalysisUsage(AnalysisUsage &AU) const {
+    AU.setPreservesAll();
+    AU.addRequired<CallGraphWrapperPass>();
+  }
 
-    void CountCriticalFunctionResources (Function *F);
-
-    bool runOnModule (Module &M);    
-
-    virtual void getAnalysisUsage(AnalysisUsage &AU) const {
-      AU.setPreservesAll();  
-      AU.addRequired<CallGraph>();    
-    }
-
-  }; // End of struct GenSIMDSchedCG
+}; // End of struct GenSIMDSchedCG
 } // End of anonymous namespace
 
-
-
 char GenSIMDSchedCG::ID = 0;
-static RegisterPass<GenSIMDSchedCG> X("GenCGSIMDSchedule", "Generate CoarseGrained SIMD Schedule");
+static RegisterPass<GenSIMDSchedCG> X("GenCGSIMDSchedule",
+                                      "Generate CoarseGrained SIMD Schedule");
 
-void GenSIMDSchedCG::getFunctionArguments(Function* F)
-{
-  for(Function::arg_iterator ait=F->arg_begin();ait!=F->arg_end();++ait)
-  {    
-    //if(ait) errs() << "Argument: "<<ait->getName()<< " ";
-
+void GenSIMDSchedCG::getFunctionArguments(Function *F) {
+  for (Function::arg_iterator ait = F->arg_begin(); ait != F->arg_end();
+       ++ait) {
     string argName = (ait->getName()).str();
-    Type* argType = ait->getType();
-    unsigned int argNum=ait->getArgNo();         
+    Type *argType = ait->getType();
+    unsigned int argNum = ait->getArgNo();
 
     qGateArg tmpQArg;
     tmpQArg.argPtr = ait;
     tmpQArg.argNum = argNum;
 
-    if(argType->isPointerTy()){
+    if (argType->isPointerTy()) {
       tmpQArg.isPtr = true;
 
       Type *elementType = argType->getPointerElementType();
-      if (elementType->isIntegerTy(16)){ //qbit*
+      if (elementType->isIntegerTy(16)) { // qbit*
         tmpQArg.isQbit = true;
         vectQbit.push_back(ait);
 
-        map<int,uint64_t> tmpMap;
-        tmpMap[-1] = 0; //add entry for entire array
-        tmpMap[-2] = 0; //add entry for max     
-        funcQbits[argName]=tmpMap;      
+        map<int, uint64_t> tmpMap;
+        tmpMap[-1] = 0; // add entry for entire array
+        tmpMap[-2] = 0; // add entry for max
+        funcQbits[argName] = tmpMap;
         funcArgs[argName] = argNum;
-      }
-      else if (elementType->isIntegerTy(1)){ //cbit*
+      } else if (elementType->isIntegerTy(1)) { // cbit*
         tmpQArg.isCbit = true;
         vectQbit.push_back(ait);
         funcArgs[argName] = argNum;
       }
-    }
-    else if (argType->isIntegerTy(16)){ //qbit
+    } else if (argType->isIntegerTy(16)) { // qbit
       tmpQArg.isQbit = true;
       vectQbit.push_back(ait);
 
-      map<int,uint64_t> tmpMap;
-      tmpMap[-1] = 0; //add entry for entire array
-      tmpMap[-2] = 0; //add entry for max
-      funcQbits[argName]=tmpMap;
+      map<int, uint64_t> tmpMap;
+      tmpMap[-1] = 0; // add entry for entire array
+      tmpMap[-2] = 0; // add entry for max
+      funcQbits[argName] = tmpMap;
       funcArgs[argName] = argNum;
-    }
-    else if (argType->isIntegerTy(1)){ //cbit
+    } else if (argType->isIntegerTy(1)) { // cbit
       tmpQArg.isCbit = true;
       vectQbit.push_back(ait);
       funcArgs[argName] = argNum;
     }
-
   }
 }
 
-bool GenSIMDSchedCG::backtraceOperand(Value* opd, int opOrIndex)
-{
-  if(opOrIndex == 0) //backtrace for operand
+bool GenSIMDSchedCG::backtraceOperand(Value *opd, int opOrIndex) {
+  if (opOrIndex == 0) // backtrace for operand
   {
-    //search for opd in qbit/cbit vector
-    vector<Value*>::iterator vIter=find(vectQbit.begin(),vectQbit.end(),opd);
-    if(vIter != vectQbit.end()){
+    // search for opd in qbit/cbit vector
+    vector<Value *>::iterator vIter =
+        find(vectQbit.begin(), vectQbit.end(), opd);
+    if (vIter != vectQbit.end()) {
       tmpDepQbit[0].argPtr = opd;
 
       return true;
     }
 
-    if(btCount>MAX_BT_COUNT)
+    if (btCount > MAX_BT_COUNT)
       return false;
 
-    if(GetElementPtrInst *GEPI = dyn_cast<GetElementPtrInst>(opd))
-    {
+    if (GetElementPtrInst *GEPI = dyn_cast<GetElementPtrInst>(opd)) {
 
-      if(GEPI->hasAllConstantIndices()){
-        Instruction* pInst = dyn_cast<Instruction>(opd);
+      if (GEPI->hasAllConstantIndices()) {
+        Instruction *pInst = dyn_cast<Instruction>(opd);
         unsigned numOps = pInst->getNumOperands();
 
-        backtraceOperand(pInst->getOperand(0),0);
+        backtraceOperand(pInst->getOperand(0), 0);
 
-        if(ConstantInt *CI = dyn_cast<ConstantInt>(pInst->getOperand(numOps-1))){
-          if(tmpDepQbit.size()==1){
+        // NOTE: getelemptr instruction can have multiple indices. Currently
+        // considering last operand as desired index for qubit. Check this
+        // reasoning.
+        if (ConstantInt *CI =
+                dyn_cast<ConstantInt>(pInst->getOperand(numOps - 1))) {
+          if (tmpDepQbit.size() == 1) {
             tmpDepQbit[0].valOrIndex = CI->getZExtValue();
           }
         }
       }
 
-      else if(GEPI->hasIndices()){
+      else if (GEPI->hasIndices()) {
 
-        Instruction* pInst = dyn_cast<Instruction>(opd);
+        Instruction *pInst = dyn_cast<Instruction>(opd);
         unsigned numOps = pInst->getNumOperands();
-        backtraceOperand(pInst->getOperand(0),0);
+        backtraceOperand(pInst->getOperand(0), 0);
 
-        if(tmpDepQbit[0].isQbit && !(tmpDepQbit[0].isPtr)){     
-          backtraceOperand(pInst->getOperand(numOps-1),1);
+        if (tmpDepQbit[0].isQbit && !(tmpDepQbit[0].isPtr)) {
+          // NOTE: getelemptr instruction can have multiple indices. consider
+          // last operand as desired index for qubit. Check if this is true for
+          // all.
+          backtraceOperand(pInst->getOperand(numOps - 1), 1);
         }
-      }
-      else{     
-        Instruction* pInst = dyn_cast<Instruction>(opd);
+      } else {
+        Instruction *pInst = dyn_cast<Instruction>(opd);
         unsigned numOps = pInst->getNumOperands();
-        for(unsigned iop=0;iop<numOps;iop++){
-          backtraceOperand(pInst->getOperand(iop),0);
+        for (unsigned iop = 0; iop < numOps; iop++) {
+          backtraceOperand(pInst->getOperand(iop), 0);
         }
       }
       return true;
     }
 
-    if(Instruction* pInst = dyn_cast<Instruction>(opd)){
+    if (Instruction *pInst = dyn_cast<Instruction>(opd)) {
       unsigned numOps = pInst->getNumOperands();
-      for(unsigned iop=0;iop<numOps;iop++){
+      for (unsigned iop = 0; iop < numOps; iop++) {
         btCount++;
-        backtraceOperand(pInst->getOperand(iop),0);
+        backtraceOperand(pInst->getOperand(iop), 0);
         btCount--;
       }
       return true;
-    }
-    else{
+    } else {
       return true;
     }
-  }
-  else if(opOrIndex == 0){ //opOrIndex == 1; i.e. Backtracing for Index    
-    if(btCount>MAX_BT_COUNT) //prevent infinite backtracing
+  } else if (opOrIndex == 0) {  // opOrIndex == 1; i.e. Backtracing for Index
+    if (btCount > MAX_BT_COUNT) // prevent infinite backtracing
       return true;
 
-    if(ConstantInt *CI = dyn_cast<ConstantInt>(opd)){
+    if (ConstantInt *CI = dyn_cast<ConstantInt>(opd)) {
       tmpDepQbit[0].valOrIndex = CI->getZExtValue();
       return true;
-    }      
+    }
 
-    if(Instruction* pInst = dyn_cast<Instruction>(opd)){
+    if (Instruction *pInst = dyn_cast<Instruction>(opd)) {
       unsigned numOps = pInst->getNumOperands();
-      for(unsigned iop=0;iop<numOps;iop++){
+      for (unsigned iop = 0; iop < numOps; iop++) {
         btCount++;
-        backtraceOperand(pInst->getOperand(iop),1);
+        backtraceOperand(pInst->getOperand(iop), 1);
         btCount--;
       }
     }
 
-  }
-  else{ //opOrIndex == 2: backtracing to call inst MeasZ
-    if(CallInst *endCI = dyn_cast<CallInst>(opd)){
-      if(endCI->getCalledFunction()->getName().find("llvm.Meas") != string::npos){
+  } else { // opOrIndex == 2: backtracing to call inst MeasZ
+    if (CallInst *endCI = dyn_cast<CallInst>(opd)) {
+      if (endCI->getCalledFunction()->getName().find("llvm.Meas") !=
+          string::npos) {
         tmpDepQbit[0].argPtr = opd;
 
         return true;
-      }
-      else{
-        if(Instruction* pInst = dyn_cast<Instruction>(opd)){
+      } else {
+        if (Instruction *pInst = dyn_cast<Instruction>(opd)) {
           unsigned numOps = pInst->getNumOperands();
-          bool foundOne=false;
-          for(unsigned iop=0;(iop<numOps && !foundOne);iop++){
+          bool foundOne = false;
+          for (unsigned iop = 0; (iop < numOps && !foundOne); iop++) {
             btCount++;
-            foundOne = foundOne || backtraceOperand(pInst->getOperand(iop),2);
+            foundOne = foundOne || backtraceOperand(pInst->getOperand(iop), 2);
             btCount--;
           }
           return foundOne;
         }
       }
-    }
-    else{
-      if(Instruction* pInst = dyn_cast<Instruction>(opd)){
+    } else {
+      if (Instruction *pInst = dyn_cast<Instruction>(opd)) {
         unsigned numOps = pInst->getNumOperands();
-        bool foundOne=false;
-        for(unsigned iop=0;(iop<numOps && !foundOne);iop++){
+        bool foundOne = false;
+        for (unsigned iop = 0; (iop < numOps && !foundOne); iop++) {
           btCount++;
-          foundOne = foundOne || backtraceOperand(pInst->getOperand(iop),2);
+          foundOne = foundOne || backtraceOperand(pInst->getOperand(iop), 2);
           btCount--;
         }
         return foundOne;
@@ -453,31 +450,29 @@ bool GenSIMDSchedCG::backtraceOperand(Value* opd, int opOrIndex)
   return false;
 }
 
-
-void GenSIMDSchedCG::analyzeAllocInst(Function* F, Instruction* pInst){
+void GenSIMDSchedCG::analyzeAllocInst(Function *F, Instruction *pInst) {
   if (AllocaInst *AI = dyn_cast<AllocaInst>(pInst)) {
     Type *allocatedType = AI->getAllocatedType();
 
-    if(ArrayType *arrayType = dyn_cast<ArrayType>(allocatedType)) {      
+    if (ArrayType *arrayType = dyn_cast<ArrayType>(allocatedType)) {
       qGateArg tmpQArg;
 
       Type *elementType = arrayType->getElementType();
       uint64_t arraySize = arrayType->getNumElements();
-      if (elementType->isIntegerTy(16)){
+      if (elementType->isIntegerTy(16)) {
         vectQbit.push_back(AI);
         tmpQArg.isQbit = true;
         tmpQArg.argPtr = AI;
         tmpQArg.valOrIndex = arraySize;
 
-        map<int,uint64_t> tmpMap; //add qbit to funcQbits
-        tmpMap[-1] = 0; //entry for entire array ops
-        tmpMap[-2] = 0; //entry for max
-        funcQbits[AI->getName()]=tmpMap;
-
+        map<int, uint64_t> tmpMap; // add qbit to funcQbits
+        tmpMap[-1] = 0;            // entry for entire array ops
+        tmpMap[-2] = 0;            // entry for max
+        funcQbits[AI->getName()] = tmpMap;
       }
 
-      if (elementType->isIntegerTy(1)){
-        vectQbit.push_back(AI); //Cbit added here
+      if (elementType->isIntegerTy(1)) {
+        vectQbit.push_back(AI); // Cbit added here
         tmpQArg.isCbit = true;
         tmpQArg.argPtr = AI;
         tmpQArg.valOrIndex = arraySize;
@@ -486,8 +481,7 @@ void GenSIMDSchedCG::analyzeAllocInst(Function* F, Instruction* pInst){
   }
 }
 
-
-void GenSIMDSchedCG::init_critical_path_algo(Function* F){
+void GenSIMDSchedCG::init_critical_path_algo(Function *F) {
 
   currSched.width = 0;
   currSched.length = 0;
@@ -508,44 +502,42 @@ void GenSIMDSchedCG::init_critical_path_algo(Function* F){
   hasPrimitivesOnly = true;
 }
 
-void GenSIMDSchedCG::print_funcQbits(){
-  for(map<string, map<int,uint64_t> >::iterator mIter = funcQbits.begin(); mIter!=funcQbits.end(); ++mIter){
-    errs() << "Var "<< (*mIter).first << " ---> ";
-    for(map<int,uint64_t>::iterator indexIter = (*mIter).second.begin(); indexIter!=(*mIter).second.end(); ++indexIter){
-      errs() << (*indexIter).first << ":"<<(*indexIter).second<< "  ";
+void GenSIMDSchedCG::print_funcQbits() {
+  for (map<string, map<int, uint64_t> >::iterator mIter = funcQbits.begin();
+       mIter != funcQbits.end(); ++mIter) {
+    errs() << "Var " << (*mIter).first << " ---> ";
+    for (map<int, uint64_t>::iterator indexIter = (*mIter).second.begin();
+         indexIter != (*mIter).second.end(); ++indexIter) {
+      errs() << (*indexIter).first << ":" << (*indexIter).second << "  ";
     }
     errs() << "\n";
   }
 }
 
-void GenSIMDSchedCG::print_ArrParGates(){
+void GenSIMDSchedCG::print_ArrParGates() {
   errs() << "Printing ArrParGate Vector \n";
   int j = 0;
-  for(vector<ArrParGates>::iterator vit = currArrParGates.begin(); vit!=currArrParGates.end(); ++vit, j++){
+  for (vector<ArrParGates>::iterator vit = currArrParGates.begin();
+       vit != currArrParGates.end(); ++vit, j++) {
     errs() << j << " -- ";
-    for(unsigned int i=0;i<RES_CONSTRAINT;i++)
+    for (unsigned int i = 0; i < RES_CONSTRAINT; i++)
       errs() << (*vit).typeOfGate[i] << " : " << (*vit).numGates[i] << " ; ";
     errs() << "\n";
   }
-
 }
 
-void GenSIMDSchedCG::print_qgate(qGate qg){
+void GenSIMDSchedCG::print_qgate(qGate qg) {
   errs() << qg.qFunc->getName() << " : ";
-  for(int i=0;i<qg.numArgs;i++){
-    errs() << qg.args[i].name << "(" << qg.args[i].index << ") "  ;
+  for (int i = 0; i < qg.numArgs; i++) {
+    errs() << qg.args[i].name << "(" << qg.args[i].index << ") ";
   }
   errs() << "\n";
 }
 
-uint64_t GenSIMDSchedCG::get_ts_to_schedule(Function* F, uint64_t ts, Function* funcToSched, uint64_t& first_step){
-  //F is non-leaf. Treat all incoming function as blackboxes
-
-  //errs() << "\n funcTOSched = " << funcToSched->getName() << "\n";
-
-  //print_funcQbits();
-  //print_ArrParGates();
-
+uint64_t GenSIMDSchedCG::get_ts_to_schedule(Function *F, uint64_t ts,
+                                            Function *funcToSched,
+                                            uint64_t &first_step) {
+  // F is non-leaf. Treat all incoming function as blackboxes
   uint64_t Win = 0;
   uint64_t Lin = 0;
   uint64_t Min = 0;
@@ -555,256 +547,232 @@ uint64_t GenSIMDSchedCG::get_ts_to_schedule(Function* F, uint64_t ts, Function* 
   uint64_t TinPar = 0;
   uint64_t TinParUB = 0;
 
-  if(checkIfIntrinsic(funcToSched)){
+  if (checkIfIntrinsic(funcToSched)) {
     Win = 1;
     Lin = 1 + MOVE_WEIGHT;
-    Min = ( funcToSched->getIntrinsicID() == Intrinsic::CNOT ) ? 4 : 2;
+    Min = (funcToSched->getIntrinsicID() == Intrinsic::CNOT) ? 4 : 2;
     Mtsin = 1;
 
-    if(funcToSched->getIntrinsicID() == Intrinsic::T
-        || funcToSched->getIntrinsicID() == Intrinsic::Tdag){
-      //errs() << "Found T or Tdag \n";
-      Lin = 5; //cost of T gate
+    if (funcToSched->getIntrinsicID() == Intrinsic::T ||
+        funcToSched->getIntrinsicID() == Intrinsic::Tdag) {
+      Lin = 5; // cost of T gate
       Tin = 1;
       TinUB = 1;
       TinPar = 1;
       TinParUB = 1;
-    }
-    else{
+    } else {
       Tin = 0;
       TinUB = 0;
       TinPar = 0;
       TinParUB = 0;
     }
-  }
+  } else {
+    map<Function *, modularInfo>::iterator fin = funcInfo.find(funcToSched);
+    assert(fin != funcInfo.end() && "Func not found in funcInfo");
 
-  else{
-    map<Function*, modularInfo>::iterator fin = funcInfo.find(funcToSched);
-    assert(fin!=funcInfo.end() && "Func not found in funcInfo");
-
-    Win = (*fin).second.width; //width for incoming func
-    Lin = (*fin).second.length; //length for incoming func 
-    Min = (*fin).second.moves; //moves for incoming func 
-    Mtsin = (*fin).second.mts; //move timesteps for incoming func 
-    Tin = (*fin).second.tgates; //tgates for incoming func  
-    TinUB = (*fin).second.tgates_ub; //tgates for incoming func  
-    TinPar = (*fin).second.tgates_par; //tgates for incoming func  
+    Win = (*fin).second.width;         // width for incoming func
+    Lin = (*fin).second.length;        // length for incoming func
+    Min = (*fin).second.moves;         // moves for incoming func
+    Mtsin = (*fin).second.mts;         // move timesteps for incoming func
+    Tin = (*fin).second.tgates;        // tgates for incoming func
+    TinUB = (*fin).second.tgates_ub;   // tgates for incoming func
+    TinPar = (*fin).second.tgates_par; // tgates for incoming func
     TinParUB = (*fin).second.tgates_par_ub;
   }
 
-  /*
-     errs() << "Curr Width = " << currSched.width << " Length = " << currSched.length 
-     << " Tgates = " << currSched.tgates << " Moves = " << currSched.moves << " MTS = " << currSched.mts << "\n";
-     errs() << "Func Width = " << Win << " Length = " << Lin <<  " Tgates = " << Tin 
-     << " Moves = " << Min << " MTS = " << Mtsin << "\n";
-     errs() << "Total Width = " << totalSched.width << " Length = " << totalSched.length 
-     << " Tgates = " << totalSched.tgates << " Moves = " << totalSched.moves << " MTS = " << totalSched.mts << "\n";
-   */
-
-  if(ts < totalSched.length+currSched.length){ //might be able to parallelize  
-    if((Win + currSched.width) <= RES_CONSTRAINT) //Hooray, can be parallelized
+  if (ts <
+      totalSched.length + currSched.length) { // might be able to parallelize
+    if ((Win + currSched.width) <=
+        RES_CONSTRAINT) // Hooray, can be parallelized
     {
-      //first_step = totalSched.length; //where the func got scheduled
-      first_step = max(ts,totalSched.length); //where the func got scheduled
+      first_step = max(ts, totalSched.length); // where the func got scheduled
       currSched.width += Win;
-      //currSched.length = max(Lin, currSched.length);
-      currSched.length = max(first_step - totalSched.length + Lin, currSched.length);
+      currSched.length =
+          max(first_step - totalSched.length + Lin, currSched.length);
       currSched.moves += Min;
       currSched.mts = max(Mtsin, currSched.mts);
       currSched.tgates = max(Tin, currSched.tgates);
-      currSched.tgates_ub = min(TinUB+currSched.tgates_ub, currSched.length);
+      currSched.tgates_ub = min(TinUB + currSched.tgates_ub, currSched.length);
       currSched.tgates_par = max(TinPar, currSched.tgates_par);
-      currSched.tgates_par_ub = min(TinParUB+currSched.tgates_par_ub, currSched.width);
-      /*
-         errs() << "Parallel. New Width = " << currSched.width << " New Length = " << 
-         currSched.length << " New Tgates = " << currSched.tgates << " Tpar= " << 
-         currSched.tgates_par << " TparUB=" << currSched.tgates_par_ub << "\n";
-       */
-    }
-    else // must be serialized due to SIMD-k constraint
+      currSched.tgates_par_ub =
+          min(TinParUB + currSched.tgates_par_ub, currSched.width);
+    } else // must be serialized due to SIMD-k constraint
     {
+      first_step =
+          totalSched.length + currSched.length; // where the func got scheduled
 
-      first_step = totalSched.length+currSched.length; //where the func got scheduled
-
-      totalSched.width = max(totalSched.width,currSched.width);
+      totalSched.width = max(totalSched.width, currSched.width);
       totalSched.length += currSched.length;
       totalSched.moves += currSched.moves;
       totalSched.mts += currSched.mts;
       totalSched.tgates += currSched.tgates;
       totalSched.tgates_ub += currSched.tgates_ub;
-      totalSched.tgates_par = max(totalSched.tgates_par,currSched.tgates_par);
-      totalSched.tgates_par_ub = max(totalSched.tgates_par_ub,currSched.tgates_par_ub);
+      totalSched.tgates_par = max(totalSched.tgates_par, currSched.tgates_par);
+      totalSched.tgates_par_ub =
+          max(totalSched.tgates_par_ub, currSched.tgates_par_ub);
 
-
-      currSched.length = Lin; //create new
-      currSched.width = Win; //create new W
+      currSched.length = Lin; // create new
+      currSched.width = Win;  // create new W
       currSched.moves = Min;
       currSched.mts = Mtsin;
-      currSched.tgates = Tin; //create new W
-      currSched.tgates_ub = TinUB; //create new W
-      currSched.tgates_par = TinPar; //create new W
-      currSched.tgates_par_ub = TinParUB; //create new W
-      /*
-         errs() << "Serial(SIMD-k). New Width = " << currSched.width << " New Length = " << 
-         currSched.length << " New Tgates= " << currSched.tgates<< " New TgatesUB= " << 
-         currSched.tgates_ub<< " New TgatesPar= " << currSched.tgates_par<< " TparUB=" << 
-         currSched.tgates_par_ub << "\n";
-       */
+      currSched.tgates = Tin;             // create new W
+      currSched.tgates_ub = TinUB;        // create new W
+      currSched.tgates_par = TinPar;      // create new W
+      currSched.tgates_par_ub = TinParUB; // create new W
     }
-  }
-
-  else //cannot parallelize due to data dependency
+  } else // cannot parallelize due to data dependency
   {
-    //first_step = currSched.length; //where the func got scheduled
-    first_step = totalSched.length+currSched.length; //where the func got scheduled
-    totalSched.width = max(totalSched.width,currSched.width);
+    first_step =
+        totalSched.length + currSched.length; // where the func got scheduled
+    totalSched.width = max(totalSched.width, currSched.width);
     totalSched.length += currSched.length;
     totalSched.moves += currSched.moves;
     totalSched.mts += currSched.mts;
     totalSched.tgates += currSched.tgates;
     totalSched.tgates_ub += currSched.tgates_ub;
-    totalSched.tgates_par = max(totalSched.tgates_par,currSched.tgates_par);
-    totalSched.tgates_par_ub = max(totalSched.tgates_par_ub,currSched.tgates_par_ub);
+    totalSched.tgates_par = max(totalSched.tgates_par, currSched.tgates_par);
+    totalSched.tgates_par_ub =
+        max(totalSched.tgates_par_ub, currSched.tgates_par_ub);
 
-    currSched.length = Lin; //create new L
-    currSched.width = Win; //create new W
+    currSched.length = Lin; // create new L
+    currSched.width = Win;  // create new W
     currSched.moves = Min;
     currSched.mts = Mtsin;
-    currSched.tgates = Tin; //create new T
-    currSched.tgates_ub = TinUB; //create new W
-    currSched.tgates_par = TinPar; //create new W
-    currSched.tgates_par_ub = TinParUB; //create new W
-
-    /*
-       errs() << "Serial(Dependency). New Width = " << currSched.width << " New Length = " << 
-       currSched.length << " TotalW=" << totalSched.width << " TotalL=" << totalSched.length << 
-       " TotalT=" << totalSched.tgates << " TotalT_UB=" << totalSched.tgates_ub << " TotalTPar=" << 
-       totalSched.tgates_par << " TotalTParUB=" << totalSched.tgates_par_ub << "\n";
-     */
+    currSched.tgates = Tin;             // create new T
+    currSched.tgates_ub = TinUB;        // create new W
+    currSched.tgates_par = TinPar;      // create new W
+    currSched.tgates_par_ub = TinParUB; // create new W
   }
 
-  return (totalSched.length+currSched.length)-1; //where the last dependency should be recorded
-  //return (currSched.length)-1; //where the last dependency should be recorded
+  return (totalSched.length + currSched.length) -
+         1; // where the last dependency should be recorded
 }
 
-
-uint64_t GenSIMDSchedCG::get_ts_to_schedule_leaf(Function* F, uint64_t ts, Function* funcToSched, uint64_t& first_step){
-
-  //errs() << " funcTOSched = " << funcToSched->getName() << "\n";
-  //errs() << " Size of currSched = " << currArrParGates.size() << "\n";
-
-  //F is leaf. Treat all incoming functions with respect  
+uint64_t GenSIMDSchedCG::get_ts_to_schedule_leaf(Function *F, uint64_t ts,
+                                                 Function *funcToSched,
+                                                 uint64_t &first_step) {
+  // F is leaf. Treat all incoming functions with respect
   int funcIndex = -1;
 
-  assert(funcToSched->getName().str().find("llvm.")!=string::npos &&  "Non-Intrinsic Func Found in Leaf Function"); 
+  assert(funcToSched->getName().str().find("llvm.") != string::npos &&
+         "Non-Intrinsic Func Found in Leaf Function");
 
   std::string intrinsic_overloaded_name = funcToSched->getName().str();
 
-  if(intrinsic_overloaded_name.find("CNOT.i") != string::npos) intrinsic_overloaded_name = "CNOT";
-  else if(intrinsic_overloaded_name.find("NOT.i") != string::npos) intrinsic_overloaded_name = "X";
-  else if(intrinsic_overloaded_name.find("Toffoli.i") != string::npos) intrinsic_overloaded_name = "Toffoli";
-  else if(intrinsic_overloaded_name.find("MeasX.") != string::npos) intrinsic_overloaded_name = "MeasX";
-  else if(intrinsic_overloaded_name.find("MeasZ.") != string::npos) intrinsic_overloaded_name = "MeasZ";
-  else if(intrinsic_overloaded_name.find("H.i") != string::npos) intrinsic_overloaded_name = "H";
-  else if(intrinsic_overloaded_name.find("Fredkin.i") != string::npos) intrinsic_overloaded_name = "Fredkin";
-  else if(intrinsic_overloaded_name.find("PrepX.") != string::npos) intrinsic_overloaded_name = "PrepX";
-  else if(intrinsic_overloaded_name.find("PrepZ.") != string::npos) intrinsic_overloaded_name = "PrepZ";
-  else if(intrinsic_overloaded_name.substr(0,2) == "Rz") intrinsic_overloaded_name = "Rz";
-  else if(intrinsic_overloaded_name.find("S.") != string::npos) intrinsic_overloaded_name = "S";
-  else if(intrinsic_overloaded_name.find("T.") != string::npos) intrinsic_overloaded_name = "T";
-  else if(intrinsic_overloaded_name.find("Sdag.") != string::npos) intrinsic_overloaded_name = "Sdag";
-  else if(intrinsic_overloaded_name.find("Tdag.") != string::npos) intrinsic_overloaded_name = "Tdag";
-  else if(intrinsic_overloaded_name.find("X.") != string::npos) intrinsic_overloaded_name = "X";
-  else if(intrinsic_overloaded_name.find("Z.") != string::npos) intrinsic_overloaded_name = "Z";
+  if (intrinsic_overloaded_name.find("CNOT.i") != string::npos)
+    intrinsic_overloaded_name = "CNOT";
+  else if (intrinsic_overloaded_name.find("NOT.i") != string::npos)
+    intrinsic_overloaded_name = "X";
+  else if (intrinsic_overloaded_name.find("Toffoli.i") != string::npos)
+    intrinsic_overloaded_name = "Toffoli";
+  else if (intrinsic_overloaded_name.find("MeasX.") != string::npos)
+    intrinsic_overloaded_name = "MeasX";
+  else if (intrinsic_overloaded_name.find("MeasZ.") != string::npos)
+    intrinsic_overloaded_name = "MeasZ";
+  else if (intrinsic_overloaded_name.find("H.i") != string::npos)
+    intrinsic_overloaded_name = "H";
+  else if (intrinsic_overloaded_name.find("Fredkin.i") != string::npos)
+    intrinsic_overloaded_name = "Fredkin";
+  else if (intrinsic_overloaded_name.find("PrepX.") != string::npos)
+    intrinsic_overloaded_name = "PrepX";
+  else if (intrinsic_overloaded_name.find("PrepZ.") != string::npos)
+    intrinsic_overloaded_name = "PrepZ";
+  else if (intrinsic_overloaded_name.substr(0, 2) == "Rz")
+    intrinsic_overloaded_name = "Rz";
+  else if (intrinsic_overloaded_name.find("S.") != string::npos)
+    intrinsic_overloaded_name = "S";
+  else if (intrinsic_overloaded_name.find("T.") != string::npos)
+    intrinsic_overloaded_name = "T";
+  else if (intrinsic_overloaded_name.find("Sdag.") != string::npos)
+    intrinsic_overloaded_name = "Sdag";
+  else if (intrinsic_overloaded_name.find("Tdag.") != string::npos)
+    intrinsic_overloaded_name = "Tdag";
+  else if (intrinsic_overloaded_name.find("X.") != string::npos)
+    intrinsic_overloaded_name = "X";
+  else if (intrinsic_overloaded_name.find("Z.") != string::npos)
+    intrinsic_overloaded_name = "Z";
 
-  //  map<string, int>::iterator gidx = gate_index.find(funcToSched->getName().str().substr(5));
   map<string, int>::iterator gidx = gate_index.find(intrinsic_overloaded_name);
 
-  assert(gidx!=gate_index.end() && "No Gate Index Found for this Intrinsic Function");
+  assert(gidx != gate_index.end() &&
+         "No Gate Index Found for this Intrinsic Function");
   funcIndex = (*gidx).second;
 
-  //schedule intrinsic function
-
+  // schedule intrinsic function
   uint64_t retVal = 0;
   bool FirstEntrySched = false;
 
   int costOfGate = 1;
 
-  /*if(funcIndex == _T || funcIndex == _Tdag)
-    costOfGate = 10;*/
-
-  for(int c = 0; c<costOfGate; c++){
+  for (int c = 0; c < costOfGate; c++) {
     bool foundEntry = false;
 
-    int searchFuncIndex = funcIndex+c*20;
+    int searchFuncIndex = funcIndex + c * 20;
 
-    for(uint64_t i = ts; (i<currArrParGates.size() && !foundEntry); i++){
-      for(unsigned int j = 0; (j<RES_CONSTRAINT && !foundEntry); j++){
-        if( (currArrParGates[i].typeOfGate[j] == searchFuncIndex) && 
-            ( (searchFuncIndex == _CNOT && 2*currArrParGates[i].numGates[j] < DATA_CONSTRAINT) || 
-              (searchFuncIndex != _CNOT && currArrParGates[i].numGates[j]< DATA_CONSTRAINT))){
+    for (uint64_t i = ts; (i < currArrParGates.size() && !foundEntry); i++) {
+      for (unsigned int j = 0; (j < RES_CONSTRAINT && !foundEntry); j++) {
+        if ((currArrParGates[i].typeOfGate[j] == searchFuncIndex) &&
+            ((searchFuncIndex == _CNOT &&
+              2 * currArrParGates[i].numGates[j] < DATA_CONSTRAINT) ||
+             (searchFuncIndex != _CNOT &&
+              currArrParGates[i].numGates[j] < DATA_CONSTRAINT))) {
           currArrParGates[i].numGates[j] += 1;
-          if(!FirstEntrySched){
+          if (!FirstEntrySched) {
             first_step = i;
             FirstEntrySched = true;
           }
 
-          if((c==0) && (funcIndex == _T || funcIndex == _Tdag)){
-            if(currArrParGates[i].numGates[j] > currSched.tgates_par){
+          if ((c == 0) && (funcIndex == _T || funcIndex == _Tdag)) {
+            if (currArrParGates[i].numGates[j] > currSched.tgates_par) {
               currSched.tgates_par = currArrParGates[i].numGates[j];
               currSched.tgates_par_ub = currArrParGates[i].numGates[j];
-              //errs() << "Incr tgate_par \n";
             }
           }
+
           foundEntry = true;
           retVal = i;
-          ts = i+1; //update value of ts to start with in next iteration
-          //return i;
-        }
-        else if(currArrParGates[i].typeOfGate[j] == -1){
+          ts = i + 1; // update value of ts to start with in next iteration
+        } else if (currArrParGates[i].typeOfGate[j] == -1) {
           currArrParGates[i].typeOfGate[j] = searchFuncIndex;
           currArrParGates[i].numGates[j] = 1;
-          if(!FirstEntrySched){
+          if (!FirstEntrySched) {
             first_step = i;
             FirstEntrySched = true;
           }
-          if(j >= currSched.width) //update currSched.width
-            currSched.width = j+1;
+          if (j >= currSched.width) // update currSched.width
+            currSched.width = j + 1;
 
-          //Add to T gate count if T or Tdag gate
-          if((c==0) && (funcIndex == _T || funcIndex == _Tdag)){
-            //errs() << "Found T or Tdag \n";
-
+          // Add to T gate count if T or Tdag gate
+          if ((c == 0) && (funcIndex == _T || funcIndex == _Tdag)) {
             bool prevTgateFound = false;
-            for(unsigned int jcheck=0; jcheck<RES_CONSTRAINT; jcheck++){
-              if(currArrParGates[i].typeOfGate[jcheck] == _T
-                  || currArrParGates[i].typeOfGate[jcheck] == _Tdag)
+            for (unsigned int jcheck = 0; jcheck < RES_CONSTRAINT; jcheck++) {
+              if (currArrParGates[i].typeOfGate[jcheck] == _T ||
+                  currArrParGates[i].typeOfGate[jcheck] == _Tdag)
                 prevTgateFound = true;
             }
-            if(!prevTgateFound){
+            if (!prevTgateFound) {
               currSched.tgates++;
               currSched.tgates_ub++;
-              if(currSched.tgates_par == 0){
+              if (currSched.tgates_par == 0) {
                 currSched.tgates_par = 1;
                 currSched.tgates_par_ub = 1;
               }
-              //errs() << "--Incr tgate \n";
             }
           }
+
           foundEntry = true;
           retVal = i;
-          ts = i+1;
-          //return i;
+          ts = i + 1;
         }
       }
     }
 
-    if(!foundEntry){
-      //suitable ts not found, create a new ts for this type of gate
-      //add entry to vectArrParGates
+    if (!foundEntry) {
+      // suitable ts not found, create a new ts for this type of gate
+      // add entry to vectArrParGates
 
-      ArrParGates tmpArrPar; //initialize
-      for(unsigned int k=0;k<RES_CONSTRAINT; k++){
+      ArrParGates tmpArrPar; // initialize
+      for (unsigned int k = 0; k < RES_CONSTRAINT; k++) {
         tmpArrPar.typeOfGate[k] = -1;
         tmpArrPar.numGates[k] = 0;
       }
@@ -812,136 +780,142 @@ uint64_t GenSIMDSchedCG::get_ts_to_schedule_leaf(Function* F, uint64_t ts, Funct
       tmpArrPar.typeOfGate[0] = searchFuncIndex;
       tmpArrPar.numGates[0] = 1;
       currArrParGates.push_back(tmpArrPar);
-      if(!FirstEntrySched){
-        first_step = currArrParGates.size()-1;
+      if (!FirstEntrySched) {
+        first_step = currArrParGates.size() - 1;
         FirstEntrySched = true;
       }
 
-      if((c==0) && (funcIndex == _T || funcIndex == _Tdag)){
+      if ((c == 0) && (funcIndex == _T || funcIndex == _Tdag)) {
         currSched.tgates++;
         currSched.tgates_ub++;
-        //errs() << "Incr tgates \n";
-        if(currSched.tgates_par == 0){
+        if (currSched.tgates_par == 0) {
           currSched.tgates_par = 1;
           currSched.tgates_par_ub = 1;
         }
       }
 
-      if(currSched.width == 0) //update currSched.width
+      if (currSched.width == 0) // update currSched.width
         currSched.width = 1;
       currSched.length++;
 
-      retVal = currArrParGates.size()-1;
+      retVal = currArrParGates.size() - 1;
       ts = currArrParGates.size();
-
-      //return currArrParGates.size()-1;
-    } 
+    }
   } // cost Of Gate
 
-  //print_ArrParGates();
   return retVal;
 }
 
-void GenSIMDSchedCG::cleanupCurrArrParGates(){
-  currArrParGates.clear();    
-}
+void GenSIMDSchedCG::cleanupCurrArrParGates() { currArrParGates.clear(); }
 
-void GenSIMDSchedCG::save_blackbox_info(Function* F){
-  //save black box info
+void GenSIMDSchedCG::save_blackbox_info(Function *F) {
+  // save black box info
   modularInfo tmpMod;
 
-  tmpMod.width = max(totalSched.width,currSched.width);
+  tmpMod.width = max(totalSched.width, currSched.width);
   tmpMod.length = totalSched.length + currSched.length;
   tmpMod.moves = totalSched.moves + currSched.moves;
   tmpMod.mts = totalSched.mts + currSched.mts;
   tmpMod.tgates = totalSched.tgates + currSched.tgates;
   tmpMod.tgates_ub = totalSched.tgates_ub + currSched.tgates_ub;
 
-  //check if leaf function
-  //if leaf go thru currArrParGates vector and find T parallelism
+  // check if leaf function
+  // if leaf go thru currArrParGates vector and find T parallelism
 
-  //if not leaf function
-  tmpMod.tgates_par = max(totalSched.tgates_par,currSched.tgates_par);
-  tmpMod.tgates_par_ub = max(totalSched.tgates_par_ub,currSched.tgates_par_ub);
-
-  //bool checkTgatePar = checkTgatePar(F,tmpMod.tgates_par);
+  // if not leaf function
+  tmpMod.tgates_par = max(totalSched.tgates_par, currSched.tgates_par);
+  tmpMod.tgates_par_ub = max(totalSched.tgates_par_ub, currSched.tgates_par_ub);
 
   funcInfo[F] = tmpMod;
 
   bool funcIsLeaf = true;
-  vector<Function*>::iterator vit = find(isLeaf.begin(), isLeaf.end(), F);
-  if(vit==isLeaf.end()) //not a leaf
-    funcIsLeaf=false;
+  vector<Function *>::iterator vit = find(isLeaf.begin(), isLeaf.end(), F);
+  if (vit == isLeaf.end()) // not a leaf
+    funcIsLeaf = false;
 
-  errs() << "SIMD k="<<RES_CONSTRAINT<<" d=" << DATA_CONSTRAINT << " " << F->getName() << " " << tmpMod.width << " " << tmpMod.length << " " << tmpMod.moves << " " << tmpMod.mts << " leaf= " << funcIsLeaf << "\n";
-
+  errs() << "SIMD k=" << RES_CONSTRAINT << " d=" << DATA_CONSTRAINT << " "
+         << F->getName() << " " << tmpMod.width << " " << tmpMod.length << " "
+         << tmpMod.moves << " " << tmpMod.mts << " leaf= " << funcIsLeaf
+         << "\n";
 }
 
-
-void GenSIMDSchedCG::print_critical_info(){
+void GenSIMDSchedCG::print_critical_info() {
   errs() << "Timesteps = " << currArrParGates.size() << "\n";
-  for(unsigned int i = 0; i<currArrParGates.size(); i++){
+  for (unsigned int i = 0; i < currArrParGates.size(); i++) {
     errs() << i << " :";
-    for(unsigned int k=0;k<RES_CONSTRAINT;k++){      
-      errs() << currArrParGates[i].typeOfGate[k] << " : " << currArrParGates[i].numGates[k] << " / ";
+    for (unsigned int k = 0; k < RES_CONSTRAINT; k++) {
+      errs() << currArrParGates[i].typeOfGate[k] << " : "
+             << currArrParGates[i].numGates[k] << " / ";
     }
     errs() << "\n";
   }
 }
 
-void GenSIMDSchedCG::print_parallelism(Function* F){
+void GenSIMDSchedCG::print_parallelism(Function *F) {
   uint64_t maxGates[NUM_QGATES];
-  for(int k = 0; k<NUM_QGATES; k++)
+  for (int k = 0; k < NUM_QGATES; k++)
     maxGates[k] = 0;
 
-  for(vector<ArrParGates>::iterator vit = currArrParGates.begin(); vit!=currArrParGates.end(); ++vit){
-    for(unsigned int i = 0; i<RES_CONSTRAINT; i++)
-      if((*vit).numGates[i] > maxGates[(*vit).typeOfGate[i]])
+  for (vector<ArrParGates>::iterator vit = currArrParGates.begin();
+       vit != currArrParGates.end(); ++vit) {
+    for (unsigned int i = 0; i < RES_CONSTRAINT; i++)
+      if ((*vit).numGates[i] > maxGates[(*vit).typeOfGate[i]])
         maxGates[(*vit).typeOfGate[i]] = (*vit).numGates[i];
   }
 
   errs() << "\nMax Parallelism Factors: \n";
-  for(int k = 0; k<NUM_QGATES-1; k++){ //do not print 'All'
+  for (int k = 0; k < NUM_QGATES - 1; k++) { // do not print 'All'
     errs() << gate_name[k] << " : " << maxGates[k] << "\n";
-  }  
+  }
 }
 
-uint64_t GenSIMDSchedCG::find_max_funcQbits(){
+uint64_t GenSIMDSchedCG::find_max_funcQbits() {
   uint64_t max_timesteps = 0;
-  for(map<string, map<int,uint64_t> >::iterator mIter = funcQbits.begin(); mIter!=funcQbits.end(); ++mIter){
-    map<int,uint64_t>::iterator arrIter = (*mIter).second.find(-2); //max ts is in -2 entry
-    if((*arrIter).second > max_timesteps)
+  for (map<string, map<int, uint64_t> >::iterator mIter = funcQbits.begin();
+       mIter != funcQbits.end(); ++mIter) {
+    map<int, uint64_t>::iterator arrIter =
+        (*mIter).second.find(-2); // max ts is in -2 entry
+    if ((*arrIter).second > max_timesteps)
       max_timesteps = (*arrIter).second;
   }
+
   return max_timesteps;
 }
 
-void GenSIMDSchedCG::memset_funcQbits(uint64_t val){
-  for(map<string, map<int,uint64_t> >::iterator mIter = funcQbits.begin(); mIter!=funcQbits.end(); ++mIter){
-    for(map<int,uint64_t>::iterator arrIter = (*mIter).second.begin(); arrIter!=(*mIter).second.end();++arrIter)
+void GenSIMDSchedCG::memset_funcQbits(uint64_t val) {
+  for (map<string, map<int, uint64_t> >::iterator mIter = funcQbits.begin();
+       mIter != funcQbits.end(); ++mIter) {
+    for (map<int, uint64_t>::iterator arrIter = (*mIter).second.begin();
+         arrIter != (*mIter).second.end(); ++arrIter)
       (*arrIter).second = val;
   }
 }
 
-void GenSIMDSchedCG::print_scheduled_gate(qGate qg, uint64_t ts){
+void GenSIMDSchedCG::print_scheduled_gate(qGate qg, uint64_t ts) {
   string tmpGateName = qg.qFunc->getName();
-  if(tmpGateName.find("llvm.")!=string::npos)
+  if (tmpGateName.find("llvm.") != string::npos)
     tmpGateName = tmpGateName.substr(5);
   errs() << ts << " " << tmpGateName;
-  for(int i = 0; i<qg.numArgs; i++){
+  for (int i = 0; i < qg.numArgs; i++) {
     errs() << " " << qg.args[i].name;
-    if(qg.args[i].index != -1)
+    if (qg.args[i].index != -1)
       errs() << qg.args[i].index;
   }
+
   errs() << "\n";
 }
 
-void GenSIMDSchedCG::print_tableFuncQbits(){
-  for(map<Function*, map<unsigned int, map<int, uint64_t> > >::iterator m1 = tableFuncQbits.begin(); m1!=tableFuncQbits.end(); ++m1){
+void GenSIMDSchedCG::print_tableFuncQbits() {
+  for (map<Function *, map<unsigned int, map<int, uint64_t> > >::iterator m1 =
+           tableFuncQbits.begin();
+       m1 != tableFuncQbits.end(); ++m1) {
     errs() << "Function " << (*m1).first->getName() << " \n  ";
-    for(map<unsigned int, map<int, uint64_t> >::iterator m2 = (*m1).second.begin(); m2!=(*m1).second.end(); ++m2){
-      errs() << "\tArg# "<< (*m2).first << " -- ";
-      for(map<int, uint64_t>::iterator m3 = (*m2).second.begin(); m3!=(*m2).second.end(); ++m3){
+    for (map<unsigned int, map<int, uint64_t> >::iterator m2 =
+             (*m1).second.begin();
+         m2 != (*m1).second.end(); ++m2) {
+      errs() << "\tArg# " << (*m2).first << " -- ";
+      for (map<int, uint64_t>::iterator m3 = (*m2).second.begin();
+           m3 != (*m2).second.end(); ++m3) {
         errs() << " ; " << (*m3).first << " : " << (*m3).second;
       }
       errs() << "\n";
@@ -949,8 +923,8 @@ void GenSIMDSchedCG::print_tableFuncQbits(){
   }
 }
 
-
-void GenSIMDSchedCG::calc_critical_time(Function* F, qGate qg, bool isLeafFunc){
+void GenSIMDSchedCG::calc_critical_time(Function *F, qGate qg,
+                                        bool isLeafFunc) {
   string fname = qg.qFunc->getName();
 
   print_qgate(qg);
@@ -958,119 +932,115 @@ void GenSIMDSchedCG::calc_critical_time(Function* F, qGate qg, bool isLeafFunc){
 
   uint64_t first_step = 0;
 
-  if(isFirstMeas && (fname.find("llvm.MeasX") != string::npos || fname.find("llvm.MeasZ") != string::npos)){
+  if (isFirstMeas && (fname == "llvm.MeasX" || fname == "llvm.MeasZ")) {
     uint64_t maxFQ = find_max_funcQbits();
-    uint64_t max_ts_sched; 
+    uint64_t max_ts_sched;
 
-    if(isLeafFunc)
-      max_ts_sched = get_ts_to_schedule_leaf(F,maxFQ, qg.qFunc, first_step);
+    if (isLeafFunc)
+      max_ts_sched = get_ts_to_schedule_leaf(F, maxFQ, qg.qFunc, first_step);
     else
-      max_ts_sched = get_ts_to_schedule(F,maxFQ, qg.qFunc, first_step);
+      max_ts_sched = get_ts_to_schedule(F, maxFQ, qg.qFunc, first_step);
 
     memset_funcQbits(max_ts_sched);
 
-    //set this Meas in this max_ts_sched+1
-    map<string, map<int,uint64_t> >::iterator mIter = funcQbits.find(qg.args[0].name);
+    // set this Meas in this max_ts_sched+1
+    map<string, map<int, uint64_t> >::iterator mIter =
+        funcQbits.find(qg.args[0].name);
     assert(mIter != funcQbits.end() && "Meas Gate Var not found in funcQbits");
 
-    int argIndex = qg.args[0].index; //must have only one argument
+    int argIndex = qg.args[0].index; // must have only one argument
     assert(argIndex != -1 && "Meas gate has array argument");
 
-    //update the timestep number for that argument
-    map<int,uint64_t>::iterator indexIter = (*mIter).second.find(argIndex);
-    (*indexIter).second =  max_ts_sched + 1;
+    // update the timestep number for that argument
+    map<int, uint64_t>::iterator indexIter = (*mIter).second.find(argIndex);
+    (*indexIter).second = max_ts_sched + 1;
 
-    //update -2 entry for the array, i.e. max ts over all indices
+    // update -2 entry for the array, i.e. max ts over all indices
     indexIter = (*mIter).second.find(-2);
     (*indexIter).second = max_ts_sched + 1;
 
-    //errs() << "Scheduled in "<< max_ts_sched+1 << "\n";
-    //print_funcQbits();
-
     isFirstMeas = false;
-    //--print_scheduled_gate(qg,max_ts_sched+1);
-    return;    
-  }
-  else{
-    //find last timestep for all arguments of qgate
-    for(int i=0;i<qg.numArgs; i++){
-      map<string, map<int,uint64_t> >::iterator mIter = funcQbits.find(qg.args[i].name);
-      assert(mIter!=funcQbits.end()); //should already have an entry for the name of the qbit
+    return;
+  } else {
+    // find last timestep for all arguments of qgate
+    for (int i = 0; i < qg.numArgs; i++) {
+      map<string, map<int, uint64_t> >::iterator mIter =
+          funcQbits.find(qg.args[i].name);
+      assert(mIter != funcQbits.end()); // should already have an entry for the
+                                        // name of the qbit
 
       int argIndex = qg.args[i].index;
 
-      //find the index of argument in the map<int,int>
-      if(argIndex == -1) //operation on entire array
+      // find the index of argument in the map<int,int>
+      if (argIndex == -1) // operation on entire array
       {
-        //find max for the array        
-        map<int,uint64_t>::iterator indexIter = (*mIter).second.find(-2);
-        if((*indexIter).second > max_ts_of_all_args)
-          max_ts_of_all_args = (*indexIter).second;     
-      }
-      else
-      {
-        map<int,uint64_t>::iterator indexIter = (*mIter).second.find(argIndex);
-        if(indexIter!=(*mIter).second.end()){
-          if((*indexIter).second > max_ts_of_all_args)
+        // find max for the array
+        map<int, uint64_t>::iterator indexIter = (*mIter).second.find(-2);
+        if ((*indexIter).second > max_ts_of_all_args)
+          max_ts_of_all_args = (*indexIter).second;
+      } else {
+        map<int, uint64_t>::iterator indexIter = (*mIter).second.find(argIndex);
+        if (indexIter != (*mIter).second.end()) {
+          if ((*indexIter).second > max_ts_of_all_args)
             max_ts_of_all_args = (*indexIter).second;
-        }
-        else{
-          //find the value for entire array
-          map<int,uint64_t>::iterator fullArrayIndexIter = (*mIter).second.find(-1);  
+        } else {
+          // find the value for entire array
+          map<int, uint64_t>::iterator fullArrayIndexIter =
+              (*mIter).second.find(-1);
           ((*mIter).second)[argIndex] = (*fullArrayIndexIter).second;
-          //((*mIter).second)[argIndex] = 0;
-          if((*fullArrayIndexIter).second > max_ts_of_all_args)
+          if ((*fullArrayIndexIter).second > max_ts_of_all_args)
             max_ts_of_all_args = (*fullArrayIndexIter).second;
         }
       }
     }
 
-    if(debugGenSIMDSchedCG){
+    if (debugGenSIMDSchedCG) {
       errs() << "Before Scheduling: \n";
       print_funcQbits();
     }
 
-    //errs() << "Max timestep for all args = " << max_ts_of_all_args << "\n";
-
-    //find timestep from max_ts_of_all_args where type of gate is same as this gate or no gate has been scheduled.
+    // find timestep from max_ts_of_all_args where type of gate is same as this
+    // gate or no gate has been scheduled.
     uint64_t ts_sched;
 
-    if(isLeafFunc)
-      ts_sched = get_ts_to_schedule_leaf(F,max_ts_of_all_args, qg.qFunc, first_step);
+    if (isLeafFunc)
+      ts_sched =
+          get_ts_to_schedule_leaf(F, max_ts_of_all_args, qg.qFunc, first_step);
     else
-      ts_sched = get_ts_to_schedule(F,max_ts_of_all_args, qg.qFunc, first_step);
+      ts_sched =
+          get_ts_to_schedule(F, max_ts_of_all_args, qg.qFunc, first_step);
 
-    //errs() << "ts_sched = " << ts_sched << " FirstStep = " << first_step << "\n";
+    // schedule gate in max_ts_of_all_args + 1th timestep = ts_sched+1
+    if (F->getName() == "EdgeORACLEsplitPow17")
+      print_scheduled_gate(qg, first_step + 1);
 
-    //schedule gate in max_ts_of_all_args + 1th timestep = ts_sched+1
-    if(F->getName()=="EdgeORACLEsplitPow17")
-      print_scheduled_gate(qg,first_step+1);
-
-    //update last timestep for all arguments of qgate
-    for(int i=0;i<qg.numArgs; i++){
-      map<string, map<int,uint64_t> >::iterator mIter = funcQbits.find(qg.args[i].name);
+    // update last timestep for all arguments of qgate
+    for (int i = 0; i < qg.numArgs; i++) {
+      map<string, map<int, uint64_t> >::iterator mIter =
+          funcQbits.find(qg.args[i].name);
 
       int argIndex = qg.args[i].index;
 
-      if(argIndex == -1){
-        for(map<int,uint64_t>::iterator entryIter = (*mIter).second.begin(); entryIter!=(*mIter).second.end();++entryIter){
+      if (argIndex == -1) {
+        for (map<int, uint64_t>::iterator entryIter = (*mIter).second.begin();
+             entryIter != (*mIter).second.end(); ++entryIter) {
           (*entryIter).second = ts_sched + 1;
         }
-      }
-      else{
-        //update the timestep number for that argument
-        map<int,uint64_t>::iterator indexIter = (*mIter).second.find(argIndex);
-        (*indexIter).second =  ts_sched + 1;
 
-        //update -2 entry for the array, i.e. max ts over all indices
+      } else {
+        // update the timestep number for that argument
+        map<int, uint64_t>::iterator indexIter = (*mIter).second.find(argIndex);
+        (*indexIter).second = ts_sched + 1;
+
+        // update -2 entry for the array, i.e. max ts over all indices
         indexIter = (*mIter).second.find(-2);
-        if((*indexIter).second < ts_sched + 1)
+        if ((*indexIter).second < ts_sched + 1)
           (*indexIter).second = ts_sched + 1;
-      }  
+      }
     }
   } // not first MeasX gate
 
-  if(debugGenSIMDSchedCG){   
+  if (debugGenSIMDSchedCG) {
     errs() << "\nAfter Scheduling: \n";
     print_funcQbits();
     print_critical_info();
@@ -1078,122 +1048,123 @@ void GenSIMDSchedCG::calc_critical_time(Function* F, qGate qg, bool isLeafFunc){
   }
 }
 
-uint64_t GenSIMDSchedCG::calc_critical_time_unbounded(Function* F, qGate qg){
+uint64_t GenSIMDSchedCG::calc_critical_time_unbounded(Function *F, qGate qg) {
   string fname = qg.qFunc->getName();
 
-  if(debugGenSIMDSchedCG){   
-    print_qgate(qg);    
+  if (debugGenSIMDSchedCG) {
+    print_qgate(qg);
     print_tableFuncQbits();
   }
 
   uint64_t max_ts_of_all_args = 0;
 
-  //find last timestep for all arguments of qgate
-  for(int i=0;i<qg.numArgs; i++){
-    map<string, map<int,uint64_t> >::iterator mIter = funcQbits.find(qg.args[i].name);
-    assert(mIter!=funcQbits.end()); //should already have an entry for the name of the qbit
+  // find last timestep for all arguments of qgate
+  for (int i = 0; i < qg.numArgs; i++) {
+    map<string, map<int, uint64_t> >::iterator mIter =
+        funcQbits.find(qg.args[i].name);
+    assert(mIter !=
+           funcQbits
+               .end()); // should already have an entry for the name of the qbit
 
     int argIndex = qg.args[i].index;
 
-    //find the index of argument in the map<int,int>
-    if(argIndex == -1) //operation on entire array
+    // find the index of argument in the map<int,int>
+    if (argIndex == -1) // operation on entire array
     {
-      //find max for the array          
-      map<int,uint64_t>::iterator indexIter = (*mIter).second.find(-2);
-      if((*indexIter).second > max_ts_of_all_args)
-        max_ts_of_all_args = (*indexIter).second;       
-    }
-    else
-    {
-      map<int,uint64_t>::iterator indexIter = (*mIter).second.find(argIndex);
-      if(indexIter!=(*mIter).second.end()){
-        if((*indexIter).second > max_ts_of_all_args)
+      // find max for the array
+      map<int, uint64_t>::iterator indexIter = (*mIter).second.find(-2);
+      if ((*indexIter).second > max_ts_of_all_args)
+        max_ts_of_all_args = (*indexIter).second;
+    } else {
+      map<int, uint64_t>::iterator indexIter = (*mIter).second.find(argIndex);
+      if (indexIter != (*mIter).second.end()) {
+        if ((*indexIter).second > max_ts_of_all_args)
           max_ts_of_all_args = (*indexIter).second;
-      }
-      else{
-        //find the value for entire array
-        map<int,uint64_t>::iterator fullArrayIndexIter = (*mIter).second.find(-1);      
+      } else {
+        // find the value for entire array
+        map<int, uint64_t>::iterator fullArrayIndexIter =
+            (*mIter).second.find(-1);
         ((*mIter).second)[argIndex] = (*fullArrayIndexIter).second;
-        if((*fullArrayIndexIter).second > max_ts_of_all_args)
+        if ((*fullArrayIndexIter).second > max_ts_of_all_args)
           max_ts_of_all_args = (*fullArrayIndexIter).second;
       }
     }
   }
 
-  if(debugGenSIMDSchedCG){
+  if (debugGenSIMDSchedCG) {
     errs() << "Before Scheduling: \n";
     print_funcQbits();
   }
 
-  //update last timestep for all arguments of qgate
-  for(int i=0;i<qg.numArgs; i++){
-    map<string, map<int,uint64_t> >::iterator mIter = funcQbits.find(qg.args[i].name);
+  // schedule gate in max_ts_of_all_args + 1th timestep
+  // update last timestep for all arguments of qgate
+  for (int i = 0; i < qg.numArgs; i++) {
+    map<string, map<int, uint64_t> >::iterator mIter =
+        funcQbits.find(qg.args[i].name);
 
     int argIndex = qg.args[i].index;
 
-    if(argIndex == -1){
-      for(map<int,uint64_t>::iterator entryIter = (*mIter).second.begin(); entryIter!=(*mIter).second.end();++entryIter){
+    if (argIndex == -1) {
+      for (map<int, uint64_t>::iterator entryIter = (*mIter).second.begin();
+           entryIter != (*mIter).second.end(); ++entryIter) {
         (*entryIter).second = max_ts_of_all_args + 1;
       }
 
-    }
-    else{
-      //update the timestep number for that argument
-      map<int,uint64_t>::iterator indexIter = (*mIter).second.find(argIndex);
-      (*indexIter).second =  max_ts_of_all_args + 1;
+    } else {
+      // update the timestep number for that argument
+      map<int, uint64_t>::iterator indexIter = (*mIter).second.find(argIndex);
+      (*indexIter).second = max_ts_of_all_args + 1;
 
-      //update -2 entry for the array, i.e. max ts over all indices
+      // update -2 entry for the array, i.e. max ts over all indices
       indexIter = (*mIter).second.find(-2);
-      if((*indexIter).second < max_ts_of_all_args + 1)
+      if ((*indexIter).second < max_ts_of_all_args + 1)
         (*indexIter).second = max_ts_of_all_args + 1;
-    }  
+    }
   }
 
-  if(debugGenSIMDSchedCG)
-  {   
+  if (debugGenSIMDSchedCG) {
     errs() << "\nAfter Scheduling: \n";
     print_funcQbits();
     errs() << "\n";
   }
 
-  return max_ts_of_all_args+1;
+  return max_ts_of_all_args + 1;
 
-} //calc_critical_time_unbounded
+} // calc_critical_time_unbounded
 
-
-bool GenSIMDSchedCG::checkIfIntrinsic(Function* CF){
-  if(CF->isIntrinsic()){
-    if((CF->getIntrinsicID() == Intrinsic::CNOT)
-        || (CF->getIntrinsicID() == Intrinsic::Fredkin)
-        || (CF->getIntrinsicID() == Intrinsic::H)
-        || (CF->getIntrinsicID() == Intrinsic::MeasX)
-        || (CF->getIntrinsicID() == Intrinsic::MeasZ)
-        || (CF->getIntrinsicID() == Intrinsic::PrepX)
-        || (CF->getIntrinsicID() == Intrinsic::PrepZ)
-        || (CF->getIntrinsicID() == Intrinsic::Rz)
-        || (CF->getIntrinsicID() == Intrinsic::S)
-        || (CF->getIntrinsicID() == Intrinsic::T)
-        || (CF->getIntrinsicID() == Intrinsic::Sdag)
-        || (CF->getIntrinsicID() == Intrinsic::Tdag)
-        || (CF->getIntrinsicID() == Intrinsic::Toffoli)
-        || (CF->getIntrinsicID() == Intrinsic::X)
-        || (CF->getIntrinsicID() == Intrinsic::Y)
-        || (CF->getIntrinsicID() == Intrinsic::Z)){
+bool GenSIMDSchedCG::checkIfIntrinsic(Function *CF) {
+  if (CF->isIntrinsic()) {
+    if ((CF->getIntrinsicID() == Intrinsic::CNOT) ||
+        (CF->getIntrinsicID() == Intrinsic::Fredkin) ||
+        (CF->getIntrinsicID() == Intrinsic::H) ||
+        (CF->getIntrinsicID() == Intrinsic::MeasX) ||
+        (CF->getIntrinsicID() == Intrinsic::MeasZ) ||
+        (CF->getIntrinsicID() == Intrinsic::PrepX) ||
+        (CF->getIntrinsicID() == Intrinsic::PrepZ) ||
+        (CF->getIntrinsicID() == Intrinsic::Rz) ||
+        (CF->getIntrinsicID() == Intrinsic::S) ||
+        (CF->getIntrinsicID() == Intrinsic::T) ||
+        (CF->getIntrinsicID() == Intrinsic::Sdag) ||
+        (CF->getIntrinsicID() == Intrinsic::Tdag) ||
+        (CF->getIntrinsicID() == Intrinsic::Toffoli) ||
+        (CF->getIntrinsicID() == Intrinsic::X) ||
+        (CF->getIntrinsicID() == Intrinsic::Y) ||
+        (CF->getIntrinsicID() == Intrinsic::Z)) {
       return true;
     }
   }
   return false;
 }
 
-void GenSIMDSchedCG::read_schedule_file(){
-  int len, wlen, temp;    // communciation unweighted and weighted lengths, and placeholder for move information
+void GenSIMDSchedCG::read_schedule_file() {
+  int len, wlen, temp; // communciation unweighted and weighted lengths, and
+                       // placeholder for move information
   std::string line;
   std::string lineFile;
 
-  std::ifstream file ("comm_aware_schedule.txt");
-  if(file.is_open()) {
-    while(std::getline(file, line)){
-      //errs() << "Reading: " << line << "\n";
+  std::ifstream file("comm_aware_schedule.txt");
+  if (file.is_open()) {
+    while (std::getline(file, line)) {
       istringstream iss(line);
       modularInfo mySize;
 
@@ -1204,185 +1175,180 @@ void GenSIMDSchedCG::read_schedule_file(){
       iss >> mySize.mts;
       iss >> mySize.moves;
       iss >> mySize.tgates;
-      //TODO Track move information
-      for(int i = 0; i < len; i++){
+      // TODO Track move information
+      for (int i = 0; i < len; i++) {
         iss >> temp;
         mySize.moveInfo.push_back(temp);
       }
       // Use comm-weighted length if weight is set
       mySize.length = (MOVE_WEIGHT) ? wlen : len;
 
-      histogramData.insert(histogramData.end(), mySize.moveInfo.begin(), mySize.moveInfo.end());
+      histogramData.insert(histogramData.end(), mySize.moveInfo.begin(),
+                           mySize.moveInfo.end());
 
       fileContents[lineFile] = mySize;
     }
-    file.close(); 
-  }
-  else
+    file.close();
+  } else
     errs() << "Error: Could not open comm_aware_schedule.txt file.\n";
 
-  //print fileContents
-  if(debugGenSIMDSchedCG){
+  // print fileContents
+  if (debugGenSIMDSchedCG) {
     errs() << "Printing fileContents:\n";
-    for(map<string, modularInfo >::iterator mit = fileContents.begin(); mit!=fileContents.end(); ++mit)
-    {
-      errs() << (*mit).first << ":" << (*mit).second.width << "," << (*mit).second.length << "\n";
+    for (map<string, modularInfo>::iterator mit = fileContents.begin();
+         mit != fileContents.end(); ++mit) {
+      errs() << (*mit).first << ":" << (*mit).second.width << ","
+             << (*mit).second.length << "\n";
     }
   }
 }
 
-bool GenSIMDSchedCG::check_if_pre_schedule(Function* F){
-  //check if the function has been scheduled by another algorithm
-  //eg: using communication aware algorithm
+bool GenSIMDSchedCG::check_if_pre_schedule(Function *F) {
+  // check if the function has been scheduled by another algorithm
+  // eg: using communication aware algorithm
 
-  //open the input file and search for function name
+  // open the input file and search for function name
   string fname = F->getName();
-  //errs() << "Func Name = " << fname << "\n";
-  //search for fname in fileContents
-  map<string, modularInfo >::iterator foundFn = fileContents.find(fname);
-  if(foundFn == fileContents.end()){
-    //errs() << "No function found\n";
+  // search for fname in fileContents
+  map<string, modularInfo>::iterator foundFn = fileContents.find(fname);
+  if (foundFn == fileContents.end())
     return false;
-  }
 
   funcInfo[F] = (*foundFn).second;
 
-  errs() << "SIMD k="<<RES_CONSTRAINT<<" d=" << DATA_CONSTRAINT << " " << F->getName() << " " << (*foundFn).second.width << " " << (*foundFn).second.length << " " << (*foundFn).second.moves << " " << (*foundFn).second.mts << " leaf= 1" << " (read from file)\n";
+  errs() << "SIMD k=" << RES_CONSTRAINT << " d=" << DATA_CONSTRAINT << " "
+         << F->getName() << " " << (*foundFn).second.width << " "
+         << (*foundFn).second.length << " " << (*foundFn).second.moves << " "
+         << (*foundFn).second.mts << " leaf= 1"
+         << " (read from file)\n";
 
   return true;
-
 }
 
-void GenSIMDSchedCG::analyzeCallInst(Function* F, Instruction* pInst){
-  if(CallInst *CI = dyn_cast<CallInst>(pInst))
-  {      
-    if(debugGenSIMDSchedCG)
+void GenSIMDSchedCG::analyzeCallInst(Function *F, Instruction *pInst) {
+  if (CallInst *CI = dyn_cast<CallInst>(pInst)) {
+    if (debugGenSIMDSchedCG)
       errs() << "Call inst: " << CI->getCalledFunction()->getName() << "\n";
 
-    if(CI->getCalledFunction()->getName() == "store_cbit"){   //trace return values
+    if (CI->getCalledFunction()->getName() ==
+        "store_cbit") { // trace return values
       return;
-    }      
+    }
 
-    vector<qGateArg> allDepQbit;                                  
+    vector<qGateArg> allDepQbit;
 
     bool tracked_all_operands = true;
 
     int myPrepState = -1;
     double myRotationAngle = 0.0;
 
-    for(unsigned iop=0;iop<CI->getNumArgOperands();iop++){
+    for (unsigned iop = 0; iop < CI->getNumArgOperands(); iop++) {
       tmpDepQbit.clear();
 
       qGateArg tmpQGateArg;
-      btCount=0;
+      btCount = 0;
 
       tmpQGateArg.argNum = iop;
 
-
-      if(isa<UndefValue>(CI->getArgOperand(iop))){
+      if (isa<UndefValue>(CI->getArgOperand(iop))) {
         errs() << "WARNING: LLVM IR code has UNDEF values. \n";
-        tmpQGateArg.isUndef = true;   
-        //exit(1);
+        tmpQGateArg.isUndef = true;
       }
 
-      Type* argType = CI->getArgOperand(iop)->getType();
-      if(argType->isPointerTy()){
+      Type *argType = CI->getArgOperand(iop)->getType();
+      if (argType->isPointerTy()) {
         tmpQGateArg.isPtr = true;
         Type *argElemType = argType->getPointerElementType();
-        if(argElemType->isIntegerTy(16))
+        if (argElemType->isIntegerTy(16))
           tmpQGateArg.isQbit = true;
-        if(argElemType->isIntegerTy(1))
+        if (argElemType->isIntegerTy(1))
           tmpQGateArg.isCbit = true;
-      }
-      else if(argType->isIntegerTy(16)){
+      } else if (argType->isIntegerTy(16)) {
         tmpQGateArg.isQbit = true;
-        tmpQGateArg.valOrIndex = 0;    
-      }               
-      else if(argType->isIntegerTy(1)){
+        tmpQGateArg.valOrIndex = 0;
+      } else if (argType->isIntegerTy(1)) {
         tmpQGateArg.isCbit = true;
-        tmpQGateArg.valOrIndex = 0;    
+        tmpQGateArg.valOrIndex = 0;
       }
 
-      //check if argument is constant int
-      if(ConstantInt *CInt = dyn_cast<ConstantInt>(CI->getArgOperand(iop))){
-        myPrepState = CInt->getZExtValue();     
+      // check if argument is constant int
+      if (ConstantInt *CInt = dyn_cast<ConstantInt>(CI->getArgOperand(iop))) {
+        myPrepState = CInt->getZExtValue();
       }
 
-      //check if argument is constant float
-      if(ConstantFP *CFP = dyn_cast<ConstantFP>(CI->getArgOperand(iop))){
+      // check if argument is constant float
+      if (ConstantFP *CFP = dyn_cast<ConstantFP>(CI->getArgOperand(iop))) {
         myRotationAngle = CFP->getValueAPF().convertToDouble();
-      }               
-
-      if(tmpQGateArg.isQbit){
-        tmpDepQbit.push_back(tmpQGateArg);  
-        tracked_all_operands &= backtraceOperand(CI->getArgOperand(iop),0);
       }
 
-      if(tmpDepQbit.size()>0){          
+      // if(tmpQGateArg.isQbit || tmpQGateArg.isCbit){
+      if (tmpQGateArg.isQbit) {
+        tmpDepQbit.push_back(tmpQGateArg);
+        tracked_all_operands &= backtraceOperand(CI->getArgOperand(iop), 0);
+      }
+
+      if (tmpDepQbit.size() > 0) {
         allDepQbit.push_back(tmpDepQbit[0]);
         assert(tmpDepQbit.size() == 1 && "tmpDepQbit SIZE GT 1");
         tmpDepQbit.clear();
       }
     }
-    if(allDepQbit.size() > 0){
-      if(debugGenSIMDSchedCG)
-      {
-        errs() << "\nCall inst: " << CI->getCalledFunction()->getName();        
-        errs() << ": Found all arguments: ";       
-        for(unsigned int vb=0; vb<allDepQbit.size(); vb++){
-          if(allDepQbit[vb].argPtr)
-            errs() << allDepQbit[vb].argPtr->getName() <<" Index: ";
-          //else
-          errs() << allDepQbit[vb].valOrIndex <<" ";
+
+    if (allDepQbit.size() > 0) {
+      if (debugGenSIMDSchedCG) {
+        errs() << "\nCall inst: " << CI->getCalledFunction()->getName();
+        errs() << ": Found all arguments: ";
+        for (unsigned int vb = 0; vb < allDepQbit.size(); vb++) {
+          if (allDepQbit[vb].argPtr)
+            errs() << allDepQbit[vb].argPtr->getName() << " Index: ";
+
+          errs() << allDepQbit[vb].valOrIndex << " ";
         }
-        errs()<<"\n";
+        errs() << "\n";
       }
-      //check if Intrinsic
+
+      // check if Intrinsic
       bool thisFuncIsIntrinsic = checkIfIntrinsic(CI->getCalledFunction());
-      if(!thisFuncIsIntrinsic) hasPrimitivesOnly = false;
+      if (!thisFuncIsIntrinsic)
+        hasPrimitivesOnly = false;
 
-      string fname =  CI->getCalledFunction()->getName();  
+      string fname = CI->getCalledFunction()->getName();
       qGate thisGate;
-      thisGate.qFunc =  CI->getCalledFunction();
+      thisGate.qFunc = CI->getCalledFunction();
 
-      if(myPrepState!=-1) thisGate.angle = (float)myPrepState;
-      if(myRotationAngle!=0.0) thisGate.angle = myRotationAngle;
+      if (myPrepState != -1)
+        thisGate.angle = (float)myPrepState;
+      if (myRotationAngle != 0.0)
+        thisGate.angle = myRotationAngle;
 
-      for(unsigned int vb=0; vb<allDepQbit.size(); vb++){
-        if(allDepQbit[vb].argPtr){
-          //errs() << allDepQbit[vb].argPtr->getName() <<" Index: ";
-          //errs() << allDepQbit[vb].valOrIndex <<"\n";
-          qGateArg param =  allDepQbit[vb];       
-          //errs() << "1\n";
+      for (unsigned int vb = 0; vb < allDepQbit.size(); vb++) {
+        if (allDepQbit[vb].argPtr) {
+          qGateArg param = allDepQbit[vb];
           thisGate.args[thisGate.numArgs].name = param.argPtr->getName();
-          //errs() << "2\n";
-          if(!param.isPtr)
+          if (!param.isPtr)
             thisGate.args[thisGate.numArgs].index = param.valOrIndex;
-          //errs() << "3\n";
           thisGate.numArgs++;
-          //errs() << "4\n";
         }
       }
-      //errs() << "5\n";
 
-      uint64_t thisTS = calc_critical_time_unbounded(F,thisGate);       
-      //update priorityVector
-      priorityVector.push_back(make_pair(pInst,thisTS));
+      uint64_t thisTS = calc_critical_time_unbounded(F, thisGate);
+      // update priorityVector
+      priorityVector.push_back(make_pair(pInst, thisTS));
 
-      //add to mapInstSet
+      // add to mapInstSet
       mapInstSet[pInst] = thisGate;
-
-    }    
-    allDepQbit.erase(allDepQbit.begin(),allDepQbit.end());
+    }
+    allDepQbit.erase(allDepQbit.begin(), allDepQbit.end());
   }
 }
 
-void GenSIMDSchedCG::saveTableFuncQbits(Function* F){
+void GenSIMDSchedCG::saveTableFuncQbits(Function *F) {
   map<unsigned int, map<int, uint64_t> > tmpFuncQbitsMap;
 
-  for(map<string, map<int, uint64_t> >::iterator mapIt = funcQbits.begin(); mapIt!=funcQbits.end(); ++mapIt){
+  for (map<string, map<int, uint64_t> >::iterator mapIt = funcQbits.begin();
+       mapIt != funcQbits.end(); ++mapIt) {
     map<string, unsigned int>::iterator argIt = funcArgs.find((*mapIt).first);
-    if(argIt!=funcArgs.end()){
+    if (argIt != funcArgs.end()) {
       unsigned int argNum = (*argIt).second;
       tmpFuncQbitsMap[argNum] = (*mapIt).second;
     }
@@ -1390,91 +1356,92 @@ void GenSIMDSchedCG::saveTableFuncQbits(Function* F){
   tableFuncQbits[F] = tmpFuncQbitsMap;
 }
 
-void GenSIMDSchedCG::CountCriticalFunctionResources (Function *F) {
+void GenSIMDSchedCG::CountCriticalFunctionResources(Function *F) {
   // Traverse instruction by instruction
   init_critical_path_algo(F);
 
-  //get qbits in function
+  // get qbits in function
   for (inst_iterator I = inst_begin(*F), E = inst_end(*F); I != E; ++I) {
-    Instruction *Inst = &*I;                            // Grab pointer to instruction reference
-    analyzeAllocInst(F,Inst);          
-    if(!isa<AllocaInst>(Inst))
+    Instruction *Inst = &*I; // Grab pointer to instruction reference
+    analyzeAllocInst(F, Inst);
+    if (!isa<AllocaInst>(Inst))
       break;
   }
 
-  //errs() << "Finding priorities--- \n";
-  //find priorities for instructions
+  // find priorities for instructions
   for (inst_iterator I = inst_begin(*F), E = inst_end(*F); I != E; ++I) {
-    Instruction *Inst = &*I;                            // Grab pointer to instruction reference
-    if(isa<CallInst>(Inst))
+    Instruction *Inst = &*I; // Grab pointer to instruction reference
+    if (isa<CallInst>(Inst))
       vectCalls.push_back(Inst);
   }
 
-  //traverse in reverse sequence
-  for(vector<Instruction*>::reverse_iterator rit = vectCalls.rbegin(); rit!=vectCalls.rend(); ++rit)
-    analyzeCallInst(F,(*rit));  
+  // traverse in reverse sequence
+  for (vector<Instruction *>::reverse_iterator rit = vectCalls.rbegin();
+       rit != vectCalls.rend(); ++rit)
+    analyzeCallInst(F, (*rit));
 
-  //is function leaf or not?
-  if(hasPrimitivesOnly) isLeaf.push_back(F);
+  // is function leaf or not?
+  if (hasPrimitivesOnly)
+    isLeaf.push_back(F);
 
-  //reset funcQbits vector in preparation for scheduling
+  // reset funcQbits vector in preparation for scheduling
   memset_funcQbits(0);
 
-  //sort vector
+  // sort vector
   sort(priorityVector.begin(), priorityVector.end(), CompareInstPriByValue());
 
-  //check if this function has a schedule from a different scheduling algo
+  // check if this function has a schedule from a different scheduling algo
   bool has_pre_schedule = false;
   has_pre_schedule = check_if_pre_schedule(F);
 
-  if(!has_pre_schedule){
-    for(vector<InstPri>::reverse_iterator vit = priorityVector.rbegin(); vit!=priorityVector.rend(); ++vit){
-      //get qgate
-      map<Instruction*, qGate>::iterator mit = mapInstSet.find((*vit).first);
-      assert(mit!=mapInstSet.end() && "Instruction Not Found in MapInstSet.");
+  if (!has_pre_schedule) {
+    for (vector<InstPri>::reverse_iterator vit = priorityVector.rbegin();
+         vit != priorityVector.rend(); ++vit) {
+      // get qgate
+      map<Instruction *, qGate>::iterator mit = mapInstSet.find((*vit).first);
+      assert(mit != mapInstSet.end() && "Instruction Not Found in MapInstSet.");
 
       qGate thisGate = (*mit).second;
 
-      if(hasPrimitivesOnly){
-        calc_critical_time(F,thisGate,true);
-      }
-      else
-        calc_critical_time(F,thisGate,false);
-
-    }   
-    saveTableFuncQbits(F);  
+      if (hasPrimitivesOnly) {
+        calc_critical_time(F, thisGate, true);
+      } else
+        calc_critical_time(F, thisGate, false);
+    }
+    saveTableFuncQbits(F);
     save_blackbox_info(F);
   }
 }
 
-
-void GenSIMDSchedCG::init_gates_as_functions(){
-  //add blackbox entry for each of these ??
-  for(int  i =0; i< NUM_QGATES ; i++){
+void GenSIMDSchedCG::init_gates_as_functions() {
+  // add blackbox entry for each of these ??
+  for (int i = 0; i < NUM_QGATES; i++) {
     string gName = gate_name[i];
     string fName = "llvm.";
     fName.append(gName);
   }
 }
 
-
-bool GenSIMDSchedCG::runOnModule (Module &M) {
+bool GenSIMDSchedCG::runOnModule(Module &M) {
   init_gate_names();
   init_gates_as_functions();
+
   read_schedule_file();
 
   // iterate over all functions, and over all instructions in those functions
-  CallGraphNode* rootNode = getAnalysis<CallGraph>().getRoot();
+  CallGraph &CG = getAnalysis<CallGraphWrapperPass>().getCallGraph();
 
-  //Post-order
-  for (scc_iterator<CallGraphNode*> sccIb = scc_begin(rootNode), E = scc_end(rootNode); sccIb != E; ++sccIb) {
-    const std::vector<CallGraphNode*> &nextSCC = *sccIb;
-    for (std::vector<CallGraphNode*>::const_iterator nsccI = nextSCC.begin(), E = nextSCC.end(); nsccI != E; ++nsccI) {
-      Function *F = (*nsccI)->getFunction();      
+  // Post-order
+  for (scc_iterator<CallGraph *> sccIb = scc_begin(&CG);
+       !sccIb.isAtEnd(); ++sccIb) {
+    const std::vector<CallGraphNode *> &nextSCC = *sccIb;
+    for (std::vector<CallGraphNode *>::const_iterator nsccI = nextSCC.begin(),
+                                                      E = nextSCC.end();
+         nsccI != E; ++nsccI) {
+      Function *F = (*nsccI)->getFunction();
 
-      if(F && !F->isDeclaration()){
-        errs() << "\n#Function " << F->getName() << "\n";      
-        //errs() << "#Timestep GateName Operand1 Operand2 \n";
+      if (F && !F->isDeclaration()) {
+        errs() << "\n#Function " << F->getName() << "\n";
 
         funcQbits.clear();
         funcArgs.clear();
@@ -1486,13 +1453,21 @@ bool GenSIMDSchedCG::runOnModule (Module &M) {
 
         // count the critical resources for this function
         CountCriticalFunctionResources(F);
-        if(F->getName() == "main"){
-          errs() << "\n#Num of SIMD time steps for function main : " << getNumCritSteps(F) << "\n";               
+
+        if (F->getName() == "main") {
+          // Print Histogram Data
+          ofstream outputFile;
+          outputFile.open("histogram_data.txt");
+          ostream_iterator<int> output_iterator(outputFile, " ");
+          copy(histogramData.begin(), histogramData.end(), output_iterator);
+
+          errs() << "\n#Num of SIMD time steps for function main : "
+                 << getNumCritSteps(F) << "\n";
         }
-        cleanupCurrArrParGates(); 
-      }
-      else{
-        if(debugGenSIMDSchedCG)
+
+        cleanupCurrArrParGates();
+      } else {
+        if (debugGenSIMDSchedCG)
           errs() << "WARNING: Ignoring external node or dummy function.\n";
       }
     }

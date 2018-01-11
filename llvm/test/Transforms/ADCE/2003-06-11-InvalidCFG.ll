@@ -1,4 +1,5 @@
 ; RUN: opt < %s -adce -disable-output
+; RUN: opt < %s -adce -adce-remove-loops -disable-output
 
 @G = external global i32*               ; <i32**> [#uses=1]
 
@@ -16,7 +17,7 @@ then.66:                ; preds = %shortcirc_done.12
         br label %endif.42
 
 endif.65:               ; preds = %endif.42
-        %tmp.2846 = load i32** @G               ; <i32*> [#uses=1]
+        %tmp.2846 = load i32*, i32** @G               ; <i32*> [#uses=1]
         br i1 false, label %shortcirc_next.12, label %shortcirc_done.12
 
 shortcirc_next.12:              ; preds = %endif.65

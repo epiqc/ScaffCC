@@ -38,8 +38,8 @@ typedef struct {
 @end
 
 @interface MyClass ()
-@property (readwrite) NSString *foo; // expected-error {{type of property 'NSString *' in continuation class does not match property type in primary class}}
-@property (readwrite, strong) NSRect bar; // expected-error {{type of property 'NSRect' in continuation class does not match property type in primary class}}
+@property (readwrite) NSString *foo; // expected-error {{type of property 'NSString *' in class extension does not match property type in primary class}}
+@property (readwrite, strong) NSRect bar; // expected-error {{type of property 'NSRect' in class extension does not match property type in primary class}}
 @end
 
 // rdar://10655530
@@ -60,4 +60,16 @@ struct S1;
 @property (nonatomic, readwrite, assign) struct S *httpRequest2;
 @property (nonatomic, readwrite, assign) struct S1 *httpRequest3;
 @property (nonatomic, readwrite, assign) struct S2 *httpRequest4;
+@end
+
+// rdar://15859862
+@protocol ADCameraJSO_Bindings
+@property (nonatomic, readonly) NSString *currentPictureURI;
+@end
+
+@interface ADCameraJSO
+@end
+
+@interface ADCameraJSO()  <ADCameraJSO_Bindings>
+@property (nonatomic, copy) NSString *currentPictureURI;
 @end

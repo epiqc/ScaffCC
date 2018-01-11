@@ -4,9 +4,9 @@
 target datalayout = "e-p:32:32:32-i1:8:32-i8:8:32-i16:16:32-i32:32:32-i64:32:64-f32:32:32-f64:32:64-v64:32:64-v128:32:128-a0:0:32-n32-S32"
 target triple = "thumbv7-apple-darwin"
 
-; CHECK: @test
+; CHECK-LABEL: @test(
 ; CHECK: if.end.i126:
-; CHECK: %exitcond = icmp ne i8* %incdec.ptr.i, getelementptr (i8* null, i32 undef)
+; CHECK: %exitcond = icmp ne i8* %incdec.ptr.i, null
 define void @test() nounwind {
 entry:
   br label %while.cond
@@ -40,7 +40,7 @@ if.else.i124:                                     ; preds = %for.body21.i
   br label %if.end.i126
 
 if.end.i126:                                      ; preds = %if.else.i124, %for.body21.i
-  %incdec.ptr.i = getelementptr inbounds i8* %destYPixelPtr.010.i, i32 1
+  %incdec.ptr.i = getelementptr inbounds i8, i8* %destYPixelPtr.010.i, i32 1
   %inc.i125 = add i32 %x.09.i, 1
   %cmp19.i = icmp ult i32 %inc.i125, undef
   br i1 %cmp19.i, label %for.body21.i, label %for.end.i129

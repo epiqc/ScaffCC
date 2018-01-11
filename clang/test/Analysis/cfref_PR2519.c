@@ -1,5 +1,5 @@
-// RUN: %clang_cc1 -analyze -analyzer-checker=core,osx.cocoa.RetainCount,experimental.core -analyzer-store=region -analyzer-constraints=basic -verify %s
-// RUN: %clang_cc1 -analyze -analyzer-checker=core,osx.cocoa.RetainCount,experimental.core -analyzer-store=region -analyzer-constraints=range -verify %s
+// RUN: %clang_analyze_cc1 -analyzer-checker=core,osx.cocoa.RetainCount,alpha.core -analyzer-store=region -verify %s
+// expected-no-diagnostics
 
 typedef unsigned char Boolean;
 typedef signed long CFIndex;

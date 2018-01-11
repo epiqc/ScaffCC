@@ -1,5 +1,4 @@
-// RUN: %clang_cc1 -analyze -analyzer-checker=debug.DumpCFG -cfg-add-initializers %s 2>&1 | FileCheck %s
-// XPASS: *
+// RUN: %clang_analyze_cc1 -std=c++11 -analyzer-checker=debug.DumpCFG %s 2>&1 | FileCheck %s
 
 class A {
 public:
@@ -44,6 +43,13 @@ TestControlFlow::TestControlFlow(bool b)
   int v;
 }
 
+class TestDelegating {
+  int x, z;
+ public:
+  TestDelegating() : TestDelegating(2, 3) {}
+  TestDelegating(int x, int z) : x(x), z(z) {}
+};
+
 // CHECK:  [B2 (ENTRY)]
 // CHECK:    Succs (1): B1
 // CHECK:  [B1]
@@ -55,7 +61,7 @@ TestControlFlow::TestControlFlow(bool b)
 // CHECK:    6: B([B1.5]) (Base initializer)
 // CHECK:    7:  (CXXConstructExpr, class A)
 // CHECK:    8: A([B1.7]) (Base initializer)
-// CHECK:    9: /*implicit*/int()
+// CHECK:    9: /*implicit*/(int)0
 // CHECK:   10: i([B1.9]) (Member initializer)
 // CHECK:   11: this
 // CHECK:   12: [B1.11]->i
@@ -94,5 +100,16 @@ TestControlFlow::TestControlFlow(bool b)
 // CHECK:    T: [B4.4] ? ... : ...
 // CHECK:    Preds (1): B5
 // CHECK:    Succs (2): B2 B3
+// CHECK:  [B0 (EXIT)]
+// CHECK:    Preds (1): B1
+// CHECK:  [B2 (ENTRY)]
+// CHECK:    Succs (1): B1
+// CHECK:  [B1]
+// CHECK:    1: 2
+// CHECK:    2: 3
+// CHECK:    3: [B1.1], [B1.2] (CXXConstructExpr, class TestDelegating)
+// CHECK:    4: TestDelegating([B1.3]) (Delegating initializer)
+// CHECK:    Preds (1): B2
+// CHECK:    Succs (1): B0
 // CHECK:  [B0 (EXIT)]
 // CHECK:    Preds (1): B1

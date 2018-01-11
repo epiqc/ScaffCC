@@ -11,36 +11,86 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef PPCMCTARGETDESC_H
-#define PPCMCTARGETDESC_H
+#ifndef LLVM_LIB_TARGET_POWERPC_MCTARGETDESC_PPCMCTARGETDESC_H
+#define LLVM_LIB_TARGET_POWERPC_MCTARGETDESC_PPCMCTARGETDESC_H
 
-#include "llvm/Support/DataTypes.h"
+// GCC #defines PPC on Linux but we use it as our namespace name
+#undef PPC
+
+#include "llvm/Support/MathExtras.h"
+#include <cstdint>
+#include <memory>
 
 namespace llvm {
+
 class MCAsmBackend;
 class MCCodeEmitter;
 class MCContext;
 class MCInstrInfo;
 class MCObjectWriter;
-class MCSubtargetInfo;
+class MCRegisterInfo;
+class MCTargetOptions;
 class Target;
+class Triple;
 class StringRef;
-class raw_ostream;
+class raw_pwrite_stream;
 
-extern Target ThePPC32Target;
-extern Target ThePPC64Target;
-  
+Target &getThePPC32Target();
+Target &getThePPC64Target();
+Target &getThePPC64LETarget();
+
 MCCodeEmitter *createPPCMCCodeEmitter(const MCInstrInfo &MCII,
-                                      const MCSubtargetInfo &STI,
+                                      const MCRegisterInfo &MRI,
                                       MCContext &Ctx);
 
-MCAsmBackend *createPPCAsmBackend(const Target &T, StringRef TT);
+MCAsmBackend *createPPCAsmBackend(const Target &T, const MCRegisterInfo &MRI,
+                                  const Triple &TT, StringRef CPU,
+                                  const MCTargetOptions &Options);
 
-/// createPPCELFObjectWriter - Construct an PPC ELF object writer.
-MCObjectWriter *createPPCELFObjectWriter(raw_ostream &OS,
-                                         bool Is64Bit,
-                                         uint8_t OSABI);
-} // End llvm namespace
+/// Construct an PPC ELF object writer.
+std::unique_ptr<MCObjectWriter> createPPCELFObjectWriter(raw_pwrite_stream &OS,
+                                                         bool Is64Bit,
+                                                         bool IsLittleEndian,
+                                                         uint8_t OSABI);
+/// Construct a PPC Mach-O object writer.
+std::unique_ptr<MCObjectWriter> createPPCMachObjectWriter(raw_pwrite_stream &OS,
+                                                          bool Is64Bit,
+                                                          uint32_t CPUType,
+                                                          uint32_t CPUSubtype);
+
+/// Returns true iff Val consists of one contiguous run of 1s with any number of
+/// 0s on either side.  The 1s are allowed to wrap from LSB to MSB, so
+/// 0x000FFF0, 0x0000FFFF, and 0xFF0000FF are all runs.  0x0F0F0000 is not,
+/// since all 1s are not contiguous.
+static inline bool isRunOfOnes(unsigned Val, unsigned &MB, unsigned &ME) {
+  if (!Val)
+    return false;
+
+  if (isShiftedMask_32(Val)) {
+    // look for the first non-zero bit
+    MB = countLeadingZeros(Val);
+    // look for the first zero bit after the run of ones
+    ME = countLeadingZeros((Val - 1) ^ Val);
+    return true;
+  } else {
+    Val = ~Val; // invert mask
+    if (isShiftedMask_32(Val)) {
+      // effectively look for the first zero bit
+      ME = countLeadingZeros(Val) - 1;
+      // effectively look for the first one bit after the run of zeros
+      MB = countLeadingZeros((Val - 1) ^ Val) + 1;
+      return true;
+    }
+  }
+  // no run present
+  return false;
+}
+
+} // end namespace llvm
+
+// Generated files will use "namespace PPC". To avoid symbol clash,
+// undefine PPC here. PPC may be predefined on some hosts.
+#undef PPC
 
 // Defines symbolic names for PowerPC registers.  This defines a mapping from
 // register name to register number.
@@ -56,4 +106,4 @@ MCObjectWriter *createPPCELFObjectWriter(raw_ostream &OS,
 #define GET_SUBTARGETINFO_ENUM
 #include "PPCGenSubtargetInfo.inc"
 
-#endif
+#endif // LLVM_LIB_TARGET_POWERPC_MCTARGETDESC_PPCMCTARGETDESC_H

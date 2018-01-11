@@ -187,6 +187,30 @@ namespace PacksAtDifferentLevels {
                               add_pointer<float>,
                               add_const<double>>>::value == 0? 1 : -1];
 
+  namespace PR13811 {
+    constexpr int g(int n, int m) { return n * 10 + m; }
+
+    template<typename...A>
+    struct X6 {
+      template<typename...B>
+      constexpr auto f1(A ...a) const -> decltype(g(A(a + B())...)) { return g(A(a + B())...); }
+
+      template<typename...B>
+      constexpr auto f2(A ...a, B ...b) const -> decltype(g((&a)[b] ...)) { return g((&a)[b] ...); } // expected-note {{past-the-end}}
+
+      template<typename...B> struct Inner {
+        template<typename...C>
+        constexpr auto f(A ...a, B ...b, C ...c) const -> decltype(g(a+b+c...)) { return g(a+b+c...); }
+      };
+    };
+    struct A { constexpr operator int() const { return 2; } };
+    struct B { constexpr operator int() const { return 1; } };
+
+    static_assert(X6<unsigned char, int>().f1<A, B>(255, 1) == 12, "");
+    static_assert(X6<int, int>().f2(3, 4, 0, 0) == 34, "");
+    static_assert(X6<int, int>().f2(3, 4, 0, 1) == 34, ""); // expected-error {{constant expression}} expected-note {{in call}}
+    static_assert(X6<int, int>::Inner<int, int>().f(1, 2, 3, 4, 5, 6) == 102, "");
+  }
 }
 
 namespace ExpandingNonTypeTemplateParameters {
@@ -247,5 +271,48 @@ namespace PR10230 {
   {
     int (&ir1)[1] = s<int>().f<int>();
     int (&ir3)[3] = s<int>().f<int, float, double>();
+  }
+}
+
+namespace PR13386 {
+  template<typename...> struct tuple {};
+  template<typename...T>
+  struct S {
+    template<typename...U>
+    void f(T &&...t, U &&...u) {} // expected-note {{candidate}}
+    template<typename...U>
+    void g(U &&...u, T &&...t) {} // expected-note {{candidate}}
+    template<typename...U>
+    void h(tuple<T, U> &&...) {} // expected-note 2{{candidate}}
+
+    template<typename...U>
+    struct X {
+      template<typename...V>
+      void x(tuple<T, U, V> &&...); // expected-error {{different lengths}}
+    };
+  };
+
+  void test() {
+    S<>().f();
+    S<>().f(0);
+    S<int>().f(0);
+    S<int>().f(0, 1);
+    S<int, int>().f(0); // expected-error {{no matching member function for call}}
+
+    S<>().g();
+    S<>().g(0);
+    S<int>().g(0);
+    S<int>().g(0, 1); // expected-error {{no matching member function for call}}
+    S<int>().g<int>(0, 1);
+    S<int, int>().g(0, 1);
+
+    S<>().h();
+    S<>().h(0); // expected-error {{no matching member function for call}}
+    S<int>().h({}); // expected-error {{no matching member function for call}}
+    S<int>().h<int>({});
+    S<int>().h(tuple<int,int>{});
+    S<int, int>().h(tuple<int,int>{}, tuple<int,int>{});
+
+    S<int, int>::X<char>(); // expected-note {{here}}
   }
 }

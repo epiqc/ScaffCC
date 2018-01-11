@@ -8,11 +8,12 @@ struct PR10757 {
 int PR10757f() {
   PR10757 a1;
   // FIXME: We get a ridiculous number of "built-in candidate" notes here...
-  if(~a1) {} // expected-error {{overload resolution selected deleted operator}} expected-note 6 {{built-in candidate}}
-  if(a1==a1) {} // expected-error {{overload resolution selected deleted operator}} expected-note 81 {{built-in candidate}}
+  if(~a1) {} // expected-error {{overload resolution selected deleted operator}} expected-note 6-8 {{built-in candidate}}
+  if(a1==a1) {} // expected-error {{overload resolution selected deleted operator}} expected-note 1-144 {{built-in candidate}}
 }
 
 struct DelOpDel {
-  virtual ~DelOpDel() {} // expected-error {{deleted function}}
-  void operator delete(void*) = delete; // expected-note {{deleted here}}
+  // FIXME: In MS ABI, we error twice below.
+  virtual ~DelOpDel() {} // expected-error 1-2 {{attempt to use a deleted function}}
+  void operator delete(void*) = delete; // expected-note 1-2 {{deleted here}}
 };

@@ -10,45 +10,55 @@ tablegen(LLVM X86GenDAGISel.inc -gen-dag-isel)
 tablegen(LLVM X86GenFastISel.inc -gen-fast-isel)
 tablegen(LLVM X86GenCallingConv.inc -gen-callingconv)
 tablegen(LLVM X86GenSubtargetInfo.inc -gen-subtarget)
-tablegen(LLVM X86GenEDInfo.inc -gen-enhanced-disassembly-info)
+tablegen(LLVM X86GenEVEX2VEXTables.inc -gen-x86-EVEX2VEX-tables)
+tablegen(LLVM X86GenRegisterBank.inc -gen-register-bank)
+tablegen(LLVM X86GenGlobalISel.inc -gen-global-isel)
+
+if (X86_GEN_FOLD_TABLES)
+  tablegen(LLVM X86GenFoldTables.inc -gen-x86-fold-tables)
+endif()
+
 add_public_tablegen_target(X86CommonTableGen)
 
 set(sources
   X86AsmPrinter.cpp
-  X86COFFMachineModuleInfo.cpp
-  X86CodeEmitter.cpp
-  X86ELFWriterInfo.cpp
+  X86CallFrameOptimization.cpp
+  X86CallLowering.cpp
+  X86CmovConversion.cpp
+  X86DomainReassignment.cpp
+  X86ExpandPseudo.cpp
   X86FastISel.cpp
+  X86FixupBWInsts.cpp
+  X86FixupLEAs.cpp
+  X86FixupSetCC.cpp
   X86FloatingPoint.cpp
   X86FrameLowering.cpp
+  X86InstructionSelector.cpp
   X86ISelDAGToDAG.cpp
   X86ISelLowering.cpp
+  X86InterleavedAccess.cpp
+  X86InstrFMA3Info.cpp
   X86InstrInfo.cpp
-  X86JITInfo.cpp
+  X86EvexToVex.cpp
+  X86LegalizerInfo.cpp
   X86MCInstLower.cpp
   X86MachineFunctionInfo.cpp
+  X86MacroFusion.cpp
+  X86OptimizeLEAs.cpp
+  X86PadShortFunction.cpp
+  X86RegisterBankInfo.cpp
   X86RegisterInfo.cpp
   X86SelectionDAGInfo.cpp
+  X86ShuffleDecodeConstantPool.cpp
   X86Subtarget.cpp
   X86TargetMachine.cpp
   X86TargetObjectFile.cpp
+  X86TargetTransformInfo.cpp
   X86VZeroUpper.cpp
+  X86WinAllocaExpander.cpp
+  X86WinEHState.cpp
+  X86CallingConv.cpp
   )
-
-if( CMAKE_CL_64 )
-  # A workaround for a bug in cmake 2.8.3. See PR 8885.
-  if( CMAKE_VERSION STREQUAL "2.8.3" )
-    include(CMakeDetermineCompilerId)
-  endif()
-  # end of workaround.
-  enable_language(ASM_MASM)
-  ADD_CUSTOM_COMMAND(
-    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/X86CompilationCallback_Win64.obj
-    MAIN_DEPENDENCY X86CompilationCallback_Win64.asm
-    COMMAND ${CMAKE_ASM_MASM_COMPILER} /Fo ${CMAKE_CURRENT_BINARY_DIR}/X86CompilationCallback_Win64.obj /c ${CMAKE_CURRENT_SOURCE_DIR}/X86CompilationCallback_Win64.asm
-   )
-   set(sources ${sources} ${CMAKE_CURRENT_BINARY_DIR}/X86CompilationCallback_Win64.obj)
-endif()
 
 add_llvm_target(X86CodeGen ${sources})
 

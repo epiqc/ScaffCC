@@ -18,9 +18,13 @@ void f5() __attribute__((availability(macosx,introduced=10.5), availability(ios,
 
 void f6() __attribute__((availability(macosx,unavailable,introduced=10.5))); // expected-warning{{'unavailable' availability overrides all other availability information}}
 
+void f7() __attribute__((availability(macosx,message=L"wide"))); // expected-error {{expected string literal for optional message in 'availability' attribute}}
+
+void f8() __attribute__((availability(macosx,message="a" L"b"))); // expected-error {{expected string literal for optional message in 'availability' attribute}}
+
 // rdar://10095131
 enum E{
-    gorf __attribute__((availability(macosx,introduced=8.5, message = 10.0))), // expected-error {{expected string literal}}
+    gorf __attribute__((availability(macosx,introduced=8.5, message = 10.0))), // expected-error {{expected string literal for optional message in 'availability' attribute}}
     garf __attribute__((availability(macosx,introduced=8.5, message))), // expected-error {{expected '=' after 'message'}}
 
     foo __attribute__((availability(macosx,introduced=8.5,deprecated=9.0, message="Use CTFontCopyPostScriptName()", deprecated=10.0))) // expected-error {{expected ')'}} \

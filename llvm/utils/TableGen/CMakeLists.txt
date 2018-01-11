@@ -1,16 +1,18 @@
-set(LLVM_REQUIRES_EH 1)
-set(LLVM_REQUIRES_RTTI 1)
 set(LLVM_LINK_COMPONENTS Support)
 
 add_tablegen(llvm-tblgen LLVM
   AsmMatcherEmitter.cpp
   AsmWriterEmitter.cpp
   AsmWriterInst.cpp
+  Attributes.cpp
   CallingConvEmitter.cpp
   CodeEmitterGen.cpp
   CodeGenDAGPatterns.cpp
+  CodeGenHwModes.cpp
   CodeGenInstruction.cpp
+  CodeGenMapTable.cpp
   CodeGenRegisters.cpp
+  CodeGenSchedule.cpp
   CodeGenTarget.cpp
   DAGISelEmitter.cpp
   DAGISelMatcherEmitter.cpp
@@ -19,19 +21,27 @@ add_tablegen(llvm-tblgen LLVM
   DAGISelMatcher.cpp
   DFAPacketizerEmitter.cpp
   DisassemblerEmitter.cpp
-  EDEmitter.cpp
   FastISelEmitter.cpp
   FixedLenDecoderEmitter.cpp
+  GlobalISelEmitter.cpp
+  InfoByHwMode.cpp
   InstrInfoEmitter.cpp
+  InstrDocsEmitter.cpp
   IntrinsicEmitter.cpp
+  OptParserEmitter.cpp
   PseudoLoweringEmitter.cpp
+  RegisterBankEmitter.cpp
   RegisterInfoEmitter.cpp
-  SetTheory.cpp
-  StringMatcher.cpp
+  SearchableTableEmitter.cpp
   SubtargetEmitter.cpp
-  TGValueTypes.cpp
+  SubtargetFeatureInfo.cpp
   TableGen.cpp
+  Types.cpp
   X86DisassemblerTables.cpp
+  X86EVEX2VEXTablesEmitter.cpp
+  X86FoldTablesEmitter.cpp
   X86ModRMFilters.cpp
   X86RecognizableInstr.cpp
+  CTagsEmitter.cpp
   )
+set_target_properties(llvm-tblgen PROPERTIES FOLDER "Tablegenning")

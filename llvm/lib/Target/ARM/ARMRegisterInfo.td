@@ -7,48 +7,63 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "ARMSystemRegister.td"
+
 //===----------------------------------------------------------------------===//
 //  Declarations that describe the ARM register file
 //===----------------------------------------------------------------------===//
 
 // Registers are identified with 4-bit ID numbers.
-class ARMReg<bits<4> num, string n, list<Register> subregs = []> : Register<n> {
-  field bits<4> Num;
+class ARMReg<bits<16> Enc, string n, list<Register> subregs = []> : Register<n> {
+  let HWEncoding = Enc;
   let Namespace = "ARM";
   let SubRegs = subregs;
   // All bits of ARM registers with sub-registers are covered by sub-registers.
   let CoveredBySubRegs = 1;
 }
 
-class ARMFReg<bits<6> num, string n> : Register<n> {
-  field bits<6> Num;
+class ARMFReg<bits<16> Enc, string n> : Register<n> {
+  let HWEncoding = Enc;
   let Namespace = "ARM";
 }
 
 // Subregister indices.
 let Namespace = "ARM" in {
-def qqsub_0 : SubRegIndex;
-def qqsub_1 : SubRegIndex;
+def qqsub_0 : SubRegIndex<256>;
+def qqsub_1 : SubRegIndex<256, 256>;
 
 // Note: Code depends on these having consecutive numbers.
-def qsub_0 : SubRegIndex;
-def qsub_1 : SubRegIndex;
-def qsub_2 : SubRegIndex<[qqsub_1, qsub_0]>;
-def qsub_3 : SubRegIndex<[qqsub_1, qsub_1]>;
+def qsub_0 : SubRegIndex<128>;
+def qsub_1 : SubRegIndex<128, 128>;
+def qsub_2 : ComposedSubRegIndex<qqsub_1, qsub_0>;
+def qsub_3 : ComposedSubRegIndex<qqsub_1, qsub_1>;
 
-def dsub_0 : SubRegIndex;
-def dsub_1 : SubRegIndex;
-def dsub_2 : SubRegIndex<[qsub_1, dsub_0]>;
-def dsub_3 : SubRegIndex<[qsub_1, dsub_1]>;
-def dsub_4 : SubRegIndex<[qsub_2, dsub_0]>;
-def dsub_5 : SubRegIndex<[qsub_2, dsub_1]>;
-def dsub_6 : SubRegIndex<[qsub_3, dsub_0]>;
-def dsub_7 : SubRegIndex<[qsub_3, dsub_1]>;
+def dsub_0 : SubRegIndex<64>;
+def dsub_1 : SubRegIndex<64, 64>;
+def dsub_2 : ComposedSubRegIndex<qsub_1, dsub_0>;
+def dsub_3 : ComposedSubRegIndex<qsub_1, dsub_1>;
+def dsub_4 : ComposedSubRegIndex<qsub_2, dsub_0>;
+def dsub_5 : ComposedSubRegIndex<qsub_2, dsub_1>;
+def dsub_6 : ComposedSubRegIndex<qsub_3, dsub_0>;
+def dsub_7 : ComposedSubRegIndex<qsub_3, dsub_1>;
 
-def ssub_0  : SubRegIndex;
-def ssub_1  : SubRegIndex;
-def ssub_2  : SubRegIndex<[dsub_1, ssub_0]>;
-def ssub_3  : SubRegIndex<[dsub_1, ssub_1]>;
+def ssub_0  : SubRegIndex<32>;
+def ssub_1  : SubRegIndex<32, 32>;
+def ssub_2  : ComposedSubRegIndex<dsub_1, ssub_0>;
+def ssub_3  : ComposedSubRegIndex<dsub_1, ssub_1>;
+def ssub_4  : ComposedSubRegIndex<dsub_2, ssub_0>;
+def ssub_5  : ComposedSubRegIndex<dsub_2, ssub_1>;
+def ssub_6  : ComposedSubRegIndex<dsub_3, ssub_0>;
+def ssub_7  : ComposedSubRegIndex<dsub_3, ssub_1>;
+def ssub_8  : ComposedSubRegIndex<dsub_4, ssub_0>;
+def ssub_9  : ComposedSubRegIndex<dsub_4, ssub_1>;
+def ssub_10 : ComposedSubRegIndex<dsub_5, ssub_0>;
+def ssub_11 : ComposedSubRegIndex<dsub_5, ssub_1>;
+def ssub_12 : ComposedSubRegIndex<dsub_6, ssub_0>;
+def ssub_13 : ComposedSubRegIndex<dsub_6, ssub_1>;
+
+def gsub_0 : SubRegIndex<32>;
+def gsub_1 : SubRegIndex<32, 32>;
 // Let TableGen synthesize the remaining 12 ssub_* indices.
 // We don't need to name them.
 }
@@ -113,13 +128,13 @@ def D15 : ARMReg<15, "d15", [S30, S31]>, DwarfRegNum<[271]>;
 }
 
 // VFP3 defines 16 additional double registers
-def D16 : ARMFReg<16, "d16">, DwarfRegNum<[272]>; 
+def D16 : ARMFReg<16, "d16">, DwarfRegNum<[272]>;
 def D17 : ARMFReg<17, "d17">, DwarfRegNum<[273]>;
 def D18 : ARMFReg<18, "d18">, DwarfRegNum<[274]>;
 def D19 : ARMFReg<19, "d19">, DwarfRegNum<[275]>;
 def D20 : ARMFReg<20, "d20">, DwarfRegNum<[276]>;
 def D21 : ARMFReg<21, "d21">, DwarfRegNum<[277]>;
-def D22 : ARMFReg<22, "d22">, DwarfRegNum<[278]>; 
+def D22 : ARMFReg<22, "d22">, DwarfRegNum<[278]>;
 def D23 : ARMFReg<23, "d23">, DwarfRegNum<[279]>;
 def D24 : ARMFReg<24, "d24">, DwarfRegNum<[280]>;
 def D25 : ARMFReg<25, "d25">, DwarfRegNum<[281]>;
@@ -154,21 +169,27 @@ def Q15 : ARMReg<15, "q15", [D30, D31]>;
 
 // Current Program Status Register.
 // We model fpscr with two registers: FPSCR models the control bits and will be
-// reserved. FPSCR_NZCV models the flag bits and will be unreserved. 
-def CPSR       : ARMReg<0, "cpsr">;
-def APSR       : ARMReg<1, "apsr">;
-def SPSR       : ARMReg<2, "spsr">;
-def FPSCR      : ARMReg<3, "fpscr">;
-def FPSCR_NZCV : ARMReg<3, "fpscr_nzcv"> {
+// reserved. FPSCR_NZCV models the flag bits and will be unreserved. APSR_NZCV
+// models the APSR when it's accessed by some special instructions. In such cases
+// it has the same encoding as PC.
+def CPSR       : ARMReg<0,  "cpsr">;
+def APSR       : ARMReg<1,  "apsr">;
+def APSR_NZCV  : ARMReg<15, "apsr_nzcv">;
+def SPSR       : ARMReg<2,  "spsr">;
+def FPSCR      : ARMReg<3,  "fpscr">;
+def FPSCR_NZCV : ARMReg<3,  "fpscr_nzcv"> {
   let Aliases = [FPSCR];
 }
 def ITSTATE    : ARMReg<4, "itstate">;
 
 // Special Registers - only available in privileged mode.
-def FPSID   : ARMReg<0, "fpsid">;
-def MVFR1   : ARMReg<6, "mvfr1">;
-def MVFR0   : ARMReg<7, "mvfr0">;
-def FPEXC   : ARMReg<8, "fpexc">;
+def FPSID   : ARMReg<0,  "fpsid">;
+def MVFR2   : ARMReg<5,  "mvfr2">;
+def MVFR1   : ARMReg<6,  "mvfr1">;
+def MVFR0   : ARMReg<7,  "mvfr0">;
+def FPEXC   : ARMReg<8,  "fpexc">;
+def FPINST  : ARMReg<9,  "fpinst">;
+def FPINST2 : ARMReg<10, "fpinst2">;
 
 // Register classes.
 //
@@ -190,8 +211,9 @@ def GPR : RegisterClass<"ARM", [i32], 32, (add (sequence "R%u", 0, 12),
   // Thumb1 instructions that know how to use hi regs.
   let AltOrders = [(add LR, GPR), (trunc GPR, 8)];
   let AltOrderSelect = [{
-      return 1 + MF.getTarget().getSubtarget<ARMSubtarget>().isThumb1Only();
+      return 1 + MF.getSubtarget<ARMSubtarget>().isThumb1Only();
   }];
+  let DiagnosticString = "operand must be a register in range [r0, r15]";
 }
 
 // GPRs without the PC.  Some ARM instructions do not allow the PC in
@@ -200,8 +222,20 @@ def GPR : RegisterClass<"ARM", [i32], 32, (add (sequence "R%u", 0, 12),
 def GPRnopc : RegisterClass<"ARM", [i32], 32, (sub GPR, PC)> {
   let AltOrders = [(add LR, GPRnopc), (trunc GPRnopc, 8)];
   let AltOrderSelect = [{
-      return 1 + MF.getTarget().getSubtarget<ARMSubtarget>().isThumb1Only();
+      return 1 + MF.getSubtarget<ARMSubtarget>().isThumb1Only();
   }];
+  let DiagnosticString = "operand must be a register in range [r0, r14]";
+}
+
+// GPRs without the PC but with APSR. Some instructions allow accessing the
+// APSR, while actually encoding PC in the register field. This is useful
+// for assembly and disassembly only.
+def GPRwithAPSR : RegisterClass<"ARM", [i32], 32, (add (sub GPR, PC), APSR_NZCV)> {
+  let AltOrders = [(add LR, GPRnopc), (trunc GPRnopc, 8)];
+  let AltOrderSelect = [{
+      return 1 + MF.getSubtarget<ARMSubtarget>().isThumb1Only();
+  }];
+  let DiagnosticString = "operand must be a register in range [r0, r14] or apsr_nzcv";
 }
 
 // GPRsp - Only the SP is legal. Used by Thumb1 instructions that want the
@@ -209,7 +243,9 @@ def GPRnopc : RegisterClass<"ARM", [i32], 32, (sub GPR, PC)> {
 // FIXME: It would be better to not use this at all and refactor the
 // instructions to not have SP an an explicit argument. That makes
 // frame index resolution a bit trickier, though.
-def GPRsp : RegisterClass<"ARM", [i32], 32, (add SP)>;
+def GPRsp : RegisterClass<"ARM", [i32], 32, (add SP)> {
+  let DiagnosticString = "operand must be a register sp";
+}
 
 // restricted GPR register class. Many Thumb2 instructions allow the full
 // register range for operands, but have undefined behaviours when PC
@@ -218,25 +254,34 @@ def GPRsp : RegisterClass<"ARM", [i32], 32, (add SP)>;
 def rGPR : RegisterClass<"ARM", [i32], 32, (sub GPR, SP, PC)> {
   let AltOrders = [(add LR, rGPR), (trunc rGPR, 8)];
   let AltOrderSelect = [{
-      return 1 + MF.getTarget().getSubtarget<ARMSubtarget>().isThumb1Only();
+      return 1 + MF.getSubtarget<ARMSubtarget>().isThumb1Only();
   }];
+  let DiagnosticType = "rGPR";
 }
 
 // Thumb registers are R0-R7 normally. Some instructions can still use
 // the general GPR register class above (MOV, e.g.)
-def tGPR : RegisterClass<"ARM", [i32], 32, (trunc GPR, 8)>;
+def tGPR : RegisterClass<"ARM", [i32], 32, (trunc GPR, 8)> {
+  let DiagnosticString = "operand must be a register in range [r0, r7]";
+}
+
+// Thumb registers R0-R7 and the PC. Some instructions like TBB or THH allow
+// the PC to be used as a destination operand as well.
+def tGPRwithpc : RegisterClass<"ARM", [i32], 32, (add tGPR, PC)>;
 
 // The high registers in thumb mode, R8-R15.
-def hGPR : RegisterClass<"ARM", [i32], 32, (sub GPR, tGPR)>;
+def hGPR : RegisterClass<"ARM", [i32], 32, (sub GPR, tGPR)> {
+  let DiagnosticString = "operand must be a register in range [r8, r15]";
+}
 
 // For tail calls, we can't use callee-saved registers, as they are restored
 // to the saved value before the tail call, which would clobber a call address.
 // Note, getMinimalPhysRegClass(R0) returns tGPR because of the names of
 // this class and the preceding one(!)  This is what we want.
-def tcGPR : RegisterClass<"ARM", [i32], 32, (add R0, R1, R2, R3, R9, R12)> {
+def tcGPR : RegisterClass<"ARM", [i32], 32, (add R0, R1, R2, R3, R12)> {
   let AltOrders = [(and tcGPR, tGPR)];
   let AltOrderSelect = [{
-      return MF.getTarget().getSubtarget<ARMSubtarget>().isThumb1Only();
+      return MF.getSubtarget<ARMSubtarget>().isThumb1Only();
   }];
 }
 
@@ -247,58 +292,76 @@ def CCR : RegisterClass<"ARM", [i32], 32, (add CPSR)> {
 }
 
 // Scalar single precision floating point register class..
-def SPR : RegisterClass<"ARM", [f32], 32, (sequence "S%u", 0, 31)>;
+// FIXME: Allocation order changed to s0, s2, ... or s0, s4, ... as a quick hack
+// to avoid partial-write dependencies on D or Q (depending on platform)
+// registers (S registers are renamed as portions of D/Q registers).
+def SPR : RegisterClass<"ARM", [f32], 32, (sequence "S%u", 0, 31)> {
+  let AltOrders = [(add (decimate SPR, 2), SPR),
+                   (add (decimate SPR, 4),
+                        (decimate SPR, 2),
+                        (decimate (rotl SPR, 1), 4),
+                        (decimate (rotl SPR, 1), 2))];
+  let AltOrderSelect = [{
+    return 1 + MF.getSubtarget<ARMSubtarget>().useStride4VFPs(MF);
+  }];
+  let DiagnosticString = "operand must be a register in range [s0, s31]";
+}
 
 // Subset of SPR which can be used as a source of NEON scalars for 16-bit
 // operations
-def SPR_8 : RegisterClass<"ARM", [f32], 32, (trunc SPR, 16)>;
+def SPR_8 : RegisterClass<"ARM", [f32], 32, (sequence "S%u", 0, 15)> {
+  let DiagnosticString = "operand must be a register in range [s0, s15]";
+}
 
 // Scalar double precision floating point / generic 64-bit vector register
 // class.
 // ARM requires only word alignment for double. It's more performant if it
 // is double-word alignment though.
-def DPR : RegisterClass<"ARM", [f64, v8i8, v4i16, v2i32, v1i64, v2f32], 64,
+def DPR : RegisterClass<"ARM", [f64, v8i8, v4i16, v2i32, v1i64, v2f32, v4f16], 64,
                         (sequence "D%u", 0, 31)> {
-  // Allocate non-VFP2 registers D16-D31 first.
-  let AltOrders = [(rotl DPR, 16)];
-  let AltOrderSelect = [{ return 1; }];
+  // Allocate non-VFP2 registers D16-D31 first, and prefer even registers on
+  // Darwin platforms.
+  let AltOrders = [(rotl DPR, 16),
+                   (add (decimate (rotl DPR, 16), 2), (rotl DPR, 16))];
+  let AltOrderSelect = [{
+    return 1 + MF.getSubtarget<ARMSubtarget>().useStride4VFPs(MF);
+  }];
+  let DiagnosticType = "DPR";
 }
 
 // Subset of DPR that are accessible with VFP2 (and so that also have
 // 32-bit SPR subregs).
-def DPR_VFP2 : RegisterClass<"ARM", [f64, v8i8, v4i16, v2i32, v1i64, v2f32], 64,
+def DPR_VFP2 : RegisterClass<"ARM", [f64, v8i8, v4i16, v2i32, v1i64, v2f32, v4f16], 64,
                              (trunc DPR, 16)> {
-  let SubRegClasses = [(SPR ssub_0, ssub_1)];
+  let DiagnosticString = "operand must be a register in range [d0, d15]";
 }
 
 // Subset of DPR which can be used as a source of NEON scalars for 16-bit
 // operations
-def DPR_8 : RegisterClass<"ARM", [f64, v8i8, v4i16, v2i32, v1i64, v2f32], 64,
+def DPR_8 : RegisterClass<"ARM", [f64, v8i8, v4i16, v2i32, v1i64, v2f32, v4f16], 64,
                           (trunc DPR, 8)> {
-  let SubRegClasses = [(SPR_8 ssub_0, ssub_1)];
+  let DiagnosticString = "operand must be a register in range [d0, d7]";
 }
 
 // Generic 128-bit vector register class.
-def QPR : RegisterClass<"ARM", [v16i8, v8i16, v4i32, v2i64, v4f32, v2f64], 128,
+def QPR : RegisterClass<"ARM", [v16i8, v8i16, v4i32, v2i64, v4f32, v2f64, v8f16], 128,
                         (sequence "Q%u", 0, 15)> {
-  let SubRegClasses = [(DPR dsub_0, dsub_1)];
   // Allocate non-VFP2 aliases Q8-Q15 first.
   let AltOrders = [(rotl QPR, 8)];
   let AltOrderSelect = [{ return 1; }];
+  let DiagnosticString = "operand must be a register in range [q0, q15]";
 }
 
 // Subset of QPR that have 32-bit SPR subregs.
 def QPR_VFP2 : RegisterClass<"ARM", [v16i8, v8i16, v4i32, v2i64, v4f32, v2f64],
                              128, (trunc QPR, 8)> {
-  let SubRegClasses = [(SPR      ssub_0, ssub_1, ssub_2, ssub_3),
-                       (DPR_VFP2 dsub_0, dsub_1)];
+  let DiagnosticString = "operand must be a register in range [q0, q7]";
 }
 
 // Subset of QPR that have DPR_8 and SPR_8 subregs.
 def QPR_8 : RegisterClass<"ARM", [v16i8, v8i16, v4i32, v2i64, v4f32, v2f64],
                            128, (trunc QPR, 4)> {
-  let SubRegClasses = [(SPR_8 ssub_0, ssub_1, ssub_2, ssub_3),
-                       (DPR_8 dsub_0, dsub_1)];
+  let DiagnosticString = "operand must be a register in range [q0, q3]";
 }
 
 // Pseudo-registers representing odd-even pairs of D registers. The even-odd
@@ -317,6 +380,17 @@ def DPair : RegisterClass<"ARM", [v16i8, v8i16, v4i32, v2i64, v4f32, v2f64],
   // Prefer even-odd pairs as they are easier to copy.
   let AltOrders = [(add (rotl QPR, 8), (rotl DPair, 16))];
   let AltOrderSelect = [{ return 1; }];
+}
+
+// Pseudo-registers representing even-odd pairs of GPRs from R1 to R13/SP.
+// These are needed by instructions (e.g. ldrexd/strexd) requiring even-odd GPRs.
+def Tuples2R : RegisterTuples<[gsub_0, gsub_1],
+                              [(add R0, R2, R4, R6, R8, R10, R12),
+                               (add R1, R3, R5, R7, R9, R11, SP)]>;
+
+// Register class representing a pair of even-odd GPRs.
+def GPRPair : RegisterClass<"ARM", [untyped], 64, (add Tuples2R)> {
+  let Size = 64; // 2 x 32 bits, we have no predefined type of that size.
 }
 
 // Pseudo-registers representing 3 consecutive D registers.
@@ -338,8 +412,6 @@ def Tuples2Q : RegisterTuples<[qsub_0, qsub_1], [(shl QPR, 0), (shl QPR, 1)]>;
 // Pseudo 256-bit vector register class to model pairs of Q registers
 // (4 consecutive D registers).
 def QQPR : RegisterClass<"ARM", [v4i64], 256, (add Tuples2Q)> {
-  let SubRegClasses = [(DPR dsub_0, dsub_1, dsub_2, dsub_3),
-                       (QPR qsub_0, qsub_1)];
   // Allocate non-VFP2 aliases first.
   let AltOrders = [(rotl QQPR, 8)];
   let AltOrderSelect = [{ return 1; }];
@@ -363,9 +435,6 @@ def Tuples2QQ : RegisterTuples<[qqsub_0, qqsub_1],
 // Pseudo 512-bit vector register class to model 4 consecutive Q registers
 // (8 consecutive D registers).
 def QQQQPR : RegisterClass<"ARM", [v8i64], 256, (add Tuples2QQ)> {
-  let SubRegClasses = [(DPR dsub_0, dsub_1, dsub_2, dsub_3,
-                            dsub_4, dsub_5, dsub_6, dsub_7),
-                       (QPR qsub_0, qsub_1, qsub_2, qsub_3)];
   // Allocate non-VFP2 aliases first.
   let AltOrders = [(rotl QQQQPR, 8)];
   let AltOrderSelect = [{ return 1; }];

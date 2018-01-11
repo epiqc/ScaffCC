@@ -1,10 +1,10 @@
 ; RUN: llc -mtriple armv7 %s -o - | FileCheck %s
 
-; CHECK: f:
+; CHECK-LABEL: f:
 define float @f(<4 x i16>* nocapture %in) {
-  ; CHECK: vldr
+  ; CHECK: vld1
   ; CHECK: vmovl.u16
-  %1 = load <4 x i16>* %in
+  %1 = load <4 x i16>, <4 x i16>* %in
   ; CHECK: vcvt.f32.u32
   %2 = uitofp <4 x i16> %1 to <4 x float>
   %3 = extractelement <4 x float> %2, i32 0
@@ -18,12 +18,14 @@ define float @f(<4 x i16>* nocapture %in) {
   ret float %7
 }
 
-; CHECK: g:
+; CHECK-LABEL: g:
 define float @g(<4 x i8>* nocapture %in) {
-  ; CHECK: vldr
+; Note: vld1 here is reasonably important. Mixing VFP and NEON
+; instructions is bad on some cores
+  ; CHECK: vld1
   ; CHECK: vmovl.u8
   ; CHECK: vmovl.u16
-  %1 = load <4 x i8>* %in
+  %1 = load <4 x i8>, <4 x i8>* %in
   ; CHECK: vcvt.f32.u32
   %2 = uitofp <4 x i8> %1 to <4 x float>
   %3 = extractelement <4 x float> %2, i32 0
@@ -37,7 +39,7 @@ define float @g(<4 x i8>* nocapture %in) {
   ret float %7
 }
 
-; CHECK: h:
+; CHECK-LABEL: h:
 define <4 x i8> @h(<4 x float> %v) {
   ; CHECK: vcvt.{{[us]}}32.f32
   ; CHECK: vmovn.i32
@@ -45,16 +47,29 @@ define <4 x i8> @h(<4 x float> %v) {
   ret <4 x i8> %1
 }
 
-; CHECK: i:
+; CHECK-LABEL: i:
 define <4 x i8> @i(<4 x i8>* %x) {
-  ; CHECK: vldr
+; Note: vld1 here is reasonably important. Mixing VFP and NEON
+; instructions is bad on some cores
+  ; CHECK: vld1
   ; CHECK: vmovl.s8
   ; CHECK: vmovl.s16
   ; CHECK: vrecpe
   ; CHECK: vrecps
   ; CHECK: vmul
   ; CHECK: vmovn
-  %1 = load <4 x i8>* %x, align 4
+  %1 = load <4 x i8>, <4 x i8>* %x, align 4
   %2 = sdiv <4 x i8> zeroinitializer, %1
   ret <4 x i8> %2
 }
+; CHECK-LABEL: j:
+define <4 x i32> @j(<4 x i8>* %in) nounwind {
+  ; CHECK: vld1
+  ; CHECK: vmovl.u8
+  ; CHECK: vmovl.u16
+  ; CHECK-NOT: vand
+  %1 = load <4 x i8>, <4 x i8>* %in, align 4
+  %2 = zext <4 x i8> %1 to <4 x i32>
+  ret <4 x i32> %2
+}
+

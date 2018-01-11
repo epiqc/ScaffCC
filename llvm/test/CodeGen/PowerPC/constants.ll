@@ -1,10 +1,10 @@
 ; All of these routines should be perform optimal load of constants.
-; RUN: llc < %s -march=ppc32 | \
+; RUN: llc -verify-machineinstrs < %s -mtriple=ppc32-- | \
 ; RUN:   grep lis | count 5
-; RUN: llc < %s -march=ppc32 | \
+; RUN: llc -verify-machineinstrs < %s -mtriple=ppc32-- | \
 ; RUN:   grep ori | count 3
-; RUN: llc < %s -march=ppc32 | \
-; RUN:   grep {li } | count 4
+; RUN: llc -verify-machineinstrs < %s -mtriple=ppc32-- | \
+; RUN:   grep "li " | count 4
 
 define i32 @f1() {
 entry:

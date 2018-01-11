@@ -1,4 +1,4 @@
-//===--- PreprocessorLexer.h - C Language Family Lexer ----------*- C++ -*-===//
+//===- PreprocessorLexer.h - C Language Family Lexer ------------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -7,16 +7,20 @@
 //
 //===----------------------------------------------------------------------===//
 //
-//  This file defines the PreprocessorLexer interface.
+/// \file
+/// \brief Defines the PreprocessorLexer interface.
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_CLANG_PreprocessorLexer_H
-#define LLVM_CLANG_PreprocessorLexer_H
+#ifndef LLVM_CLANG_LEX_PREPROCESSORLEXER_H
+#define LLVM_CLANG_LEX_PREPROCESSORLEXER_H
 
 #include "clang/Lex/MultipleIncludeOpt.h"
 #include "clang/Lex/Token.h"
+#include "clang/Basic/SourceLocation.h"
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
+#include <cassert>
 
 namespace clang {
 
@@ -25,29 +29,34 @@ class Preprocessor;
 
 class PreprocessorLexer {
   virtual void anchor();
+
 protected:
-  Preprocessor *PP;              // Preprocessor object controlling lexing.
+  friend class Preprocessor;
+
+  // Preprocessor object controlling lexing.
+  Preprocessor *PP = nullptr;
 
   /// The SourceManager FileID corresponding to the file being lexed.
   const FileID FID;
 
   /// \brief Number of SLocEntries before lexing the file.
-  unsigned InitialNumSLocEntries;
+  unsigned InitialNumSLocEntries = 0;
 
   //===--------------------------------------------------------------------===//
   // Context-specific lexing flags set by the preprocessor.
   //===--------------------------------------------------------------------===//
 
-  /// ParsingPreprocessorDirective - This is true when parsing #XXX.  This turns
-  /// '\n' into a tok::eod token.
-  bool ParsingPreprocessorDirective;
+  /// \brief True when parsing \#XXX; turns '\\n' into a tok::eod token.
+  bool ParsingPreprocessorDirective = false;
 
-  /// ParsingFilename - True after #include: this turns <xx> into a
-  /// tok::angle_string_literal token.
-  bool ParsingFilename;
+  /// \brief True after \#include; turns \<xx> into a tok::angle_string_literal
+  /// token.
+  bool ParsingFilename = false;
 
-  /// LexingRawMode - True if in raw mode:  This flag disables interpretation of
-  /// tokens and is a far faster mode to lex in than non-raw-mode.  This flag:
+  /// \brief True if in raw mode.
+  ///
+  /// Raw mode disables interpretation of tokens and is a far faster mode to
+  /// lex in than non-raw-mode.  This flag:
   ///  1. If EOF of the current lexer is found, the include stack isn't popped.
   ///  2. Identifier information is not looked up for identifier tokens.  As an
   ///     effect of this, implicit macro expansion is naturally disabled.
@@ -57,42 +66,31 @@ protected:
   ///  5. No callbacks are made into the preprocessor.
   ///
   /// Note that in raw mode that the PP pointer may be null.
-  bool LexingRawMode;
+  bool LexingRawMode = false;
 
-  /// MIOpt - This is a state machine that detects the #ifndef-wrapping a file
+  /// \brief A state machine that detects the \#ifndef-wrapping a file
   /// idiom for the multiple-include optimization.
   MultipleIncludeOpt MIOpt;
 
-  /// ConditionalStack - Information about the set of #if/#ifdef/#ifndef blocks
+  /// \brief Information about the set of \#if/\#ifdef/\#ifndef blocks
   /// we are currently in.
   SmallVector<PPConditionalInfo, 4> ConditionalStack;
 
-  PreprocessorLexer(const PreprocessorLexer&);          // DO NOT IMPLEMENT
-  void operator=(const PreprocessorLexer&); // DO NOT IMPLEMENT
-  friend class Preprocessor;
-
+  PreprocessorLexer() : FID() {}
   PreprocessorLexer(Preprocessor *pp, FileID fid);
-
-  PreprocessorLexer()
-    : PP(0), InitialNumSLocEntries(0),
-      ParsingPreprocessorDirective(false),
-      ParsingFilename(false),
-      LexingRawMode(false) {}
-
-  virtual ~PreprocessorLexer() {}
+  virtual ~PreprocessorLexer() = default;
 
   virtual void IndirectLex(Token& Result) = 0;
 
-  /// getSourceLocation - Return the source location for the next observable
-  ///  location.
+  /// \brief Return the source location for the next observable location.
   virtual SourceLocation getSourceLocation() = 0;
 
   //===--------------------------------------------------------------------===//
   // #if directive handling.
 
-  /// pushConditionalLevel - When we enter a #if directive, this keeps track of
-  /// what we are currently in for diagnostic emission (e.g. #if with missing
-  /// #endif).
+  /// pushConditionalLevel - When we enter a \#if directive, this keeps track of
+  /// what we are currently in for diagnostic emission (e.g. \#if with missing
+  /// \#endif).
   void pushConditionalLevel(SourceLocation DirectiveStart, bool WasSkipping,
                             bool FoundNonSkip, bool FoundElse) {
     PPConditionalInfo CI;
@@ -110,14 +108,14 @@ protected:
   /// stack, returning information about it.  If the conditional stack is empty,
   /// this returns true and does not fill in the arguments.
   bool popConditionalLevel(PPConditionalInfo &CI) {
-    if (ConditionalStack.empty()) return true;
-    CI = ConditionalStack.back();
-    ConditionalStack.pop_back();
+    if (ConditionalStack.empty())
+      return true;
+    CI = ConditionalStack.pop_back_val();
     return false;
   }
 
-  /// peekConditionalLevel - Return the top of the conditional stack.  This
-  /// requires that there be a conditional active.
+  /// \brief Return the top of the conditional stack.
+  /// \pre This requires that there be a conditional active.
   PPConditionalInfo &peekConditionalLevel() {
     assert(!ConditionalStack.empty() && "No conditionals active!");
     return ConditionalStack.back();
@@ -126,25 +124,29 @@ protected:
   unsigned getConditionalStackDepth() const { return ConditionalStack.size(); }
 
 public:
+  PreprocessorLexer(const PreprocessorLexer &) = delete;
+  PreprocessorLexer &operator=(const PreprocessorLexer &) = delete;
 
   //===--------------------------------------------------------------------===//
   // Misc. lexing methods.
 
-  /// LexIncludeFilename - After the preprocessor has parsed a #include, lex and
-  /// (potentially) macro expand the filename.  If the sequence parsed is not
-  /// lexically legal, emit a diagnostic and return a result EOD token.
+  /// \brief After the preprocessor has parsed a \#include, lex and
+  /// (potentially) macro expand the filename.
+  ///
+  /// If the sequence parsed is not lexically legal, emit a diagnostic and
+  /// return a result EOD token.
   void LexIncludeFilename(Token &Result);
 
-  /// setParsingPreprocessorDirective - Inform the lexer whether or not
-  ///  we are currently lexing a preprocessor directive.
+  /// \brief Inform the lexer whether or not we are currently lexing a
+  /// preprocessor directive.
   void setParsingPreprocessorDirective(bool f) {
     ParsingPreprocessorDirective = f;
   }
 
-  /// isLexingRawMode - Return true if this lexer is in raw mode or not.
+  /// \brief Return true if this lexer is in raw mode or not.
   bool isLexingRawMode() const { return LexingRawMode; }
 
-  /// getPP - Return the preprocessor object for this lexer.
+  /// \brief Return the preprocessor object for this lexer.
   Preprocessor *getPP() const { return PP; }
 
   FileID getFileID() const {
@@ -163,18 +165,24 @@ public:
   const FileEntry *getFileEntry() const;
 
   /// \brief Iterator that traverses the current stack of preprocessor
-  /// conditional directives (#if/#ifdef/#ifndef).
-  typedef SmallVectorImpl<PPConditionalInfo>::const_iterator 
-    conditional_iterator;
+  /// conditional directives (\#if/\#ifdef/\#ifndef).
+  using conditional_iterator =
+      SmallVectorImpl<PPConditionalInfo>::const_iterator;
 
   conditional_iterator conditional_begin() const { 
     return ConditionalStack.begin(); 
   }
+
   conditional_iterator conditional_end() const { 
     return ConditionalStack.end(); 
   }
+
+  void setConditionalLevels(ArrayRef<PPConditionalInfo> CL) {
+    ConditionalStack.clear();
+    ConditionalStack.append(CL.begin(), CL.end());
+  }
 };
 
-}  // end namespace clang
+} // namespace clang
 
-#endif
+#endif // LLVM_CLANG_LEX_PREPROCESSORLEXER_H

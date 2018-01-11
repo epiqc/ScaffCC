@@ -37,10 +37,20 @@ Z::operator int() const {
   return 0;
 }
 
+template <typename T>
+struct Foo { T member; };
+
+template<typename T> using Bar = Foo<T>;
+
+void test_template_alias() {
+  // RUN: env CINDEXTEST_COMPLETION_CACHING=1 c-index-test -code-completion-at=%s:47:1 %s | FileCheck -check-prefix=CHECK-TEMPLATE-ALIAS %s
+
+}
+
 // CHECK-MEMBER: FieldDecl:{ResultType double}{TypedText member}
 // CHECK-MEMBER: FieldDecl:{ResultType int}{Text X::}{TypedText member}
 // CHECK-MEMBER: FieldDecl:{ResultType float}{Text Y::}{TypedText member}
-// CHECK-MEMBER: CXXMethod:{ResultType void}{Informative Y::}{TypedText memfunc}{LeftParen (}{Optional {Placeholder int i}}{RightParen )}
+// CHECK-MEMBER: CXXMethod:{ResultType void}{Informative Y::}{TypedText memfunc}{LeftParen (}{Optional {Placeholder int i = 17}}{RightParen )}
 // CHECK-MEMBER: CXXConversion:{TypedText operator int}{LeftParen (}{RightParen )}{Informative  const}
 // CHECK-MEMBER: CXXMethod:{ResultType Z &}{TypedText operator=}{LeftParen (}{Placeholder const Z &}{RightParen )}
 // CHECK-MEMBER: CXXMethod:{ResultType X &}{Text X::}{TypedText operator=}{LeftParen (}{Placeholder const X &}{RightParen )}
@@ -58,9 +68,9 @@ Z::operator int() const {
 // CHECK-MEMBER-NEXT: Container is complete
 // CHECK-MEMBER-NEXT: Container USR: c:@S@Z
 
-// CHECK-OVERLOAD: NotImplemented:{ResultType int &}{Text overloaded}{LeftParen (}{Text Z z}{Comma , }{CurrentParameter int second}{RightParen )}
-// CHECK-OVERLOAD: NotImplemented:{ResultType float &}{Text overloaded}{LeftParen (}{Text int i}{Comma , }{CurrentParameter long second}{RightParen )}
-// CHECK-OVERLOAD: NotImplemented:{ResultType double &}{Text overloaded}{LeftParen (}{Text float f}{Comma , }{CurrentParameter int second}{RightParen )}
+// CHECK-OVERLOAD: OverloadCandidate:{ResultType int &}{Text overloaded}{LeftParen (}{Placeholder Z z}{Comma , }{CurrentParameter int second}{RightParen )}
+// CHECK-OVERLOAD: OverloadCandidate:{ResultType float &}{Text overloaded}{LeftParen (}{Placeholder int i}{Comma , }{CurrentParameter long second}{RightParen )}
+// CHECK-OVERLOAD: OverloadCandidate:{ResultType double &}{Text overloaded}{LeftParen (}{Placeholder float f}{Comma , }{CurrentParameter int second}{RightParen )}
 // CHECK-OVERLOAD: Completion contexts:
 // CHECK-OVERLOAD-NEXT: Any type
 // CHECK-OVERLOAD-NEXT: Any value
@@ -77,7 +87,7 @@ Z::operator int() const {
 // CHECK-EXPR: FieldDecl:{ResultType double}{TypedText member} (17)
 // CHECK-EXPR: FieldDecl:{ResultType int}{Text X::}{TypedText member} (9)
 // CHECK-EXPR: FieldDecl:{ResultType float}{Text Y::}{TypedText member} (18)
-// CHECK-EXPR: CXXMethod:{ResultType void}{TypedText memfunc}{LeftParen (}{Optional {Placeholder int i}}{RightParen )} (37)
+// CHECK-EXPR: CXXMethod:{ResultType void}{TypedText memfunc}{LeftParen (}{Optional {Placeholder int i = 17}}{RightParen )} (37)
 // CHECK-EXPR: Namespace:{TypedText N}{Text ::} (75)
 // CHECK-EXPR: Completion contexts:
 // CHECK-EXPR-NEXT: Any type
@@ -88,3 +98,5 @@ Z::operator int() const {
 // CHECK-EXPR-NEXT: Class name
 // CHECK-EXPR-NEXT: Nested name specifier
 // CHECK-EXPR-NEXT: Objective-C interface
+
+// CHECK-TEMPLATE-ALIAS: AliasTemplateDecl:{TypedText Bar}{LeftAngle <}{Placeholder typename T}{RightAngle >} (50)

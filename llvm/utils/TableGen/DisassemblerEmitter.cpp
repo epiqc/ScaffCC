@@ -7,13 +7,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "DisassemblerEmitter.h"
 #include "CodeGenTarget.h"
 #include "X86DisassemblerTables.h"
 #include "X86RecognizableInstr.h"
-#include "FixedLenDecoderEmitter.h"
 #include "llvm/TableGen/Error.h"
 #include "llvm/TableGen/Record.h"
+#include "llvm/TableGen/TableGenBackend.h"
 
 using namespace llvm;
 using namespace llvm::X86Disassembler;
@@ -94,49 +93,56 @@ using namespace llvm::X86Disassembler;
 /// X86RecognizableInstr.cpp contains the implementation for a single
 ///   instruction.
 
-void DisassemblerEmitter::run(raw_ostream &OS) {
-  CodeGenTarget Target(Records);
+namespace llvm {
 
-  OS << "/*===- TableGen'erated file "
-     << "---------------------------------------*- C -*-===*\n"
-     << " *\n"
-     << " * " << Target.getName() << " Disassembler\n"
-     << " *\n"
-     << " * Automatically generated file, do not edit!\n"
-     << " *\n"
-     << " *===---------------------------------------------------------------"
-     << "-------===*/\n";
+extern void EmitFixedLenDecoder(RecordKeeper &RK, raw_ostream &OS,
+                                const std::string &PredicateNamespace,
+                                const std::string &GPrefix,
+                                const std::string &GPostfix,
+                                const std::string &ROK,
+                                const std::string &RFail, const std::string &L);
+
+void EmitDisassembler(RecordKeeper &Records, raw_ostream &OS) {
+  CodeGenTarget Target(Records);
+  emitSourceFileHeader(" * " + Target.getName().str() + " Disassembler", OS);
 
   // X86 uses a custom disassembler.
   if (Target.getName() == "X86") {
     DisassemblerTables Tables;
-  
-    const std::vector<const CodeGenInstruction*> &numberedInstructions =
+
+    ArrayRef<const CodeGenInstruction*> numberedInstructions =
       Target.getInstructionsByEnumValue();
-    
+
     for (unsigned i = 0, e = numberedInstructions.size(); i != e; ++i)
       RecognizableInstr::processInstr(Tables, *numberedInstructions[i], i);
 
-    // FIXME: As long as we are using exceptions, might as well drop this to the
-    // actual conflict site.
-    if (Tables.hasConflicts())
-      throw TGError(Target.getTargetRecord()->getLoc(),
-                    "Primary decode conflict");
+    if (Tables.hasConflicts()) {
+      PrintError(Target.getTargetRecord()->getLoc(), "Primary decode conflict");
+      return;
+    }
 
     Tables.emit(OS);
     return;
   }
 
   // ARM and Thumb have a CHECK() macro to deal with DecodeStatuses.
-  if (Target.getName() == "ARM" ||
-      Target.getName() == "Thumb") {
-    FixedLenDecoderEmitter(Records,
-                           "ARM",
-                           "if (!Check(S, ", ")) return MCDisassembler::Fail;",
-                           "S", "MCDisassembler::Fail",
-                           "  MCDisassembler::DecodeStatus S = MCDisassembler::Success;\n(void)S;").run(OS);
+  if (Target.getName() == "ARM" || Target.getName() == "Thumb" ||
+      Target.getName() == "AArch64" || Target.getName() == "ARM64") {
+    std::string PredicateNamespace = Target.getName();
+    if (PredicateNamespace == "Thumb")
+      PredicateNamespace = "ARM";
+
+    EmitFixedLenDecoder(Records, OS, PredicateNamespace,
+                        "if (!Check(S, ", "))",
+                        "S", "MCDisassembler::Fail",
+                        "  MCDisassembler::DecodeStatus S = "
+                          "MCDisassembler::Success;\n(void)S;");
     return;
   }
 
-  FixedLenDecoderEmitter(Records, Target.getName()).run(OS);
+  EmitFixedLenDecoder(Records, OS, Target.getName(),
+                      "if (", " == MCDisassembler::Fail)",
+                      "MCDisassembler::Success", "MCDisassembler::Fail", "");
 }
+
+} // End llvm namespace

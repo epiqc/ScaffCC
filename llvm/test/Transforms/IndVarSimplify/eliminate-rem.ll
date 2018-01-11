@@ -3,7 +3,7 @@
 target datalayout = "e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64"
 
 ; Indvars should be able to eliminate this srem.
-; CHECK: @simple
+; CHECK-LABEL: @simple(
 ; CHECK-NOT: rem
 ; CHECK: ret
 
@@ -18,7 +18,7 @@ bb4:                                              ; preds = %bb
 bb5:                                              ; preds = %bb4, %bb5
   %t6 = phi i64 [ %t9, %bb5 ], [ 0, %bb4 ]    ; <i64> [#uses=2]
   %t7 = srem i64 %t6, %arg                    ; <i64> [#uses=1]
-  %t8 = getelementptr inbounds double* %arg3, i64 %t7 ; <double*> [#uses=1]
+  %t8 = getelementptr inbounds double, double* %arg3, i64 %t7 ; <double*> [#uses=1]
   store double 0.000000e+00, double* %t8
   %t9 = add nsw i64 %t6, 1                    ; <i64> [#uses=2]
   %t10 = icmp slt i64 %t9, %arg               ; <i1> [#uses=1]
@@ -32,10 +32,10 @@ bb12:                                             ; preds = %bb11, %bb
 }
 
 ; Indvars should be able to eliminate the (i+1)%n.
-; CHECK: @f
-; CHECK-NOT: rem
-; CHECK: rem
-; CHECK-NOT: rem
+; CHECK-LABEL: @f(
+; CHECK-NOT: {{[us]}}rem
+; CHECK: {{[us]}}rem
+; CHECK-NOT: {{[us]}}rem
 ; CHECK: ret
 
 define i32 @f(i64* %arg, i64 %arg1, i64 %arg2, i64 %arg3) nounwind {
@@ -78,16 +78,16 @@ bb21:                                             ; preds = %bb21, %bb20
   %t26 = add nsw i64 %t24, %t22                   ; <i64> [#uses=1]
   %t27 = mul i64 %t11, %arg1                      ; <i64> [#uses=1]
   %t28 = add nsw i64 %t25, %t22                   ; <i64> [#uses=1]
-  %t29 = getelementptr inbounds i64* %arg, i64 %t26 ; <i64*> [#uses=1]
+  %t29 = getelementptr inbounds i64, i64* %arg, i64 %t26 ; <i64*> [#uses=1]
   %t30 = add nsw i64 %t27, %t22                   ; <i64> [#uses=1]
-  %t31 = getelementptr inbounds i64* %arg, i64 %t28 ; <i64*> [#uses=1]
+  %t31 = getelementptr inbounds i64, i64* %arg, i64 %t28 ; <i64*> [#uses=1]
   %t32 = zext i32 %t23 to i64                     ; <i64> [#uses=1]
-  %t33 = load i64* %t29                           ; <i64> [#uses=1]
-  %t34 = getelementptr inbounds i64* %arg, i64 %t30 ; <i64*> [#uses=1]
-  %t35 = load i64* %t31                           ; <i64> [#uses=1]
+  %t33 = load i64, i64* %t29                           ; <i64> [#uses=1]
+  %t34 = getelementptr inbounds i64, i64* %arg, i64 %t30 ; <i64*> [#uses=1]
+  %t35 = load i64, i64* %t31                           ; <i64> [#uses=1]
   %t36 = add nsw i64 %t32, %t33                   ; <i64> [#uses=1]
   %t37 = add nsw i64 %t36, %t35                   ; <i64> [#uses=1]
-  %t38 = load i64* %t34                           ; <i64> [#uses=1]
+  %t38 = load i64, i64* %t34                           ; <i64> [#uses=1]
   %t39 = add nsw i64 %t37, %t38                   ; <i64> [#uses=1]
   %t40 = trunc i64 %t39 to i32                    ; <i32> [#uses=2]
   %t41 = add nsw i64 %t22, 1                      ; <i64> [#uses=2]

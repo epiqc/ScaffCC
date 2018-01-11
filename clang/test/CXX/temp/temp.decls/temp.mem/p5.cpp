@@ -55,8 +55,8 @@ template double Foo::As2();
 // Partial ordering with conversion function templates.
 struct X0 {
   template<typename T> operator T*() {
-    T x = 1;
-    x = 17; // expected-error{{read-only variable is not assignable}}
+    T x = 1; // expected-note{{variable 'x' declared const here}}
+    x = 17; // expected-error{{cannot assign to variable 'x' with const-qualified type 'const int'}}
   }
   
   template<typename T> operator T*() const; // expected-note{{explicit instantiation refers here}}
@@ -76,4 +76,17 @@ void test_X0(X0 x0, const X0 &x0c) {
   x0.operator const int*(); // expected-note{{in instantiation of function template specialization}}
   x0.operator float *();
   x0c.operator const char*();
+}
+
+namespace PR14211 {
+template <class U> struct X {
+  void foo(U){}
+  template <class T> void foo(T){}
+
+  template <class T> void bar(T){}
+  void bar(U){}
+};
+
+template void X<int>::foo(int);
+template void X<int>::bar(int);
 }

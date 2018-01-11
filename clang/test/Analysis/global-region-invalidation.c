@@ -1,7 +1,9 @@
-// RUN: %clang_cc1 -triple x86_64-apple-darwin10 -analyze -disable-free -analyzer-eagerly-assume -analyzer-checker=core,deadcode,experimental.security.taint,debug.TaintTest -verify %s
+// RUN: %clang_analyze_cc1 -triple x86_64-apple-darwin10 -disable-free -analyzer-eagerly-assume -analyzer-checker=core,deadcode,alpha.security.taint,debug.TaintTest,debug.ExprInspection -verify %s
+
+void clang_analyzer_eval(int);
 
 // Note, we do need to include headers here, since the analyzer checks if the function declaration is located in a system header.
-#include "system-header-simulator.h"
+#include "Inputs/system-header-simulator.h"
 
 // Test that system header does not invalidate the internal global.
 int size_rdar9373039 = 1;
@@ -42,7 +44,10 @@ int testErrnoSystem() {
     fscanf(stdin, "%d", &i); // errno gets invalidated here.
     return 5 / errno; // no-warning
   }
-  return 0;
+
+  errno = 0;
+  fscanf(stdin, "%d", &i); // errno gets invalidated here.
+  return 5 / errno; // no-warning
 }
 
 // Test that errno gets invalidated by internal calls.
@@ -65,11 +70,58 @@ int constIntGlob() {
   return 3 / *m; // expected-warning {{Division by zero}}
 }
 
-extern const int x;
+extern const int y;
 int constIntGlobExtern() {
-  if (x == 0) {
+  if (y == 0) {
     foo();
-    return 5 / x; // expected-warning {{Division by zero}}
+    return 5 / y; // expected-warning {{Division by zero}}
   }
   return 0;
 }
+
+static void * const ptr = 0;
+void constPtrGlob() {
+  clang_analyzer_eval(ptr == 0); // expected-warning{{TRUE}}
+  foo();
+  clang_analyzer_eval(ptr == 0); // expected-warning{{TRUE}}
+}
+
+static const int x2 = x;
+void constIntGlob2() {
+  clang_analyzer_eval(x2 == 0); // expected-warning{{TRUE}}
+  foo();
+  clang_analyzer_eval(x2 == 0); // expected-warning{{TRUE}}
+}
+
+void testAnalyzerEvalIsPure() {
+  extern int someGlobal;
+  if (someGlobal == 0) {
+    clang_analyzer_eval(someGlobal == 0); // expected-warning{{TRUE}}
+    clang_analyzer_eval(someGlobal == 0); // expected-warning{{TRUE}}
+  }
+}
+
+// Test that static variables with initializers do not get reinitialized on
+// recursive calls.
+void Function2(void);
+int *getPtr();
+void Function1(void) {
+  static unsigned flag;
+  static int *p = 0;
+  if (!flag) {
+    flag = 1;
+    p = getPtr();
+  }
+  int m = *p; // no-warning: p is never null.
+  m++;
+  Function2();
+}
+void Function2(void) {
+    Function1();
+}
+
+void SetToNonZero(void) {
+  static int g = 5;
+  clang_analyzer_eval(g == 5); // expected-warning{{TRUE}}
+}
+

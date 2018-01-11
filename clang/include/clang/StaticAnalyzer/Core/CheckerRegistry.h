@@ -10,8 +10,8 @@
 #ifndef LLVM_CLANG_STATICANALYZER_CORE_CHECKERREGISTRY_H
 #define LLVM_CLANG_STATICANALYZER_CORE_CHECKERREGISTRY_H
 
-#include "clang/StaticAnalyzer/Core/CheckerManager.h"
 #include "clang/Basic/LLVM.h"
+#include "clang/StaticAnalyzer/Core/CheckerManager.h"
 #include <vector>
 
 // FIXME: move this information to an HTML file in docs/.
@@ -54,10 +54,6 @@
 //
 // For a complete working example, see examples/analyzer-plugin.
 
-
-namespace clang {
-namespace ento {
-
 #ifndef CLANG_ANALYZER_API_VERSION_STRING
 // FIXME: The Clang version string is not particularly granular;
 // the analyzer infrastructure can change a lot between releases.
@@ -66,6 +62,12 @@ namespace ento {
 #include "clang/Basic/Version.h"
 #define CLANG_ANALYZER_API_VERSION_STRING CLANG_VERSION_STRING
 #endif
+
+namespace clang {
+class DiagnosticsEngine;
+class AnalyzerOptions;
+
+namespace ento {
 
 class CheckerOptInfo;
 
@@ -119,9 +121,15 @@ public:
   void initializeManager(CheckerManager &mgr,
                          SmallVectorImpl<CheckerOptInfo> &opts) const;
 
+  /// Check if every option corresponds to a specific checker or package.
+  void validateCheckerOptions(const AnalyzerOptions &opts,
+                              DiagnosticsEngine &diags) const;
+
   /// Prints the name and description of all checkers in this registry.
   /// This output is not intended to be machine-parseable.
-  void printHelp(raw_ostream &out, size_t maxNameChars = 30) const ;
+  void printHelp(raw_ostream &out, size_t maxNameChars = 30) const;
+  void printList(raw_ostream &out,
+                 SmallVectorImpl<CheckerOptInfo> &opts) const;
 
 private:
   mutable CheckerInfoList Checkers;

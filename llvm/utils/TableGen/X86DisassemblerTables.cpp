@@ -10,126 +10,19 @@
 // This file is part of the X86 Disassembler Emitter.
 // It contains the implementation of the disassembler tables.
 // Documentation for the disassembler emitter in general can be found in
-//  X86DisasemblerEmitter.h.
+//  X86DisassemblerEmitter.h.
 //
 //===----------------------------------------------------------------------===//
 
-#include "X86DisassemblerShared.h"
 #include "X86DisassemblerTables.h"
-
-#include "llvm/TableGen/TableGenBackend.h"
+#include "X86DisassemblerShared.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/Format.h"
+#include <map>
 
 using namespace llvm;
 using namespace X86Disassembler;
-  
-/// inheritsFrom - Indicates whether all instructions in one class also belong
-///   to another class.
-///
-/// @param child  - The class that may be the subset
-/// @param parent - The class that may be the superset
-/// @return       - True if child is a subset of parent, false otherwise.
-static inline bool inheritsFrom(InstructionContext child,
-                                InstructionContext parent,
-                                bool VEX_LIG = false) {
-  if (child == parent)
-    return true;
-  
-  switch (parent) {
-  case IC:
-    return(inheritsFrom(child, IC_64BIT) ||
-           inheritsFrom(child, IC_OPSIZE) ||
-           inheritsFrom(child, IC_ADSIZE) ||
-           inheritsFrom(child, IC_XD) ||
-           inheritsFrom(child, IC_XS));
-  case IC_64BIT:
-    return(inheritsFrom(child, IC_64BIT_REXW)   ||
-           inheritsFrom(child, IC_64BIT_OPSIZE) ||
-           inheritsFrom(child, IC_64BIT_ADSIZE) ||
-           inheritsFrom(child, IC_64BIT_XD)     ||
-           inheritsFrom(child, IC_64BIT_XS));
-  case IC_OPSIZE:
-    return inheritsFrom(child, IC_64BIT_OPSIZE);
-  case IC_ADSIZE:
-  case IC_64BIT_ADSIZE:
-    return false;
-  case IC_XD:
-    return inheritsFrom(child, IC_64BIT_XD);
-  case IC_XS:
-    return inheritsFrom(child, IC_64BIT_XS);
-  case IC_XD_OPSIZE:
-    return inheritsFrom(child, IC_64BIT_XD_OPSIZE);
-  case IC_XS_OPSIZE:
-    return inheritsFrom(child, IC_64BIT_XS_OPSIZE);
-  case IC_64BIT_REXW:
-    return(inheritsFrom(child, IC_64BIT_REXW_XS) ||
-           inheritsFrom(child, IC_64BIT_REXW_XD) ||
-           inheritsFrom(child, IC_64BIT_REXW_OPSIZE));
-  case IC_64BIT_OPSIZE:
-    return(inheritsFrom(child, IC_64BIT_REXW_OPSIZE));
-  case IC_64BIT_XD:
-    return(inheritsFrom(child, IC_64BIT_REXW_XD));
-  case IC_64BIT_XS:
-    return(inheritsFrom(child, IC_64BIT_REXW_XS));
-  case IC_64BIT_XD_OPSIZE:
-  case IC_64BIT_XS_OPSIZE:
-    return false;
-  case IC_64BIT_REXW_XD:
-  case IC_64BIT_REXW_XS:
-  case IC_64BIT_REXW_OPSIZE:
-    return false;
-  case IC_VEX:
-    return inheritsFrom(child, IC_VEX_W) ||
-           (VEX_LIG && inheritsFrom(child, IC_VEX_L));
-  case IC_VEX_XS:
-    return inheritsFrom(child, IC_VEX_W_XS) ||
-           (VEX_LIG && inheritsFrom(child, IC_VEX_L_XS));
-  case IC_VEX_XD:
-    return inheritsFrom(child, IC_VEX_W_XD) ||
-           (VEX_LIG && inheritsFrom(child, IC_VEX_L_XD));
-  case IC_VEX_OPSIZE:
-    return inheritsFrom(child, IC_VEX_W_OPSIZE) ||
-           (VEX_LIG && inheritsFrom(child, IC_VEX_L_OPSIZE));
-  case IC_VEX_W:
-  case IC_VEX_W_XS:
-  case IC_VEX_W_XD:
-  case IC_VEX_W_OPSIZE:
-    return false;
-  case IC_VEX_L:
-  case IC_VEX_L_XS:
-  case IC_VEX_L_XD:
-    return false;
-  case IC_VEX_L_OPSIZE:
-    return inheritsFrom(child, IC_VEX_L_W_OPSIZE);
-  case IC_VEX_L_W_OPSIZE:
-    return false;
-  default:
-    llvm_unreachable("Unknown instruction class");
-  }
-}
-
-/// outranks - Indicates whether, if an instruction has two different applicable
-///   classes, which class should be preferred when performing decode.  This
-///   imposes a total ordering (ties are resolved toward "lower")
-///
-/// @param upper  - The class that may be preferable
-/// @param lower  - The class that may be less preferable
-/// @return       - True if upper is to be preferred, false otherwise.
-static inline bool outranks(InstructionContext upper, 
-                            InstructionContext lower) {
-  assert(upper < IC_max);
-  assert(lower < IC_max);
-  
-#define ENUM_ENTRY(n, r, d) r,
-  static int ranks[IC_max] = {
-    INSTRUCTION_CONTEXTS
-  };
-#undef ENUM_ENTRY
-  
-  return (ranks[upper] > ranks[lower]);
-}
 
 /// stringForContext - Returns a string containing the name of a particular
 ///   InstructionContext, usually for diagnostic purposes.
@@ -142,8 +35,12 @@ static inline const char* stringForContext(InstructionContext insnContext) {
   default:
     llvm_unreachable("Unhandled instruction class");
 #define ENUM_ENTRY(n, r, d)   case n: return #n; break;
+#define ENUM_ENTRY_K_B(n, r, d) ENUM_ENTRY(n, r, d) ENUM_ENTRY(n##_K_B, r, d)\
+        ENUM_ENTRY(n##_KZ, r, d) ENUM_ENTRY(n##_K, r, d) ENUM_ENTRY(n##_B, r, d)\
+        ENUM_ENTRY(n##_KZ_B, r, d)
   INSTRUCTION_CONTEXTS
 #undef ENUM_ENTRY
+#undef ENUM_ENTRY_K_B
   }
 }
 
@@ -170,36 +67,515 @@ static inline const char* stringForOperandEncoding(OperandEncoding encoding) {
   }
 }
 
-void DisassemblerTables::emitOneID(raw_ostream &o,
-                                   uint32_t &i,
-                                   InstrUID id,
-                                   bool addComma) const {
-  if (id)
-    o.indent(i * 2) << format("0x%hx", id);
-  else
-    o.indent(i * 2) << 0;
-  
-  if (addComma)
-    o << ", ";
-  else
-    o << "  ";
-  
-  o << "/* ";
-  o << InstructionSpecifiers[id].name;
-  o << "*/";
-  
-  o << "\n";
+/// inheritsFrom - Indicates whether all instructions in one class also belong
+///   to another class.
+///
+/// @param child  - The class that may be the subset
+/// @param parent - The class that may be the superset
+/// @return       - True if child is a subset of parent, false otherwise.
+static inline bool inheritsFrom(InstructionContext child,
+                                InstructionContext parent, bool noPrefix = true,
+                                bool VEX_LIG = false, bool VEX_WIG = false,
+                                bool AdSize64 = false) {
+  if (child == parent)
+    return true;
+
+  switch (parent) {
+  case IC:
+    return(inheritsFrom(child, IC_64BIT, AdSize64) ||
+           (noPrefix && inheritsFrom(child, IC_OPSIZE, noPrefix)) ||
+           inheritsFrom(child, IC_ADSIZE) ||
+           (noPrefix && inheritsFrom(child, IC_XD, noPrefix)) ||
+           (noPrefix && inheritsFrom(child, IC_XS, noPrefix)));
+  case IC_64BIT:
+    return(inheritsFrom(child, IC_64BIT_REXW)   ||
+           (noPrefix && inheritsFrom(child, IC_64BIT_OPSIZE, noPrefix)) ||
+           (!AdSize64 && inheritsFrom(child, IC_64BIT_ADSIZE)) ||
+           (noPrefix && inheritsFrom(child, IC_64BIT_XD, noPrefix))     ||
+           (noPrefix && inheritsFrom(child, IC_64BIT_XS, noPrefix)));
+  case IC_OPSIZE:
+    return inheritsFrom(child, IC_64BIT_OPSIZE) ||
+           inheritsFrom(child, IC_OPSIZE_ADSIZE);
+  case IC_ADSIZE:
+    return (noPrefix && inheritsFrom(child, IC_OPSIZE_ADSIZE, noPrefix));
+  case IC_OPSIZE_ADSIZE:
+    return false;
+  case IC_64BIT_ADSIZE:
+    return (noPrefix && inheritsFrom(child, IC_64BIT_OPSIZE_ADSIZE, noPrefix));
+  case IC_64BIT_OPSIZE_ADSIZE:
+    return false;
+  case IC_XD:
+    return inheritsFrom(child, IC_64BIT_XD);
+  case IC_XS:
+    return inheritsFrom(child, IC_64BIT_XS);
+  case IC_XD_OPSIZE:
+    return inheritsFrom(child, IC_64BIT_XD_OPSIZE);
+  case IC_XS_OPSIZE:
+    return inheritsFrom(child, IC_64BIT_XS_OPSIZE);
+  case IC_64BIT_REXW:
+    return((noPrefix && inheritsFrom(child, IC_64BIT_REXW_XS, noPrefix)) ||
+           (noPrefix && inheritsFrom(child, IC_64BIT_REXW_XD, noPrefix)) ||
+           (noPrefix && inheritsFrom(child, IC_64BIT_REXW_OPSIZE, noPrefix)) ||
+           (!AdSize64 && inheritsFrom(child, IC_64BIT_REXW_ADSIZE)));
+  case IC_64BIT_OPSIZE:
+    return inheritsFrom(child, IC_64BIT_REXW_OPSIZE) ||
+           (!AdSize64 && inheritsFrom(child, IC_64BIT_OPSIZE_ADSIZE)) ||
+           (!AdSize64 && inheritsFrom(child, IC_64BIT_REXW_ADSIZE));
+  case IC_64BIT_XD:
+    return(inheritsFrom(child, IC_64BIT_REXW_XD));
+  case IC_64BIT_XS:
+    return(inheritsFrom(child, IC_64BIT_REXW_XS));
+  case IC_64BIT_XD_OPSIZE:
+  case IC_64BIT_XS_OPSIZE:
+    return false;
+  case IC_64BIT_REXW_XD:
+  case IC_64BIT_REXW_XS:
+  case IC_64BIT_REXW_OPSIZE:
+  case IC_64BIT_REXW_ADSIZE:
+    return false;
+  case IC_VEX:
+    return (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_VEX_L_W)) ||
+           (VEX_WIG && inheritsFrom(child, IC_VEX_W)) ||
+           (VEX_LIG && inheritsFrom(child, IC_VEX_L));
+  case IC_VEX_XS:
+    return (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_VEX_L_W_XS)) ||
+           (VEX_WIG && inheritsFrom(child, IC_VEX_W_XS)) ||
+           (VEX_LIG && inheritsFrom(child, IC_VEX_L_XS));
+  case IC_VEX_XD:
+    return (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_VEX_L_W_XD)) ||
+           (VEX_WIG && inheritsFrom(child, IC_VEX_W_XD)) ||
+           (VEX_LIG && inheritsFrom(child, IC_VEX_L_XD));
+  case IC_VEX_OPSIZE:
+    return (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_VEX_L_W_OPSIZE)) ||
+           (VEX_WIG && inheritsFrom(child, IC_VEX_W_OPSIZE)) ||
+           (VEX_LIG && inheritsFrom(child, IC_VEX_L_OPSIZE));
+  case IC_VEX_W:
+    return VEX_LIG && inheritsFrom(child, IC_VEX_L_W);
+  case IC_VEX_W_XS:
+    return VEX_LIG && inheritsFrom(child, IC_VEX_L_W_XS);
+  case IC_VEX_W_XD:
+    return VEX_LIG && inheritsFrom(child, IC_VEX_L_W_XD);
+  case IC_VEX_W_OPSIZE:
+    return VEX_LIG && inheritsFrom(child, IC_VEX_L_W_OPSIZE);
+  case IC_VEX_L:
+    return VEX_WIG && inheritsFrom(child, IC_VEX_L_W);
+  case IC_VEX_L_XS:
+    return VEX_WIG && inheritsFrom(child, IC_VEX_L_W_XS);
+  case IC_VEX_L_XD:
+    return VEX_WIG && inheritsFrom(child, IC_VEX_L_W_XD);
+  case IC_VEX_L_OPSIZE:
+    return VEX_WIG && inheritsFrom(child, IC_VEX_L_W_OPSIZE);
+  case IC_VEX_L_W:
+  case IC_VEX_L_W_XS:
+  case IC_VEX_L_W_XD:
+  case IC_VEX_L_W_OPSIZE:
+    return false;
+  case IC_EVEX:
+    return (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_EVEX_L_W)) ||
+           (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W)) ||
+           (VEX_WIG && inheritsFrom(child, IC_EVEX_W)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2));
+  case IC_EVEX_XS:
+    return (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_EVEX_L_W_XS)) ||
+           (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W_XS)) ||
+           (VEX_WIG && inheritsFrom(child, IC_EVEX_W_XS)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L_XS)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_XS));
+  case IC_EVEX_XD:
+    return (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_EVEX_L_W_XD)) ||
+           (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W_XD)) ||
+           (VEX_WIG && inheritsFrom(child, IC_EVEX_W_XD)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L_XD)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_XD));
+  case IC_EVEX_OPSIZE:
+    return (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_EVEX_L_W_OPSIZE)) ||
+           (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W_OPSIZE)) ||
+           (VEX_WIG && inheritsFrom(child, IC_EVEX_W_OPSIZE)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L_OPSIZE)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_OPSIZE));
+  case IC_EVEX_K:
+    return (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_EVEX_L_W_K)) ||
+           (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W_K)) ||
+           (VEX_WIG && inheritsFrom(child, IC_EVEX_W_K)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L_K)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_K));
+  case IC_EVEX_XS_K:
+    return (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_EVEX_L_W_XS_K)) ||
+           (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W_XS_K)) ||
+           (VEX_WIG && inheritsFrom(child, IC_EVEX_W_XS_K)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L_XS_K)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_XS_K));
+  case IC_EVEX_XD_K:
+    return (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_EVEX_L_W_XD_K)) ||
+           (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W_XD_K)) ||
+           (VEX_WIG && inheritsFrom(child, IC_EVEX_W_XD_K)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L_XD_K)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_XD_K));
+  case IC_EVEX_OPSIZE_K:
+    return (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_EVEX_L_W_OPSIZE_K)) ||
+           (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W_OPSIZE_K)) ||
+           (VEX_WIG && inheritsFrom(child, IC_EVEX_W_OPSIZE_K)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L_OPSIZE_K)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_OPSIZE_K));
+  case IC_EVEX_KZ:
+    return (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_EVEX_L_W_KZ)) ||
+           (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W_KZ)) ||
+           (VEX_WIG && inheritsFrom(child, IC_EVEX_W_KZ)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L_KZ)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_KZ));
+  case IC_EVEX_XS_KZ:
+    return (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_EVEX_L_W_XS_KZ)) ||
+           (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W_XS_KZ)) ||
+           (VEX_WIG && inheritsFrom(child, IC_EVEX_W_XS_KZ)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L_XS_KZ)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_XS_KZ));
+  case IC_EVEX_XD_KZ:
+    return (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_EVEX_L_W_XD_KZ)) ||
+           (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W_XD_KZ)) ||
+           (VEX_WIG && inheritsFrom(child, IC_EVEX_W_XD_KZ)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L_XD_KZ)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_XD_KZ));
+  case IC_EVEX_OPSIZE_KZ:
+    return (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_EVEX_L_W_OPSIZE_KZ)) ||
+           (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W_OPSIZE_KZ)) ||
+           (VEX_WIG && inheritsFrom(child, IC_EVEX_W_OPSIZE_KZ)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L_OPSIZE_KZ)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_OPSIZE_KZ));
+  case IC_EVEX_W:
+    return (VEX_LIG && inheritsFrom(child, IC_EVEX_L_W)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_W));
+  case IC_EVEX_W_XS:
+    return (VEX_LIG && inheritsFrom(child, IC_EVEX_L_W_XS)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_W_XS));
+  case IC_EVEX_W_XD:
+    return (VEX_LIG && inheritsFrom(child, IC_EVEX_L_W_XD)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_W_XD));
+  case IC_EVEX_W_OPSIZE:
+    return (VEX_LIG && inheritsFrom(child, IC_EVEX_L_W_OPSIZE)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_W_OPSIZE));
+  case IC_EVEX_W_K:
+    return (VEX_LIG && inheritsFrom(child, IC_EVEX_L_W_K)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_W_K));
+  case IC_EVEX_W_XS_K:
+    return (VEX_LIG && inheritsFrom(child, IC_EVEX_L_W_XS_K)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_W_XS_K));
+  case IC_EVEX_W_XD_K:
+    return (VEX_LIG && inheritsFrom(child, IC_EVEX_L_W_XD_K)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_W_XD_K));
+  case IC_EVEX_W_OPSIZE_K:
+    return (VEX_LIG && inheritsFrom(child, IC_EVEX_L_W_OPSIZE_K)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_W_OPSIZE_K));
+  case IC_EVEX_W_KZ:
+    return (VEX_LIG && inheritsFrom(child, IC_EVEX_L_W_KZ)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_W_KZ));
+  case IC_EVEX_W_XS_KZ:
+    return (VEX_LIG && inheritsFrom(child, IC_EVEX_L_W_XS_KZ)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_W_XS_KZ));
+  case IC_EVEX_W_XD_KZ:
+    return (VEX_LIG && inheritsFrom(child, IC_EVEX_L_W_XD_KZ)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_W_XD_KZ));
+  case IC_EVEX_W_OPSIZE_KZ:
+    return (VEX_LIG && inheritsFrom(child, IC_EVEX_L_W_OPSIZE_KZ)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_W_OPSIZE_KZ));
+  case IC_EVEX_L:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L_W);
+  case IC_EVEX_L_XS:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L_W_XS);
+  case IC_EVEX_L_XD:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L_W_XD);
+  case IC_EVEX_L_OPSIZE:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L_W_OPSIZE);
+  case IC_EVEX_L_K:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L_W_K);
+  case IC_EVEX_L_XS_K:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L_W_XS_K);
+  case IC_EVEX_L_XD_K:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L_W_XD_K);
+  case IC_EVEX_L_OPSIZE_K:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L_W_OPSIZE_K);
+  case IC_EVEX_L_KZ:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L_W_KZ);
+  case IC_EVEX_L_XS_KZ:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L_W_XS_KZ);
+  case IC_EVEX_L_XD_KZ:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L_W_XD_KZ);
+  case IC_EVEX_L_OPSIZE_KZ:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L_W_OPSIZE_KZ);
+  case IC_EVEX_L_W:
+  case IC_EVEX_L_W_XS:
+  case IC_EVEX_L_W_XD:
+  case IC_EVEX_L_W_OPSIZE:
+    return false;
+  case IC_EVEX_L_W_K:
+  case IC_EVEX_L_W_XS_K:
+  case IC_EVEX_L_W_XD_K:
+  case IC_EVEX_L_W_OPSIZE_K:
+    return false;
+  case IC_EVEX_L_W_KZ:
+  case IC_EVEX_L_W_XS_KZ:
+  case IC_EVEX_L_W_XD_KZ:
+  case IC_EVEX_L_W_OPSIZE_KZ:
+    return false;
+  case IC_EVEX_L2:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W);
+  case IC_EVEX_L2_XS:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W_XS);
+  case IC_EVEX_L2_XD:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W_XD);
+  case IC_EVEX_L2_OPSIZE:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W_OPSIZE);
+  case IC_EVEX_L2_K:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W_K);
+  case IC_EVEX_L2_XS_K:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W_XS_K);
+  case IC_EVEX_L2_XD_K:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W_XD_K);
+  case IC_EVEX_L2_OPSIZE_K:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W_OPSIZE_K);
+  case IC_EVEX_L2_KZ:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W_KZ);
+  case IC_EVEX_L2_XS_KZ:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W_XS_KZ);
+  case IC_EVEX_L2_XD_KZ:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W_XD_KZ);
+  case IC_EVEX_L2_OPSIZE_KZ:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W_OPSIZE_KZ);
+  case IC_EVEX_L2_W:
+  case IC_EVEX_L2_W_XS:
+  case IC_EVEX_L2_W_XD:
+  case IC_EVEX_L2_W_OPSIZE:
+    return false;
+  case IC_EVEX_L2_W_K:
+  case IC_EVEX_L2_W_XS_K:
+  case IC_EVEX_L2_W_XD_K:
+  case IC_EVEX_L2_W_OPSIZE_K:
+    return false;
+  case IC_EVEX_L2_W_KZ:
+  case IC_EVEX_L2_W_XS_KZ:
+  case IC_EVEX_L2_W_XD_KZ:
+  case IC_EVEX_L2_W_OPSIZE_KZ:
+    return false;
+  case IC_EVEX_B:
+    return (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_EVEX_L_W_B)) ||
+           (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W_B)) ||
+           (VEX_WIG && inheritsFrom(child, IC_EVEX_W_B)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L_B)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_B));
+  case IC_EVEX_XS_B:
+    return (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_EVEX_L_W_XS_B)) ||
+           (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W_XS_B)) ||
+           (VEX_WIG && inheritsFrom(child, IC_EVEX_W_XS_B)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L_XS_B)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_XS_B));
+  case IC_EVEX_XD_B:
+    return (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_EVEX_L_W_XD_B)) ||
+           (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W_XD_B)) ||
+           (VEX_WIG && inheritsFrom(child, IC_EVEX_W_XD_B)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L_XD_B)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_XD_B));
+  case IC_EVEX_OPSIZE_B:
+    return (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_EVEX_L_W_OPSIZE_B)) ||
+           (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W_OPSIZE_B)) ||
+           (VEX_WIG && inheritsFrom(child, IC_EVEX_W_OPSIZE_B)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L_OPSIZE_B)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_OPSIZE_B));
+  case IC_EVEX_K_B:
+    return (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_EVEX_L_W_K_B)) ||
+           (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W_K_B)) ||
+           (VEX_WIG && inheritsFrom(child, IC_EVEX_W_K_B)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L_K_B)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_K_B));
+  case IC_EVEX_XS_K_B:
+    return (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_EVEX_L_W_XS_K_B)) ||
+           (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W_XS_K_B)) ||
+           (VEX_WIG && inheritsFrom(child, IC_EVEX_W_XS_K_B)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L_XS_K_B)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_XS_K_B));
+  case IC_EVEX_XD_K_B:
+    return (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_EVEX_L_W_XD_K_B)) ||
+           (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W_XD_K_B)) ||
+           (VEX_WIG && inheritsFrom(child, IC_EVEX_W_XD_K_B)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L_XD_K_B)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_XD_K_B));
+  case IC_EVEX_OPSIZE_K_B:
+    return (VEX_LIG && VEX_WIG &&
+            inheritsFrom(child, IC_EVEX_L_W_OPSIZE_K_B)) ||
+           (VEX_LIG && VEX_WIG &&
+            inheritsFrom(child, IC_EVEX_L2_W_OPSIZE_K_B)) ||
+           (VEX_WIG && inheritsFrom(child, IC_EVEX_W_OPSIZE_K_B)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L_OPSIZE_K_B)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_OPSIZE_K_B));
+  case IC_EVEX_KZ_B:
+    return (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_EVEX_L_W_KZ_B)) ||
+           (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W_KZ_B)) ||
+           (VEX_WIG && inheritsFrom(child, IC_EVEX_W_KZ_B)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L_KZ_B)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_KZ_B));
+  case IC_EVEX_XS_KZ_B:
+    return (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_EVEX_L_W_XS_KZ_B)) ||
+           (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W_XS_KZ_B)) ||
+           (VEX_WIG && inheritsFrom(child, IC_EVEX_W_XS_KZ_B)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L_XS_KZ_B)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_XS_KZ_B));
+  case IC_EVEX_XD_KZ_B:
+    return (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_EVEX_L_W_XD_KZ_B)) ||
+           (VEX_LIG && VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W_XD_KZ_B)) ||
+           (VEX_WIG && inheritsFrom(child, IC_EVEX_W_XD_KZ_B)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L_XD_KZ_B)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_XD_KZ_B));
+  case IC_EVEX_OPSIZE_KZ_B:
+    return (VEX_LIG && VEX_WIG &&
+            inheritsFrom(child, IC_EVEX_L_W_OPSIZE_KZ_B)) ||
+           (VEX_LIG && VEX_WIG &&
+            inheritsFrom(child, IC_EVEX_L2_W_OPSIZE_KZ_B)) ||
+           (VEX_WIG && inheritsFrom(child, IC_EVEX_W_OPSIZE_KZ_B)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L_OPSIZE_KZ_B)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_OPSIZE_KZ_B));
+  case IC_EVEX_W_B:
+    return (VEX_LIG && inheritsFrom(child, IC_EVEX_L_W_B)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_W_B));
+  case IC_EVEX_W_XS_B:
+    return (VEX_LIG && inheritsFrom(child, IC_EVEX_L_W_XS_B)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_W_XS_B));
+  case IC_EVEX_W_XD_B:
+    return (VEX_LIG && inheritsFrom(child, IC_EVEX_L_W_XD_B)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_W_XD_B));
+  case IC_EVEX_W_OPSIZE_B:
+    return (VEX_LIG && inheritsFrom(child, IC_EVEX_L_W_OPSIZE_B)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_W_OPSIZE_B));
+  case IC_EVEX_W_K_B:
+    return (VEX_LIG && inheritsFrom(child, IC_EVEX_L_W_K_B)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_W_K_B));
+  case IC_EVEX_W_XS_K_B:
+    return (VEX_LIG && inheritsFrom(child, IC_EVEX_L_W_XS_K_B)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_W_XS_K_B));
+  case IC_EVEX_W_XD_K_B:
+    return (VEX_LIG && inheritsFrom(child, IC_EVEX_L_W_XD_K_B)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_W_XD_K_B));
+  case IC_EVEX_W_OPSIZE_K_B:
+    return (VEX_LIG && inheritsFrom(child, IC_EVEX_L_W_OPSIZE_K_B)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_W_OPSIZE_K_B));
+  case IC_EVEX_W_KZ_B:
+    return (VEX_LIG && inheritsFrom(child, IC_EVEX_L_W_KZ_B)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_W_KZ_B));
+  case IC_EVEX_W_XS_KZ_B:
+    return (VEX_LIG && inheritsFrom(child, IC_EVEX_L_W_XS_KZ_B)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_W_XS_KZ_B));
+  case IC_EVEX_W_XD_KZ_B:
+    return (VEX_LIG && inheritsFrom(child, IC_EVEX_L_W_XD_KZ_B)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_W_XD_KZ_B));
+  case IC_EVEX_W_OPSIZE_KZ_B:
+    return (VEX_LIG && inheritsFrom(child, IC_EVEX_L_W_OPSIZE_KZ_B)) ||
+           (VEX_LIG && inheritsFrom(child, IC_EVEX_L2_W_OPSIZE_KZ_B));
+  case IC_EVEX_L_B:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L_W_B);
+  case IC_EVEX_L_XS_B:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L_W_XS_B);
+  case IC_EVEX_L_XD_B:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L_W_XD_B);
+  case IC_EVEX_L_OPSIZE_B:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L_W_OPSIZE_B);
+  case IC_EVEX_L_K_B:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L_W_K_B);
+  case IC_EVEX_L_XS_K_B:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L_W_XS_K_B);
+  case IC_EVEX_L_XD_K_B:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L_W_XD_K_B);
+  case IC_EVEX_L_OPSIZE_K_B:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L_W_OPSIZE_K_B);
+  case IC_EVEX_L_KZ_B:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L_W_KZ_B);
+  case IC_EVEX_L_XS_KZ_B:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L_W_XS_KZ_B);
+  case IC_EVEX_L_XD_KZ_B:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L_W_XD_KZ_B);
+  case IC_EVEX_L_OPSIZE_KZ_B:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L_W_OPSIZE_KZ_B);
+  case IC_EVEX_L_W_B:
+  case IC_EVEX_L_W_XS_B:
+  case IC_EVEX_L_W_XD_B:
+  case IC_EVEX_L_W_OPSIZE_B:
+    return false;
+  case IC_EVEX_L_W_K_B:
+  case IC_EVEX_L_W_XS_K_B:
+  case IC_EVEX_L_W_XD_K_B:
+  case IC_EVEX_L_W_OPSIZE_K_B:
+    return false;
+  case IC_EVEX_L_W_KZ_B:
+  case IC_EVEX_L_W_XS_KZ_B:
+  case IC_EVEX_L_W_XD_KZ_B:
+  case IC_EVEX_L_W_OPSIZE_KZ_B:
+    return false;
+  case IC_EVEX_L2_B:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W_B);
+  case IC_EVEX_L2_XS_B:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W_XS_B);
+  case IC_EVEX_L2_XD_B:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W_XD_B);
+  case IC_EVEX_L2_OPSIZE_B:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W_OPSIZE_B);
+  case IC_EVEX_L2_K_B:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W_K_B);
+  case IC_EVEX_L2_XS_K_B:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W_XS_K_B);
+  case IC_EVEX_L2_XD_K_B:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W_XD_K_B);
+  case IC_EVEX_L2_OPSIZE_K_B:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W_OPSIZE_K_B);
+  case IC_EVEX_L2_KZ_B:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W_KZ_B);
+  case IC_EVEX_L2_XS_KZ_B:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W_XS_KZ_B);
+  case IC_EVEX_L2_XD_KZ_B:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W_XD_KZ_B);
+  case IC_EVEX_L2_OPSIZE_KZ_B:
+    return VEX_WIG && inheritsFrom(child, IC_EVEX_L2_W_OPSIZE_KZ_B);
+  case IC_EVEX_L2_W_B:
+  case IC_EVEX_L2_W_XS_B:
+  case IC_EVEX_L2_W_XD_B:
+  case IC_EVEX_L2_W_OPSIZE_B:
+    return false;
+  case IC_EVEX_L2_W_K_B:
+  case IC_EVEX_L2_W_XS_K_B:
+  case IC_EVEX_L2_W_XD_K_B:
+  case IC_EVEX_L2_W_OPSIZE_K_B:
+    return false;
+  case IC_EVEX_L2_W_KZ_B:
+  case IC_EVEX_L2_W_XS_KZ_B:
+  case IC_EVEX_L2_W_XD_KZ_B:
+  case IC_EVEX_L2_W_OPSIZE_KZ_B:
+    return false;
+  default:
+    errs() << "Unknown instruction class: " <<
+      stringForContext((InstructionContext)parent) << "\n";
+    llvm_unreachable("Unknown instruction class");
+  }
 }
 
-/// emitEmptyTable - Emits the modRMEmptyTable, which is used as a ID table by
-///   all ModR/M decisions for instructions that are invalid for all possible
-///   ModR/M byte values.
+/// outranks - Indicates whether, if an instruction has two different applicable
+///   classes, which class should be preferred when performing decode.  This
+///   imposes a total ordering (ties are resolved toward "lower")
 ///
-/// @param o        - The output stream on which to emit the table.
-/// @param i        - The indentation level for that output stream.
-static void emitEmptyTable(raw_ostream &o, uint32_t &i)
-{
-  o.indent(i * 2) << "0x0, /* EmptyTable */\n";
+/// @param upper  - The class that may be preferable
+/// @param lower  - The class that may be less preferable
+/// @return       - True if upper is to be preferred, false otherwise.
+static inline bool outranks(InstructionContext upper,
+                            InstructionContext lower) {
+  assert(upper < IC_max);
+  assert(lower < IC_max);
+
+#define ENUM_ENTRY(n, r, d) r,
+#define ENUM_ENTRY_K_B(n, r, d) ENUM_ENTRY(n, r, d) \
+  ENUM_ENTRY(n##_K_B, r, d) ENUM_ENTRY(n##_KZ_B, r, d) \
+  ENUM_ENTRY(n##_KZ, r, d) ENUM_ENTRY(n##_K, r, d) ENUM_ENTRY(n##_B, r, d)
+  static int ranks[IC_max] = {
+    INSTRUCTION_CONTEXTS
+  };
+#undef ENUM_ENTRY
+#undef ENUM_ENTRY_K_B
+
+  return (ranks[upper] > ranks[lower]);
 }
 
 /// getDecisionType - Determines whether a ModRM decision with 255 entries can
@@ -207,15 +583,13 @@ static void emitEmptyTable(raw_ostream &o, uint32_t &i)
 ///
 /// @param decision - The decision to be compacted.
 /// @return         - The compactest available representation for the decision.
-static ModRMDecisionType getDecisionType(ModRMDecision &decision)
-{
+static ModRMDecisionType getDecisionType(ModRMDecision &decision) {
   bool satisfiesOneEntry = true;
   bool satisfiesSplitRM = true;
   bool satisfiesSplitReg = true;
+  bool satisfiesSplitMisc = true;
 
-  uint16_t index;
-
-  for (index = 0; index < 256; ++index) {
+  for (unsigned index = 0; index < 256; ++index) {
     if (decision.instructionIDs[index] != decision.instructionIDs[0])
       satisfiesOneEntry = false;
 
@@ -233,7 +607,7 @@ static ModRMDecisionType getDecisionType(ModRMDecision &decision)
 
     if (((index & 0xc0) != 0xc0) &&
        (decision.instructionIDs[index] != decision.instructionIDs[index&0x38]))
-      satisfiesSplitReg = false;
+      satisfiesSplitMisc = false;
   }
 
   if (satisfiesOneEntry)
@@ -242,8 +616,11 @@ static ModRMDecisionType getDecisionType(ModRMDecision &decision)
   if (satisfiesSplitRM)
     return MODRM_SPLITRM;
 
-  if (satisfiesSplitReg)
+  if (satisfiesSplitReg && satisfiesSplitMisc)
     return MODRM_SPLITREG;
+
+  if (satisfiesSplitMisc)
+    return MODRM_SPLITMISC;
 
   return MODRM_FULL;
 }
@@ -252,64 +629,43 @@ static ModRMDecisionType getDecisionType(ModRMDecision &decision)
 ///   to a particular decision type.
 ///
 /// @param dt - The decision type.
-/// @return   - A pointer to the statically-allocated string (e.g., 
+/// @return   - A pointer to the statically-allocated string (e.g.,
 ///             "MODRM_ONEENTRY" for MODRM_ONEENTRY).
-static const char* stringForDecisionType(ModRMDecisionType dt)
-{
+static const char* stringForDecisionType(ModRMDecisionType dt) {
 #define ENUM_ENTRY(n) case n: return #n;
   switch (dt) {
     default:
-      llvm_unreachable("Unknown decision type");  
+      llvm_unreachable("Unknown decision type");
     MODRMTYPES
-  };  
-#undef ENUM_ENTRY
-}
-  
-/// stringForModifierType - Returns a statically-allocated string corresponding
-///   to an opcode modifier type.
-///
-/// @param mt - The modifier type.
-/// @return   - A pointer to the statically-allocated string (e.g.,
-///             "MODIFIER_NONE" for MODIFIER_NONE).
-static const char* stringForModifierType(ModifierType mt)
-{
-#define ENUM_ENTRY(n) case n: return #n;
-  switch(mt) {
-    default:
-      llvm_unreachable("Unknown modifier type");
-    MODIFIER_TYPES
   };
 #undef ENUM_ENTRY
 }
-  
+
 DisassemblerTables::DisassemblerTables() {
   unsigned i;
-  
+
   for (i = 0; i < array_lengthof(Tables); i++) {
     Tables[i] = new ContextDecision;
     memset(Tables[i], 0, sizeof(ContextDecision));
   }
-  
+
   HasConflicts = false;
 }
-  
+
 DisassemblerTables::~DisassemblerTables() {
   unsigned i;
-  
+
   for (i = 0; i < array_lengthof(Tables); i++)
     delete Tables[i];
 }
-  
-void DisassemblerTables::emitModRMDecision(raw_ostream &o1,
-                                           raw_ostream &o2,
-                                           uint32_t &i1,
-                                           uint32_t &i2,
-                                           ModRMDecision &decision)
-  const {
-  static uint64_t sTableNumber = 0;
-  static uint64_t sEntryNumber = 1;
+
+void DisassemblerTables::emitModRMDecision(raw_ostream &o1, raw_ostream &o2,
+                                           unsigned &i1, unsigned &i2,
+                                           unsigned &ModRMTableNum,
+                                           ModRMDecision &decision) const {
+  static uint32_t sTableNumber = 0;
+  static uint32_t sEntryNumber = 1;
   ModRMDecisionType dt = getDecisionType(decision);
-  uint16_t index;
 
   if (dt == MODRM_ONEENTRY && decision.instructionIDs[0] == 0)
   {
@@ -324,38 +680,56 @@ void DisassemblerTables::emitModRMDecision(raw_ostream &o1,
     return;
   }
 
-  o1 << "/* Table" << sTableNumber << " */\n";
-  i1++;
+  std::vector<unsigned> ModRMDecision;
 
   switch (dt) {
     default:
       llvm_unreachable("Unknown decision type");
     case MODRM_ONEENTRY:
-      emitOneID(o1, i1, decision.instructionIDs[0], true);
+      ModRMDecision.push_back(decision.instructionIDs[0]);
       break;
     case MODRM_SPLITRM:
-      emitOneID(o1, i1, decision.instructionIDs[0x00], true); // mod = 0b00
-      emitOneID(o1, i1, decision.instructionIDs[0xc0], true); // mod = 0b11
+      ModRMDecision.push_back(decision.instructionIDs[0x00]);
+      ModRMDecision.push_back(decision.instructionIDs[0xc0]);
       break;
     case MODRM_SPLITREG:
-      for (index = 0; index < 64; index += 8)
-        emitOneID(o1, i1, decision.instructionIDs[index], true);
-      for (index = 0xc0; index < 256; index += 8)
-        emitOneID(o1, i1, decision.instructionIDs[index], true);
+      for (unsigned index = 0; index < 64; index += 8)
+        ModRMDecision.push_back(decision.instructionIDs[index]);
+      for (unsigned index = 0xc0; index < 256; index += 8)
+        ModRMDecision.push_back(decision.instructionIDs[index]);
+      break;
+    case MODRM_SPLITMISC:
+      for (unsigned index = 0; index < 64; index += 8)
+        ModRMDecision.push_back(decision.instructionIDs[index]);
+      for (unsigned index = 0xc0; index < 256; ++index)
+        ModRMDecision.push_back(decision.instructionIDs[index]);
       break;
     case MODRM_FULL:
-      for (index = 0; index < 256; ++index)
-        emitOneID(o1, i1, decision.instructionIDs[index], true);
+      for (unsigned index = 0; index < 256; ++index)
+        ModRMDecision.push_back(decision.instructionIDs[index]);
       break;
   }
 
-  i1--;
+  unsigned &EntryNumber = ModRMTable[ModRMDecision];
+  if (EntryNumber == 0) {
+    EntryNumber = ModRMTableNum;
+
+    ModRMTableNum += ModRMDecision.size();
+    o1 << "/* Table" << EntryNumber << " */\n";
+    i1++;
+    for (std::vector<unsigned>::const_iterator I = ModRMDecision.begin(),
+           E = ModRMDecision.end(); I != E; ++I) {
+      o1.indent(i1 * 2) << format("0x%hx", *I) << ", /* "
+                        << InstructionSpecifiers[*I].name << " */\n";
+    }
+    i1--;
+  }
 
   o2.indent(i2) << "{ /* struct ModRMDecision */" << "\n";
   i2++;
 
   o2.indent(i2) << stringForDecisionType(dt) << "," << "\n";
-  o2.indent(i2) << sEntryNumber << " /* Table" << sTableNumber << " */\n";
+  o2.indent(i2) << EntryNumber << " /* Table" << EntryNumber << " */\n";
 
   i2--;
   o2.indent(i2) << "}";
@@ -372,33 +746,37 @@ void DisassemblerTables::emitModRMDecision(raw_ostream &o1,
     case MODRM_SPLITREG:
       sEntryNumber += 16;
       break;
+    case MODRM_SPLITMISC:
+      sEntryNumber += 8 + 64;
+      break;
     case MODRM_FULL:
       sEntryNumber += 256;
       break;
   }
 
+  // We assume that the index can fit into uint16_t.
+  assert(sEntryNumber < 65536U &&
+         "Index into ModRMDecision is too large for uint16_t!");
+
   ++sTableNumber;
 }
 
-void DisassemblerTables::emitOpcodeDecision(
-  raw_ostream &o1,
-  raw_ostream &o2,
-  uint32_t &i1,
-  uint32_t &i2,
-  OpcodeDecision &decision) const {
-  uint16_t index;
-
+void DisassemblerTables::emitOpcodeDecision(raw_ostream &o1, raw_ostream &o2,
+                                            unsigned &i1, unsigned &i2,
+                                            unsigned &ModRMTableNum,
+                                            OpcodeDecision &decision) const {
   o2.indent(i2) << "{ /* struct OpcodeDecision */" << "\n";
   i2++;
   o2.indent(i2) << "{" << "\n";
   i2++;
 
-  for (index = 0; index < 256; ++index) {
+  for (unsigned index = 0; index < 256; ++index) {
     o2.indent(i2);
 
     o2 << "/* 0x" << format("%02hhx", index) << " */" << "\n";
 
-    emitModRMDecision(o1, o2, i1, i2, decision.modRMDecisions[index]);
+    emitModRMDecision(o1, o2, i1, i2, ModRMTableNum,
+                      decision.modRMDecisions[index]);
 
     if (index <  255)
       o2 << ",";
@@ -412,27 +790,24 @@ void DisassemblerTables::emitOpcodeDecision(
   o2.indent(i2) << "}" << "\n";
 }
 
-void DisassemblerTables::emitContextDecision(
-  raw_ostream &o1,
-  raw_ostream &o2,
-  uint32_t &i1,
-  uint32_t &i2,
-  ContextDecision &decision,
-  const char* name) const {
+void DisassemblerTables::emitContextDecision(raw_ostream &o1, raw_ostream &o2,
+                                             unsigned &i1, unsigned &i2,
+                                             unsigned &ModRMTableNum,
+                                             ContextDecision &decision,
+                                             const char* name) const {
   o2.indent(i2) << "static const struct ContextDecision " << name << " = {\n";
   i2++;
   o2.indent(i2) << "{ /* opcodeDecisions */" << "\n";
   i2++;
 
-  unsigned index;
-
-  for (index = 0; index < IC_max; ++index) {
+  for (unsigned index = 0; index < IC_max; ++index) {
     o2.indent(i2) << "/* ";
     o2 << stringForContext((InstructionContext)index);
     o2 << " */";
     o2 << "\n";
 
-    emitOpcodeDecision(o1, o2, i1, i2, decision.opcodeDecisions[index]);
+    emitOpcodeDecision(o1, o2, i1, i2, ModRMTableNum,
+                       decision.opcodeDecisions[index]);
 
     if (index + 1 < IC_max)
       o2 << ", ";
@@ -444,79 +819,112 @@ void DisassemblerTables::emitContextDecision(
   o2.indent(i2) << "};" << "\n";
 }
 
-void DisassemblerTables::emitInstructionInfo(raw_ostream &o, uint32_t &i) 
-  const {
+void DisassemblerTables::emitInstructionInfo(raw_ostream &o,
+                                             unsigned &i) const {
+  unsigned NumInstructions = InstructionSpecifiers.size();
+
+  o << "static const struct OperandSpecifier x86OperandSets[]["
+    << X86_MAX_OPERANDS << "] = {\n";
+
+  typedef SmallVector<std::pair<OperandEncoding, OperandType>,
+                      X86_MAX_OPERANDS> OperandListTy;
+  std::map<OperandListTy, unsigned> OperandSets;
+
+  unsigned OperandSetNum = 0;
+  for (unsigned Index = 0; Index < NumInstructions; ++Index) {
+    OperandListTy OperandList;
+
+    for (unsigned OperandIndex = 0; OperandIndex < X86_MAX_OPERANDS;
+         ++OperandIndex) {
+      OperandEncoding Encoding = (OperandEncoding)InstructionSpecifiers[Index]
+                                 .operands[OperandIndex].encoding;
+      OperandType Type = (OperandType)InstructionSpecifiers[Index]
+                         .operands[OperandIndex].type;
+      OperandList.push_back(std::make_pair(Encoding, Type));
+    }
+    unsigned &N = OperandSets[OperandList];
+    if (N != 0) continue;
+
+    N = ++OperandSetNum;
+
+    o << "  { /* " << (OperandSetNum - 1) << " */\n";
+    for (unsigned i = 0, e = OperandList.size(); i != e; ++i) {
+      const char *Encoding = stringForOperandEncoding(OperandList[i].first);
+      const char *Type     = stringForOperandType(OperandList[i].second);
+      o << "    { " << Encoding << ", " << Type << " },\n";
+    }
+    o << "  },\n";
+  }
+  o << "};" << "\n\n";
+
   o.indent(i * 2) << "static const struct InstructionSpecifier ";
   o << INSTRUCTIONS_STR "[" << InstructionSpecifiers.size() << "] = {\n";
-  
+
   i++;
 
-  uint16_t numInstructions = InstructionSpecifiers.size();
-  uint16_t index, operandIndex;
-
-  for (index = 0; index < numInstructions; ++index) {
-    o.indent(i * 2) << "{ /* " << index << " */" << "\n";
+  for (unsigned index = 0; index < NumInstructions; ++index) {
+    o.indent(i * 2) << "{ /* " << index << " */\n";
     i++;
 
-    o.indent(i * 2) << stringForModifierType(
-                       (ModifierType)InstructionSpecifiers[index].modifierType);
-    o << "," << "\n";
-
-    o.indent(i * 2) << "0x";
-    o << format("%02hhx", (uint16_t)InstructionSpecifiers[index].modifierBase);
-    o << "," << "\n";
-
-    o.indent(i * 2) << "{" << "\n";
-    i++;
-
-    for (operandIndex = 0; operandIndex < X86_MAX_OPERANDS; ++operandIndex) {
-      o.indent(i * 2) << "{ ";
-      o <<stringForOperandEncoding((OperandEncoding)InstructionSpecifiers[index]
-                                   .operands[operandIndex]
-                                   .encoding);
-      o << ", ";
-      o << stringForOperandType((OperandType)InstructionSpecifiers[index]
-                                .operands[operandIndex]
-                                .type);
-      o << " }";
-
-      if (operandIndex < X86_MAX_OPERANDS - 1)
-        o << ",";
-
-      o << "\n";
+    OperandListTy OperandList;
+    for (unsigned OperandIndex = 0; OperandIndex < X86_MAX_OPERANDS;
+         ++OperandIndex) {
+      OperandEncoding Encoding = (OperandEncoding)InstructionSpecifiers[index]
+                                 .operands[OperandIndex].encoding;
+      OperandType Type = (OperandType)InstructionSpecifiers[index]
+                         .operands[OperandIndex].type;
+      OperandList.push_back(std::make_pair(Encoding, Type));
     }
+    o.indent(i * 2) << (OperandSets[OperandList] - 1) << ",\n";
+
+    o.indent(i * 2) << "/* " << InstructionSpecifiers[index].name << " */\n";
 
     i--;
-    o.indent(i * 2) << "}," << "\n";
-    
-    o.indent(i * 2) << "/* " << InstructionSpecifiers[index].name << " */";
-    o << "\n";
-
-    i--;
-    o.indent(i * 2) << "}";
-
-    if (index + 1 < numInstructions)
-      o << ",";
-
-    o << "\n";
+    o.indent(i * 2) << "},\n";
   }
 
   i--;
   o.indent(i * 2) << "};" << "\n";
 }
 
-void DisassemblerTables::emitContextTable(raw_ostream &o, uint32_t &i) const {
-  uint16_t index;
-
-  o.indent(i * 2) << "static const InstructionContext " CONTEXTS_STR
-                     "[256] = {\n";
+void DisassemblerTables::emitContextTable(raw_ostream &o, unsigned &i) const {
+  const unsigned int tableSize = 16384;
+  o.indent(i * 2) << "static const uint8_t " CONTEXTS_STR
+                     "[" << tableSize << "] = {\n";
   i++;
 
-  for (index = 0; index < 256; ++index) {
+  for (unsigned index = 0; index < tableSize; ++index) {
     o.indent(i * 2);
 
-    if ((index & ATTR_VEXL) && (index & ATTR_REXW) && (index & ATTR_OPSIZE))
+    if (index & ATTR_EVEX) {
+      o << "IC_EVEX";
+      if (index & ATTR_EVEXL2)
+        o << "_L2";
+      else if (index & ATTR_EVEXL)
+        o << "_L";
+      if (index & ATTR_REXW)
+        o << "_W";
+      if (index & ATTR_OPSIZE)
+        o << "_OPSIZE";
+      else if (index & ATTR_XD)
+        o << "_XD";
+      else if (index & ATTR_XS)
+        o << "_XS";
+      if (index & ATTR_EVEXKZ)
+        o << "_KZ";
+      else if (index & ATTR_EVEXK)
+        o << "_K";
+      if (index & ATTR_EVEXB)
+        o << "_B";
+    }
+    else if ((index & ATTR_VEXL) && (index & ATTR_REXW) && (index & ATTR_OPSIZE))
       o << "IC_VEX_L_W_OPSIZE";
+    else if ((index & ATTR_VEXL) && (index & ATTR_REXW) && (index & ATTR_XD))
+      o << "IC_VEX_L_W_XD";
+    else if ((index & ATTR_VEXL) && (index & ATTR_REXW) && (index & ATTR_XS))
+      o << "IC_VEX_L_W_XS";
+    else if ((index & ATTR_VEXL) && (index & ATTR_REXW))
+      o << "IC_VEX_L_W";
     else if ((index & ATTR_VEXL) && (index & ATTR_OPSIZE))
       o << "IC_VEX_L_OPSIZE";
     else if ((index & ATTR_VEXL) && (index & ATTR_XD))
@@ -545,9 +953,12 @@ void DisassemblerTables::emitContextTable(raw_ostream &o, uint32_t &i) const {
       o << "IC_64BIT_REXW_XS";
     else if ((index & ATTR_64BIT) && (index & ATTR_REXW) && (index & ATTR_XD))
       o << "IC_64BIT_REXW_XD";
-    else if ((index & ATTR_64BIT) && (index & ATTR_REXW) && 
+    else if ((index & ATTR_64BIT) && (index & ATTR_REXW) &&
              (index & ATTR_OPSIZE))
       o << "IC_64BIT_REXW_OPSIZE";
+    else if ((index & ATTR_64BIT) && (index & ATTR_REXW) &&
+             (index & ATTR_ADSIZE))
+      o << "IC_64BIT_REXW_ADSIZE";
     else if ((index & ATTR_64BIT) && (index & ATTR_XD) && (index & ATTR_OPSIZE))
       o << "IC_64BIT_XD_OPSIZE";
     else if ((index & ATTR_64BIT) && (index & ATTR_XS) && (index & ATTR_OPSIZE))
@@ -556,6 +967,9 @@ void DisassemblerTables::emitContextTable(raw_ostream &o, uint32_t &i) const {
       o << "IC_64BIT_XS";
     else if ((index & ATTR_64BIT) && (index & ATTR_XD))
       o << "IC_64BIT_XD";
+    else if ((index & ATTR_64BIT) && (index & ATTR_OPSIZE) &&
+             (index & ATTR_ADSIZE))
+      o << "IC_64BIT_OPSIZE_ADSIZE";
     else if ((index & ATTR_64BIT) && (index & ATTR_OPSIZE))
       o << "IC_64BIT_OPSIZE";
     else if ((index & ATTR_64BIT) && (index & ATTR_ADSIZE))
@@ -572,6 +986,8 @@ void DisassemblerTables::emitContextTable(raw_ostream &o, uint32_t &i) const {
       o << "IC_XS";
     else if (index & ATTR_XD)
       o << "IC_XD";
+    else if ((index & ATTR_OPSIZE) && (index & ATTR_ADSIZE))
+      o << "IC_OPSIZE_ADSIZE";
     else if (index & ATTR_OPSIZE)
       o << "IC_OPSIZE";
     else if (index & ATTR_ADSIZE)
@@ -579,7 +995,7 @@ void DisassemblerTables::emitContextTable(raw_ostream &o, uint32_t &i) const {
     else
       o << "IC";
 
-    if (index < 255)
+    if (index < tableSize - 1)
       o << ",";
     else
       o << " ";
@@ -593,40 +1009,45 @@ void DisassemblerTables::emitContextTable(raw_ostream &o, uint32_t &i) const {
   o.indent(i * 2) << "};" << "\n";
 }
 
-void DisassemblerTables::emitContextDecisions(raw_ostream &o1,
-                                            raw_ostream &o2,
-                                            uint32_t &i1,
-                                            uint32_t &i2)
-  const {
-  emitContextDecision(o1, o2, i1, i2, *Tables[0], ONEBYTE_STR);
-  emitContextDecision(o1, o2, i1, i2, *Tables[1], TWOBYTE_STR);
-  emitContextDecision(o1, o2, i1, i2, *Tables[2], THREEBYTE38_STR);
-  emitContextDecision(o1, o2, i1, i2, *Tables[3], THREEBYTE3A_STR);
-  emitContextDecision(o1, o2, i1, i2, *Tables[4], THREEBYTEA6_STR);
-  emitContextDecision(o1, o2, i1, i2, *Tables[5], THREEBYTEA7_STR);
+void DisassemblerTables::emitContextDecisions(raw_ostream &o1, raw_ostream &o2,
+                                              unsigned &i1, unsigned &i2,
+                                              unsigned &ModRMTableNum) const {
+  emitContextDecision(o1, o2, i1, i2, ModRMTableNum, *Tables[0], ONEBYTE_STR);
+  emitContextDecision(o1, o2, i1, i2, ModRMTableNum, *Tables[1], TWOBYTE_STR);
+  emitContextDecision(o1, o2, i1, i2, ModRMTableNum, *Tables[2], THREEBYTE38_STR);
+  emitContextDecision(o1, o2, i1, i2, ModRMTableNum, *Tables[3], THREEBYTE3A_STR);
+  emitContextDecision(o1, o2, i1, i2, ModRMTableNum, *Tables[4], XOP8_MAP_STR);
+  emitContextDecision(o1, o2, i1, i2, ModRMTableNum, *Tables[5], XOP9_MAP_STR);
+  emitContextDecision(o1, o2, i1, i2, ModRMTableNum, *Tables[6], XOPA_MAP_STR);
 }
 
 void DisassemblerTables::emit(raw_ostream &o) const {
-  uint32_t i1 = 0;
-  uint32_t i2 = 0;
-  
+  unsigned i1 = 0;
+  unsigned i2 = 0;
+
   std::string s1;
   std::string s2;
-  
+
   raw_string_ostream o1(s1);
   raw_string_ostream o2(s2);
-  
+
   emitInstructionInfo(o, i2);
   o << "\n";
 
   emitContextTable(o, i2);
   o << "\n";
 
+  unsigned ModRMTableNum = 0;
+
   o << "static const InstrUID modRMTable[] = {\n";
   i1++;
-  emitEmptyTable(o1, i1);
+  std::vector<unsigned> EmptyTable(1, 0);
+  ModRMTable[EmptyTable] = ModRMTableNum;
+  ModRMTableNum += EmptyTable.size();
+  o1 << "/* EmptyTable */\n";
+  o1.indent(i1 * 2) << "0x0,\n";
   i1--;
-  emitContextDecisions(o1, o2, i1, i2);
+  emitContextDecisions(o1, o2, i1, i2, ModRMTableNum);
 
   o << o1.str();
   o << "  0x0\n";
@@ -641,9 +1062,7 @@ void DisassemblerTables::setTableFields(ModRMDecision     &decision,
                                         const ModRMFilter &filter,
                                         InstrUID          uid,
                                         uint8_t           opcode) {
-  unsigned index;
-
-  for (index = 0; index < 256; ++index) {
+  for (unsigned index = 0; index < 256; ++index) {
     if (filter.accepts(index)) {
       if (decision.instructionIDs[index] == uid)
         continue;
@@ -653,21 +1072,21 @@ void DisassemblerTables::setTableFields(ModRMDecision     &decision,
           InstructionSpecifiers[uid];
         InstructionSpecifier &previousInfo =
           InstructionSpecifiers[decision.instructionIDs[index]];
-        
-        if(newInfo.filtered)
-          continue; // filtered instructions get lowest priority
-        
+
         if(previousInfo.name == "NOOP" && (newInfo.name == "XCHG16ar" ||
                                            newInfo.name == "XCHG32ar" ||
                                            newInfo.name == "XCHG32ar64" ||
                                            newInfo.name == "XCHG64ar"))
           continue; // special case for XCHG*ar and NOOP
 
+        if (previousInfo.name == "DATA16_PREFIX" &&
+            newInfo.name == "DATA32_PREFIX")
+          continue; // special case for data16 and data32
+
         if (outranks(previousInfo.insnContext, newInfo.insnContext))
           continue;
-        
-        if (previousInfo.insnContext == newInfo.insnContext &&
-            !previousInfo.filtered) {
+
+        if (previousInfo.insnContext == newInfo.insnContext) {
           errs() << "Error: Primary decode conflict: ";
           errs() << newInfo.name << " would overwrite " << previousInfo.name;
           errs() << "\n";
@@ -689,18 +1108,22 @@ void DisassemblerTables::setTableFields(OpcodeType          type,
                                         const ModRMFilter   &filter,
                                         InstrUID            uid,
                                         bool                is32bit,
-                                        bool                ignoresVEX_L) {
-  unsigned index;
-  
+                                        bool                noPrefix,
+                                        bool                ignoresVEX_L,
+                                        bool                ignoresVEX_W,
+                                        unsigned            addressSize) {
   ContextDecision &decision = *Tables[type];
 
-  for (index = 0; index < IC_max; ++index) {
-    if (is32bit && inheritsFrom((InstructionContext)index, IC_64BIT))
+  for (unsigned index = 0; index < IC_max; ++index) {
+    if ((is32bit || addressSize == 16) &&
+        inheritsFrom((InstructionContext)index, IC_64BIT))
       continue;
 
-    if (inheritsFrom((InstructionContext)index, 
-                     InstructionSpecifiers[uid].insnContext, ignoresVEX_L))
-      setTableFields(decision.opcodeDecisions[index].modRMDecisions[opcode], 
+    bool adSize64 = addressSize == 64;
+    if (inheritsFrom((InstructionContext)index,
+                     InstructionSpecifiers[uid].insnContext, noPrefix,
+                     ignoresVEX_L, ignoresVEX_W, adSize64))
+      setTableFields(decision.opcodeDecisions[index].modRMDecisions[opcode],
                      filter,
                      uid,
                      opcode);

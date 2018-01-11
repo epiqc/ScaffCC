@@ -1,17 +1,23 @@
-// RUN: %clang_cc1 -emit-llvm %s -o - | FileCheck -check-prefix=CHECK-HOST %s
-// RUN: %clang_cc1 -emit-llvm %s -o - -fcuda-is-device | FileCheck -check-prefix=CHECK-DEVICE %s
+// RUN: %clang_cc1 -triple %itanium_abi_triple -emit-llvm %s -o - | FileCheck -check-prefix=CHECK-HOST %s
+// RUN: %clang_cc1 -triple %itanium_abi_triple -emit-llvm %s -o - -fcuda-is-device | FileCheck -check-prefix=CHECK-DEVICE %s
 
-#include "../SemaCUDA/cuda.h"
+#include "Inputs/cuda.h"
 
-// CHECK-HOST-NOT: constantdata = global
-// CHECK-DEVICE: constantdata = global
+// This has to be at the top of the file as that's where file-scope
+// asm ends up.
+// CHECK-HOST: module asm "file scope asm is host only"
+// CHECK-DEVICE-NOT: module asm "file scope asm is host only"
+__asm__("file scope asm is host only");
+
+// CHECK-HOST: constantdata = internal global
+// CHECK-DEVICE: constantdata = externally_initialized global
 __constant__ char constantdata[256];
 
-// CHECK-HOST-NOT: devicedata = global
-// CHECK-DEVICE: devicedata = global
+// CHECK-HOST: devicedata = internal global
+// CHECK-DEVICE: devicedata = externally_initialized global
 __device__ char devicedata[256];
 
-// CHECK-HOST-NOT: shareddata = global
+// CHECK-HOST: shareddata = internal global
 // CHECK-DEVICE: shareddata = global
 __shared__ char shareddata[256];
 

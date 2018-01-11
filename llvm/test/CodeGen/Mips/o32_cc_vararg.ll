@@ -1,6 +1,5 @@
 ; RUN: llc -march=mipsel -pre-RA-sched=source < %s | FileCheck %s
 
-
 ; All test functions do the same thing - they return the first variable
 ; argument.
 
@@ -25,14 +24,14 @@ entry:
   store i32 %0, i32* %b, align 4
   %ap2 = bitcast i8** %ap to i8*
   call void @llvm.va_end(i8* %ap2)
-  %tmp = load i32* %b, align 4
+  %tmp = load i32, i32* %b, align 4
   ret i32 %tmp
 
-; CHECK: va1:
+; CHECK-LABEL: va1:
 ; CHECK: addiu   $sp, $sp, -16
+; CHECK: sw      $5, 20($sp)
 ; CHECK: sw      $7, 28($sp)
 ; CHECK: sw      $6, 24($sp)
-; CHECK: sw      $5, 20($sp)
 ; CHECK: lw      $2, 20($sp)
 }
 
@@ -51,10 +50,10 @@ entry:
   store double %0, double* %b, align 8
   %ap2 = bitcast i8** %ap to i8*
   call void @llvm.va_end(i8* %ap2)
-  %tmp = load double* %b, align 8
+  %tmp = load double, double* %b, align 8
   ret double %tmp
 
-; CHECK: va2:
+; CHECK-LABEL: va2:
 ; CHECK: addiu   $sp, $sp, -16
 ; CHECK: sw      $7, 28($sp)
 ; CHECK: sw      $6, 24($sp)
@@ -79,13 +78,13 @@ entry:
   store i32 %0, i32* %b, align 4
   %ap2 = bitcast i8** %ap to i8*
   call void @llvm.va_end(i8* %ap2)
-  %tmp = load i32* %b, align 4
+  %tmp = load i32, i32* %b, align 4
   ret i32 %tmp
 
-; CHECK: va3:
+; CHECK-LABEL: va3:
 ; CHECK: addiu   $sp, $sp, -16
-; CHECK: sw      $7, 28($sp)
 ; CHECK: sw      $6, 24($sp)
+; CHECK: sw      $7, 28($sp)
 ; CHECK: lw      $2, 24($sp)
 }
 
@@ -102,10 +101,10 @@ entry:
   store double %0, double* %b, align 8
   %ap2 = bitcast i8** %ap to i8*
   call void @llvm.va_end(i8* %ap2)
-  %tmp = load double* %b, align 8
+  %tmp = load double, double* %b, align 8
   ret double %tmp
 
-; CHECK: va4:
+; CHECK-LABEL: va4:
 ; CHECK: addiu   $sp, $sp, -24
 ; CHECK: sw      $7, 36($sp)
 ; CHECK: sw      $6, 32($sp)
@@ -130,10 +129,10 @@ entry:
   store i32 %0, i32* %d, align 4
   %ap2 = bitcast i8** %ap to i8*
   call void @llvm.va_end(i8* %ap2)
-  %tmp = load i32* %d, align 4
+  %tmp = load i32, i32* %d, align 4
   ret i32 %tmp
 
-; CHECK: va5:
+; CHECK-LABEL: va5:
 ; CHECK: addiu   $sp, $sp, -24
 ; CHECK: sw      $7, 36($sp)
 ; CHECK: lw      $2, 36($sp)
@@ -156,10 +155,10 @@ entry:
   store double %0, double* %d, align 8
   %ap2 = bitcast i8** %ap to i8*
   call void @llvm.va_end(i8* %ap2)
-  %tmp = load double* %d, align 8
+  %tmp = load double, double* %d, align 8
   ret double %tmp
 
-; CHECK: va6:
+; CHECK-LABEL: va6:
 ; CHECK: addiu   $sp, $sp, -24
 ; CHECK: sw      $7, 36($sp)
 ; CHECK: addiu   $[[R0:[0-9]+]], $sp, 36
@@ -184,10 +183,10 @@ entry:
   store i32 %0, i32* %c, align 4
   %ap2 = bitcast i8** %ap to i8*
   call void @llvm.va_end(i8* %ap2)
-  %tmp = load i32* %c, align 4
+  %tmp = load i32, i32* %c, align 4
   ret i32 %tmp
 
-; CHECK: va7:
+; CHECK-LABEL: va7:
 ; CHECK: addiu   $sp, $sp, -24
 ; CHECK: lw      $2, 40($sp)
 }
@@ -207,10 +206,10 @@ entry:
   store double %0, double* %c, align 8
   %ap2 = bitcast i8** %ap to i8*
   call void @llvm.va_end(i8* %ap2)
-  %tmp = load double* %c, align 8
+  %tmp = load double, double* %c, align 8
   ret double %tmp
 
-; CHECK: va8:
+; CHECK-LABEL: va8:
 ; CHECK: addiu   $sp, $sp, -32
 ; CHECK: addiu   ${{[0-9]+}}, $sp, 48
 ; CHECK: ldc1    $f0, 48($sp)
@@ -233,12 +232,12 @@ entry:
   store i32 %0, i32* %d, align 4
   %ap2 = bitcast i8** %ap to i8*
   call void @llvm.va_end(i8* %ap2)
-  %tmp = load i32* %d, align 4
+  %tmp = load i32, i32* %d, align 4
   ret i32 %tmp
 
-; CHECK: va9:
-; CHECK: addiu   $sp, $sp, -32
-; CHECK: lw      $2, 52($sp)
+; CHECK-LABEL: va9:
+; CHECK: addiu   $sp, $sp, -24
+; CHECK: lw      $2, 44($sp)
 }
 
 ; double
@@ -258,10 +257,10 @@ entry:
   store double %0, double* %d, align 8
   %ap2 = bitcast i8** %ap to i8*
   call void @llvm.va_end(i8* %ap2)
-  %tmp = load double* %d, align 8
+  %tmp = load double, double* %d, align 8
   ret double %tmp
 
-; CHECK: va10:
+; CHECK-LABEL: va10:
 ; CHECK: addiu   $sp, $sp, -32
 ; CHECK: addiu   $[[R0:[0-9]+]], $sp, 52
 ; CHECK: addiu   $[[R1:[0-9]+]], $[[R0]], 7

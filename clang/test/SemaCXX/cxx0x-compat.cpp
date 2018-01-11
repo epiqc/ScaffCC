@@ -1,4 +1,7 @@
-// RUN: %clang_cc1 -fsyntax-only -std=c++98 -Wc++11-compat -verify %s
+// RUN: %clang_cc1 -fsyntax-only -std=c++98 -Wc++11-compat-pedantic -verify %s
+// RUN: %clang_cc1 -fsyntax-only -std=c++17 -Wc++11-compat-pedantic -verify %s
+
+#if __cplusplus < 201103L
 
 namespace N {
   template<typename T> void f(T) {} // expected-note 2{{here}}
@@ -37,3 +40,19 @@ void h(size_t foo, size_t bar) {
 
 #define _x + 1
 char c = 'x'_x; // expected-warning {{will be treated as a user-defined literal suffix}}
+
+template<int ...N> int f() { // expected-warning {{C++11 extension}}
+  return (N + ...); // expected-warning {{C++17 extension}}
+}
+
+#else
+
+auto init_capture = [a(0)] {}; // expected-warning {{initialized lambda captures are incompatible with C++ standards before C++14}}
+static_assert(true); // expected-warning {{incompatible with C++ standards before C++17}}
+
+template<int ...N> int f() { return (N + ...); } // expected-warning {{incompatible with C++ standards before C++17}}
+
+namespace [[]] NS_with_attr {} // expected-warning {{incompatible with C++ standards before C++17}}
+enum { e [[]] }; // expected-warning {{incompatible with C++ standards before C++17}}
+
+#endif

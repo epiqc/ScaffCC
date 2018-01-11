@@ -25,3 +25,19 @@ namespace PR6375 {
 
   template void f<int>();
 }
+
+namespace EnumScoping {
+
+template <typename T>
+struct C {
+  struct X {};
+  enum {
+    value = 42
+  };
+};
+
+void f(int i, C<int>::X c) {
+  int value;
+}
+
+}

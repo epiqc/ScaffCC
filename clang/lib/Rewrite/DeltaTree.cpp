@@ -11,10 +11,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "clang/Rewrite/DeltaTree.h"
+#include "clang/Rewrite/Core/DeltaTree.h"
 #include "clang/Basic/LLVM.h"
-#include <cstring>
 #include <cstdio>
+#include <cstring>
 using namespace clang;
 
 /// The DeltaTree class is a multiway search tree (BTree) structure with some
@@ -113,8 +113,6 @@ namespace {
     void RecomputeFullDeltaLocally();
 
     void Destroy();
-
-    //static inline bool classof(const DeltaTreeNode *) { return true; }
   };
 } // end anonymous namespace
 
@@ -149,7 +147,6 @@ namespace {
       return Children[i];
     }
 
-  //static inline bool classof(const DeltaTreeInteriorNode *) { return true; }
     static inline bool classof(const DeltaTreeNode *N) { return !N->isLeaf(); }
   };
 }
@@ -219,9 +216,9 @@ bool DeltaTreeNode::DoInsertion(unsigned FileIndex, int Delta,
     DoSplit(*InsertRes);
 
     if (InsertRes->Split.FileLoc > FileIndex)
-      InsertRes->LHS->DoInsertion(FileIndex, Delta, 0 /*can't fail*/);
+      InsertRes->LHS->DoInsertion(FileIndex, Delta, nullptr /*can't fail*/);
     else
-      InsertRes->RHS->DoInsertion(FileIndex, Delta, 0 /*can't fail*/);
+      InsertRes->RHS->DoInsertion(FileIndex, Delta, nullptr /*can't fail*/);
     return true;
   }
 

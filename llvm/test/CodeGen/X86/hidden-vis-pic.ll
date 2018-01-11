@@ -1,4 +1,4 @@
-; RUN: llc < %s -disable-cfi -mtriple=i386-apple-darwin9 -relocation-model=pic -disable-fp-elim | FileCheck %s
+; RUN: llc < %s -mtriple=i386-apple-darwin9 -relocation-model=pic -disable-fp-elim | FileCheck %s
 
 
 
@@ -17,7 +17,7 @@ entry:
 
 ; This must use movl of the stub, not an lea, since the function isn't being
 ; emitted here.
-; CHECK: movl L__ZNSbIcED1Ev$non_lazy_ptr-L1$pb(
+; CHECK: movl L__ZNSbIcED1Ev$non_lazy_ptr-L0$pb(
 
 
 
@@ -28,7 +28,7 @@ entry:
 
 define hidden void @func() nounwind ssp uwtable {
 entry:
-  %0 = call i32 @puts(i8* getelementptr inbounds ([12 x i8]* @.str, i64 0, i64 0)) nounwind ; <i32> [#uses=0]
+  %0 = call i32 @puts(i8* getelementptr inbounds ([12 x i8], [12 x i8]* @.str, i64 0, i64 0)) nounwind ; <i32> [#uses=0]
   br label %return
 
 return:                                           ; preds = %entry
@@ -45,11 +45,6 @@ entry:
   br label %return
 
 return:                                           ; preds = %entry
-  %retval1 = load i32* %retval                    ; <i32> [#uses=1]
+  %retval1 = load i32, i32* %retval                    ; <i32> [#uses=1]
   ret i32 %retval1
 }
-
-; CHECK: .private_extern _func.eh
-; CHECK: .private_extern _main.eh
-
-

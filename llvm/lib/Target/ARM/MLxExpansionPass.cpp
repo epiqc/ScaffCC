@@ -12,21 +12,22 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "mlx-expansion"
 #include "ARM.h"
 #include "ARMBaseInstrInfo.h"
 #include "ARMSubtarget.h"
-#include "llvm/CodeGen/MachineInstr.h"
-#include "llvm/CodeGen/MachineInstrBuilder.h"
-#include "llvm/CodeGen/MachineFunctionPass.h"
-#include "llvm/CodeGen/MachineRegisterInfo.h"
-#include "llvm/Target/TargetRegisterInfo.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/Statistic.h"
+#include "llvm/CodeGen/MachineFunctionPass.h"
+#include "llvm/CodeGen/MachineInstr.h"
+#include "llvm/CodeGen/MachineInstrBuilder.h"
+#include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 using namespace llvm;
+
+#define DEBUG_TYPE "mlx-expansion"
 
 static cl::opt<bool>
 ForceExapnd("expand-all-fp-mlx", cl::init(false), cl::Hidden);
@@ -40,9 +41,9 @@ namespace {
     static char ID;
     MLxExpansion() : MachineFunctionPass(ID) {}
 
-    virtual bool runOnMachineFunction(MachineFunction &Fn);
+    bool runOnMachineFunction(MachineFunction &Fn) override;
 
-    virtual const char *getPassName() const {
+    StringRef getPassName() const override {
       return "ARM MLA / MLS expansion pass";
     }
 
@@ -51,7 +52,8 @@ namespace {
     const TargetRegisterInfo *TRI;
     MachineRegisterInfo *MRI;
 
-    bool isA9;
+    bool isLikeA9;
+    bool isSwift;
     unsigned MIIdx;
     MachineInstr* LastMIs[4];
     SmallPtrSet<MachineInstr*, 4> IgnoreStall;
@@ -60,6 +62,7 @@ namespace {
     void pushStack(MachineInstr *MI);
     MachineInstr *getAccDefMI(MachineInstr *MI) const;
     unsigned getDefReg(MachineInstr *MI) const;
+    bool hasLoopHazard(MachineInstr *MI) const;
     bool hasRAWHazard(unsigned Reg, MachineInstr *MI) const;
     bool FindMLxHazard(MachineInstr *MI);
     void ExpandFPMLxInstruction(MachineBasicBlock &MBB, MachineInstr *MI,
@@ -71,7 +74,7 @@ namespace {
 }
 
 void MLxExpansion::clearStack() {
-  std::fill(LastMIs, LastMIs + 4, (MachineInstr*)0);
+  std::fill(LastMIs, LastMIs + 4, nullptr);
   MIIdx = 0;
 }
 
@@ -86,7 +89,7 @@ MachineInstr *MLxExpansion::getAccDefMI(MachineInstr *MI) const {
   // real definition MI. This is important for _sfp instructions.
   unsigned Reg = MI->getOperand(1).getReg();
   if (TargetRegisterInfo::isPhysicalRegister(Reg))
-    return 0;
+    return nullptr;
 
   MachineBasicBlock *MBB = MI->getParent();
   MachineInstr *DefMI = MRI->getVRegDef(Reg);
@@ -118,7 +121,7 @@ unsigned MLxExpansion::getDefReg(MachineInstr *MI) const {
     return Reg;
 
   MachineBasicBlock *MBB = MI->getParent();
-  MachineInstr *UseMI = &*MRI->use_nodbg_begin(Reg);
+  MachineInstr *UseMI = &*MRI->use_instr_nodbg_begin(Reg);
   if (UseMI->getParent() != MBB)
     return Reg;
 
@@ -127,12 +130,56 @@ unsigned MLxExpansion::getDefReg(MachineInstr *MI) const {
     if (TargetRegisterInfo::isPhysicalRegister(Reg) ||
         !MRI->hasOneNonDBGUse(Reg))
       return Reg;
-    UseMI = &*MRI->use_nodbg_begin(Reg);
+    UseMI = &*MRI->use_instr_nodbg_begin(Reg);
     if (UseMI->getParent() != MBB)
       return Reg;
   }
 
   return Reg;
+}
+
+/// hasLoopHazard - Check whether an MLx instruction is chained to itself across
+/// a single-MBB loop.
+bool MLxExpansion::hasLoopHazard(MachineInstr *MI) const {
+  unsigned Reg = MI->getOperand(1).getReg();
+  if (TargetRegisterInfo::isPhysicalRegister(Reg))
+    return false;
+
+  MachineBasicBlock *MBB = MI->getParent();
+  MachineInstr *DefMI = MRI->getVRegDef(Reg);
+  while (true) {
+outer_continue:
+    if (DefMI->getParent() != MBB)
+      break;
+
+    if (DefMI->isPHI()) {
+      for (unsigned i = 1, e = DefMI->getNumOperands(); i < e; i += 2) {
+        if (DefMI->getOperand(i + 1).getMBB() == MBB) {
+          unsigned SrcReg = DefMI->getOperand(i).getReg();
+          if (TargetRegisterInfo::isVirtualRegister(SrcReg)) {
+            DefMI = MRI->getVRegDef(SrcReg);
+            goto outer_continue;
+          }
+        }
+      }
+    } else if (DefMI->isCopyLike()) {
+      Reg = DefMI->getOperand(1).getReg();
+      if (TargetRegisterInfo::isVirtualRegister(Reg)) {
+        DefMI = MRI->getVRegDef(Reg);
+        continue;
+      }
+    } else if (DefMI->isInsertSubreg()) {
+      Reg = DefMI->getOperand(2).getReg();
+      if (TargetRegisterInfo::isVirtualRegister(Reg)) {
+        DefMI = MRI->getVRegDef(Reg);
+        continue;
+      }
+    }
+
+    break;
+  }
+
+  return DefMI == MI;
 }
 
 bool MLxExpansion::hasRAWHazard(unsigned Reg, MachineInstr *MI) const {
@@ -149,6 +196,19 @@ bool MLxExpansion::hasRAWHazard(unsigned Reg, MachineInstr *MI) const {
   return false;
 }
 
+static bool isFpMulInstruction(unsigned Opcode) {
+  switch (Opcode) {
+  case ARM::VMULS:
+  case ARM::VMULfd:
+  case ARM::VMULfq:
+  case ARM::VMULD:
+  case ARM::VMULslfd:
+  case ARM::VMULslfq:
+    return true;
+  default:
+    return false;
+  }
+}
 
 bool MLxExpansion::FindMLxHazard(MachineInstr *MI) {
   if (NumExpand >= ExpandLimit)
@@ -171,6 +231,12 @@ bool MLxExpansion::FindMLxHazard(MachineInstr *MI) {
     return true;
   }
 
+  // On Swift, we mostly care about hazards from multiplication instructions
+  // writing the accumulator and the pipelining of loop iterations by out-of-
+  // order execution. 
+  if (isSwift)
+    return isFpMulInstruction(DefMI->getOpcode()) || hasLoopHazard(MI);
+
   if (IgnoreStall.count(MI))
     return false;
 
@@ -179,8 +245,8 @@ bool MLxExpansion::FindMLxHazard(MachineInstr *MI) {
   // preserves the in-order retirement of the instructions.
   // Look at the next few instructions, if *most* of them can cause hazards,
   // then the scheduler can't *fix* this, we'd better break up the VMLA.
-  unsigned Limit1 = isA9 ? 1 : 4;
-  unsigned Limit2 = isA9 ? 1 : 4;
+  unsigned Limit1 = isLikeA9 ? 1 : 4;
+  unsigned Limit2 = isLikeA9 ? 1 : 4;
   for (unsigned i = 1; i <= 4; ++i) {
     int Idx = ((int)MIIdx - i + 4) % 4;
     MachineInstr *NextMI = LastMIs[Idx];
@@ -220,7 +286,9 @@ MLxExpansion::ExpandFPMLxInstruction(MachineBasicBlock &MBB, MachineInstr *MI,
 
   const MCInstrDesc &MCID1 = TII->get(MulOpc);
   const MCInstrDesc &MCID2 = TII->get(AddSubOpc);
-  unsigned TmpReg = MRI->createVirtualRegister(TII->getRegClass(MCID1, 0, TRI));
+  const MachineFunction &MF = *MI->getParent()->getParent();
+  unsigned TmpReg = MRI->createVirtualRegister(
+                      TII->getRegClass(MCID1, 0, TRI, MF));
 
   MachineInstrBuilder MIB = BuildMI(MBB, MI, MI->getDebugLoc(), MCID1, TmpReg)
     .addReg(Src1Reg, getKillRegState(Src1Kill))
@@ -245,9 +313,9 @@ MLxExpansion::ExpandFPMLxInstruction(MachineBasicBlock &MBB, MachineInstr *MI,
       dbgs() << "Expanding: " << *MI;
       dbgs() << "  to:\n";
       MachineBasicBlock::iterator MII = MI;
-      MII = llvm::prior(MII);
+      MII = std::prev(MII);
       MachineInstr &MI2 = *MII;
-      MII = llvm::prior(MII);
+      MII = std::prev(MII);
       MachineInstr &MI1 = *MII;
       dbgs() << "    " << MI1;
       dbgs() << "    " << MI2;
@@ -266,18 +334,15 @@ bool MLxExpansion::ExpandFPMLxInstructions(MachineBasicBlock &MBB) {
   unsigned Skip = 0;
   MachineBasicBlock::reverse_iterator MII = MBB.rbegin(), E = MBB.rend();
   while (MII != E) {
-    MachineInstr *MI = &*MII;
+    MachineInstr *MI = &*MII++;
 
-    if (MI->isLabel() || MI->isImplicitDef() || MI->isCopy()) {
-      ++MII;
+    if (MI->isPosition() || MI->isImplicitDef() || MI->isCopy())
       continue;
-    }
 
     const MCInstrDesc &MCID = MI->getDesc();
     if (MI->isBarrier()) {
       clearStack();
       Skip = 0;
-      ++MII;
       continue;
     }
 
@@ -285,7 +350,7 @@ bool MLxExpansion::ExpandFPMLxInstructions(MachineBasicBlock &MBB) {
     if (Domain == ARMII::DomainGeneral) {
       if (++Skip == 2)
         // Assume dual issues of non-VFP / NEON instructions.
-        pushStack(0);
+        pushStack(nullptr);
     } else {
       Skip = 0;
 
@@ -297,31 +362,30 @@ bool MLxExpansion::ExpandFPMLxInstructions(MachineBasicBlock &MBB) {
         pushStack(MI);
       else {
         ExpandFPMLxInstruction(MBB, MI, MulOpc, AddSubOpc, NegAcc, HasLane);
-        E = MBB.rend(); // May have changed if MI was the 1st instruction.
         Changed = true;
-        continue;
       }
     }
-
-    ++MII;
   }
 
   return Changed;
 }
 
 bool MLxExpansion::runOnMachineFunction(MachineFunction &Fn) {
-  TII = static_cast<const ARMBaseInstrInfo*>(Fn.getTarget().getInstrInfo());
-  TRI = Fn.getTarget().getRegisterInfo();
+  if (skipFunction(*Fn.getFunction()))
+    return false;
+
+  TII = static_cast<const ARMBaseInstrInfo *>(Fn.getSubtarget().getInstrInfo());
+  TRI = Fn.getSubtarget().getRegisterInfo();
   MRI = &Fn.getRegInfo();
-  const ARMSubtarget *STI = &Fn.getTarget().getSubtarget<ARMSubtarget>();
-  isA9 = STI->isCortexA9();
+  const ARMSubtarget *STI = &Fn.getSubtarget<ARMSubtarget>();
+  if (!STI->expandMLx())
+    return false;
+  isLikeA9 = STI->isLikeA9() || STI->isSwift();
+  isSwift = STI->isSwift();
 
   bool Modified = false;
-  for (MachineFunction::iterator MFI = Fn.begin(), E = Fn.end(); MFI != E;
-       ++MFI) {
-    MachineBasicBlock &MBB = *MFI;
+  for (MachineBasicBlock &MBB : Fn)
     Modified |= ExpandFPMLxInstructions(MBB);
-  }
 
   return Modified;
 }

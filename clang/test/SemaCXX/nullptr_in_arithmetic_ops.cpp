@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -fsyntax-only -fblocks -std=c++11 -verify %s
+// RUN: %clang_cc1 -fsyntax-only -Wno-tautological-pointer-compare -fblocks -std=c++11 -verify %s
 
 void foo() {
   int a;
@@ -45,12 +45,12 @@ void foo() {
   b = a == nullptr || nullptr == a; // expected-error 2{{invalid operands to binary expression}}
   b = a != nullptr || nullptr != a; // expected-error 2{{invalid operands to binary expression}}
 
-  b = &a < nullptr || nullptr < &a || &a > nullptr || nullptr > &a;
-  b = &a <= nullptr || nullptr <= &a || &a >= nullptr || nullptr >= &a;
+  b = &a < nullptr || nullptr < &a || &a > nullptr || nullptr > &a; // expected-error 4{{invalid operands}}
+  b = &a <= nullptr || nullptr <= &a || &a >= nullptr || nullptr >= &a; // expected-error 4{{invalid operands}}
   b = &a == nullptr || nullptr == &a || &a != nullptr || nullptr != &a;
 
-  b = nullptr < nullptr || nullptr > nullptr;
-  b = nullptr <= nullptr || nullptr >= nullptr;
+  b = nullptr < nullptr || nullptr > nullptr; // expected-error 2{{invalid operands to binary expression}}
+  b = nullptr <= nullptr || nullptr >= nullptr; // expected-error 2{{invalid operands to binary expression}}
   b = nullptr == nullptr || nullptr != nullptr;
 
   b = ((nullptr)) != a;  // expected-error{{invalid operands to binary expression}}

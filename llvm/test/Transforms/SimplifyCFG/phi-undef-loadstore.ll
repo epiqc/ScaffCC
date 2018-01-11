@@ -21,10 +21,10 @@ if.then4:                                         ; preds = %if.else
 
 if.end7:                                          ; preds = %if.else, %if.then4, %if.then
   %x.0 = phi i32* [ %a, %if.then ], [ %c, %if.then4 ], [ null, %if.else ]
-  %tmp9 = load i32* %x.0
+  %tmp9 = load i32, i32* %x.0
   ret i32 %tmp9
 
-; CHECK: @test1
+; CHECK-LABEL: @test1(
 ; CHECK: if.else:
 ; CHECK: br label %if.end7
 
@@ -50,9 +50,9 @@ if.then4:                                         ; preds = %if.else
 
 if.end7:                                          ; preds = %if.else, %if.then4, %if.then
   %x.0 = phi i32* [ %a, %if.then ], [ null, %if.then4 ], [ null, %if.else ]
-  %tmp9 = load i32* %x.0
+  %tmp9 = load i32, i32* %x.0
   ret i32 %tmp9
-; CHECK: @test2
+; CHECK-LABEL: @test2(
 ; CHECK: if.else:
 ; CHECK: unreachable
 
@@ -79,9 +79,37 @@ if.then4:                                         ; preds = %if.else
 if.end7:                                          ; preds = %if.else, %if.then4, %if.then
   %x.0 = phi i32* [ %a, %if.then ], [ null, %if.then4 ], [ null, %if.else ]
   tail call void @bar() nounwind
-  %tmp9 = load i32* %x.0
+  %tmp9 = load i32, i32* %x.0
   ret i32 %tmp9
-; CHECK: @test3
+; CHECK-LABEL: @test3(
 ; CHECK: if.end7:
 ; CHECK: phi i32* [ %a, %if.then ], [ null, %if.then4 ], [ null, %if.else ]
+}
+
+define i32 @test4(i32* %a, i32 %b, i32* %c, i32 %d) nounwind {
+entry:
+  %tobool = icmp eq i32 %b, 0
+  br i1 %tobool, label %if.else, label %if.then
+
+if.then:                                          ; preds = %entry
+  tail call void @bar() nounwind
+  br label %if.end7
+
+if.else:                                          ; preds = %entry
+  %tobool3 = icmp eq i32 %d, 0
+  br i1 %tobool3, label %if.end7, label %if.then4
+
+if.then4:                                         ; preds = %if.else
+  tail call void @bar() nounwind
+  br label %if.end7
+
+if.end7:                                          ; preds = %if.else, %if.then4, %if.then
+  %x.0 = phi i32* [ %a, %if.then ], [ null, %if.then4 ], [ null, %if.else ]
+  %gep = getelementptr i32, i32* %x.0, i32 10
+  %tmp9 = load i32, i32* %gep
+  %tmp10 = or i32 %tmp9, 1
+  store i32 %tmp10, i32* %gep
+  ret i32 %tmp9
+; CHECK-LABEL: @test4(
+; CHECK-NOT: phi
 }

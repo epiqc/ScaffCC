@@ -44,10 +44,10 @@ void test1(int cond) {
   x = (id) (cond ? (void*) 0 : unauditedString()); // expected-error {{requires a bridged cast}} expected-note {{use __bridge to}} expected-note {{use CFBridgingRelease call to}}
   x = (id) (cond ? (CFStringRef) @"help" : unauditedString()); // expected-error {{requires a bridged cast}} expected-note {{use __bridge to}} expected-note {{use CFBridgingRelease call to}}
 
-  x = (id) auditedCreateString(); // expected-error {{requires a bridged cast}} expected-note {{use __bridge to}} expected-note {{use CFBridgingRelease call to}}
-  x = (id) (cond ? auditedCreateString() : (void*) 0); // expected-error {{requires a bridged cast}} expected-note {{use __bridge to}} expected-note {{use CFBridgingRelease call to}}
-  x = (id) (cond ? (void*) 0 : auditedCreateString()); // expected-error {{requires a bridged cast}} expected-note {{use __bridge to}} expected-note {{use CFBridgingRelease call to}}
-  x = (id) (cond ? (CFStringRef) @"help" : auditedCreateString()); // expected-error {{requires a bridged cast}} expected-note {{use __bridge to}} expected-note {{use CFBridgingRelease call to}}
+  x = (id) auditedCreateString(); // expected-error {{requires a bridged cast}} expected-note {{use CFBridgingRelease call to}}
+  x = (id) (cond ? auditedCreateString() : (void*) 0); // expected-error {{requires a bridged cast}} expected-note {{use CFBridgingRelease call to}}
+  x = (id) (cond ? (void*) 0 : auditedCreateString()); // expected-error {{requires a bridged cast}} expected-note {{use CFBridgingRelease call to}}
+  x = (id) (cond ? (CFStringRef) @"help" : auditedCreateString()); // expected-error {{requires a bridged cast}} expected-note {{use CFBridgingRelease call to}}
 
   x = (id) [object property];
   x = (id) (cond ? [object property] : (void*) 0);
@@ -107,4 +107,13 @@ void testTakerFunctions(id string) {
   takeCFOrdinaryAudited((CFStringRef) string);
   takeCFVariadicAudited(1, (CFStringRef) string);
   takeCFConsumedAudited((CFStringRef) string); // expected-error {{cast of Objective-C pointer type 'id' to C pointer type 'CFStringRef'}} expected-note {{use __bridge to}} expected-note {{use CFBridgingRetain call to}}
+}
+
+// rdar://12788838
+id obj;
+
+void rdar12788838() {
+  void *foo = reinterpret_cast<void *>(obj); // expected-error {{cast of Objective-C pointer type 'id' to C pointer type 'void *' requires a bridged cast}} \
+		// expected-note {{use __bridge with C-style cast to convert directly}} \
+		// expected-note {{use CFBridgingRetain call to make an ARC object available as a +1 'void *'}}
 }

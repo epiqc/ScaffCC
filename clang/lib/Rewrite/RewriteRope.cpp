@@ -11,7 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "clang/Rewrite/RewriteRope.h"
+#include "clang/Rewrite/Core/RewriteRope.h"
 #include "clang/Basic/LLVM.h"
 #include <algorithm>
 using namespace clang;
@@ -89,9 +89,9 @@ namespace {
     bool IsLeaf;
 
     RopePieceBTreeNode(bool isLeaf) : Size(0), IsLeaf(isLeaf) {}
-    ~RopePieceBTreeNode() {}
-  public:
+    ~RopePieceBTreeNode() = default;
 
+  public:
     bool isLeaf() const { return IsLeaf; }
     unsigned size() const { return Size; }
 
@@ -116,8 +116,6 @@ namespace {
     /// erase - Remove NumBytes from this node at the specified offset.  We are
     /// guaranteed that there is a split at Offset.
     void erase(unsigned Offset, unsigned NumBytes);
-
-    //static inline bool classof(const RopePieceBTreeNode *) { return true; }
 
   };
 } // end anonymous namespace
@@ -148,7 +146,7 @@ namespace {
     RopePieceBTreeLeaf **PrevLeaf, *NextLeaf;
   public:
     RopePieceBTreeLeaf() : RopePieceBTreeNode(true), NumPieces(0),
-                           PrevLeaf(0), NextLeaf(0) {}
+                           PrevLeaf(nullptr), NextLeaf(nullptr) {}
     ~RopePieceBTreeLeaf() {
       if (PrevLeaf || NextLeaf)
         removeFromLeafInOrder();
@@ -173,7 +171,7 @@ namespace {
 
     const RopePieceBTreeLeaf *getNextLeafInOrder() const { return NextLeaf; }
     void insertAfterLeafInOrder(RopePieceBTreeLeaf *Node) {
-      assert(PrevLeaf == 0 && NextLeaf == 0 && "Already in ordering");
+      assert(!PrevLeaf && !NextLeaf && "Already in ordering");
 
       NextLeaf = Node->NextLeaf;
       if (NextLeaf)
@@ -188,7 +186,7 @@ namespace {
         if (NextLeaf)
           NextLeaf->PrevLeaf = PrevLeaf;
       } else if (NextLeaf) {
-        NextLeaf->PrevLeaf = 0;
+        NextLeaf->PrevLeaf = nullptr;
       }
     }
 
@@ -221,7 +219,6 @@ namespace {
     /// guaranteed that there is a split at Offset.
     void erase(unsigned Offset, unsigned NumBytes);
 
-    //static inline bool classof(const RopePieceBTreeLeaf *) { return true; }
     static inline bool classof(const RopePieceBTreeNode *N) {
       return N->isLeaf();
     }
@@ -239,7 +236,7 @@ RopePieceBTreeNode *RopePieceBTreeLeaf::split(unsigned Offset) {
   // specified offset so find it.
   if (Offset == 0 || Offset == size()) {
     // Fastpath for a common case.  There is already a splitpoint at the end.
-    return 0;
+    return nullptr;
   }
 
   // Find the piece that this offset lands in.
@@ -253,7 +250,7 @@ RopePieceBTreeNode *RopePieceBTreeLeaf::split(unsigned Offset) {
   // If there is already a split point at the specified offset, just return
   // success.
   if (PieceOffs == Offset)
-    return 0;
+    return nullptr;
 
   // Otherwise, we need to split piece 'i' at Offset-PieceOffs.  Convert Offset
   // to being Piece relative.
@@ -299,7 +296,7 @@ RopePieceBTreeNode *RopePieceBTreeLeaf::insert(unsigned Offset,
     Pieces[i] = R;
     ++NumPieces;
     Size += R.size();
-    return 0;
+    return nullptr;
   }
 
   // Otherwise, if this is leaf is full, split it in two halves.  Since this
@@ -353,8 +350,10 @@ void RopePieceBTreeLeaf::erase(unsigned Offset, unsigned NumBytes) {
     PieceOffs += getPiece(i).size();
 
   // If we exactly include the last one, include it in the region to delete.
-  if (Offset+NumBytes == PieceOffs+getPiece(i).size())
-    PieceOffs += getPiece(i).size(), ++i;
+  if (Offset+NumBytes == PieceOffs+getPiece(i).size()) {
+    PieceOffs += getPiece(i).size();
+    ++i;
+  }
 
   // If we completely cover some RopePieces, erase them now.
   if (i != StartPiece) {
@@ -458,7 +457,6 @@ namespace {
     /// guaranteed that there is a split at Offset.
     void erase(unsigned Offset, unsigned NumBytes);
 
-    //static inline bool classof(const RopePieceBTreeInterior *) { return true; }
     static inline bool classof(const RopePieceBTreeNode *N) {
       return !N->isLeaf();
     }
@@ -474,7 +472,7 @@ namespace {
 RopePieceBTreeNode *RopePieceBTreeInterior::split(unsigned Offset) {
   // Figure out which child to split.
   if (Offset == 0 || Offset == size())
-    return 0;  // If we have an exact offset, we're already split.
+    return nullptr; // If we have an exact offset, we're already split.
 
   unsigned ChildOffset = 0;
   unsigned i = 0;
@@ -483,12 +481,12 @@ RopePieceBTreeNode *RopePieceBTreeInterior::split(unsigned Offset) {
 
   // If already split there, we're done.
   if (ChildOffset == Offset)
-    return 0;
+    return nullptr;
 
   // Otherwise, recursively split the child.
   if (RopePieceBTreeNode *RHS = getChild(i)->split(Offset-ChildOffset))
     return HandleChildPiece(i, RHS);
-  return 0;  // Done!
+  return nullptr; // Done!
 }
 
 /// insert - Insert the specified ropepiece into this tree node at the
@@ -519,7 +517,7 @@ RopePieceBTreeNode *RopePieceBTreeInterior::insert(unsigned Offset,
   if (RopePieceBTreeNode *RHS = getChild(i)->insert(Offset-ChildOffs, R))
     return HandleChildPiece(i, RHS);
 
-  return 0;
+  return nullptr;
 }
 
 /// HandleChildPiece - A child propagated an insertion result up to us.
@@ -535,7 +533,7 @@ RopePieceBTreeInterior::HandleChildPiece(unsigned i, RopePieceBTreeNode *RHS) {
               (getNumChildren()-i-1)*sizeof(Children[0]));
     Children[i+1] = RHS;
     ++NumChildren;
-    return 0;
+    return nullptr;
   }
 
   // Okay, this node is full.  Split it in half, moving WidthFactor children to
@@ -682,10 +680,10 @@ RopePieceBTreeIterator::RopePieceBTreeIterator(const void *n) {
   while (CurNode && getCN(CurNode)->getNumPieces() == 0)
     CurNode = getCN(CurNode)->getNextLeafInOrder();
 
-  if (CurNode != 0)
+  if (CurNode)
     CurPiece = &getCN(CurNode)->getPiece(0);
   else  // Empty tree, this is an end() iterator.
-    CurPiece = 0;
+    CurPiece = nullptr;
   CurChar = 0;
 }
 
@@ -701,10 +699,10 @@ void RopePieceBTreeIterator::MoveToNextPiece() {
     CurNode = getCN(CurNode)->getNextLeafInOrder();
   while (CurNode && getCN(CurNode)->getNumPieces() == 0);
 
-  if (CurNode != 0)
+  if (CurNode)
     CurPiece = &getCN(CurNode)->getPiece(0);
   else // Hit end().
-    CurPiece = 0;
+    CurPiece = nullptr;
   CurChar = 0;
 }
 
@@ -792,19 +790,14 @@ RopePiece RewriteRope::MakeRopeString(const char *Start, const char *End) {
   // Otherwise, this was a small request but we just don't have space for it
   // Make a new chunk and share it with later allocations.
 
-  // If we had an old allocation, drop our reference to it.
-  if (AllocBuffer && --AllocBuffer->RefCount == 0)
-    delete [] (char*)AllocBuffer;
-
   unsigned AllocSize = offsetof(RopeRefCountString, Data) + AllocChunkSize;
-  AllocBuffer = reinterpret_cast<RopeRefCountString *>(new char[AllocSize]);
-  AllocBuffer->RefCount = 0;
-  memcpy(AllocBuffer->Data, Start, Len);
+  RopeRefCountString *Res =
+      reinterpret_cast<RopeRefCountString *>(new char[AllocSize]);
+  Res->RefCount = 0;
+  memcpy(Res->Data, Start, Len);
+  AllocBuffer = Res;
   AllocOffs = Len;
 
-  // Start out the new allocation with a refcount of 1, since we have an
-  // internal reference to it.
-  AllocBuffer->addRef();
   return RopePiece(AllocBuffer, 0, Len);
 }
 

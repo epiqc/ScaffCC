@@ -1,4 +1,4 @@
-//===-- llvm/MC/MachineLocation.h -------------------------------*- C++ -*-===//
+//===- llvm/MC/MachineLocation.h --------------------------------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -9,90 +9,51 @@
 // The MachineLocation class is used to represent a simple location in a machine
 // frame.  Locations will be one of two forms; a register or an address formed
 // from a base address plus an offset.  Register indirection can be specified by
-// using an offset of zero.
-//
-// The MachineMove class is used to represent abstract move operations in the 
-// prolog/epilog of a compiled function.  A collection of these objects can be
-// used by a debug consumer to track the location of values when unwinding stack
-// frames.
+// explicitly passing an offset to the constructor.
 //===----------------------------------------------------------------------===//
-
 
 #ifndef LLVM_MC_MACHINELOCATION_H
 #define LLVM_MC_MACHINELOCATION_H
 
+#include <cstdint>
+#include <cassert>
+
 namespace llvm {
-  class MCSymbol;
-  
+
 class MachineLocation {
 private:
-  bool IsRegister;                      // True if location is a register.
-  unsigned Register;                    // gcc/gdb register number.
-  int Offset;                           // Displacement if not register.
+  bool IsRegister = false;              ///< True if location is a register.
+  unsigned Register = 0;                ///< gcc/gdb register number.
+
 public:
-  enum {
+  enum : uint32_t {
     // The target register number for an abstract frame pointer. The value is
     // an arbitrary value that doesn't collide with any real target register.
     VirtualFP = ~0U
   };
-  MachineLocation()
-    : IsRegister(false), Register(0), Offset(0) {}
-  explicit MachineLocation(unsigned R)
-    : IsRegister(true), Register(R), Offset(0) {}
-  MachineLocation(unsigned R, int O)
-    : IsRegister(false), Register(R), Offset(O) {}
+
+  MachineLocation() = default;
+  /// Create a direct register location.
+  explicit MachineLocation(unsigned R, bool Indirect = false)
+      : IsRegister(!Indirect), Register(R) {}
 
   bool operator==(const MachineLocation &Other) const {
-      return IsRegister == Other.IsRegister && Register == Other.Register &&
-        Offset == Other.Offset;
+    return IsRegister == Other.IsRegister && Register == Other.Register;
   }
-  
-  // Accessors
+
+  // Accessors.
+  /// \return true iff this is a register-indirect location.
+  bool isIndirect()      const { return !IsRegister; }
   bool isReg()           const { return IsRegister; }
   unsigned getReg()      const { return Register; }
-  int getOffset()        const { return Offset; }
   void setIsRegister(bool Is)  { IsRegister = Is; }
   void setRegister(unsigned R) { Register = R; }
-  void setOffset(int O)        { Offset = O; }
-  void set(unsigned R) {
-    IsRegister = true;
-    Register = R;
-    Offset = 0;
-  }
-  void set(unsigned R, int O) {
-    IsRegister = false;
-    Register = R;
-    Offset = O;
-  }
-
-#ifndef NDEBUG
-  void dump();
-#endif
 };
 
-/// MachineMove - This class represents the save or restore of a callee saved
-/// register that exception or debug info needs to know about.
-class MachineMove {
-private:
-  /// Label - Symbol for post-instruction address when result of move takes
-  /// effect.
-  MCSymbol *Label;
-  
-  // Move to & from location.
-  MachineLocation Destination, Source;
-public:
-  MachineMove() : Label(0) {}
+inline bool operator!=(const MachineLocation &LHS, const MachineLocation &RHS) {
+  return !(LHS == RHS);
+}
 
-  MachineMove(MCSymbol *label, const MachineLocation &D,
-              const MachineLocation &S)
-  : Label(label), Destination(D), Source(S) {}
-  
-  // Accessors
-  MCSymbol *getLabel()                    const { return Label; }
-  const MachineLocation &getDestination() const { return Destination; }
-  const MachineLocation &getSource()      const { return Source; }
-};
+} // end namespace llvm
 
-} // End llvm namespace
-
-#endif
+#endif // LLVM_MC_MACHINELOCATION_H

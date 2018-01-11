@@ -1,4 +1,5 @@
-; RUN: opt < %s -simplifycfg -S | FileCheck %s
+; RUN: opt -S -simplifycfg < %s | FileCheck %s
+; RUN: opt -S -data-layout="p:32:32-p1:16:16" -simplifycfg < %s | FileCheck -check-prefix=CHECK -check-prefix=DL %s
 
 declare void @foo1()
 
@@ -15,11 +16,49 @@ T:              ; preds = %0
 F:              ; preds = %0
         call void @foo2( )
         ret void
-; CHECK: @test1
+; CHECK-LABEL: @test1(
 ; CHECK:  switch i32 %V, label %F [
 ; CHECK:    i32 17, label %T
 ; CHECK:    i32 4, label %T
 ; CHECK:  ]
+}
+
+define void @test1_ptr(i32* %V) {
+        %C1 = icmp eq i32* %V, inttoptr (i32 4 to i32*)
+        %C2 = icmp eq i32* %V, inttoptr (i32 17 to i32*)
+        %CN = or i1 %C1, %C2            ; <i1> [#uses=1]
+        br i1 %CN, label %T, label %F
+T:              ; preds = %0
+        call void @foo1( )
+        ret void
+F:              ; preds = %0
+        call void @foo2( )
+        ret void
+; CHECK-LABEL: @test1_ptr(
+; DL:  %magicptr = ptrtoint i32* %V to i32
+; DL:  switch i32 %magicptr, label %F [
+; DL:    i32 17, label %T
+; DL:    i32 4, label %T
+; DL:  ]
+}
+
+define void @test1_ptr_as1(i32 addrspace(1)* %V) {
+        %C1 = icmp eq i32 addrspace(1)* %V, inttoptr (i32 4 to i32 addrspace(1)*)
+        %C2 = icmp eq i32 addrspace(1)* %V, inttoptr (i32 17 to i32 addrspace(1)*)
+        %CN = or i1 %C1, %C2            ; <i1> [#uses=1]
+        br i1 %CN, label %T, label %F
+T:              ; preds = %0
+        call void @foo1( )
+        ret void
+F:              ; preds = %0
+        call void @foo2( )
+        ret void
+; CHECK-LABEL: @test1_ptr_as1(
+; DL:  %magicptr = ptrtoint i32 addrspace(1)* %V to i16
+; DL:  switch i16 %magicptr, label %F [
+; DL:    i16 17, label %T
+; DL:    i16 4, label %T
+; DL:  ]
 }
 
 define void @test2(i32 %V) {
@@ -33,7 +72,7 @@ T:              ; preds = %0
 F:              ; preds = %0
         call void @foo2( )
         ret void
-; CHECK: @test2
+; CHECK-LABEL: @test2(
 ; CHECK:  switch i32 %V, label %T [
 ; CHECK:    i32 17, label %F
 ; CHECK:    i32 4, label %F
@@ -53,7 +92,7 @@ F:              ; preds = %N
         call void @foo2( )
         ret void
 
-; CHECK: @test3
+; CHECK-LABEL: @test3(
 ; CHECK: switch i32 %V, label %F [
 ; CHECK:     i32 4, label %T
 ; CHECK:     i32 17, label %T
@@ -79,8 +118,8 @@ lor.end:                                          ; preds = %lor.rhs, %lor.lhs.f
   %0 = phi i1 [ true, %lor.lhs.false ], [ true, %entry ], [ %cmp8, %lor.rhs ]
   %lor.ext = zext i1 %0 to i32
   ret i32 %lor.ext
-  
-; CHECK: @test4
+
+; CHECK-LABEL: @test4(
 ; CHECK:  switch i8 %c, label %lor.rhs [
 ; CHECK:    i8 62, label %lor.end
 ; CHECK:    i8 34, label %lor.end
@@ -104,7 +143,7 @@ lor.end:                                          ; preds = %entry, %entry, %ent
   %0 = phi i1 [ true, %entry ], [ %V, %lor.rhs ], [ true, %entry ], [ true, %entry ]
   %lor.ext = zext i1 %0 to i32
   ret i32 %lor.ext
-; CHECK: @test5
+; CHECK-LABEL: @test5(
 ; CHECK:  switch i8 %c, label %lor.rhs [
 ; CHECK:    i8 62, label %lor.end
 ; CHECK:    i8 34, label %lor.end
@@ -115,8 +154,8 @@ lor.end:                                          ; preds = %entry, %entry, %ent
 
 define i1 @test6({ i32, i32 }* %I) {
 entry:
-        %tmp.1.i = getelementptr { i32, i32 }* %I, i64 0, i32 1         ; <i32*> [#uses=1]
-        %tmp.2.i = load i32* %tmp.1.i           ; <i32> [#uses=6]
+        %tmp.1.i = getelementptr { i32, i32 }, { i32, i32 }* %I, i64 0, i32 1         ; <i32*> [#uses=1]
+        %tmp.2.i = load i32, i32* %tmp.1.i           ; <i32> [#uses=6]
         %tmp.2 = icmp eq i32 %tmp.2.i, 14               ; <i1> [#uses=1]
         br i1 %tmp.2, label %shortcirc_done.4, label %shortcirc_next.0
 shortcirc_next.0:               ; preds = %entry
@@ -139,8 +178,8 @@ shortcirc_done.4:               ; preds = %shortcirc_next.3, %shortcirc_next.2, 
 UnifiedReturnBlock:             ; preds = %shortcirc_done.4, %shortcirc_next.4
         %UnifiedRetVal = phi i1 [ %tmp.26, %shortcirc_next.4 ], [ true, %shortcirc_done.4 ]             ; <i1> [#uses=1]
         ret i1 %UnifiedRetVal
-        
-; CHECK: @test6
+
+; CHECK-LABEL: @test6(
 ; CHECK: %tmp.2.i.off = add i32 %tmp.2.i, -14
 ; CHECK: %switch = icmp ult i32 %tmp.2.i.off, 6
 }
@@ -160,8 +199,8 @@ if.then:                                          ; preds = %entry
 
 if.end:                                           ; preds = %entry
   ret void
-  
-; CHECK: @test7
+
+; CHECK-LABEL: @test7(
 ; CHECK:   %cmp = icmp ult i32 %x, 32
 ; CHECK:   br i1 %cmp, label %if.then, label %switch.early.test
 ; CHECK: switch.early.test:
@@ -189,8 +228,8 @@ if.then:                                          ; preds = %entry
 
 if.end:                                           ; preds = %entry
   ret i32 0
-  
-; CHECK: @test8
+
+; CHECK-LABEL: @test8(
 ; CHECK: switch.early.test:
 ; CHECK:   switch i8 %c, label %if.end [
 ; CHECK:     i8 99, label %if.then
@@ -245,8 +284,8 @@ lor.end:                                          ; preds = %lor.rhs, %lor.lhs.f
   %0 = phi i1 [ true, %lor.lhs.false36 ], [ true, %lor.lhs.false31 ], [ true, %lor.lhs.false26 ], [ true, %lor.lhs.false21 ], [ true, %lor.lhs.false16 ], [ true, %lor.lhs.false11 ], [ true, %lor.lhs.false6 ], [ true, %lor.lhs.false ], [ true, %entry ], [ %cmp43, %lor.rhs ]
   %conv46 = zext i1 %0 to i32
   ret i32 %conv46
-  
-; CHECK: @test9
+
+; CHECK-LABEL: @test9(
 ; CHECK:   %cmp = icmp ult i8 %c, 33
 ; CHECK:   br i1 %cmp, label %lor.end, label %switch.early.test
 
@@ -275,7 +314,7 @@ T:
 F:
   ret i32 324
 
-; CHECK: @test10
+; CHECK-LABEL: @test10(
 ; CHECK:  br i1 %Cond, label %switch.early.test, label %F
 ; CHECK:switch.early.test:
 ; CHECK:  switch i32 %mode, label %T [
@@ -314,7 +353,7 @@ return:                                           ; preds = %if.end, %if.then
   %retval.0 = phi i32 [ 1, %if.then ], [ 0, %if.end ]
   ret i32 %retval.0
 
-; CHECK: @test11
+; CHECK-LABEL: @test11(
 ; CHECK: switch i32 %bar, label %if.end [
 ; CHECK:   i32 55, label %return
 ; CHECK:   i32 53, label %return
@@ -343,7 +382,7 @@ bb55.us.us:
 
 malformed:
   ret void
-; CHECK: @test12
+; CHECK-LABEL: @test12(
 
 }
 
@@ -371,7 +410,7 @@ if.then:                                          ; preds = %lor.lhs.false9, %lo
 
 if.end:                                           ; preds = %if.then, %lor.lhs.false9
   ret void
-; CHECK: @test13
+; CHECK-LABEL: @test13(
 ; CHECK:  switch i32 %x, label %if.end [
 ; CHECK:     i32 6, label %if.then
 ; CHECK:     i32 4, label %if.then
@@ -405,7 +444,7 @@ if.then:                                          ; preds = %lor.lhs.false9, %lo
 
 if.end:                                           ; preds = %if.then, %lor.lhs.false9
   ret void
-; CHECK: @test14
+; CHECK-LABEL: @test14(
 ; CHECK:  switch i32 %x, label %if.end [
 ; CHECK:     i32 6, label %if.then
 ; CHECK:     i32 4, label %if.then
@@ -431,7 +470,7 @@ if.then:
 if.end:
   ret void
 
-; CHECK: @test15
+; CHECK-LABEL: @test15(
 ; CHECK-NOT: switch
 ; CHECK: ret void
 }
@@ -440,7 +479,7 @@ if.end:
 ; rdar://5134905
 define zeroext i1 @test16(i32 %x) nounwind {
 entry:
-; CHECK: @test16
+; CHECK-LABEL: @test16(
 ; CHECK: %x.off = add i32 %x, -1
 ; CHECK: %switch = icmp ult i32 %x.off, 3
   %cmp.i = icmp eq i32 %x, 1
@@ -473,9 +512,149 @@ lor.lhs.false8:
 return:
   ret void
 
-; CHECK: @test17
+; CHECK-LABEL: @test17(
 ; CHECK-NOT: switch.early.test
 ; CHECK-NOT: switch i32
 ; CHECK: ret void
 }
 
+define void @test18(i32 %arg) {
+bb:
+  %tmp = and i32 %arg, -2
+  %tmp1 = icmp eq i32 %tmp, 8
+  %tmp2 = icmp eq i32 %arg, 10
+  %tmp3 = or i1 %tmp1, %tmp2
+  %tmp4 = icmp eq i32 %arg, 11
+  %tmp5 = or i1 %tmp3, %tmp4
+  %tmp6 = icmp eq i32 %arg, 12
+  %tmp7 = or i1 %tmp5, %tmp6
+  br i1 %tmp7, label %bb19, label %bb8
+
+bb8:                                              ; preds = %bb
+  %tmp9 = add i32 %arg, -13
+  %tmp10 = icmp ult i32 %tmp9, 2
+  %tmp11 = icmp eq i32 %arg, 16
+  %tmp12 = or i1 %tmp10, %tmp11
+  %tmp13 = icmp eq i32 %arg, 17
+  %tmp14 = or i1 %tmp12, %tmp13
+  %tmp15 = icmp eq i32 %arg, 18
+  %tmp16 = or i1 %tmp14, %tmp15
+  %tmp17 = icmp eq i32 %arg, 15
+  %tmp18 = or i1 %tmp16, %tmp17
+  br i1 %tmp18, label %bb19, label %bb20
+
+bb19:                                             ; preds = %bb8, %bb
+  tail call void @foo1()
+  br label %bb20
+
+bb20:                                             ; preds = %bb19, %bb8
+  ret void
+
+; CHECK-LABEL: @test18(
+; CHECK: %arg.off = add i32 %arg, -8
+; CHECK: icmp ult i32 %arg.off, 11
+}
+
+define void @PR26323(i1 %tobool23, i32 %tmp3) {
+entry:
+  %tobool5 = icmp ne i32 %tmp3, 0
+  %neg14 = and i32 %tmp3, -2
+  %cmp17 = icmp ne i32 %neg14, -1
+  %or.cond = and i1 %tobool5, %tobool23
+  %or.cond1 = and i1 %cmp17, %or.cond
+  br i1 %or.cond1, label %if.end29, label %if.then27
+
+if.then27:                                        ; preds = %entry
+  call void @foo1()
+  unreachable
+
+if.end29:                                         ; preds = %entry
+  ret void
+}
+
+; CHECK-LABEL: define void @PR26323(
+; CHECK:  %tobool5 = icmp ne i32 %tmp3, 0
+; CHECK:  %neg14 = and i32 %tmp3, -2
+; CHECK:  %cmp17 = icmp ne i32 %neg14, -1
+; CHECK:  %or.cond = and i1 %tobool5, %tobool23
+; CHECK:  %or.cond1 = and i1 %cmp17, %or.cond
+; CHECK:  br i1 %or.cond1, label %if.end29, label %if.then27
+
+; Form a switch when and'ing a negated power of two
+; CHECK-LABEL: define void @test19
+; CHECK: switch i32 %arg, label %else [
+; CHECK: i32 32, label %if
+; CHECK: i32 13, label %if
+; CHECK: i32 12, label %if
+define void @test19(i32 %arg) {
+  %and = and i32 %arg, -2
+  %cmp1 = icmp eq i32 %and, 12
+  %cmp2 = icmp eq i32 %arg, 32
+  %pred = or i1 %cmp1, %cmp2
+  br i1 %pred, label %if, label %else
+
+if:
+  call void @foo1()
+  ret void
+
+else:
+  ret void
+}
+
+; Since %cmp1 is always false, a switch is never formed
+; CHECK-LABEL: define void @test20
+; CHECK-NOT: switch
+; CHECK: ret void
+define void @test20(i32 %arg) {
+  %and = and i32 %arg, -2
+  %cmp1 = icmp eq i32 %and, 13
+  %cmp2 = icmp eq i32 %arg, 32
+  %pred = or i1 %cmp1, %cmp2
+  br i1 %pred, label %if, label %else
+
+if:
+  call void @foo1()
+  ret void
+
+else:
+  ret void
+}
+
+; Form a switch when or'ing a power of two
+; CHECK-LABEL: define void @test21
+; CHECK: i32 32, label %else
+; CHECK: i32 13, label %else
+; CHECK: i32 12, label %else
+define void @test21(i32 %arg) {
+  %and = or i32 %arg, 1
+  %cmp1 = icmp ne i32 %and, 13
+  %cmp2 = icmp ne i32 %arg, 32
+  %pred = and i1 %cmp1, %cmp2
+  br i1 %pred, label %if, label %else
+
+if:
+  call void @foo1()
+  ret void
+
+else:
+  ret void
+}
+
+; Since %cmp1 is always false, a switch is never formed
+; CHECK-LABEL: define void @test22
+; CHECK-NOT: switch
+; CHECK: ret void
+define void @test22(i32 %arg) {
+  %and = or i32 %arg, 1
+  %cmp1 = icmp ne i32 %and, 12
+  %cmp2 = icmp ne i32 %arg, 32
+  %pred = and i1 %cmp1, %cmp2
+  br i1 %pred, label %if, label %else
+
+if:
+  call void @foo1()
+  ret void
+
+else:
+  ret void
+}
