@@ -230,6 +230,6 @@ purge:
 
 # clean removes all completed files
 clean: purge
-	@rm -f $(FILE).resources $(FILE).qasmh $(FILE).qasmf $(FILE)_optimized.qasmf $(FILE).qc
+	@rm -f $(FILE).resources $(FILE).qasmh $(FILE).qasmf $(FILE).qasm $(FILE)_optimized.qasmf $(FILE).qc
 
 .PHONY: clean purge
