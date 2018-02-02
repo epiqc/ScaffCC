@@ -13,6 +13,7 @@ function show_help {
     echo "    -r   Generate resource estimate (default)"
     echo "    -q   Generate QASM"
     echo "    -f   Generate flattened QASM"
+    echo "    -b   Generate OpenQASM"
     echo "    -R   Disable rotation decomposition"
     echo "    -T   Disable Toffoli decomposition"
     echo "    -l   Levels of recursion to run (default=1)"
@@ -42,11 +43,12 @@ res=0
 rot=1
 toff=1
 flat=0
+openqasm=0
 qc=0
 precision=4
 targets=""
 optimize=0
-while getopts "h?vcdfsFkqroRT:l:P:" opt; do
+while getopts "h?vcdfbsFkqroRT:l:P:" opt; do
     case "$opt" in
     h|\?)
         show_help
@@ -64,6 +66,8 @@ while getopts "h?vcdfsFkqroRT:l:P:" opt; do
         ;;
     f) flat=1
         ;;
+	b) openqasm=1
+		;;
     k) purge=0
         ;;
     q) targets="${targets} qasm"
@@ -88,6 +92,10 @@ shift $((OPTIND-1))
 
 if [ ${flat} -eq 1 ]; then
 	targets="${targets} flat"
+fi
+
+if [ ${openqasm} -eq 1 ]; then
+	targets="${targets} openqasm"
 fi
 
 if [ ${qc} -eq 1 ]; then
