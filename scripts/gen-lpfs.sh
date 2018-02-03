@@ -14,9 +14,9 @@ I_FLAGS="-I/usr/include -I/usr/include/x86_64-linux-gnu -I/usr/lib/gcc/x86_64-li
 # Capacity of each SIMD region
 D=(1024)
 # Number of SIMD regions
-K=(4)
+K=(2)
 # Module flattening thresholds: must be picked from the set in scripts/flattening_thresh.py
-THRESHOLDS=(300k)
+THRESHOLDS=(010k)
 # Full schedule? otherwise only generates metrics (faster)
 FULL_SCHED=1
 

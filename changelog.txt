@@ -1,6 +1,13 @@
+2018-02-06:
+	Release version -v4.0
+  Migrated to LLVM v6.0.
+  Released Braidflash v2.0, with improved simulation of magic state distillation overheads, 
+  including different distillation protocols and different factory layouts.
+  Fixed bug in braidflash generating machine-dependent results due to uninitialized variable.
+  Fixed "file not found" bug in some scripts.
 2017-08-06:
 	Release version -v3.0-alpha
-	New software package, braidflash, added - in braidflash/ directory (Unix only)
+	New software package, Braidflash, added - in braidflash/ directory (Unix only)
 	New software package, Rotation Generator, added for future support in dynamic rotation generation - in scripts/gen_rotations/ directory
 	New software package, RKQCVerifier, added in scripts/RKQCVerifier/ directory
 	Fixed bugs in the QASM flattening tool chain

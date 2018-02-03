@@ -441,7 +441,7 @@ void GenLPFSSched::lpfs(Function* F, int ts, int simd_l, int refill_simd, int op
             string name = arg.name + ss.str();
             qubitMap.insert(make_pair(name, arg));
           }
-          if(1){//(*mp1).second.name.args[i] == (*mp2).second.name.args[j]){
+          if((*mp1).second.name.args[i] == (*mp2).second.name.args[j]){
             string zz = (*mp1).second.name.args[i].name;             
             (*mp1).second.out_edges.push_back((*mp2).first);
             (*mp2).second.in_edges.push_back((*mp1).first);

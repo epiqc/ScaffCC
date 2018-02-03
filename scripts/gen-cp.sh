@@ -23,7 +23,7 @@ for f in $*; do
   echo "[gen-cp.sh] $b: Compiling ..."
   if [ ! -e ${b}/${b}.ll ]; then
     # Generate compiled files
-    $ROOT/scaffold.sh -r $f
+    $ROOT/scaffold.sh -rk $f
     mv ${b}11.ll ${b}11.ll.keep_me
     # clean intermediary compilation files (comment out for speed)
     $ROOT/scaffold.sh -c $f

@@ -8,7 +8,7 @@
 ##===----------------------------------------------------------------------===##
 
 LEVEL = ../..
-PARALLEL_DIRS = Utils Instrumentation Scalar InstCombine IPO Vectorize Hello ResourceAnalysis Scaffold
+PARALLEL_DIRS = Utils Instrumentation Scalar InstCombine IPO Vectorize Hello Scaffold
 
 include $(LEVEL)/Makefile.config
 
