@@ -1,0 +1,18 @@
+// This file is targetted to test gates that have are handled in special ways
+// for OpenQASM generation
+int main () {
+    qbit qb[4];
+    cbit cb[2];
+
+    PrepZ( qb[0], 0 );
+    PrepZ( qb[1], 1 );
+    PrepX( qb[2], 0 );
+    PrepX( qb[3], 1 );
+
+    Fredkin( qb[0], qb[1], qb[2] );
+
+    cb[0] = MeasX( qb[2] );
+    cb[1] = MeasZ( qb[3] );
+
+    return 0;
+}
