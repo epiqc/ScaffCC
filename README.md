@@ -15,13 +15,9 @@ Release Information
 Current Release
 ---------------
 
-ScaffCC is currently in an *alpha* release. Specifically, the release details are:
+-   Version 3.1
 
--   Version 3.0
-
--   Release Date: August, 2017
-
--   Release Note: The current version is still an alpha release. Multiple new features are in active developement. For instance, .qasmf formart conforming to standardized QASM and optimization to parallel scheduler are expected to be included in the near term.
+-   Release Date: February, 2018
 
 Supported Operating Systems
 ---------------------------
@@ -213,6 +209,7 @@ To see a list of compiler options which can be passed as flags, run:
         -r   Generate resource estimate (default)
         -q   Generate QASM
         -f   Generate flattened QASM
+        -b   Generate OpenQASM
         -R   Disable rotation decomposition
         -T   Disable Toffoli decomposition
         -l   Levels of recursion to run (default=1)
