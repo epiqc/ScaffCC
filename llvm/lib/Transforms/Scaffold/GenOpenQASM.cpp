@@ -940,7 +940,17 @@ void GenQASM::genQASM(Function* F)
 
 	std::replace(fToPrint.begin(), fToPrint.end(), '.', '_');
 	std::replace(fToPrint.begin(), fToPrint.end(), '-', '_');
-	errs()<<fToPrint<<" ";
+
+    if(fToPrint.find("rz") != string::npos) {
+      qGateArg angleArg = mapFunction[mIndex].qArgs.back();
+      mapFunction[mIndex].qArgs.pop_back();
+      errs()<<fToPrint<<"(";
+      print_qgateArg(angleArg);
+      errs()<<") ";
+    }
+    else {
+      errs()<<fToPrint<<" ";
+    }
 
 	//print all but last argument
 	for(vector<qGateArg>::iterator vpIt=mapFunction[mIndex].qArgs.begin(), vpItE=mapFunction[mIndex].qArgs.end();vpIt!=vpItE-1;++vpIt)
