@@ -35,7 +35,7 @@ This list will continue to grow in the future!
 Installation 
 ============
 
-**Note**: if you have trouble setting up ScaffCC, you can user our [Docker](https://www.docker.com/) image instead. Simply install Docker and run `docker pull epiqc/scaffcc`.
+**Note**: if you have trouble setting up ScaffCC, you can use our [Docker](https://www.docker.com/) image instead. Simply install Docker and run `docker pull epiqc/scaffcc`.
 
 Getting ScaffCC
 ---------------
