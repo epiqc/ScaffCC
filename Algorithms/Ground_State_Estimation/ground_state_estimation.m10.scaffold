@@ -9056,9 +9056,9 @@ module Swap(qbit q1,qbit q2)
 module ControlledRotation(qbit target, qbit control, double theta)   
 {
 	Rz(target, theta / 2.0);
-	CNOT(target, control);
+	CNOT(control, target);
 	Rz(target, -1.0 * theta / 2.0);
-	CNOT(target, control);
+	CNOT(control, target);
 }
 
 // Implement the Y gate defined in the GFIs Y=Rx(-PI/2), we'll name it Y_Rx
@@ -9107,10 +9107,10 @@ module CascadeControlledRotation(qbit reg[M], int p, int q,double theta,qbit con
   int i;
                                                           
   for (i=p;i>q;i--)
-      CNOT(reg[i-1],reg[i]);
+      CNOT(reg[i],reg[i-1]);
   ControlledRotation(reg[q],control,theta);
   for (i=q;i<p;i++)
-      CNOT(reg[i],reg[i+1]);
+      CNOT(reg[i+1],reg[i]);
 }
 
 
@@ -9121,16 +9121,16 @@ module CascadeControlledRotation_pqrs(qbit reg[M], int p, int q,int r, int s, do
 {
   int i;	  			       	   	    	   	  					  	  	      	    
   for (i=p;i>q;i--)
-      CNOT(reg[i-1],reg[i]);
-  CNOT(reg[r],reg[q]);
+      CNOT(reg[i],reg[i-1]);
+  CNOT(reg[p],reg[r]);
   for (i=r;i>s;i--)
-      CNOT(reg[i-1],reg[i]);
+      CNOT(reg[i],reg[i-1]);
   ControlledRotation(reg[s],control,theta);
   for (i=s;i<r;i++)
-      CNOT(reg[i],reg[i+1]);
-  CNOT(reg[r],reg[q]);
+      CNOT(reg[i+1],reg[i]);
+  CNOT(reg[p],reg[r]);
   for (i=q;i<p;i++)
-      CNOT(reg[i],reg[i+1]);
+      CNOT(reg[i+1],reg[i]);
 }
 
 
@@ -9141,12 +9141,12 @@ module CascadeControlledRotation_prq(qbit reg[M], int p, int q,int r, double the
 {
   int i;	  	     	     	    	      	 					  	  	      	    	   		       	   	    	   	  					  	  
   for (i=p;i>r;i--)
-      CNOT(reg[i-1],reg[i]);
-  CNOT(reg[q],reg[r]);
+      CNOT(reg[i],reg[i-1]);
+  CNOT(reg[r],reg[q]);
   ControlledRotation(reg[q],control,theta);
-  CNOT(reg[q],reg[r]);
+  CNOT(reg[r],reg[q]);
   for (i=r;i<p;i++)
-      CNOT(reg[i],reg[i+1]);
+      CNOT(reg[i+1],reg[i]);
 }
 
 // q>p>r
@@ -9155,13 +9155,13 @@ module CascadeControlledRotation_prq(qbit reg[M], int p, int q,int r, double the
 module CascadeControlledRotation_qpr(qbit reg[M], int p, int q,int r, double theta,qbit control)			
 {	 
   int i;	     	     	    	      	 					  	  	      	    	 		      	   	    	   	  					  	  
-  CNOT(reg[p],reg[q]);
+  CNOT(reg[q],reg[p]);
   for (i=p;i>r;i--)
-      CNOT(reg[i-1],reg[i]);
+      CNOT(reg[i],reg[i-1]);
   ControlledRotation(reg[r],control,theta);
   for (i=r;i<p;i++)
-      CNOT(reg[i],reg[i+1]);
-  CNOT(reg[p],reg[q]);
+      CNOT(reg[i+1],reg[i]);
+  CNOT(reg[q],reg[p]);
 }
 
 
@@ -9205,9 +9205,9 @@ module CoulombExchgOperator(qbit reg[M],int p, int q, double theta, qbit control
   ControlledPhase(reg[p],control,theta/2);
   ControlledRotation(reg[q],control,theta);
   ControlledRotation(reg[p],control,theta);
-  CNOT(reg[q],reg[p]);
+  CNOT(reg[p],reg[q]);
   ControlledRotation(reg[q],control,-theta);
-  CNOT(reg[q],reg[p]);
+  CNOT(reg[p],reg[q]);
 }
 
 //Implements controlled version of Number Excitation Operator circuit primitive for the case p>q>r
