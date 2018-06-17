@@ -929,6 +929,8 @@ void GenQASM::genQASM(Function* F)
 	if(fToPrint.find("CNOT") != string::npos) fToPrint = "cx";
 	else if(fToPrint.find("Toffoli.") != string::npos) fToPrint = "ccx";
 	else if(fToPrint.find("H.i") != string::npos) fToPrint = "h";
+	else if(fToPrint.substr(0,2) == "Rx") fToPrint = "rx";
+	else if(fToPrint.substr(0,2) == "Ry") fToPrint = "ry";
 	else if(fToPrint.substr(0,2) == "Rz") fToPrint = "rz";
 	else if(fToPrint.find("S.") != string::npos) fToPrint = "s";
 	else if(fToPrint.find("T.") != string::npos) fToPrint = "t";
@@ -1159,6 +1161,8 @@ bool GenQASM::runOnModule(Module &M) {
 		else if(newName.find("H.i") != string::npos) newName = "H";
 		else if(newName.find("PrepX") != string::npos) newName = "PrepX";
 		else if(newName.find("PrepZ") != string::npos) newName = "PrepZ";
+		else if(newName.substr(0,2) == "Rx") newName = "Rx";
+		else if(newName.substr(0,2) == "Ry") newName = "Ry";
 		else if(newName.substr(0,2) == "Rz") newName = "Rz";
 		else if(newName.find("S.") != string::npos) newName = "S";
 		else if(newName.find("T.") != string::npos) newName = "T";

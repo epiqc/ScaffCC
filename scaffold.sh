@@ -9,13 +9,13 @@ if [ $(echo $PATH | grep ${RKQC_PATH} | wc -l) -eq 0 ]; then
 fi
 
 function show_help {
-    echo "Usage: $0 [-hv] [-rqfRFckdso] [-l #] [-P #] <filename>.scaffold"
+    echo "Usage: $0 [-hv] [-rqfRTFckdso] [-l #] [-P #] <filename>.scaffold"
     echo "    -r   Generate resource estimate (default)"
     echo "    -q   Generate QASM"
     echo "    -f   Generate flattened QASM"
     echo "    -b   Generate OpenQASM"
-    echo "    -R   Disable rotation decomposition"
-    echo "    -T   Disable Toffoli decomposition"
+    echo "    -R   Enable rotation decomposition"
+    echo "    -T   Enable Toffoli decomposition"
     echo "    -l   Levels of recursion to run (default=1)"
     echo "    -P   Set precision of rotation decomposition in decimal digits (default=10)"
     echo "    -F   Force running all steps"
@@ -40,15 +40,15 @@ dryrun=""
 force=0
 purge=1
 res=0
-rot=1
-toff=1
+rot=0
+toff=0
 flat=0
 openqasm=0
 qc=0
 precision=4
 targets=""
 optimize=0
-while getopts "h?vcdfbsFkqroRT:l:P:" opt; do
+while getopts "h?vcdfbsFkqroTRl:P:" opt; do
     case "$opt" in
     h|\?)
         show_help
@@ -74,9 +74,9 @@ while getopts "h?vcdfbsFkqroRT:l:P:" opt; do
         ;;
     r) res=1
         ;;
-    R) rot=0
+    R) rot=1
         ;;
-    T) toff=0
+    T) toff=1
         ;;        
     s) qc=1
         ;;
@@ -123,6 +123,7 @@ if [ ${purge} -eq 1 ]; then
     targets="${targets} purge"
 fi
 
+echo ${1}
 if [ $# -lt 1 ]; then 
     echo "Error: Missing filename argument" 
     show_help 

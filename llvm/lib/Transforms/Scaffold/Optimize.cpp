@@ -1,7 +1,10 @@
 //===- Optimize.cpp - Optimize flattened circuit and produce QASM file-------------------===//
 //
 //                     The LLVM Scaffold Compiler Infrastructure
-//
+//								
+//								Update: June 17 2018
+//										-- Rx Ry have been added in detection stage
+//											Need to handle these cases [unimplemented]
 // This file was created by Scaffold Compiler Working Group
 //===----------------------------------------------------------------------===//
 
@@ -933,6 +936,8 @@ void Optimize::genGateArray(Function* F)
 	else if(fToPrint.find("Fredkin") != string::npos) fToPrint = "Fredkin";
 	else if(fToPrint.find("PrepX") != string::npos) fToPrint = "PrepX";
 	else if(fToPrint.find("PrepZ") != string::npos) fToPrint = "PrepZ";
+	else if(fToPrint.substr(0,2) == "Rx") fToPrint = "Rx";
+	else if(fToPrint.substr(0,2) == "Ry") fToPrint = "Ry";
 	else if(fToPrint.substr(0,2) == "Rz") fToPrint = "Rz";
 	else if(fToPrint.find("S.") != string::npos) fToPrint = "S";
 	else if(fToPrint.find("T.") != string::npos) fToPrint = "T";
@@ -1206,6 +1211,9 @@ void Optimize::optimal_initial(Function * F, vector<string> &B, vector<OpGate> &
         else if(fName.find("S.") !=string::npos){ nxtGate.gateTy = 's';}
         else if(fName.find("T.") !=string::npos){ nxtGate.gateTy = 't';}
         else if(fName.find("Tdag") !=string::npos){ nxtGate.gateTy = 'T';}
+		// Need a new variable representation for rotations in different axes?
+//      else if(fName.substr(0,2) == "Rx"){ nxtGate.gateTy = 'r';}
+//      else if(fName.substr(0,2) == "Ry"){ nxtGate.gateTy = 'r';}
         else if(fName.substr(0,2) == "Rz"){ nxtGate.gateTy = 'r';}
         else if(fName.find("X.") !=string::npos){ nxtGate.gateTy = 'x';}
         else if(fName.find("Z.") !=string::npos){ nxtGate.gateTy = 'z';}

@@ -5161,6 +5161,8 @@ SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I, unsigned Intrinsic) {
   case Intrinsic::Tdag:
   case Intrinsic::S:
   case Intrinsic::Sdag:
+  case Intrinsic::Rx:
+  case Intrinsic::Ry:
   case Intrinsic::Rz:
   case Intrinsic::PrepX:
   case Intrinsic::PrepZ:

@@ -1,0 +1,46 @@
+-------QASM Generation Pass:
+
+module ToffoliImpl_Q_Q_Q ( qbit target , qbit control1 , qbit control2 ,  ) {
+ 	H ( target );
+ 	Tdag ( control1 );
+ 	T ( control2 );
+ 	T ( target );
+ 	CNOT ( control2 , control1 );
+ 	CNOT ( control1 , target );
+ 	Tdag ( control1 );
+ 	CNOT ( target , control2 );
+ 	CNOT ( control1 , control2 );
+ 	Tdag ( control1 );
+ 	Tdag ( control2 );
+ 	T ( target );
+ 	CNOT ( control1 , target );
+ 	S ( control1 );
+ 	CNOT ( target , control2 );
+ 	CNOT ( control2 , control1 );
+ 	H ( target );
+ }
+
+module main (  ) {
+ 	qbit q[3];
+	cbit c[1];
+	X ( q[0] );
+ 	Y ( q[0] );
+ 	Z ( q[0] );
+ 	H ( q[0] );
+ 	T ( q[0] );
+ 	S ( q[0] );
+ 	Tdag ( q[0] );
+ 	Sdag ( q[0] );
+ 	Rx ( q[0] , 3.141590e+00 );
+ 	Ry ( q[0] , 3.141590e+00 );
+ 	Rz ( q[0] , 3.141590e+00 );
+ 	PrepX ( q[0] , 0 );
+ 	PrepZ ( q[0] , 0 );
+ 	c[0] = MeasX ( q[0] );
+ 	c[0] = MeasZ ( q[0] );
+ 	CNOT ( q[0] , q[1] );
+ 	ToffoliImpl_Q_Q_Q ( q[0] , q[1] , q[2] );
+ 	Fredkin ( q[0] , q[1] , q[2] );
+ }
+
+--------End of QASM generation

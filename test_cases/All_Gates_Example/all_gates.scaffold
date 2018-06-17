@@ -1,0 +1,27 @@
+int main () {
+    qbit q[3];
+	cbit c[1];
+
+	X ( q[0] );
+	Y ( q[0] );
+	Z ( q[0] );
+	H ( q[0] );
+	T ( q[0] );
+	S ( q[0] );
+	Tdag ( q[0] );
+	Sdag ( q[0] );
+	Rx ( q[0], 3.14159 );
+	Ry ( q[0], 3.14159 );
+	Rz ( q[0], 3.14159 );
+	PrepX (q[0], 0 );
+	PrepZ (q[0], 0 );
+	c[0] = MeasX ( q[0] );
+	c[0] = MeasZ ( q[0] );
+	
+	CNOT ( q[0], q[1] );
+	Toffoli ( q[0], q[1], q[2] );
+	Fredkin ( q[0], q[1], q[2] );
+
+    return 0;
+}
+

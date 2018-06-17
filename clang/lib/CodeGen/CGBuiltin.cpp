@@ -1485,6 +1485,25 @@ RValue CodeGenFunction::EmitBuiltinExpr(const FunctionDecl *FD,
 
     return RValue::get(Builder.CreateCall2(F, TargetQbit, TargetDouble));
   }
+  case Builtin::BIRx: {
+    Value *TargetQbit = EmitScalarExpr(E->getArg(0));
+    Value *TargetDouble = EmitScalarExpr(E->getArg(1));
+
+    Value *F = CGM.getIntrinsic(Intrinsic::Rx, 
+        llvm::makeArrayRef(TargetQbit -> getType()));
+
+    return RValue::get(Builder.CreateCall2(F, TargetQbit, TargetDouble));
+  }
+  case Builtin::BIRy: {
+    Value *TargetQbit = EmitScalarExpr(E->getArg(0));
+    Value *TargetDouble = EmitScalarExpr(E->getArg(1));
+
+    Value *F = CGM.getIntrinsic(Intrinsic::Ry, 
+        llvm::makeArrayRef(TargetQbit -> getType()));
+
+    return RValue::get(Builder.CreateCall2(F, TargetQbit, TargetDouble));
+  }
+
   case Builtin::BIPrepX: {
     Value *TargetQbit = EmitScalarExpr(E->getArg(0));
     Value *TargetInt = EmitScalarExpr(E->getArg(1));

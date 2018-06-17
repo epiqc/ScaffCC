@@ -31,7 +31,6 @@ static cl::opt<unsigned>
 SqctLevels("sqct-levels", cl::init(1), cl::Hidden,
   cl::desc("The rotation decomposition precision"));
 
-
 namespace {
 	// We need to use a ModulePass in order to create new Functions
 	struct Rotations : public ModulePass {
@@ -69,12 +68,12 @@ namespace {
 					case Intrinsic::Rz:
 						axis = std::string(" Z ");
 						break;
-					case Intrinsic::Rx:
-						axis = std::string(" X ");
-						break;
-					case Intrinsic::Ry:
-						axis = std::string(" Y ");
-						break;
+//					case Intrinsic::Rx:
+//						axis = std::string(" X ");
+//						break;
+//					case Intrinsic::Ry:
+//						axis = std::string(" Y ");
+//						break;
 					default:
 						return;
 				}
@@ -128,11 +127,11 @@ namespace {
 						FuncName, M);
 
 					Function::arg_iterator args = DR->arg_begin(); //set name of variable
+		  			BasicBlock *BB = BasicBlock::Create(getGlobalContext(), "", DR, 0);
 					Value* qArg = args;
 					qArg->setName("q");
 
 					// Create a BasicBlock and insert it at the end of the Function
-					BasicBlock *BB = BasicBlock::Create(getGlobalContext(), "", DR, 0);
 					// Populate the BasicBlock
 					// Build rotation decomposition command
 					std::string buf; std::ostringstream ss2;
@@ -142,15 +141,15 @@ namespace {
 						return;
 					}          
           char *prec = getenv("PRECISION");
-          if (std::string(path).find("gridsynth") != std::string::npos) {
+          if (std::string(path).find("gridsynth") != std::string::npos && axis == " Z " ) {
     			  ss2 << path << " \"(" << std::fixed << Angle << ")\"" << " -d " << prec;          
           }
           else if (std::string(path).find("sqct") != std::string::npos) {
             ss2 << path << " " << Angle << axis << SqctLevels;
           }
           else {
-            errs() << "Invalid rotation decomposer!\n";
-            return;
+            errs() << "Rotation decomposition offline\n.";
+			return;
           }
           
           buf = ss2.str();
@@ -160,7 +159,7 @@ namespace {
           // if basic rotation angle, do not decompose
           //if (Angle == 3.14 || Angle == 1.57 || Angle == 0) 
 					std::string circuit = exec(ss3.str().c_str());
-
+					errs() << "Decomp: " << circuit << "\n";
 					// For each gate in decomposition:
           // (the decomposed string is given in the reverse order that ops must be applied)
 					for (int i=circuit.length()-2; i>=0; i--) {
