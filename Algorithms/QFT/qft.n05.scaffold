@@ -24,9 +24,9 @@ module cT ( qbit ctrl, qbit target ) {
 
 	PhasePi8(ctrl);
 	Rz(target,pi/8);
-	CNOT(target,ctrl);
+	CNOT(ctrl, target);
 	Rz(target,-1*pi/8);
-	CNOT(target,ctrl);	
+	CNOT(ctrl, target);	
 	
 }
 
@@ -40,9 +40,9 @@ module cS ( qbit ctrl, qbit target ) {
 	
 	T(ctrl);
 	Rz(target,pi/4);
-	CNOT(target,ctrl);
+	CNOT(ctrl, target);
 	Rz(target,-1*pi/4);
-	CNOT(target,ctrl);
+	CNOT(ctrl, target);
 	
 }
 
@@ -55,9 +55,9 @@ module cRz ( qbit ctrl, qbit target, const double angle ) {
     */
 
 	Rz(target,-1*angle/2);
-	CNOT(target,ctrl);
+	CNOT(ctrl, target);
 	Rz(target,angle/2);
-	CNOT(target,ctrl);
+	CNOT(ctrl, target);
 	
 }
 
