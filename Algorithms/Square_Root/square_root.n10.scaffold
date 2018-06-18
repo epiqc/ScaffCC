@@ -6,7 +6,6 @@
  *
  * February 2013
  *
- * Modification June 2018 to swap CNOT/Toffoli args to (control..., target)
  *****************************************************************************/
 
 #include <math.h>
@@ -44,10 +43,8 @@ void diffuse(qbit q[n]) {
   // forall(j=0; j<n-1; j++) PrepZ(x[j]);
   for(j=0; j<n-1; j++) PrepZ(x[j],0);
   
-  // Toffoli(x[0], q[1], q[0]);
   Toffoli(q[1], q[0], x[0]);
   for(j = 1; j < n-1; j++)
-    // Toffoli(x[j], x[j-1], q[j+1]);
     Toffoli(x[j-1], q[j+1], x[j]);
   
   // Phase flip conditioned on x[n-2]
@@ -55,9 +52,7 @@ void diffuse(qbit q[n]) {
 
   // Undo the local registers
   for(j = n-2; j > 0; j--)
-    // Toffoli(x[j], x[j-1], q[j+1]);
     Toffoli(x[j-1], q[j+1], x[j]);
-  // Toffoli(x[0], q[1], q[0]);
   Toffoli(q[1], q[0], x[0]);
    
   // Restore q
@@ -92,16 +87,12 @@ void EQxMark(qbit b[n], qbit t[1], int tF) {
   // No forall yet
   // forall(j=0; j<n-1; j++) PrepZ(x[j]);
   for(j=0; j<n-1; j++) PrepZ(x[j],0);
-  // Toffoli(x[0], b[1], b[0]);
   Toffoli(b[1], b[0], x[0]);
   for(j = 1; j < n-1; j++)
-    // Toffoli(x[j], x[j-1], b[j+1]);
     Toffoli(x[j-1], b[j+1], x[j]);
   
   // Either return result in t or Phase flip conditioned on x[n-2]
   if(tF!=0) {
-    // control and target swapped to conform with new protocol
-    // CNOT(t[0], x[n-2]); // Returns result in t
     CNOT(x[n-2], t[0]); // Returns result in t
   }
   else {
@@ -110,9 +101,7 @@ void EQxMark(qbit b[n], qbit t[1], int tF) {
 
   // Undo the local registers
   for(j = n-2; j > 0; j--)
-    // Toffoli(x[j], x[j-1], b[j+1]);
     Toffoli(x[j-1], b[j+1], x[j]);
-  // Toffoli(x[0], b[1], b[0]);
   Toffoli(b[1], b[0], x[0]); 
    
   // Restore b
@@ -137,8 +126,6 @@ void Sqr(qbit a[n], qbit b[n]) {
   // forall(i=0; i<=(n-1)/2; i++) {
   for(i=0; i<=(n-1)/2; i++) {
     k = 2*i;
-    // control and target swapped to conform with new protocol
-    // CNOT(b[k], a[i]);
     CNOT(a[i], b[k]);
   }
 
@@ -147,9 +134,6 @@ void Sqr(qbit a[n], qbit b[n]) {
   // Or perhaps it is okay to just replace the for with a forall.
   for(i=(n+1)/2; i<n; i++) {
     k = (2*i)-n;
-    // control and target swapped to conform with new protocol
-    // CNOT(b[k],   a[i]); 
-    // CNOT(b[k+1], a[i]); 
     CNOT(a[i], b[k]); 
     CNOT(a[i], b[k+1]);
   }
