@@ -212,8 +212,8 @@ To see a list of compiler options which can be passed as flags, run:
         -q   Generate QASM
         -f   Generate flattened QASM
         -b   Generate OpenQASM
-        -R   Disable rotation decomposition
-        -T   Disable Toffoli decomposition
+        -R   Enable rotation decomposition
+        -T   Enable Toffoli decomposition
         -l   Levels of recursion to run (default=1)
         -P   Set precision of rotation decomposition in decimal digits (default=10)
         -F   Force running all steps
