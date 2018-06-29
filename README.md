@@ -15,9 +15,9 @@ Release Information
 Current Release
 ---------------
 
--   Version 3.1
+-   Version 4.0
 
--   Release Date: February, 2018
+-   Release Date: June 28, 2018
 
 Supported Operating Systems
 ---------------------------
