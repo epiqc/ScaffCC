@@ -1,3 +1,6 @@
+***Important Note:*** starting with version 4.0, the argument orders of `CNOT` and `Toffoli` have been changed and standardized to `CNOT(control, target)` and `Toffoli(control1, control2, target)` respectively. Previously, the target argument was first. All of the benchmarks (in [Algorithms/](https://github.com/epiqc/ScaffCC/tree/master/Algorithms)) now conform to the new ordering. 
+
+
 What Is ScaffCC?
 ================
 ScaffCC is a compiler and scheduler for the Scaffold programing language. It is written using the LLVM open-source infrastructure. It is for the purpose of writing and analyzing code for quantum computing applications.
