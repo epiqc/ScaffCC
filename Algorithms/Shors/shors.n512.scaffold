@@ -2,8 +2,8 @@
 //Input x -> H -> f(x) -> iQFT
 //f(x) = a^x mod N
 
-// Optimized implementation as described in 		 	 	 		
-// http://arxiv.org/pdf/1207.0511v5.pdf			
+// Optimized implementation as described in
+// http://arxiv.org/pdf/1207.0511v5.pdf
 // Quantum Information and Computation, Vol. 14, No. 7&8 (2014) 0649–0682
 
 #include <math.h>
@@ -40,17 +40,17 @@
 
 
 module swap (qbit a, qbit b) {
-	CNOT(a, b);
 	CNOT(b, a);
 	CNOT(a, b);
+	CNOT(b, a);
 }
 
 module cRz (qbit ctrl, qbit target, double angle) {
 
 	Rz (target, angle/2);
-	CNOT (target, ctrl);
+	CNOT (ctrl, target);
 	Rz (target, -1*angle/2);
-	CNOT (target, ctrl);
+	CNOT (ctrl, target);
 }
 
 module ccRz (qbit ctrl1, qbit ctrl2, qbit target, double angle)
@@ -58,9 +58,9 @@ module ccRz (qbit ctrl1, qbit ctrl2, qbit target, double angle)
   // doubly - controlled Rz circuit with angle
   // decompose in terms of V = sqrt(U)
   cRz (ctrl2, target, angle/2);
-  CNOT (ctrl2, ctrl1);
+  CNOT (ctrl1, ctrl2);
   cRz (ctrl1, target, -angle/2);
-  CNOT (ctrl2, ctrl1);
+	CNOT (ctrl1, ctrl2);
   cRz (ctrl1, target, angle/2);
 }
 
@@ -89,7 +89,7 @@ module iQFT (qbit x[]){
     }
     H(x[i]);
   }
-  // TODO: swaps for reordering    
+  // TODO: swaps for reordering
 }
 
 
@@ -98,7 +98,7 @@ module iQFT (qbit x[]){
 module QFT_2 (qbit x0[], qbit x1[]) {
   int i, j;
   double angle = 0.0;
-  
+
   // the first register
   for (i=0; i<_n; i++){
     H(x0[i]);
@@ -128,7 +128,7 @@ module QFT_2 (qbit x0[], qbit x1[]) {
 module iQFT_2 (qbit x0[], qbit x1[]){
   int i, j;
   double angle = 0.0;
-  
+
   // the second register
   for (i=_n-1; i>=0; i--){
     for (j=_n-1; j>i; j--) {
@@ -137,7 +137,7 @@ module iQFT_2 (qbit x0[], qbit x1[]){
     }
     H(x1[i]);
   }
-  
+
   // the first register
   for (i=_n-1; i>=0; i--){
     for (j=_n-1; j>=0; j--) {
@@ -150,8 +150,8 @@ module iQFT_2 (qbit x0[], qbit x1[]){
     }
     H(x0[i]);
   }
-  
-  // TODO: swaps for reordering    
+
+  // TODO: swaps for reordering
 }
 
 
@@ -163,11 +163,11 @@ module QADD_2 (qbit R0[], qbit R2[])
   double angle = 0.0;
 
   for(j=0; j<_n; j++){
-    angle = angle_A_N[j]; 
+    angle = angle_A_N[j];
     Rz(R0[j],angle);
   }
   for(j=0; j<_n; j++){
-    angle = angle_A_N[j+_n]; 
+    angle = angle_A_N[j+_n];
     Rz(R2[j],angle);
   }
 }
@@ -179,11 +179,11 @@ module iQADD_2 (qbit R0[], qbit R2[])
   double angle = 0.0;
 
   for(j=_n-1; j>=0; j--){
-    angle = -angle_A_N[j+_n]; 
+    angle = -angle_A_N[j+_n];
     Rz(R2[j],angle);
   }
   for(j=_n-1; j>=0; j--){
-    angle = -angle_A_N[j]; 
+    angle = -angle_A_N[j];
     Rz(R0[j],angle);
   }
 }
@@ -192,7 +192,7 @@ module CQADD_1 (qbit ctrl, qbit target[])
 {
   int j = 0;
   double angle = 0.0;
-  
+
   for(j=0; j<_n; j++){
     angle = angle_A_1[j]; //compute angle of rotation
     cRz(ctrl,target[j],angle);
@@ -203,7 +203,7 @@ module iCQADD_1 (qbit ctrl, qbit target[])
 {
   int j = 0;
   double angle = 0.0;
-  
+
   for(j=_n-1; j>=0; j--){
     angle = -angle_A_1[j]; //compute angle of rotation
     cRz(ctrl,target[j],angle);
@@ -215,7 +215,7 @@ module CQADD_dc (qbit ctrl, qbit target[])
 {
   int j = 0;
   double angle = 0.0;
-  
+
   for(j=0; j<_n; j++){
     angle = angle_A_dc[j]; //compute angle of rotation
     cRz(ctrl,target[j],angle);
@@ -226,7 +226,7 @@ module iCQADD_dc (qbit ctrl, qbit target[])
 {
   int j = 0;
   double angle = 0.0;
-  
+
   for(j=_n-1; j>=0; j--){
     angle = -angle_A_dc[j]; //compute angle of rotation
     cRz(ctrl,target[j],angle);
@@ -252,7 +252,7 @@ module QADDn( qbit a[],     // n bits
   // lower bits
   for (i=_n-1; i>=0; i--) {
     for (j=i; j<_n; j++) {
-      angle = angle_R [j-i+1]; 
+      angle = angle_R [j-i+1];
       cRz (a[i], b[j], angle);
     }
   }
@@ -271,7 +271,7 @@ module iQADDn( qbit a[],     // n bits
   // lower bits
   for (i=0; i<_n; i++) {
     for (j=_n-1; j>=i; j--) {
-      angle = -angle_R [j-i+1]; 
+      angle = -angle_R [j-i+1];
       cRz (a[i], b[j], angle);
     }
   }
@@ -280,8 +280,8 @@ module iQADDn( qbit a[],     // n bits
 
 // multiplier-accumulator (refer to Fig.11b and Fig.12 in paper)
 // parallel version with 8n depth
-// Is this parallelized? 
-module QMAC_a(qbit ctrl, 
+// Is this parallelized?
+module QMAC_a(qbit ctrl,
               qbit x[],               // size n
               // b is divided into two registers of size n
               qbit R10[], // size n
@@ -289,7 +289,7 @@ module QMAC_a(qbit ctrl,
               )
 {
   double angle = 0.0;
-  int i=0; 
+  int i=0;
   int j=0;
   int l=0;
 
@@ -312,20 +312,20 @@ module QMAC_a(qbit ctrl,
 
   //CNOTs
   for(i=0; i<_n; i++)
-    CNOT(x[i], ctrl);
+    CNOT(ctrl, x[i]);
 
 
   // V_dagger section
   for(l=0; l<_n; l++){
     for(i=0; i<_n; i++){
-      j = (l-i)%_n; 
+      j = (l-i)%_n;
       angle = -angle_V_a[l][j];
       cRz(x[j], R10[l], angle);
     }
   }
   for(l=0; l<_n; l++){
     for(i=0; i<_n; i++){
-      j = (l+_n-i)%_n; 
+      j = (l+_n-i)%_n;
       angle = -angle_V_a[l+_n][j];
       cRz(x[j], R20[l], angle);
     }
@@ -334,7 +334,7 @@ module QMAC_a(qbit ctrl,
 
   //CNOTs
   for(i=0; i<_n; i++)
-    CNOT(x[i], ctrl);
+    CNOT(ctrl, x[i]);
 
 
   // W section
@@ -346,11 +346,11 @@ module QMAC_a(qbit ctrl,
     angle = angle_W_a[l+_n];
     cRz(ctrl, R20[l], angle);
   }
-  
+
 }
 
 
-module iQMAC_a(qbit ctrl, 
+module iQMAC_a(qbit ctrl,
               qbit x[],               // size n
               // b is divided into two registers of size n
               // which are again divided into two of size t and n-t
@@ -359,13 +359,13 @@ module iQMAC_a(qbit ctrl,
               )
 {
   double angle = 0.0;
-  int i=0; 
+  int i=0;
   int j=0;
   int l=0;
 
   // More parallel version of above with O(n) depth
-  // Is this parallelized? 
-  
+  // Is this parallelized?
+
   // W section
   for(l=_n-1; l>=0; l--) {
     angle = -angle_W_a[l+_n];
@@ -379,7 +379,7 @@ module iQMAC_a(qbit ctrl,
 
   //CNOTs
   for(i=_n-1; i>=0; i--)
-    CNOT(x[i], ctrl);
+    CNOT(ctrl, x[i]);
 
 
   // V_dagger section
@@ -401,7 +401,7 @@ module iQMAC_a(qbit ctrl,
 
   //CNOTs
   for(i=_n-1; i>=0; i--)
-    CNOT(x[i], ctrl);
+    CNOT(ctrl, x[i]);
 
 
   // V section
@@ -426,8 +426,8 @@ module iQMAC_a(qbit ctrl,
 
 // multiplier-accumulator (refer to Fig.11b and Fig.12 in paper)
 // parallel version with 8n depth
-// Is this parallelized? 
-module QMAC_N(qbit ctrl, 
+// Is this parallelized?
+module QMAC_N(qbit ctrl,
               qbit x[],               // size n
               // b is divided into two registers of size n
               qbit R10[], // size n
@@ -435,7 +435,7 @@ module QMAC_N(qbit ctrl,
               )
 {
   double angle = 0.0;
-  int i=0; 
+  int i=0;
   int j=0;
   int l=0;
 
@@ -458,20 +458,20 @@ module QMAC_N(qbit ctrl,
 
   //CNOTs
   for(i=0; i<_n; i++)
-    CNOT(x[i], ctrl);
+    CNOT(ctrl, x[i]);
 
 
   // V_dagger section
   for(l=0; l<_n; l++){
     for(i=0; i<_n; i++){
-      j = (l-i)%_n; 
+      j = (l-i)%_n;
       angle = -angle_V_N[l][j];
       cRz(x[j], R10[l], angle);
     }
   }
   for(l=0; l<_n; l++){
     for(i=0; i<_n; i++){
-      j = (l+_n-i)%_n; 
+      j = (l+_n-i)%_n;
       angle = -angle_V_N[l+_n][j];
       cRz(x[j], R20[l], angle);
     }
@@ -480,7 +480,7 @@ module QMAC_N(qbit ctrl,
 
   //CNOTs
   for(i=0; i<_n; i++)
-    CNOT(x[i], ctrl);
+    CNOT(ctrl, x[i]);
 
 
   // W section
@@ -492,11 +492,11 @@ module QMAC_N(qbit ctrl,
     angle = angle_W_N[l+_n];
     cRz(ctrl, R20[l], angle);
   }
-  
+
 }
 
 
-module iQMAC_N(qbit ctrl, 
+module iQMAC_N(qbit ctrl,
               qbit x[],               // size n
               // b is divided into two registers of size n
               // which are again divided into two of size t and n-t
@@ -505,13 +505,13 @@ module iQMAC_N(qbit ctrl,
               )
 {
   double angle = 0.0;
-  int i=0; 
+  int i=0;
   int j=0;
   int l=0;
 
   // More parallel version of above with O(n) depth
-  // Is this parallelized? 
-  
+  // Is this parallelized?
+
   // W section
   for(l=_n-1; l>=0; l--) {
     angle = -angle_W_N[l+_n];
@@ -525,7 +525,7 @@ module iQMAC_N(qbit ctrl,
 
   //CNOTs
   for(i=_n-1; i>=0; i--)
-    CNOT(x[i], ctrl);
+    CNOT(ctrl, x[i]);
 
 
   // V_dagger section
@@ -547,7 +547,7 @@ module iQMAC_N(qbit ctrl,
 
   //CNOTs
   for(i=_n-1; i>=0; i--)
-    CNOT(x[i], ctrl);
+    CNOT(ctrl, x[i]);
 
 
   // V section
@@ -575,16 +575,16 @@ module iQMAC_N(qbit ctrl,
 // Circuit Width = 7n+1 qubits
 // Figures 13 & 14 & 18
 // In this case, divisor d = _N always.
-module GMQDIV2( 
+module GMQDIV2(
                // dividend z at the start of computation (2*_n qubits)
                qbit Reg00[_n],   // lower bits: l bits
                qbit Reg10[_n]   // lower bits: l bits
                )
 {
   // quotient q at the end of computation (n qubits)
-  qbit Reg2[_n];    // n bits   
+  qbit Reg2[_n];    // n bits
 
-  // ancilla qubits  
+  // ancilla qubits
   qbit Reg3[_n];   // ancilla -- q1
   qbit Reg4[_n];   // ancilla -- n2, n2+n1, n2, 0, n1, 0
   qbit Reg51[_n];
@@ -594,7 +594,7 @@ module GMQDIV2(
 
   // loop variable
   int i;
-  
+
   // -------------------- Compute (fig. 13) ------------------------/
 
   // SLL(HIGH(z),n-l) --> Reg0[0 .. l-1] |  Reg5[0 .. n-l-1]
@@ -608,11 +608,11 @@ module GMQDIV2(
   // SRL(LOW(z), l) --> Reg1[l .. n-1] | Reg5[n-l .. n-1]
   // Reg4[0 .. n-1]
   QADDn(Reg51, Reg4);
-  
+
   iQFT(Reg6);
-  
-  // CNOT(target, control)
-  CNOT(Aqbit[0], Reg6[_n-1]);
+
+  // CNOT(control, target)
+  CNOT(Reg6[_n-1], Aqbit[0]);
 
   CQADD_1(Aqbit[0], Reg4);
 
@@ -621,19 +621,19 @@ module GMQDIV2(
   CQADD_dc(Aqbit[0], Reg6);
 
   iQFT(Reg6);
-   
+
   // Reg6[n]|Reg51[l]
-  QFT_2(Reg6, Reg51); 
+  QFT_2(Reg6, Reg51);
 
   iQFT(Reg4);
-  
+
   //FIXME: code me (algorithm does not show control signal)
   //QMAC_mdash();
 
   iQFT_2(Reg6, Reg51);
 
   for (i=0; i<_n ; i++) {
-    CNOT(Reg2[_n-_n+i], Reg51[i]);
+    CNOT(Reg51[i], Reg2[_n-_n+i]);
   }
 
   QFT(Reg2);
@@ -647,7 +647,7 @@ module GMQDIV2(
   QFT_2(Reg10, Reg00);
 
   for (i=0; i<_n; i++)
-    CNOT(Reg3[i], Reg2[i]);
+    CNOT(Reg2[i], Reg3[i]);
 
   // FIXME: code me
   //QMAC(, -_N);
@@ -682,18 +682,18 @@ module GMQDIV2(
   iQFT(Reg3);
 
   for (i=0; i<_n; i++) {
-    CNOT(Reg3[i], Reg51[i]);
+    CNOT(Reg51[i], Reg3[i]);
   }
 
-  QFT_2(Reg6, Reg51); 
-  
+  QFT_2(Reg6, Reg51);
+
   //FIXME: code me
   //QMAC_mdash();
 
   iQFT_2(Reg6, Reg51);
 
   QFT(Reg4);
-  
+
   iCQADD_1(Aqbit[0], Reg4);
 
   QFT(Reg6);
@@ -709,11 +709,11 @@ module GMQDIV2(
   QADDn(Reg10, Reg6);
 
   iQFT(Reg6);
-  
+
   // SLL(LOW(z),n-l) --> Reg1[0 .. l-1] | Reg5[0 .. n-l-1]
   // Reg6[0 .. n-1]
   iQADDn(Reg10, Reg4);
-  
+
   iQFT(Reg4);
 
   QFT(Reg4);
@@ -723,7 +723,7 @@ module GMQDIV2(
   iQADDn(Reg10, Reg4);
 
   iQFT(Reg4);
-  
+
   QFT_2(Reg10, Reg00);
 
   // FIXME: code me
@@ -734,7 +734,7 @@ module GMQDIV2(
 }
 
 
-module iGMQDIV2( 
+module iGMQDIV2(
                // dividend z at the start of computation (2*_n qubits)
                qbit Reg00[_n],   // lower bits: l bits
                qbit Reg10[_n]   // lower bits: l bits
@@ -742,23 +742,23 @@ module iGMQDIV2(
 {
 
   // quotient q at the end of computation (n qubits)
-  qbit Reg2[_n];    // n bits   
+  qbit Reg2[_n];    // n bits
 
-  // ancilla qubits  
+  // ancilla qubits
   qbit Reg3[_n];   // ancilla -- q1
   qbit Reg4[_n];   // ancilla -- n2, n2+n1, n2, 0, n1, 0
   qbit Reg51[_n];
   qbit Reg6[_n]; // ancilla -- LOW(m'(n2+n1)+nadj)
-  qbit Aqbit[1]; // ancilla - sign(n1)  
+  qbit Aqbit[1]; // ancilla - sign(n1)
   qbit anc[1];
 
   // loop variable
   int i;
 
-  
+
   //------------------------- UnCompute (fig. 14) ------------------------/
 
-  QFT_2(Reg10, Reg00);  
+  QFT_2(Reg10, Reg00);
 
   // FIXME: code me
   //iQMAC(, -_N);
@@ -802,10 +802,10 @@ module iGMQDIV2(
   //FIXME: code me
   //iQMAC_mdash();
 
-  iQFT_2(Reg6, Reg51); 
+  iQFT_2(Reg6, Reg51);
 
   for (i=_n-1; i>=0; i--) {
-    CNOT(Reg3[i], Reg51[i]);
+    CNOT(Reg51[i], Reg3[i]);
   }
 
   QFT(Reg3);
@@ -813,7 +813,7 @@ module iGMQDIV2(
   iCQADD_1(Aqbit[0], Reg3);
 
   iQADDn(Reg3, Reg4);
-  
+
   iQFT(Reg3);
 
   // -------------------- Compute (fig. 13) ------------------------/
@@ -840,7 +840,7 @@ module iGMQDIV2(
   //iQMAC(, -_N);
 
   for (i=_n-1; i>=0; i--)
-    CNOT(Reg3[i], Reg2[i]);
+    CNOT(Reg2[i], Reg3[i]);
 
   iQFT_2(Reg10, Reg00);
 
@@ -853,7 +853,7 @@ module iGMQDIV2(
   iQFT(Reg2);
 
   for (i=_n-1; i>=0 ; i--) {
-    CNOT(Reg2[_n-_n+i], Reg51[i]);
+    CNOT(Reg51[i], Reg2[_n-_n+i]);
   }
 
   QFT_2(Reg6, Reg51);
@@ -864,7 +864,7 @@ module iGMQDIV2(
   QFT(Reg4);
 
   // Reg6[n]|Reg51[l]
-  iQFT_2(Reg6, Reg51); 
+  iQFT_2(Reg6, Reg51);
 
   QFT(Reg6);
 
@@ -874,8 +874,8 @@ module iGMQDIV2(
 
   iCQADD_1(Aqbit[0], Reg4);
 
-  // CNOT(target, control)
-  CNOT(Aqbit[0], Reg6[_n-1]);
+  // CNOT(control, target)
+  CNOT(Reg6[_n-1], Aqbit[0]);
 
   QFT(Reg6);
 
@@ -890,7 +890,7 @@ module iGMQDIV2(
   // SLL(HIGH(z),n-l) --> Reg0[0 .. l-1] |  Reg5[0 .. n-l-1]
   // Reg4[0 .. n-1]
   iQADDn(Reg00, Reg4);
-  
+
 }
 
 
@@ -898,15 +898,15 @@ module iGMQDIV2(
 
 // Optimized controlled modular multiplier/accumulator (Fig. 19)
 // 4n+1 qubits + 5n+1 ancillas
-module QMAC_MOD2 (qbit ctrl, 
-                  qbit y[_n], 
+module QMAC_MOD2 (qbit ctrl,
+                  qbit y[_n],
                   qbit R10[_n],
                   qbit R20[_n],
                   qbit R30[_n]
                   )
 {
   int i = 0;
- 
+
   QFT_2(R20, R10);
 
   QMAC_a(ctrl, y, R10, R20);
@@ -916,10 +916,10 @@ module QMAC_MOD2 (qbit ctrl,
   GMQDIV2(R20, R10); // only GMQDIV2 with parameter _N is used
 
   for (i=0; i<_n; i++)
-    CNOT(R30[i], R10[i]);
+    CNOT(R10[i], R30[i]);
 
   iGMQDIV2(R20, R10); // only iGMQDIV2 with parameter _N is used
-  
+
   QFT_2(R20, R30);
 
   iQMAC_a(ctrl, y, R20, R30);
@@ -928,16 +928,16 @@ module QMAC_MOD2 (qbit ctrl,
 
 }
 
-module iQMAC_MOD2 (qbit ctrl, 
-                  qbit y[_n], 
+module iQMAC_MOD2 (qbit ctrl,
+                  qbit y[_n],
                   qbit R10[_n],
                   qbit R20[_n],
                   qbit R30[_n])
 {
   int i = 0;
- 
+
   QFT_2(R20, R30);
-  
+
   QMAC_a(ctrl, y, R20, R30);
 
   iQFT_2(R20, R30);
@@ -945,8 +945,8 @@ module iQMAC_MOD2 (qbit ctrl,
   GMQDIV2(R20, R10);
 
   for (i=_n-1; i>=0; i--)
-    CNOT(R30[i], R10[i]);
-  
+    CNOT(R10[i], R30[i]);
+
   iGMQDIV2(R20, R10);
 
   QFT_2(R20, R10);
@@ -954,7 +954,7 @@ module iQMAC_MOD2 (qbit ctrl,
   iQMAC_a(ctrl, y, R10, R20);
 
   iQFT_2(R20, R10);
-  
+
 }
 
 // Optimized controlled modular multiplier (Fig. 20) -- specialized a=_a and N=_N
@@ -964,7 +964,7 @@ module CU(qbit ctrl, qbit x[_n], int k)
 {
   //Compute U^(2^k) = a^(2^k) mod N
 
-  //Uf = a^x mod N. 
+  //Uf = a^x mod N.
   //When x is expressed in binary as x[n-1]:x[n-2]:...:x[1]:x[0],
   //a^x mod N = PRODUCT{a^(2^(k)*x[k]}, where k goes from 0 to (n-1)
 
@@ -979,7 +979,7 @@ module CU(qbit ctrl, qbit x[_n], int k)
   for (i=0; i<_n; i++){
     PrepZ(R10[i], 0);
     PrepZ(R20[i], 0);
-    PrepZ(R30[i], 0);  
+    PrepZ(R30[i], 0);
   }
 
   // QMAC_MOD2 is only used in the overall design with (_a, _N) as parameters
@@ -988,13 +988,13 @@ module CU(qbit ctrl, qbit x[_n], int k)
   for (i=0; i<_n; i++) {
     //Fredkin(x[i], R10[i], ctrl);
     // Fredkin decomposition (J. A. Smolin and D. P. DiVincenzo, Phys. Rev. A, 53, 2855 (1996).)
-    CNOT(R10[i], ctrl);
-    Toffoli(x[i], R10[i], ctrl);
-    CNOT(R10[i], ctrl);
+    CNOT(ctrl, R10[i]);
+    Toffoli(ctrl, x[i], R10[i]);
+    CNOT(ctrl, R10[i]);
   }
 
   iQMAC_MOD2(ctrl, x, R10, R20, R30);
-  
+
 }
 
 
@@ -1015,16 +1015,16 @@ module RotBy(qbit q, int k, int neg)
 module CRinv(qbit ctrl, qbit q, int k) //Controlled RotBy
 {
   RotBy(q,k-1, -1); //SP: negative angle
-  CNOT(q, ctrl);  // ajavadia: changed order of ctrl and target
+  CNOT(ctrl, q);
   RotBy(q,k-1, 1); //positive angle
-  CNOT(q, ctrl);
+  CNOT(ctrl, q);
 }
 
 module AQFT(qbit x[_n_upper], qbit y[_n])
 {
     cbit measBits[_n_upper];
     int i = 0, j = 0;
-    
+
     for(i=0; i<_n_upper; i++)
         H(x[i]);
 
@@ -1038,7 +1038,7 @@ module AQFT(qbit x[_n_upper], qbit y[_n])
                 CRinv(x[j], x[i], j-i+1);
         H(x[i]);
     }
-    
+
     for(i=0; i<_n_upper; i++)
         measBits[i] = MeasZ(x[i]);
 }
@@ -1047,9 +1047,8 @@ int main()
 {
     qbit x[_n_upper];
     qbit y[_n];
-     
+
     AQFT(x,y); //Implement AQFT
 
     return 0;
 }
-
