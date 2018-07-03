@@ -1,4 +1,4 @@
-***Important Note:*** starting with version 4.0, the argument orders of `CNOT` and `Toffoli` have been changed and standardized to `CNOT(control, target)` and `Toffoli(control1, control2, target)` respectively. Previously, the target argument was first. All of the benchmarks (in [Algorithms/](https://github.com/epiqc/ScaffCC/tree/master/Algorithms)) now conform to the new ordering. 
+***Important Note:*** starting with version 4.0, the argument orders of `CNOT` and `Toffoli` have been changed and standardized to `CNOT(control, target)` and `Toffoli(control1, control2, target)` respectively. Previously, the target argument was first. All of the benchmarks (in [Algorithms/](https://github.com/epiqc/ScaffCC/tree/master/Algorithms)) now conform to the new ordering. Also starting with version 4.0, rotation decomposition and Toffoli decomposition are disabled by default. They can be enabled with the `-R` and `-T` flags.
 
 
 What Is ScaffCC?
