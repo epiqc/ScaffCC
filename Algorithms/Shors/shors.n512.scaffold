@@ -1015,7 +1015,7 @@ module RotBy(qbit q, int k, int neg)
 module CRinv(qbit ctrl, qbit q, int k) //Controlled RotBy
 {
   RotBy(q,k-1, -1); //SP: negative angle
-  CNOT(ctrl, q);  // ajavadia: changed order of ctrl and target
+  CNOT(ctrl, q);
   RotBy(q,k-1, 1); //positive angle
   CNOT(ctrl, q);
 }
