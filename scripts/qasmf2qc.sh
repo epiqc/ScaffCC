@@ -1,12 +1,12 @@
 #!/bin/bash
-#Shell script that converts .qasmf files to .qc files, 
+#Shell script that converts .qasmf files to .qc files,
 #which are compatible with the QX simulator.
 #
 # qubits #
 # qubit a0 -> map q0, a0
 # cbit ma0 -> map b0, ma0
-# CNOT a0, a1 -> cnot a1, a0
-# Toffoli a0, a1, a2 -> toffoli a1, a2, a0
+# CNOT a0, a1 -> cnot a0, a1
+# Toffoli a0, a1, a2 -> toffoli a0, a1, a2
 # MeasZ a0 -> measure a0
 
 
@@ -48,7 +48,7 @@ declare -A labels #associative array requires bash 4.0 or above
 while read LINE
 do
   case $LINE in
-    $qubit) 
+    $qubit)
       # initialize qubits
       echo "${LINE/qubit /map q$count, }" >> $init_file
       labels["${LINE#$q_pre}"]=$count #labels["a0"]=0
@@ -63,13 +63,13 @@ do
     $cnot)
       # cnot gate
       arrIn=(${LINE/,/ })
-      echo "cnot ${arrIn[2]}, ${arrIn[1]}" >> $file
-    ;; 
+      echo "cnot ${arrIn[1]}, ${arrIn[2]}" >> $file
+    ;;
     $toffoli)
       # toffoli gate
       arrIn=(${LINE//,/ })
-      echo "toffoli ${arrIn[2]}, ${arrIn[3]}, ${arrIn[1]}" >> $file
-    ;; 
+      echo "toffoli ${arrIn[1]}, ${arrIn[2]}, ${arrIn[3]}" >> $file
+    ;;
     $measZ)
       # measurement
       echo "${LINE/MeasZ/measure}" >> $file
@@ -83,14 +83,14 @@ do
       echo "Stopped: Gate not supported (MeasX or PrepX)!"
       err=1
     ;;
-    *) 
+    *)
       echo $LINE >> $file
     ;;
   esac
 done
 
 if [ "$err" -ne 0 ];
-  then 
+  then
     rm "$file"
     echo "No file generated."
   else
@@ -101,4 +101,3 @@ if [ "$err" -ne 0 ];
 fi
 fi
 exec 0<&10 10<&-
-
