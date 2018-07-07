@@ -11,7 +11,7 @@ module CNOTLadder(qbit reg[N], int controlStartIndex, int controlStopIndex) {
   // Table A1 of Whitfield et al 2010
   int delta = controlStopIndex > controlStartIndex ? 1 : -1;
   for (int index = controlStartIndex;; index += delta) {
-    CNOT(reg[index], reg[index + 1]);
+    CNOT(reg[index], reg[index - 1]);
     if (index == controlStopIndex)
       break;
   }
