@@ -6,7 +6,7 @@ module PhasePi8 ( qbit bit ) {
        [ [ 1 0    ]
          [ 0 e^i*pi/8 ] ]
 
-	Notes: Can be decomposed as Rz(-pi/8)*[ [e^i*pi/16 0] 
+	Notes: Can be decomposed as Rz(-pi/8)*[ [e^i*pi/16 0]
 											[0 e^i*pi/16] ]
 
 	 */
@@ -26,8 +26,8 @@ module cT ( qbit ctrl, qbit target ) {
 	Rz(target,pi/8);
 	CNOT(ctrl, target);
 	Rz(target,-1*pi/8);
-	CNOT(ctrl, target);	
-	
+	CNOT(ctrl, target);
+
 }
 
 module cS ( qbit ctrl, qbit target ) {
@@ -37,13 +37,13 @@ module cS ( qbit ctrl, qbit target ) {
          [ 0 0 1 0 ]
          [ 0 0 0 i ] ]
     */
-	
+
 	T(ctrl);
 	Rz(target,pi/4);
 	CNOT(ctrl, target);
 	Rz(target,-1*pi/4);
 	CNOT(ctrl, target);
-	
+
 }
 
 module cRz ( qbit ctrl, qbit target, const double angle ) {
@@ -54,11 +54,12 @@ module cRz ( qbit ctrl, qbit target, const double angle ) {
          [ 0 0 0 				e^(i*angle/2) ] ]
     */
 
+    Rz(ctrl, angle/2);
+    Rz(target,angle/2);
+  	CNOT(ctrl, target);
 	Rz(target,-1*angle/2);
 	CNOT(ctrl, target);
-	Rz(target,angle/2);
-	CNOT(ctrl, target);
-	
+
 }
 
 
@@ -91,9 +92,7 @@ int main () {
     qft5( reg );
     for ( i = 0; i < 5; i++ ) {
 	H(reg[i]);
-        out[i] = MeasZ( reg[i] );
+//        out[i] = MeasZ( reg[i] );
     }
     return 0;
 }
-
-
