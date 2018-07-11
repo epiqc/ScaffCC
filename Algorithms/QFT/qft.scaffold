@@ -1,0 +1,42 @@
+#include <math.h>
+#define pi 3.141592653589793238462643383279502884197
+
+#define n 5
+
+module cRz ( qbit ctrl, qbit target, const double angle ) {
+	/* cRz identity matrix:
+		[ [ 1 0 0 0 ]
+			[ 0 1 0 0 ]
+			[ 0 0 e^(-i*angle/2) 0 ]
+			[ 0 0 0 e^(i*angle/2) ] ]
+	*/
+
+	Rz(ctrl, angle/2);
+	CNOT(ctrl, target);
+	Rz(target, -angle/2);
+	CNOT(ctrl, target);
+	Rz(target, angle/2);
+}
+
+module qft ( qbit bit[n] ) {
+	H(bit[0]);
+	for ( int i = 1; i < n; i++ ) {
+		for ( int j = 0; j < i; j++ ) {
+			cRz ( bit[j], bit[i], pi/(pow(2,i-j)) );
+		}
+		H(bit[i]);
+	}
+}
+
+int main () {
+	qbit reg[n];
+
+	for ( int i = 0; i < n; i++ ) {
+		PrepZ(reg[i], 0);
+	}
+	qft(reg);
+	for ( int i = 0; i < n; i++ ) {
+		H(reg[i]);
+	}
+	return 0;
+}
