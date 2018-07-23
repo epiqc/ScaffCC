@@ -34,7 +34,9 @@ using namespace std;
 #define _X 12
 #define _Y 13
 #define _Z 14
-#define _Rz 15
+#define _Rx 15
+#define _Ry 16
+#define _Rz 17
 
 bool debugRTResourceEst = false;
 
@@ -83,6 +85,8 @@ namespace {
 	  else if(CF->getIntrinsicID() == Intrinsic::MeasZ) { gateIndex = _MeasZ; delAfterInst = false; }
 	  else if(CF->getIntrinsicID() == Intrinsic::PrepX) gateIndex = _PrepX;
 	  else if(CF->getIntrinsicID() == Intrinsic::PrepZ) gateIndex = _PrepZ;
+	  else if(CF->getIntrinsicID() == Intrinsic::Rx) gateIndex = _Rx;
+	  else if(CF->getIntrinsicID() == Intrinsic::Ry) gateIndex = _Ry;
 	  else if(CF->getIntrinsicID() == Intrinsic::Rz) gateIndex = _Rz;
 	  else if(CF->getIntrinsicID() == Intrinsic::S) gateIndex = _S;
 	  else if(CF->getIntrinsicID() == Intrinsic::T) gateIndex = _T;

@@ -9,12 +9,13 @@ if [ $(echo $PATH | grep ${RKQC_PATH} | wc -l) -eq 0 ]; then
 fi
 
 function show_help {
-    echo "Usage: $0 [-hv] [-rqfRFckdso] [-l #] [-P #] <filename>.scaffold"
+    echo "Usage: $0 [-hv] [-rqfRTFckdso] [-l #] [-P #] <filename>.scaffold"
     echo "    -r   Generate resource estimate (default)"
     echo "    -q   Generate QASM"
     echo "    -f   Generate flattened QASM"
-    echo "    -R   Disable rotation decomposition"
-    echo "    -T   Disable Toffoli decomposition"
+    echo "    -b   Generate OpenQASM"
+    echo "    -R   Enable rotation decomposition"
+    echo "    -T   Enable Toffoli decomposition"
     echo "    -l   Levels of recursion to run (default=1)"
     echo "    -P   Set precision of rotation decomposition in decimal digits (default=10)"
     echo "    -F   Force running all steps"
@@ -23,16 +24,12 @@ function show_help {
     echo "         but requires recompilation for any new output)"
     echo "    -d   Dry-run; show all commands to be run, but do not execute"
     echo "    -s   Generate QX Simulator input file"
-    echo "    -o   Generate optimized QASM (Not yet supported on OS X)"
+    echo "    -o   Generate optimized QASM"
     echo "    -v   Show current Scaffold version information"
 }
 
 function show_version {
-    echo "Scaffold - Release 3.0 (Aug 1, 2017) Alpha"
-}
-
-function not_supported {
-    echo "[scaffold.sh] -o flag is not yet supported on OS X"
+    echo "Scaffold - Release 4.1 (June 28, 2018)"
 }
 
 # Parse opts
@@ -43,15 +40,15 @@ dryrun=""
 force=0
 purge=1
 res=0
-rot=1
-toff=1
+rot=0
+toff=0
 flat=0
+openqasm=0
 qc=0
 precision=4
 targets=""
-#optimize=0
-while getopts "h?vcdfsFkqroRT:l:P:" opt; do
-#while getopts "h?vcdfsFkqrRT:l:P:" opt; do
+optimize=0
+while getopts "h?vcdfbsFkqroTRl:P:" opt; do
     case "$opt" in
     h|\?)
         show_help
@@ -69,22 +66,21 @@ while getopts "h?vcdfsFkqroRT:l:P:" opt; do
         ;;
     f) flat=1
         ;;
+	b) openqasm=1
+		;;
     k) purge=0
         ;;
     q) targets="${targets} qasm"
         ;;
     r) res=1
         ;;
-    R) rot=0
+    R) rot=1
         ;;
-    T) toff=0
+    T) toff=1
         ;;        
     s) qc=1
         ;;
-    #o) optimize=1
-    o) 
-        not_supported
-        exit 0
+    o) optimize=1
         ;;
     l) targets="${targets} SQCT_LEVELS=${OPTARG}"
         ;;
@@ -98,13 +94,17 @@ if [ ${flat} -eq 1 ]; then
 	targets="${targets} flat"
 fi
 
+if [ ${openqasm} -eq 1 ]; then
+	targets="${targets} openqasm"
+fi
+
 if [ ${qc} -eq 1 ]; then
 	targets="${targets} qc"
 fi
 
-#if [ ${optimize} -eq 1 ]; then
-#    targets="${targets} optimize"
-#fi
+if [ ${optimize} -eq 1 ]; then
+	targets="${targets} optimize"
+fi
 
 # Put resources at the end so it is easy to read
 if [ ${res} -eq 1 ]; then
@@ -123,6 +123,7 @@ if [ ${purge} -eq 1 ]; then
     targets="${targets} purge"
 fi
 
+echo ${1}
 if [ $# -lt 1 ]; then 
     echo "Error: Missing filename argument" 
     show_help 
@@ -148,7 +149,6 @@ if [ ${clean} -eq 1 ]; then
 	make -f $ROOT/scaffold/Scaffold.makefile ${dryrun} ROOT=$ROOT DIRNAME=${dir} FILENAME=${filename} FILE=${file} CFILE=${cfile} clean
     exit
 fi
-#make -f $ROOT/scaffold/Scaffold.makefile ${dryrun} ROOT=$ROOT DIRNAME=${dir} FILENAME=${filename} FILE=${file} CFILE=${cfile} TOFF=${toff} RKQC=${rkqc} ROTATIONS=${rot} PRECISION=${precision} OPTIMIZE=${optimize} ${targets}
-make -f $ROOT/scaffold/Scaffold.makefile ${dryrun} ROOT=$ROOT DIRNAME=${dir} FILENAME=${filename} FILE=${file} CFILE=${cfile} TOFF=${toff} RKQC=${rkqc} ROTATIONS=${rot} PRECISION=${precision} ${targets}
+make -f $ROOT/scaffold/Scaffold.makefile ${dryrun} ROOT=$ROOT DIRNAME=${dir} FILENAME=${filename} FILE=${file} CFILE=${cfile} TOFF=${toff} RKQC=${rkqc} ROTATIONS=${rot} PRECISION=${precision} OPTIMIZE=${optimize} ${targets}
 
 exit 0

@@ -935,12 +935,15 @@ void GenQASM::genQASM(Function* F)
 	else if(fToPrint.find("Fredkin") != string::npos) fToPrint = "Fredkin";
 	else if(fToPrint.find("PrepX") != string::npos) fToPrint = "PrepX";
 	else if(fToPrint.find("PrepZ") != string::npos) fToPrint = "PrepZ";
+	else if(fToPrint.substr(0,2) == "Rx") fToPrint = "Rx";
+	else if(fToPrint.substr(0,2) == "Ry") fToPrint = "Ry";
 	else if(fToPrint.substr(0,2) == "Rz") fToPrint = "Rz";
 	else if(fToPrint.find("S.") != string::npos) fToPrint = "S";
 	else if(fToPrint.find("T.") != string::npos) fToPrint = "T";
 	else if(fToPrint.find("Sdag") != string::npos) fToPrint = "Sdag";
 	else if(fToPrint.find("Tdag") != string::npos) fToPrint = "Tdag";
 	else if(fToPrint.find("X.") != string::npos) fToPrint = "X";
+	else if(fToPrint.find("Y.") != string::npos) fToPrint = "Y";
 	else if(fToPrint.find("Z.") != string::npos) fToPrint = "Z";
 
 	std::replace(fToPrint.begin(), fToPrint.end(), '.', '_');
@@ -1242,12 +1245,15 @@ bool GenQASM::runOnModule(Module &M) {
 		else if(newName.find("Fredkin") != string::npos) newName = "Fredkin";
 		else if(newName.find("PrepX") != string::npos) newName = "PrepX";
 		else if(newName.find("PrepZ") != string::npos) newName = "PrepZ";
+		else if(newName.substr(0,2) == "Rx") newName = "Rx";
+		else if(newName.substr(0,2) == "Ry") newName = "Ry";
 		else if(newName.substr(0,2) == "Rz") newName = "Rz";
 		else if(newName.find("S.") != string::npos) newName = "S";
 		else if(newName.find("T.") != string::npos) newName = "T";
 		else if(newName.find("Sdag") != string::npos) newName = "Sdag";
 		else if(newName.find("Tdag") != string::npos) newName = "Tdag";
 		else if(newName.find("X.") != string::npos) newName = "X";
+		else if(newName.find("Y.") != string::npos) newName = "Y";
 		else if(newName.find("Z.") != string::npos) newName = "Z";
 
 		std::replace(newName.begin(), newName.end(), '.', '_');

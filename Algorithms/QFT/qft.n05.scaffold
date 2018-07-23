@@ -1,9 +1,7 @@
-
 #include <math.h>
-
 #define pi 3.141592653589793238462643383279502884197
 
-module PhasePi8 ( qbit bit[1] ) {
+module PhasePi8 ( qbit bit ) {
     /* PhasePi8 matrix:
        [ [ 1 0    ]
          [ 0 e^i*pi/8 ] ]
@@ -13,10 +11,10 @@ module PhasePi8 ( qbit bit[1] ) {
 
 	 */
 
-	 Rz(bit[0], -1*pi/8);
+	 Rz(bit, pi/8);
 }
 
-module cT ( qbit ctrl[1], qbit target[1] ) {
+module cT ( qbit ctrl, qbit target ) {
     /* cT identity matrix:
        [ [ 1 0 0     0    ]
          [ 0 1 0     0    ]
@@ -24,15 +22,15 @@ module cT ( qbit ctrl[1], qbit target[1] ) {
          [ 0 0 0 e^i*pi/4 ] ]
     */
 
-	PhasePi8(ctrl[0]);
-	Rz(target[0],pi/8);
-	CNOT(target[0],ctrl[0]);
-	Rz(target[0],-1*pi/8);
-	CNOT(target[0],ctrl[0]);	
+	PhasePi8(ctrl);
+	Rz(target,pi/8);
+	CNOT(ctrl, target);
+	Rz(target,-1*pi/8);
+	CNOT(ctrl, target);	
 	
 }
 
-module cS ( qbit ctrl[1], qbit target[1] ) {
+module cS ( qbit ctrl, qbit target ) {
     /* cS identity matrix:
        [ [ 1 0 0 0 ]
          [ 0 1 0 0 ]
@@ -40,15 +38,15 @@ module cS ( qbit ctrl[1], qbit target[1] ) {
          [ 0 0 0 i ] ]
     */
 	
-	T(ctrl[0]);
-	Rz(target[0],pi/4);
-	CNOT(target[0],ctrl[0]);
-	Rz(target[0],-1*pi/4);
-	CNOT(target[0],ctrl[0]);
+	T(ctrl);
+	Rz(target,pi/4);
+	CNOT(ctrl, target);
+	Rz(target,-1*pi/4);
+	CNOT(ctrl, target);
 	
 }
 
-module cRz ( qbit ctrl[1], qbit target[1], const double angle ) {
+module cRz ( qbit ctrl, qbit target, const double angle ) {
     /* cRz identity matrix:
        [ [ 1 0 0     			0     ]
          [ 0 1 0     			0     ]
@@ -56,10 +54,10 @@ module cRz ( qbit ctrl[1], qbit target[1], const double angle ) {
          [ 0 0 0 				e^(i*angle/2) ] ]
     */
 
-	Rz(target[0],-1*angle/2);
-	CNOT(target[0],ctrl[0]);
-	Rz(target[0],angle/2);
-	CNOT(target[0],ctrl[0]);
+	Rz(target,-1*angle/2);
+	CNOT(ctrl, target);
+	Rz(target,angle/2);
+	CNOT(ctrl, target);
 	
 }
 
@@ -85,15 +83,17 @@ module qft5 ( qbit bit[5] ) {
 int main () {
     qbit reg[5];
     cbit out[5];
-    int i, qft;
+    int i;
 
     for ( i = 0; i < 5; i++ ) {
         PrepZ( reg[i],0 );
     }
     qft5( reg );
     for ( i = 0; i < 5; i++ ) {
-        out[i] = MeasX( reg[i] );
+	H(reg[i]);
+        out[i] = MeasZ( reg[i] );
     }
     return 0;
 }
+
 

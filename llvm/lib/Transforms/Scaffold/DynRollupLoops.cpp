@@ -219,14 +219,6 @@ namespace {
         {
           hasOtherThanPhiAndBrInst = true;
           hasCallInst = true;
-          /*
-             if((CI->getCalledFunction()->getName() == "llvm.PrepZ") || (CI->getCalledFunction()->getName() == "llvm.PrepX")){
-             isQtm &= true;
-          //errs() << "Found PrepZ or PrepX\n";		
-          }
-          else{
-           */
-
           //check if all operands of call inst are i16 or i16*
           //if not i16 or i16*, they should be constant integers i64 or i32 or floats
           for(unsigned iop=0;iop<CI->getNumArgOperands();iop++){
@@ -434,11 +426,7 @@ namespace {
               errs() << "Compare Inst = "<<*IC<<"\n";
 
             bbICmpInst[BB] = IC;
-
             int val = INT_MAX;
-
-            unsigned numOps = IC->getNumOperands();
-            //for(unsigned opIter=0; opIter < numOps; opIter++)
             unsigned opIter = 1;//check only second operand
             {
               Value* opInst = IC->getOperand(opIter);
@@ -1011,12 +999,6 @@ namespace {
         {
           hasOtherThanPhiAndBrInst = true;
 
-          /*if((CI->getCalledFunction()->getName() == "llvm.PrepZ") || (CI->getCalledFunction()->getName() == "llvm.PrepX")){
-            isQtm &= true;
-          //errs() << "Found PrepZ or PrepX\n";		
-          }
-          else{
-           */
           //check if all operands of call inst are i16 or i16*
           //if not i16 or i16*, they should be constant integers i64 or i32
           for(unsigned iop=0;iop<CI->getNumArgOperands();iop++){

@@ -1,0 +1,383 @@
+
+fn.h:
+
+#define JMAX   100
+
+typedef struct {
+  int    a;
+  int    b;
+  int    k;
+  double d;  // delta() for this ideal
+} ideal_t;
+
+gcd.c:
+
+// Extended Euclidean algorithm
+//
+// It's assumed inputs a and b are both positive
+//
+// We return gcd and set ap and bp to the corresponding integer
+// coefficients such that gcd(a,b) = a*ap + b*bp.  Note that one of ap or bp
+// will necessarily be negative
+//
+int rkqc gcd(int a, int b, int *ap, int *bp)
+{
+  int x = 0;
+  int y = 1;
+  int lx = 1;
+  int ly = 0;
+  int q, t;
+  
+  // the so-called "iterative method"; this avoids recursion
+  //
+  while (b != 0)
+  {
+    q = a / b;
+
+    t = a % b;  a = b;  b = t;
+
+    t = lx - q*x;  lx = p;  x = t;
+    t = ly - q*y;  ly = p;  y = t;
+  }
+
+  *ap = x;
+  *bp = y;
+
+  return a;
+}
+
+product.c:
+
+#include "fn.h"
+
+// implements the product of two ideals (which may not be reduced)
+//
+// out:    the product of i1 and i2
+// i1, i2: multiplier, multiplicand
+// delta:  \Delta
+// sdelta: sqrt of \Delta
+//
+void rkqc product(ideal_t *out, ideal_t *i1, ideal_t *i2, int delta, double sdelta)
+{
+  // ignoring line 1 since I_1 and I_2 are not used subsequently
+  //
+  int kh, uh, vh, k, x, w, t;
+
+  kh = gcd(i1->a, i2->a, &uh, &vh);
+  k = gcd(kh, (i1->b + i2->b)/2, &x, &w);
+  out->a = (i1->a * i2->a / k) / k;
+
+  t = (   x * uh * i1->a * i2->b 
+	+ x * vh * i2->a * i1->b 
+	+ (w * i1->b * i2->b + delta)/2
+      );
+
+  out->b = t % (2 * out->a);
+  if (out->a > sdelta) 
+    out->b -= out->a - 1;
+  else
+    out->b += sdelta  - 2*out->a + 1;
+
+  // unsure about how this is used (from g-hat and st_product)
+  out->k = k;
+}
+
+tau.c:
+
+// Computes the \tau() function defined in Jozsa (and probably elsewhere)
+// defined as implicitly taking \Delta (the fundamental discriminant of our
+// real quadratic number field) and computing tau(b, a) = b mod 2a where
+// the value is either in (\sqrt{\Delta}-2a, \sqrt{\Delta}]
+// if a < \sqrt{\Delta} or in (-a, a] if a is >= \sqrt{Delta}  (see GFI pg 2)
+//
+// This function is used to normalize ideals to their unique
+// canonical representation 
+//
+// Note: we assume that Scaffold's % operator preserves the sign of the
+//   dividend (like C99 and Java, but unlike Python and VHDL)
+//
+// a, b : inputs (note that b can and often will be negative)
+// sdelta: sqrt{\Delta} (Delta is the overall input to the class number alg)
+//
+int rkqc tau(int b, int a, int sdelta)
+{
+  int   ret;
+
+  ret = b % (2*a);
+
+  if (a > sdelta)
+  {
+    while (ret < sdelta - 2*a)
+      ret += 2*a;
+    while (ret > sdelta)
+      ret -= 2*a;
+  }
+  else
+  {
+    while (ret <= -a)
+      ret += 2*a;
+    while (ret > a)
+      ret -= 2*a;
+  }
+  
+  return ret;
+}
+
+
+rho.c:
+
+#include "fn.h"
+
+// \rho in the Class Number algorithm steps between ideals and has various
+// guarantees about how much and how little it steps, which equivalence 
+// class it resides in, how the delta() function reacts to it, etc
+// This is all documented in the GFI
+//
+// \rho is defined on pg 3 of the GFI as \rho(I) = I/\gamma(I), but we
+// take a simpler approach here based on the fact that 4a divides \Delta-b^2
+// (GFI pg 2) and some algebra.  Here's the idea: let c = (\Delta-b^2)/4a,
+// then a' = c and b' = \tau(b, a') in \rho(I).
+//
+// This function also updates the ideal's delta() value
+// The formula is
+//   \delta(\rho(I)) = ln abs(\overline(\gamma(I))/\gamma(I)) + \delta(I)
+// from app A.1 in GFI;  note that this simplifies (see code)
+//
+// in:      the input ideal
+// out:     \rho(in) is stored here, with its delta() value
+// delta:   \Delta  (input to class number algorithm)
+// sdelta:  \sqrt{\Delta}
+//
+void rkqc rho(ideal_t *out, ideal_t *in, int delta, double sdelta)
+{
+  out->a = (abs(delta - in->b*in->b))/(4*in->a);
+  out->b = tau(-in->b, out->a);
+  out->d = log(fabs((in->b - sdelta)/(in->b + sdelta))) + in->d;
+}
+
+// rho^{-1} is sigma(rho(sigma(I))) where sigma is the algebraic conjugate
+//
+// The GFI does not specify how to compute rho^{-1}, so I did the algebra
+// by hand.  It should probably be double-checked by someone (note: I just
+// found parts of Jozsa's paper that back up part of my implementation)
+//
+void rkqc rho_inv(ideal_t *out, ideal_t *in, int delta, double sdelta)
+{
+  int bs = tau(-in->b, in->a);
+
+  out->a = (delta - bs*bs)/(4*in->a);
+  out->b = tau(bs, out->a);
+  out->d = -log(fabs((out->b - sdelta)/(out->b + sdelta))) + out->d;
+}
+
+st_product.c:
+
+#include "fn.h"
+
+// st_product() implement the "star" product from alg A.2 
+// Essentially, this product finds the reduced ideal "just to the right"
+// of I \cdot J
+//
+//
+void rkqc st_product(ideal_t *res, ideal_t *i, ideal_t *j,
+      int delta, double sdelta)
+{
+  // skipping line 1 of Alg A.2 beccause a and k are not defined
+  // (I have email pending to Brian Matt)
+  ideal_t tmp;
+  product(&tmp, i, j, delta, sdelta);
+
+  if (res->d <= tmp.d)
+  {
+    while (res->d <= tmp.d)
+      rho(&tmp, &tmp, delta, sdelta);
+    *res = tmp;
+  }
+  else
+  {
+    while (tmp->d >= tmp.d)
+      rho_inv(&tmp, &tmp, delta, sdelta);
+    rho(res, &tmp, delta, sdelta);
+  }
+}
+
+fn.c:
+
+#include "fn.h"
+
+// fn is the main entry point for the oracle function that implements f_N,
+// the oracle function which enables approximation of the regulator
+//
+// bound: i/N + jp/L (see alg A.3 in GFI)
+// delta: \Delta (the input to the class number alg)
+//
+//
+void rkqc fn(int bound, int delta, ideal_t *j, int *dist)
+{
+  // used a lot, so compute once
+  double sdelta = sqrt(delta);
+
+  // a reduced ideal is represented by a pair of integers a, b where
+  // I = Z + (b+sqrt(Delta))/2a Z
+  // 
+  // We start with O (the ring of integers) which is an ideal of O and has
+  // delta(O) = 0; O is represented by a=1, b=1
+
+  // j holds all ideals as we search; j[0] is O
+  //
+  ideal_t j[JMAX];
+  ideal_t jstar, jtemp;
+
+  j[0].a = 1;  j[0].b = 1;  j[0].k = 1;  j[0].d = 0.0;
+
+  // run rho() on it twice, always tracking its delta
+  rho(&j[1], &j[0], delta, sdelta);
+  rho(&j[2], &j[1], delta, sdelta);
+
+  int k = 1;
+  while (j[k].d <= bound)
+  {
+    st_product(&jtemp, &j[k], &jstar, delta, sdelta);
+    k++;
+  }
+
+  jstar = j[k-1];
+  k -= 2;
+
+  while (k > 0)
+  {
+    st_product(&jtemp, &j[k], &jstar, delta, sdelta);
+    if (jtemp.d <= bound)
+      jstar = jtemp;
+    k--;
+  }
+
+  while (jstar.d < bound)
+  {
+    rho(&jstar, &jstar, delta, sdelta);
+    jtemp = jstar;
+    rho(&jstar, &jstar, delta, sdelta);
+  }
+
+  if (jtemp.d >= bound)
+    *j = jtemp;
+  else
+    *j = jstar;
+
+  *dist = floor(N * (bound - j->d));
+}
+
+ghat.c:
+
+#include "fn.h"
+
+// builds the ideal I, the product of the generators classically produced
+// for phase II
+//
+// out: the output ideal I
+// g[]: the input generators
+// p[]: corresponding powers of g[]
+// k:   number of ideals in g[]
+//
+void rkqc ghat(ideal_t *out, ideal_t g[], int p[], int k,
+    int delta, double sdelta)
+{
+  ideal_t   a, t;
+  int       i, j;
+
+  a->a = 1;
+  a->b = 1;
+  a->k = 1;
+  a->delta = 1.0;
+
+  for (i=0; i < k; i++)
+  {
+    // compute powers first
+    for (j=0; j < p[i]; j++)
+      product(&a, &a, &g[i], delta, sdelta);
+  }
+
+  // now ensure a is reduced
+  //
+  while (a->k != 1) 
+    rho(&a, &a, delta, sdelta)
+
+  *out = a;
+}
+
+fjn.c:
+
+#include "fn.h"
+
+// fjn is the main entry point for the oracle function that implements f_J,N,
+// the oracle function which enables approximation of the regulator
+//
+// bound: i/N + jp/L (see alg A.3 in GFI)
+// delta: \Delta (the input to the class number alg)
+// sdelta: floor(sqrt(delta))
+//
+//
+void rkqc fjn(int bound, int delta, int sdelta,
+	      ideal_t *j, ideal_t *out, int *dist)
+{
+  ideal_t i, k, ktemp;
+
+  i = *j;
+  fn(bound, delta, i, dist);
+  product(&k, &i, j, delta, sdelta);
+
+  while (k.k != 1)
+  {
+    rho(&k, &k, delta, sdelta);
+  }
+
+  if (k.d <= bound)
+  {
+    while (k.d < bound)
+      rho(&k, &k, delta, sdelta);
+  }
+  else
+  {
+    while (k.d >= bound)
+      rhoinv(&k, &k, delta, sdelta);
+
+    rho(&k, &k, delta, sdelta);
+  }
+
+  *out = k;
+  *dist = floor(N * (bound - j->d));
+}
+
+h.c:
+
+#include "fn.h"
+
+// h computes the h_I oracle
+//
+// bound: b/N + jhatp/L (see alg A.6 in GFI)
+// delta: \Delta (the input to the class number alg)
+//
+//
+void rkqc h(int a, int b, int bound, int delta, double sdelta,
+	    ideal_t *i, ideal_t *out, int *dist)
+{
+  ideal_t j, k;
+  int li, dst;
+
+  j = *i;
+  k.a = 1;  k.b = 1;  k.k = 1;  k.d = 0.0;
+  li = a;
+
+  while (k.k != 1)
+  {
+    if (i % 2 == 1)
+      st_product(&k, &k, &j, delta, sdelta);
+    st_product(&j, &j, &j, delta, sdelta);
+  }
+  fn(bound, delta, &j, &dst);
+  st_product(&k, &k, &j, delta, sdelta);
+
+  *out = *k;
+  *dist = floor(N * k.d);
+}
+

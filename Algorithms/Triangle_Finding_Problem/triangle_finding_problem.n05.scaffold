@@ -146,26 +146,26 @@ module ZeroNodeTest(qbit w[n], qbit dum[n-1])
 		X(w[j]);
 	}
 
-	Toffoli(dum[0], w[1], w[0]);
+	Toffoli( w[0], w[1],dum[0]);
 	for(j = 1; j < n-2; j++)
 	{
-		Toffoli(dum[j], dum[j-1], w[j+1]);
+		Toffoli( w[j+1], dum[j-1],dum[j]);
 	}
 
-	Toffoli(dum[n-2], dum[n-3], w[n-1]);
+	Toffoli( w[n-1], dum[n-3],dum[n-2]);
 }
 
 module InvZeroNodeTest(qbit w[n], qbit dum[n-1])
 {
 	int j = 0;
-	Toffoli(dum[n-2], dum[n-3], w[n-1]);
+	Toffoli( w[n-1], dum[n-3],dum[n-2]);
 
 	for(j = n-3; j > 0; j--)
 	{
-		Toffoli(dum[j], dum[j-1], w[j+1]);
+		Toffoli( w[j+1], dum[j-1],dum[j]);
 	}
 
-	Toffoli(dum[0], w[1], w[0]);
+	Toffoli( w[0], w[1],dum[0]);
 
 	for(j = 0; j< n; j++)
 	{
@@ -192,14 +192,14 @@ module RegTest(qbit input[], qbit dum[], int k, int flg)
 		}
 	}
 
-	Toffoli(dum[0], input[1], input[0]);
+	Toffoli( input[0], input[1],dum[0]);
 	for(j = 1; j < k-2; j++)
 	{
-		Toffoli(dum[j], dum[j-1], input[j+1]);
+		Toffoli( input[j+1], dum[j-1],dum[j]);
 	}
 
   if (k>=3)
-	  Toffoli(dum[k-2], dum[k-3], input[k-1]);
+	  Toffoli( input[k-1], dum[k-3],dum[k-2]);
 }
 
 module InvRegTest(qbit input[], qbit dum[], int k, int flg)
@@ -207,14 +207,14 @@ module InvRegTest(qbit input[], qbit dum[], int k, int flg)
 	int j = 0;
 
   if (k>=3)
-	  Toffoli(dum[k-2], dum[k-3], input[k-1]);
+	  Toffoli( input[k-1], dum[k-3],dum[k-2]);
 
 	for(j = k-3; j > 0; j--)
 	{
-		Toffoli(dum[j], dum[j-1], input[j+1]);
+		Toffoli( input[j+1], dum[j-1],dum[j]);
 	}
 
-	Toffoli(dum[0], input[1], input[0]);
+	Toffoli( input[0], input[1],dum[0]);
 
 	if(flg == 0)
 	{
@@ -240,8 +240,8 @@ module CompareIndex(qbit ireg[], int iregOffset, qbit treg[], int tregOffset, qb
 
 	for (i = 0; i < j; i++)
 	{
-		CNOT(treg[tregOffset+i], ireg[iregOffset+i]);
-		CNOT(dum[i], treg[tregOffset+i]);
+		CNOT( ireg[iregOffset+i],treg[tregOffset+i]);
+		CNOT( treg[tregOffset+i],dum[i]);
 		X(dum[i]);
 	}
 }
@@ -261,8 +261,8 @@ module InvCompareIndex(qbit ireg[], int iregOffset, qbit treg[], int tregOffset,
 	for (i = j-1; i > -1; i--)
 	{
 		X(dum[i]);
-	 	CNOT(dum[i], treg[tregOffset+i]);
-		CNOT(treg[tregOffset+i], ireg[iregOffset+i]);
+	 	CNOT( treg[tregOffset+i],dum[i]);
+		CNOT( ireg[iregOffset+i],treg[tregOffset+i]);
 	}
 }
 
@@ -309,24 +309,24 @@ module ctrCTRincr(qbit cTri[], qbit ctrQ, qbit ctrbit2[], int k)
 	* ctrbit2[t] where t should be greater than 1
 	*****************************************************************************/
 
-	CNOT(ctrbit2[0], ctrQ);
+	CNOT( ctrQ,ctrbit2[0]);
 
 	for(i = 1; i < k; i++)
 	{
-		Toffoli(ctrbit2[i], ctrbit2[i-1], cTri[i-1]);
+		Toffoli( cTri[i-1], ctrbit2[i-1],ctrbit2[i]);
 	}
 
 	for(i = k-1; i > 0; i--)
 	{
-		CNOT(cTri[i], ctrbit2[i]);
+		CNOT( ctrbit2[i],cTri[i]);
 		// uncompute ctrbit2 array
-		Toffoli(ctrbit2[i], ctrbit2[i-1], cTri[i-1]);
+		Toffoli( cTri[i-1], ctrbit2[i-1],ctrbit2[i]);
 	}
 
-	CNOT(cTri[0], ctrbit2[0]);
+	CNOT( ctrbit2[0],cTri[0]);
 
 	// uncompute
-	CNOT(ctrbit2[0], ctrQ);
+	CNOT( ctrQ,ctrbit2[0]);
 }
 
 
@@ -354,33 +354,33 @@ module ctrCTRdecr(qbit cTri[], qbit ctrQ, qbit ctrbit2[], int k)
 	* the value of if the first t elements (0 till t-1) in cTri are all 0s is stored at
 	* ctrbit2[t] where t should be greater than 1
 	*****************************************************************************/
-	CNOT(ctrbit2[0], ctrQ);
+	CNOT( ctrQ,ctrbit2[0]);
 
 	for(i = 1; i < k; i++)
 	{
-		Toffoli(ctrbit2[i], ctrbit2[i-1], cTri[i-1]);
+		Toffoli( cTri[i-1], ctrbit2[i-1],ctrbit2[i]);
 	}
 
 
 	for(i = k-1; i > 0; i--)
 	{
-		CNOT(cTri[i], ctrbit2[i]);
+		CNOT( ctrbit2[i],cTri[i]);
 
 		// correctly undo X operation on cTri (restore)
 		X(cTri[i-1]);
 
 		// uncompute ctrbit2 array
-		Toffoli(ctrbit2[i], ctrbit2[i-1], cTri[i-1]);
+		Toffoli( cTri[i-1], ctrbit2[i-1],ctrbit2[i]);
 	}
 
 	// restoring element at location 0
 	X(cTri[0]);
 
 
-	CNOT(cTri[0], ctrbit2[0]);
+	CNOT( ctrbit2[0],cTri[0]);
 
 	// uncompute
-	CNOT(ctrbit2[0], ctrQ);
+	CNOT( ctrQ,ctrbit2[0]);
 }
 
 /***********************************************************
@@ -389,11 +389,11 @@ module ctrCTRdecr(qbit cTri[], qbit ctrQ, qbit ctrbit2[], int k)
 module ctrEvaluate16(qbit target, qbit ctr3, qbit ctr2, qbit ctr1)
 {
 	qbit tmp[1];
-	Toffoli(tmp[0], ctr2, ctr1);
-	Toffoli(target, ctr3, tmp[0]);
+	Toffoli( ctr1, ctr2,tmp[0]);
+	Toffoli( tmp[0], ctr3,target);
 
 	// uncompute
-	Toffoli(tmp[0], ctr2, ctr1);
+	Toffoli( ctr1, ctr2,tmp[0]);
 }
 
 /***********************************************
@@ -555,7 +555,7 @@ module DIFFUSENode(qbit w[n], qbit ctrbit[])
 
 		//now need to reset the minus sign if the stat is |000...0>
 		ZeroNodeTest(w, ctrbit);
-		CNOT(tmpphase[0], ctrbit[n-2]);
+		CNOT( ctrbit[n-2],tmpphase[0]);
 		InvZeroNodeTest(w, ctrbit);
 
 	// uncompute tmpphase
@@ -606,11 +606,11 @@ module DIFFUSEVI(qbit alpha[n], qbit beta[r], qbit ctrbit2[], qbit ctrbit[])
 	ZeroNodeTest(alpha, ctrbit);
 	// ctrbit2 is also of size n-1, hence, we have extra n-r = 6 bits left after Zero RegTest
 	RegTest(beta, ctrbit2, r, 0);
-	Toffoli(ctrbit2[r-1], ctrbit2[r-2], ctrbit[n-2]);
-	CNOT(tmpphase[0], ctrbit2[r-1]);
+	Toffoli( ctrbit[n-2], ctrbit2[r-2],ctrbit2[r-1]);
+	CNOT( ctrbit2[r-1],tmpphase[0]);
 
 	//uncompute
-	Toffoli(ctrbit2[r-1], ctrbit2[r-2], ctrbit[n-2]);
+	Toffoli( ctrbit[n-2], ctrbit2[r-2],ctrbit2[r-1]);
 	InvRegTest(beta, ctrbit2, r, 0);
 	InvZeroNodeTest(alpha, ctrbit);
 
@@ -666,11 +666,11 @@ module DIFFUSEGC(qbit ta[rbar], qbit ma[r],  qbit ctrbit2[], qbit ctrbit[])
 	RegTest(ta, ctrbit, rbar, 0);
 	// ctrbit2 is also of size n-1, hence, we have extra n-r = 6 bits left after RegTest
 	RegTest(ma, ctrbit2, r, 0);
-	Toffoli(ctrbit2[r-1], ctrbit2[r-2], ctrbit[rbar-2]);
-	CNOT(tmpphase[0], ctrbit2[r-1]);
+	Toffoli( ctrbit[rbar-2], ctrbit2[r-2],ctrbit2[r-1]);
+	CNOT( ctrbit2[r-1],tmpphase[0]);
 
 	//uncompute
-	Toffoli(ctrbit2[r-1], ctrbit2[r-2], ctrbit[rbar-2]);
+	Toffoli( ctrbit[rbar-2], ctrbit2[r-2],ctrbit2[r-1]);
 	InvRegTest(ma, ctrbit2, r, 0);
 	InvRegTest(ta, ctrbit, rbar,0);
 
@@ -711,7 +711,7 @@ module FetchT(qbit I[], int Ioffset, qbit T[R*n], qbit Td[n], qbit idxIJ[R*r], q
 
 		    for(k = 0; k < n; k++)
 			{
-				Toffoli(Td[k], T[j*n+k], ctrbit[r-2]);
+				Toffoli( ctrbit[r-2], T[j*n+k],Td[k]);
 			}
 		InvCompareIJ(I, Ioffset, idxIJ, j*r, ctrbit2, ctrbit, r);
 
@@ -739,7 +739,7 @@ module FetchTr1(qbit I[], int Ioffset, qbit T[R], qbit Td, int b, qbit idxIJ[R*r
 		for(k = 0; k < b; k++)
 			{
 				// in this case, k is always 0
-				Toffoli(Td, T[j], ctrbit[r-2]);
+				Toffoli( ctrbit[r-2], T[j],Td);
 			}
 		InvCompareIJ(I, Ioffset, idxIJ, j*r, ctrbit2, ctrbit, r);
 
@@ -766,7 +766,7 @@ module FetchTrbarr(qbit iota[rbar], qbit tau[Rbar*r], qbit Td[r], qbit idxIJ[R*r
 		CompareIJ(iota, 0, idxIJ, j*r, ctrbit2, ctrbit, r);
 			for(k = 0; k < r; k++)
 			{
-				Toffoli(Td[k], tau[j*r+k], ctrbit[rbar-2]);
+				Toffoli( ctrbit[rbar-2], tau[j*r+k],Td[k]);
 			}
 		InvCompareIJ(iota, 0, idxIJ, j*r, ctrbit2, ctrbit, r);
 	}
@@ -793,7 +793,7 @@ module StoreT(qbit I[r], qbit T[R*n], qbit Td[n], qbit idxIJ[R*r],qbit ctrbit2[n
 		CompareIJ(I, 0, idxIJ, j*r, ctrbit2, ctrbit, r);
 			for(k = 0; k < n; k++)
 			{
-				Toffoli(T[j*n+k], Td[k], ctrbit[r-2]);
+				Toffoli( ctrbit[r-2], Td[k],T[j*n+k]);
 			}
 		InvCompareIJ(I, 0, idxIJ, j*r, ctrbit2, ctrbit, r);
 
@@ -820,7 +820,7 @@ module StoreTrbarr(qbit I[rbar], qbit T[Rbar*r], qbit Td[r], qbit idxIJ[R*r],qbi
 		CompareIJ(I, 0, idxIJ, j*r, ctrbit2, ctrbit, r);
 			for(k = 0; k < r; k++)
 			{
-				Toffoli(T[j*r+k], Td[k], ctrbit[rbar-2]);
+				Toffoli( ctrbit[rbar-2], Td[k],T[j*r+k]);
 			}
 		InvCompareIJ(I, 0, idxIJ, j*r, ctrbit2, ctrbit, r);
 	}
@@ -883,13 +883,13 @@ module FetchE(qbit I[], int Ioffset, qbit E[RR1], qbit Ed[R], qbit idxIJ[R*r], q
 			for(k = 0; k < j; k++)
 			{
 				kj = ((j*(j-1))/2) + k;
-				Toffoli(Ed[k], E[kj], ctrbit[r-2]);
+				Toffoli( ctrbit[r-2], E[kj],Ed[k]);
 			}
 
 			for(k = j+1; k < R ; k++)
 			{
 				jk = ((k*(k-1))/2) + j;
-				Toffoli(Ed[k], E[jk], ctrbit[r-2]);
+				Toffoli( ctrbit[r-2], E[jk],Ed[k]);
 			}
 		InvCompareIJ(I, Ioffset, idxIJ, j*r, ctrbit2, ctrbit, r);
 	}
@@ -966,9 +966,9 @@ module SWAP(qbit Td[n], qbit v[n] )
 	for(j = 0; j < n-1; j++)
 	{
 		// three CNOT is a simple bit-wise Swap
-		CNOT(Td[j], v[j]);
-		CNOT(v[j], Td[j]);
-		CNOT(Td[j], v[j]);
+		CNOT( v[j],Td[j]);
+		CNOT( Td[j],v[j]);
+		CNOT( v[j],Td[j]);
 	}
 }
 
@@ -1065,7 +1065,7 @@ module TriangleTestT(qbit E[RR1], qbit test)
 
 	// if triCnt is all 0, then we do not need to set test[0] to 1
 	RegTest(triCnt, lctrbit, 3*r, 0);
-	CNOT(test, lctrbit[3*r-2]);
+	CNOT( lctrbit[3*r-2],test);
 	X(test);
 	InvRegTest(triCnt, lctrbit, 3*r, 0);
 
@@ -1136,7 +1136,7 @@ module TriangleTestTw(qbit T[R*n], qbit E[RR1], qbit w[n], qbit test)
 
 	// if triCnt is all 0, then we do not need to set test[0] to 1
 	RegTest(triCnt, lctrbit, 3*r, 0);
-	CNOT(test, lctrbit[3*r-2]);
+	CNOT( lctrbit[3*r-2],test);
 	X(test);
 	InvRegTest(triCnt, lctrbit, 3*r, 0);
 
@@ -1214,14 +1214,14 @@ module GCQWalkStep(qbit T[R*n], qbit E[RR1], qbit w[n], /*GCQWRegs GC,*/ qbit Td
 	// Update cTri using current edge values in Ewd
 	for(j = 0; j < Rbar; j++)
 	{
-		Toffoli(ctrbit[0], Ewd, Ew[j]);
-		Toffoli(ctrbit[1], ctrbit[0], Edd[j]);
+		Toffoli( Ew[j], Ewd,ctrbit[0]);
+		Toffoli( Edd[j], ctrbit[0],ctrbit[1]);
 
 		ctrCTRdecr(cTri, ctrbit[1], ctrbit2, 2*rbar-1);
 
 		//uncompute
-		Toffoli(ctrbit[1], ctrbit[0], Edd[j]);
-		Toffoli(ctrbit[0], Ewd, Ew[j]);
+		Toffoli( Edd[j], ctrbit[0],ctrbit[1]);
+		Toffoli( Ew[j], Ewd,ctrbit[0]);
 	}
 
 
@@ -1264,14 +1264,14 @@ module GCQWalkStep(qbit T[R*n], qbit E[RR1], qbit w[n], /*GCQWRegs GC,*/ qbit Td
 	// Update Ewd and cTri using  any new triangles involving Ewd
 	for(j = 0; j < Rbar; j++)
 	{
-		Toffoli(ctrbit[0], Ewd, Ew[j]);
-		Toffoli(ctrbit[1], ctrbit[0], Edd[j]);
+		Toffoli( Ew[j], Ewd,ctrbit[0]);
+		Toffoli( Edd[j], ctrbit[0],ctrbit[1]);
 
 		ctrCTRdecr(cTri, ctrbit[1], ctrbit2, 2*rbar-1);
 
 		//uncompute
-		Toffoli(ctrbit[1], ctrbit[0], Edd[j]);
-		Toffoli(ctrbit[0], Ewd, Ew[j]);
+		Toffoli( Edd[j], ctrbit[0],ctrbit[1]);
+		Toffoli( Ew[j], Ewd,ctrbit[0]);
 	}
 
 	// Restore data and data registers to initial state
@@ -1384,14 +1384,14 @@ module GCQWalk(qbit T[R*n], qbit E[RR1], qbit w[n], /*GCQWRegs GC,*/  qbit idxIJ
 		{
 			FetchTr1(tau, k*r, Ed, Edd[k], 1, idxIJ, ctrbit2, ctrbit);
 
-			Toffoli(ctrbit[0], Ew[j], Ew[k]);
-			Toffoli(ctrbit[1], ctrbit[0], Edd[k]);
+			Toffoli( Ew[k], Ew[j],ctrbit[0]);
+			Toffoli( Edd[k], ctrbit[0],ctrbit[1]);
 
 			ctrCTRincr(cTri, ctrbit[1], ctrbit2, 2*rbar-1);
 
 			// uncompute
-			Toffoli(ctrbit[1], ctrbit[0], Edd[k]);
-			Toffoli(ctrbit[0], Ew[j], Ew[k]);
+			Toffoli( Edd[k], ctrbit[0],ctrbit[1]);
+			Toffoli( Ew[k], Ew[j],ctrbit[0]);
 
 			FetchTr1(tau, k*r, Ed, Edd[k], 1, idxIJ, ctrbit2, ctrbit);
 		}
@@ -1404,13 +1404,13 @@ module GCQWalk(qbit T[R*n], qbit E[RR1], qbit w[n], /*GCQWRegs GC,*/  qbit idxIJ
 		RegTest(cTri, ctrbit, CTR,0);
 		X(ctrbit[CTR-2]);
 		X(triTestT);
-		Toffoli(ctrbit[CTR-1], ctrbit[CTR-2], triTestT);
+		Toffoli( triTestT, ctrbit[CTR-2],ctrbit[CTR-1]);
 
 		//phase flip
-		CNOT(tmpphase[0], ctrbit[CTR-1]);
+		CNOT( ctrbit[CTR-1],tmpphase[0]);
 
 		//uncompute
-		Toffoli(ctrbit[CTR-1], ctrbit[CTR-2], triTestT);
+		Toffoli( triTestT, ctrbit[CTR-2],ctrbit[CTR-1]);
 		X(triTestT);
 		X(ctrbit[CTR-2]);
 		InvRegTest(cTri, ctrbit, CTR,0);
@@ -1522,12 +1522,12 @@ module InvGCQWalk(qbit T[R*n], qbit E[RR1], qbit w[n], /*GCQWRegs GC,*/  qbit id
 		InvRegTest(cTri, ctrbit, CTR,0);
 		X(ctrbit[CTR-2]);
 		X(triTestT);
-		Toffoli(ctrbit[CTR-1], ctrbit[CTR-2], triTestT);
+		Toffoli( triTestT, ctrbit[CTR-2],ctrbit[CTR-1]);
 
 		//phase flip
-		CNOT(tmpphase[0], ctrbit[CTR-1]);
+		CNOT( ctrbit[CTR-1],tmpphase[0]);
 
-		Toffoli(ctrbit[CTR-1], ctrbit[CTR-2], triTestT);
+		Toffoli( triTestT, ctrbit[CTR-2],ctrbit[CTR-1]);
 		X(triTestT);
 		X(ctrbit[CTR-2]);
 		RegTest(cTri, ctrbit, CTR,0);
@@ -1540,14 +1540,14 @@ module InvGCQWalk(qbit T[R*n], qbit E[RR1], qbit w[n], /*GCQWRegs GC,*/  qbit id
 		{
 			FetchTr1(tau, k*r, Ed, Edd[k], 1, idxIJ, ctrbit2, ctrbit);
 
-			Toffoli(ctrbit[0], Ew[j], Ew[k]);
-			Toffoli(ctrbit[1], ctrbit[0], Edd[k]);
+			Toffoli( Ew[k], Ew[j],ctrbit[0]);
+			Toffoli( Edd[k], ctrbit[0],ctrbit[1]);
 
 			ctrCTRincr(cTri, ctrbit[1], ctrbit2, 2*rbar-1);
 
 			// uncompute
-			Toffoli(ctrbit[1], ctrbit[0], Edd[k]);
-			Toffoli(ctrbit[0], Ew[j], Ew[k]);
+			Toffoli( Edd[k], ctrbit[0],ctrbit[1]);
+			Toffoli( Ew[k], Ew[j],ctrbit[0]);
 
 			FetchTr1(tau, k*r, Ed, Edd[k], 1, idxIJ, ctrbit2, ctrbit);
 		}
@@ -1600,12 +1600,12 @@ module TriangleEdgeSearch(qbit T[R*n], qbit E[RR1], qbit w[n], /*GCQWRegs GC,*/ 
 
 		RegTest(cTri, ctrbit, CTR, 0);
 		X(ctrbit[CTR-2]);
-		Toffoli(ctrbit[CTR-1], ctrbit[CTR-2], triTestT);
+		Toffoli( triTestT, ctrbit[CTR-2],ctrbit[CTR-1]);
 		// phase kickback
-		CNOT(tmpphase[0], ctrbit[CTR-1]);
+		CNOT( ctrbit[CTR-1],tmpphase[0]);
 
 		// uncompute
-		Toffoli(ctrbit[CTR-1], ctrbit[CTR-2], triTestT);
+		Toffoli( triTestT, ctrbit[CTR-2],ctrbit[CTR-1]);
 		X(ctrbit[CTR-2]);
 		InvRegTest(cTri, ctrbit, CTR, 0);
 

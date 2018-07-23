@@ -1008,6 +1008,8 @@ void DynGenQASMLoops::analyzeCallInst(Function* F, Instruction* pInst, AllocaIns
 	else if(CF->getIntrinsicID() == Intrinsic::MeasZ) { gateIndex = _MeasZ; }
 	else if(CF->getIntrinsicID() == Intrinsic::PrepX) gateIndex = _PrepX;
 	else if(CF->getIntrinsicID() == Intrinsic::PrepZ) gateIndex = _PrepZ;
+	else if(CF->getIntrinsicID() == Intrinsic::Rx) gateIndex = _Rx;
+	else if(CF->getIntrinsicID() == Intrinsic::Ry) gateIndex = _Ry;
 	else if(CF->getIntrinsicID() == Intrinsic::Rz) gateIndex = _Rz;
 	else if(CF->getIntrinsicID() == Intrinsic::S) gateIndex = _S;
 	else if(CF->getIntrinsicID() == Intrinsic::T) gateIndex = _T;
@@ -1270,6 +1272,8 @@ void DynGenQASMLoops::removeIntrinsicQtmExec(Function* F,Instruction* I){
        //|| (CF->getIntrinsicID() == Intrinsic::MeasZ)
        || (CF->getIntrinsicID() == Intrinsic::PrepX)
        || (CF->getIntrinsicID() == Intrinsic::PrepZ)
+       || (CF->getIntrinsicID() == Intrinsic::Rx)
+       || (CF->getIntrinsicID() == Intrinsic::Ry)
        || (CF->getIntrinsicID() == Intrinsic::Rz)
        || (CF->getIntrinsicID() == Intrinsic::S)
        || (CF->getIntrinsicID() == Intrinsic::T)

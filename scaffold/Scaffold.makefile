@@ -12,14 +12,14 @@ CTQG=0
 ROTATIONS=0
 
 #BUILD=$(ROOT)/build/Release+Asserts
-BUILD=$(ROOT)/build/
+BUILD=$(ROOT)/build
 
 SQCTPATH=$(ROOT)/Rotations/sqct/rotZ
 GRIDSYNTHPATH=$(ROOT)/Rotations/gridsynth/gridsynth
 ROTATIONPATH=$(GRIDSYNTHPATH) # select rotation decomposition tool
 SCRIPTSPATH=$(ROOT)/scripts/ # select path to scripts
 PRECISION=""
-#OPTIMIZE=0
+OPTIMIZE=0
 
 CC=$(BUILD)/bin/clang
 OPT=$(BUILD)/bin/opt
@@ -46,6 +46,11 @@ resources: $(FILE).resources
 flat: $(FILE).qasmf
 
 ################################
+# OpenQASM generation
+################################
+openqasm: $(FILE).qasm
+
+################################
 # QASM generation
 ################################
 qasm: $(FILE).qasmh
@@ -53,7 +58,7 @@ qasm: $(FILE).qasmh
 ################################
 # QASM optimization
 ################################
-#optimize: $(FILE)_optimized.qasmf
+optimize: $(FILE)_optimized.qasmf
 
 ################################
 # QX Simulator Generation
@@ -61,7 +66,7 @@ qasm: $(FILE).qasmh
 qc: $(FILE).qc
 
 
-.PHONY: res_count qasm flat qc #optimize
+.PHONY: res_count qasm flat optimize qc
 
 ################################
 # Intermediate targets
@@ -197,14 +202,22 @@ $(FILE).qasmf: $(FILE)12.ll
 	@cat fdecl.out $(FILE).tmp > $(FILE).qasmf
 	@echo "[Scaffold.makefile] Flat QASM written to $(FILE).qasmf ..."    
 
+# Generate OpenQASM
+$(FILE).qasm: $(FILE)12.ll
+	@echo "[Scaffold.makefile] Flattening modules ..."
+	@$(OPT) -S -load $(SCAFFOLD_LIB) -FlattenModule -all 1 $(FILE)12.ll -o $(FILE)12.inlined.ll 2> /dev/null
+	@echo "[Scaffold.makefile] Generating OpenQASM ..."
+	@$(OPT) -load $(SCAFFOLD_LIB) -gen-openqasm $(FILE)12.inlined.ll 2> $(FILE).qasm > /dev/null
+	@echo "[Scaffold.makefile] OpenQASM written to $(FILE).qasm ..."
+
 # Generate optimized QASM
-#$(FILE)_optimized.qasmf: $(FILE)12.ll
-#	@if [ $(OPTIMIZE) -eq 1 ]; then \
-#		echo "[Scaffold.makefile] Optimizing circuit ..."; \
-#		$(OPT) -S -load $(SCAFFOLD_LIB) -FlattenModule -all 1 $(FILE)12.ll -o $(FILE)12.inlined.ll 2> /dev/null; \
-#		$(OPT) -load $(SCAFFOLD_LIB) -Optimize $(FILE)12.inlined.ll 2> $(FILE)_optimized.qasmf > /dev/null; \
-#		echo "[Scaffold.makefile] Optimized circuit written to $(FILE)_optimized.qasmf ..."; \
-#	fi
+$(FILE)_optimized.qasmf: $(FILE)12.ll
+	@if [ $(OPTIMIZE) -eq 1 ]; then \
+		echo "[Scaffold.makefile] Optimizing circuit ..."; \
+		$(OPT) -S -load $(SCAFFOLD_LIB) -FlattenModule -all 1 $(FILE)12.ll -o $(FILE)12.inlined.ll 2> /dev/null; \
+		$(OPT) -load $(SCAFFOLD_LIB) -Optimize $(FILE)12.inlined.ll 2> $(FILE)_optimized.qasmf > /dev/null; \
+		echo "[Scaffold.makefile] Optimized circuit written to $(FILE)_optimized.qasmf ..."; \
+	fi
 
 # Generate simulation input
 $(FILE).qc: $(FILE).qasmf
@@ -218,6 +231,6 @@ purge:
 
 # clean removes all completed files
 clean: purge
-	@rm -f $(FILE).resources $(FILE).qasmh $(FILE).qasmf $(FILE).qc #$(FILE)_optimized.qasmf
+	@rm -f $(FILE).resources $(FILE).qasmh $(FILE).qasmf $(FILE).qasm $(FILE)_optimized.qasmf $(FILE).qc
 
 .PHONY: clean purge

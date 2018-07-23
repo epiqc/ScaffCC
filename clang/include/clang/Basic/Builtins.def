@@ -98,6 +98,8 @@ BUILTIN(Tdag , "vq"  , "")
 BUILTIN(S , "vq"  , "")
 BUILTIN(Sdag , "vq"  , "")
 BUILTIN(Rz , "vqd"  , "")
+BUILTIN(Rx , "vqd"  , "")
+BUILTIN(Ry , "vqd"  , "")
 
 BUILTIN(PrepX , "vqi"  , "")
 BUILTIN(PrepZ , "vqi"  , "")

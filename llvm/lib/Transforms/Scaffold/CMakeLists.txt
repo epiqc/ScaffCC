@@ -12,11 +12,13 @@ add_llvm_loadable_module( LLVMScaffold
 	GenLPFSSchedule.cpp
 	GenQASM.cpp
 	GenQASMLoops.cpp
+	GenOpenQASM.cpp
 	GenRKQC.cpp
 	GenSIMDSchedule.cpp
 	GenSIMDScheduleCG.cpp
 	GetCriticalPath.cpp
 	InlineModule.cpp
+	Optimize.cpp
 	ResourceCount.cpp
 	ResourceCount2.cpp
 	Reverse.cpp

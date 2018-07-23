@@ -48,10 +48,12 @@ using namespace std;
 #define _PrepZ 10
 #define _Tdag 11
 #define _Sdag 12
-#define _Rz 13
-#define _Toffoli 14
-#define _Fredkin 15
-#define _All 16
+#define _Rx 13
+#define _Ry 14
+#define _Rz 15
+#define _Toffoli 16
+#define _Fredkin 17
+#define _All 18
 
 bool debugGetCriticalPath = false;
 
@@ -162,6 +164,8 @@ namespace {
       gate_name[_Sdag] = "Sdag";
       gate_name[_Tdag] = "Tdag";
       gate_name[_Fredkin] = "Fredkin";
+      gate_name[_Rx] = "Rx";
+      gate_name[_Ry] = "Ry";
       gate_name[_Rz] = "Rz";
       gate_name[_All] = "All";                    
 
@@ -180,6 +184,8 @@ namespace {
       gate_index["PrepX"] = _PrepX;
       gate_index["PrepZ"] = _PrepZ;
       gate_index["Fredkin"] = _Fredkin;
+      gate_index["Rx"] = _Rx;
+      gate_index["Ry"] = _Ry;
       gate_index["Rz"] = _Rz;
       gate_index["All"] = _All;                            
     }
@@ -861,7 +867,7 @@ void GetCriticalPath::calc_critical_time(Function* F, qGate qg){
 
   //print_qgate(qg);
 
-  if(isFirstMeas && (fname == "llvm.MeasX" || fname == "llvm.MeasZ")){
+  if(isFirstMeas && (fname.find("llvm.MeasX")!=string::npos || fname.find("llvm.MeasZ")!=string::npos)){
     uint64_t maxFQ = find_max_funcQbits();
     memset_funcQbits(maxFQ);
 

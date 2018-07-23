@@ -1,0 +1,15 @@
+qubit qb0
+qubit qb1
+qubit qb2
+qubit qb3
+cbit cb0
+cbit cb1
+PrepZ qb0
+PrepZ qb1
+X qb1
+PrepX qb2
+PrepX qb3
+X qb3
+Fredkin qb0,qb1,qb2
+MeasX qb2
+MeasZ qb3

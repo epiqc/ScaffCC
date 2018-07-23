@@ -3,7 +3,7 @@ import re
 
 def process_qasm(fname):
 
-    qgates = ['H','X','CNOT','Y','Z','S','T','Tdag','Sdag','Rz','PrepX','PrepZ','MeasX','MeasZ','Toffoli','Fredkin']    
+    qgates = ['H','X','CNOT','Y','Z','S','T','Tdag','Sdag','Rx','Ry','Rz','PrepX','PrepZ','MeasX','MeasZ','Toffoli','Fredkin']    
 
     qgates_1 = ['H','X','Y','Z','S','T','Tdag']
     qgates_1a = ['Sdag']
@@ -11,7 +11,8 @@ def process_qasm(fname):
     qgates_3 = ['Toffoli','Fredkin']    
     qgates_4 = ['PrepX','PrepZ']
     qgates_5 = ['MeasX','MeasZ']
-    qgates_6 = ['Rz']
+    qgates_6 = ['Rx','Ry','Rz']
+    qgates_7 = ['afree']
     
 
     gateNames = {
@@ -27,10 +28,13 @@ def process_qasm(fname):
         'PrepZ':'PrepZ', #'Pz',
         'MeasZ':'MeasZ', #'Mz',
         'MeasX':'MeasX', #'Mx',
+        'Rx':'Rx',
+        'Ry':'Ry',
         'Rz':'Rz',
         'CNOT':'CNOT', #'CX',
         'Toffoli':'Tof',
-        'Fredkin':'Fredkin'
+        'Fredkin':'Fredkin',
+        'afree':'afree'
         }
     
     pattern_qbit_decl = re.compile(r"\s*\bqbit\b\s+(?P<qbit_var>\w+)\s*\[\s*(?P<array_size>\d+)\s*\]\s*;")
@@ -97,6 +101,13 @@ def process_qasm(fname):
         instFnName = 'qg_'+q
         fstr = 'void '+instFnName+'(char* a, double b){ printf("' +gateNames[q] +' %s,%f\\n",a,b); }\n'
         fout.write(fstr)
+    
+    for q in qgates_7:
+        instFnName = q
+        fstr = 'void '+instFnName+'(char** a, int b ){ for(int i = 0; i < b; i++){ printf("' +gateNames[q] +' %s\\n",(*a)); a++; }}\n'
+                
+        fout.write(fstr)
+
 
     fout.write('\n')
 

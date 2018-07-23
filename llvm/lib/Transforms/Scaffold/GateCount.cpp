@@ -49,25 +49,23 @@ namespace {
         if (CallInst *CI = dyn_cast<CallInst>(Inst)) {      // Filter Call Instructions
           Function *callee = CI->getCalledFunction();
           if (callee->isIntrinsic()) {                      // Intrinsic (Gate) Functions calls
-            if (callee->getName().str() == "llvm.X") 
+            if (callee->getName().str().find("llvm.X") != std::string::npos) 
               FunctionGates[F][0]++;
-            else if (callee->getName().str() == "llvm.Z") 
+            else if (callee->getName().str().find("llvm.Z") != std::string::npos) 
               FunctionGates[F][1]++;
-            else if (callee->getName().str() == "llvm.H") 
+            else if (callee->getName().str().find("llvm.H") != std::string::npos) 
               FunctionGates[F][2]++;
-            else if (callee->getName().str() == "llvm.T") 
+            else if (callee->getName().str().find("llvm.T") != std::string::npos) 
               FunctionGates[F][3]++;
-            else if (callee->getName().str() == "llvm.CNOT")
-              //std::vector<int> x = FunctionGates[F];
-              //x.insert(x.begin(),1);
+            else if (callee->getName().str().find("llvm.CNOT") != std::string::npos)
               FunctionGates[F][4]++;
-            else if (callee->getName().str() == "llvm.Toffoli") 
+            else if (callee->getName().str().find("llvm.Toffoli") != std::string::npos) 
               FunctionGates[F][5]++;
-            else if (callee->getName().str() == "llvm.RZ") 
+            else if (callee->getName().str().find("llvm.RZ") != std::string::npos) 
               FunctionGates[F][6]++;
-            else if (callee->getName().str() == "llvm.PrepZ") 
+            else if (callee->getName().str().find("llvm.PrepZ") != std::string::npos) 
               FunctionGates[F][7]++;
-            else if (callee->getName().str() == "llvm.MeasZ") 
+            else if (callee->getName().str().find("llvm.MeasZ") != std::string::npos) 
               FunctionGates[F][8]++;
           }
 
@@ -85,13 +83,13 @@ namespace {
     }
 
     virtual bool runOnModule (Module &M) {
-      // Function* ---> X | Z | H | T | CNOT | Toffoli | Rz | PrepZ | MeasZ
+      // Function* ---> X | Z | H | T | CNOT | Toffoli | Rx | Ry | Rz | PrepZ | MeasZ
       std::map <Function*, unsigned long long*> FunctionGates;
 
       // unsigned long long is 18x10^18 digits longs. good enough.
       // errs() << "LONG LONG LIMIT: " << std::numeric_limits<unsigned long long>::max() << "\n";
 
-      errs() << "\t\tX\t\tZ\t\tH\t\tT\t\tCNOT\t\tToffoli\t\tRz\t\tPrepZ\t\tMeasZ\n";
+      errs() << "\t\tX\t\tZ\t\tH\t\tT\t\tCNOT\t\tToffoli\t\tRx\t\tRy\t\tRz\t\tPrepZ\t\tMeasZ\n";
 
       // iterate over all functions, and over all instructions in those functions
       // find call sites that have constant integer values. In Post-Order.
