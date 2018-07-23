@@ -1,3 +1,6 @@
+***Important Note:*** starting with version 4.0, the argument orders of `CNOT` and `Toffoli` have been changed and standardized to `CNOT(control, target)` and `Toffoli(control1, control2, target)` respectively. Previously, the target argument was first. All of the benchmarks (in [Algorithms/](https://github.com/epiqc/ScaffCC/tree/master/Algorithms)) now conform to the new ordering. Also starting with version 4.0, rotation decomposition and Toffoli decomposition are disabled by default. They can be enabled with the `-R` and `-T` flags.
+
+
 What Is ScaffCC?
 ================
 ScaffCC is a compiler and scheduler for the Scaffold programing language. It is written using the LLVM open-source infrastructure. It is for the purpose of writing and analyzing code for quantum computing applications.
@@ -15,13 +18,9 @@ Release Information
 Current Release
 ---------------
 
-ScaffCC is currently in an *alpha* release. Specifically, the release details are:
+-   Version 4.0
 
--   Version 3.0
-
--   Release Date: August, 2017
-
--   Release Note: The current version is still an alpha release. Multiple new features are in active developement. For instance, .qasmf formart conforming to standardized QASM and optimization to parallel scheduler are expected to be included in the near term.
+-   Release Date: June 28, 2018
 
 Supported Operating Systems
 ---------------------------
@@ -38,6 +37,8 @@ This list will continue to grow in the future!
 
 Installation 
 ============
+
+**Note**: if you have trouble setting up ScaffCC, you can use our [Docker](https://www.docker.com/) image instead. Simply install Docker and run `docker pull epiqc/scaffcc`.
 
 Getting ScaffCC
 ---------------
@@ -91,7 +92,9 @@ of your system (“yum" on Red Hat or “apt-get" on Ubuntu).
     consider using ‘update-alternatives’ as system-wide method for
     preserving and maintaining these.
 
-3.  Boost 1.48
+3.  Clang++ 3.5 or higher
+
+4.  Boost 1.48
 
     -   “Source Build": Boost installation instructions are here:
         <http://www.boost.org/doc/libs/1_48_0/doc/html/bbv2/installation.html>
@@ -108,7 +111,7 @@ of your system (“yum" on Red Hat or “apt-get" on Ubuntu).
                 sudo apt-get install libboost-all-dev
                 
 
-4.  The GNU Multiple Precision Arithmetic Library (gmp and gmpxx)
+5.  The GNU Multiple Precision Arithmetic Library (gmp and gmpxx)
 
     -   “Ubuntu": Use tab-completion to verify the correct packages
 
@@ -122,7 +125,7 @@ of your system (“yum" on Red Hat or “apt-get" on Ubuntu).
                 sudo make && sudo make check && sudo make install
                 
 
-5.  The GNU MPFR Library (mpfr)
+6.  The GNU MPFR Library (mpfr)
 
     -   “Ubuntu"
 
@@ -136,9 +139,9 @@ of your system (“yum" on Red Hat or “apt-get" on Ubuntu).
                 sudo make && sudo make check && sudo make install
                 
 
-6.  Python 2.7 (or later)
+7.  Python 2.7 (or later)
 
-7.  CMake (For Integrating RKQC Functionality)
+8.  CMake (For Integrating RKQC Functionality)
 
     -   “Ubuntu"
 
@@ -211,8 +214,9 @@ To see a list of compiler options which can be passed as flags, run:
         -r   Generate resource estimate (default)
         -q   Generate QASM
         -f   Generate flattened QASM
-        -R   Disable rotation decomposition
-        -T   Disable Toffoli decomposition
+        -b   Generate OpenQASM
+        -R   Enable rotation decomposition
+        -T   Enable Toffoli decomposition
         -l   Levels of recursion to run (default=1)
         -P   Set precision of rotation decomposition in decimal digits (default=10)
         -F   Force running all steps
