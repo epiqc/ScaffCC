@@ -4,7 +4,7 @@ rkqc allLibraryFuncs(qbit a[32]){
 		assign_value_of_0_to_a(a[0], 1);
 		assign_value_of_1_to_a(a[i], 1);
 		assign_value_of_b_to_a(a[i], a[i+1], 1);
-    	a_swap_b(a[i+1],a[i],1);
+		a_swap_b(a[i+1],a[i],1);
 		a_eq_a_plus_b(a[i+1],a[i],1);
     }
 }

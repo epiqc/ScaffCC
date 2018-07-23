@@ -30,7 +30,7 @@ const unsigned int s_=100;
 module CZ(qbit target[1], qbit control[1])
 {
   H(target[0]);
-  CNOT(target[0], control[0]);
+  CNOT(control[0], target[0]);
   H(target[0]);
 }
 
@@ -38,7 +38,7 @@ module CZ(qbit target[1], qbit control[1])
 
 module controlled_expZ (qbit target[1], qbit control[1])  
 { Rz(target[0], -2*dt); //t substituted
-  CNOT(target[0], control[0]);
+  CNOT(control[0], target[0]);
   Rz(target[0], 2*dt);
 }
 
@@ -59,14 +59,14 @@ module PARSENODEROOT(qbit a[n+1],qbit root[1],qbit even[1]) // 301 changed to n+
     {X(scratch[index]);
       Toffoli(scratch[index-1],scratch[index],a[index]);
       X(scratch[index]);
-      CNOT(scratch[index-1],scratch[index]);
+      CNOT(scratch[index],scratch[index-1]);
     }
   X(scratch[0]);
-  CNOT(root[0],scratch[0]);
-  CNOT(even[0],scratch[0]);
+  CNOT(scratch[0], root[0]);
+  CNOT(scratch[0], even[0]);
   X(scratch[0]);
   for(index=1;index<=n;index++) // p changed to n
-    {CNOT(scratch[index-1],scratch[index]);
+    {CNOT(scratch[index],scratch[index-1]);
       X(scratch[index]);
       Toffoli(scratch[index-1],scratch[index],a[index]);
       X(scratch[index]);
@@ -93,11 +93,11 @@ module PARSENODEEVEN(qbit a[n+1],qbit even[1])
 	{ Toffoli(even[0],scratch[n],a[index]); /* Missed this Toffoli in the earlier version of the code */
 	}
       X(scratch[n]);
-      CNOT(scratch[n],scratch[index-1]);          
+      CNOT(scratch[index-1], scratch[n]);          
     }
     
   for( index=1;index<=n;index++)
-    { CNOT(scratch[n],scratch[index-1]);
+    { CNOT(scratch[index-1], scratch[n]);
       X(scratch[n]);
       Toffoli(scratch[index-1],scratch[n],a[index]);
       X(scratch[n]);
@@ -152,11 +152,11 @@ module  TESTISCHILD(qbit even[1],qbit ischild[1],qbit direction[1], int color)
   
   if(color==3|| color==2) 
     {X(even[0]); 
-      CNOT(ischild[0],even[0]);
+      CNOT(even[0], ischild[0]);
       X(even[0]);
     }
   else if (color==1||color==0)
-    {CNOT(ischild[0],even[0]);
+    {CNOT(even[0], ischild[0]);
     }
     
  
@@ -289,7 +289,7 @@ module DOWELD0(qbit a[n+2],qbit b[n+2],qbit weldctrl[1])
   Toffoli(addsub[0],weldctrl[0],a[n+1]);
   X(a[n+1]);
   CADDNUM(addsub,b,a);
-  CNOT(addsub[0],weldctrl[0]);
+  CNOT(weldctrl[0], addsub[0]);
   CSUBNUM(addsub,b,a);  /* parameter n is dropped as it is already declared as a macro definition */
   Toffoli(addsub[0],weldctrl[0],a[n+1]); 
 }
@@ -302,13 +302,13 @@ module SETWELD(qbit a[n+2], qbit b[n+2], qbit childctrl[1], qbit direction[1], q
   X(direction[0]); /* direction is undone so that it can be used in subsequent steps */
   DOWELD0(a,b,weldctrl);    /*DWELD0 and DOWELD1 is switched properly */
   
-  CNOT(weldctrl[0],childctrl[0]);
+  CNOT(childctrl[0], weldctrl[0]);
   DOWELD1(a,b,weldctrl,g);  /* n dropped from the parameter  */
   
   Toffoli(weldctrl[0], direction[0],childctrl[0]);
   Toffoli(b[n+1],a[n+1],childctrl[0]);
-  CNOT(b[n],childctrl[0]);
-  CNOT(b[n+1],childctrl[0]);
+  CNOT(childctrl[0], b[n]);
+  CNOT(childctrl[0], b[n+1]);
 }
 
 
@@ -329,7 +329,7 @@ module SETCHILD(qbit a[n+2], qbit b[n+2], qbit ischild[1], qbit direction[1], qb
   
   Toffoli(childctrl[0], ischild[0],a[n]);
   SETWELD(a,b,childctrl,direction,g);
-  CNOT(childctrl[0],ischild[0]);
+  CNOT(ischild[0], childctrl[0]);
   SETCHILDINTREE(a,b,childctrl,direction);   /* name set to "SETCHILDINTREE" as per GFI */
   X(a[n]);
   Toffoli(childctrl[0], ischild[0], a[n]);
@@ -338,17 +338,17 @@ module SETCHILD(qbit a[n+2], qbit b[n+2], qbit ischild[1], qbit direction[1], qb
 
 // Module for W gate  modified and expressed only in terms of S,T,H,X and CNOT gate
 module W (qbit q1, qbit q2)   
-{ CNOT(q1, q2);
+{ CNOT(q2, q1);
   X (q2);
   Sdag(q2);
   H(q2);
   Tdag(q2);
-  CNOT(q2,q1);
+  CNOT(q1,q2);
   T(q2);
   H(q2);
   S(q2);
   X (q2);
-  CNOT(q1, q2);
+  CNOT(q2, q1);
 }
 
 // module for TIMESTEP operation
