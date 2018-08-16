@@ -1,5 +1,6 @@
 // Scaffold
 // This pass implements a fault tolerant implementation of Toffoli gates
+// Update Aug 2018: Toffoli(ctrl1, ctrl2, targ)
 //
 
 #include <cstdlib>
@@ -63,11 +64,11 @@ namespace {
 						ToffoliImpl->addFnAttr(Attribute::AlwaysInline);
 
 						// Build Function;
-						// Fetch arguments
+						// Fetch arguments: Toffoli(ctrl1, ctrl2, targ)
 						Function::arg_iterator arg_it = ToffoliImpl->arg_begin();
-						Value *Target = arg_it++;	            
 						Value *Control1 = arg_it++;
-						Value *Control2 = arg_it;
+						Value *Control2 = arg_it++;
+						Value *Target = arg_it;	            
             
                         Control1->setName("control1");
                         Control2->setName("control2");
@@ -108,74 +109,91 @@ namespace {
 						CallInst::Create(gate_S, ArrayRef<Value*>(Control2), "", BB)->setTailCall();
             */
 
-            // -- Improved T-depth Toffoli gate (Amy et al.)
+            // -- Improved T-depth Toffoli gate (Amy et al. (http://arxiv.org/abs/1206.0758v3))
             // CNOT shorthands
 
-						std::vector<Value*> C1C2; C1C2.push_back(Control2); C1C2.push_back(Control1); 
-                        std::vector<Type*> C1C2ty; C1C2ty.push_back(ArgTypes[2]); C1C2ty.push_back(ArgTypes[1]);
+						std::vector<Value*> C1C2; C1C2.push_back(Control1); C1C2.push_back(Control2); 
+						std::vector<Type*> C1C2ty; C1C2ty.push_back(ArgTypes[0]); C1C2ty.push_back(ArgTypes[1]);
+						std::vector<Value*> C2C1; C2C1.push_back(Control2); C2C1.push_back(Control1);   
+						std::vector<Type*> C2C1ty; C2C1ty.push_back(ArgTypes[1]); C2C1ty.push_back(ArgTypes[0]);            
 
-						std::vector<Value*> C2T; C2T.push_back(Target); C2T.push_back(Control2);
-                        std::vector<Type*> C2Tty; C2Tty.push_back(ArgTypes[0]); C2Tty.push_back(ArgTypes[2]);
+						std::vector<Value*> C1T; C1T.push_back(Control1); C1T.push_back(Target);
+						std::vector<Type*> C1Tty; C1Tty.push_back(ArgTypes[0]); C1Tty.push_back(ArgTypes[2]);
+						std::vector<Value*> C2T; C2T.push_back(Control2); C2T.push_back(Target);
+						std::vector<Type*> C2Tty; C2Tty.push_back(ArgTypes[1]); C2Tty.push_back(ArgTypes[2]);
 
 
-						std::vector<Value*> TC1; TC1.push_back(Control1); TC1.push_back(Target);
-						std::vector<Type*> TC1ty; TC1ty.push_back(ArgTypes[1]); TC1ty.push_back(ArgTypes[0]);
+						std::vector<Value*> TC1; TC1.push_back(Target); TC1.push_back(Control1);
+						std::vector<Type*> TC1ty; TC1ty.push_back(ArgTypes[2]); TC1ty.push_back(ArgTypes[0]);
+						std::vector<Value*> TC2; TC2.push_back(Target); TC2.push_back(Control2);
+						std::vector<Type*> TC2ty; TC2ty.push_back(ArgTypes[2]); TC2ty.push_back(ArgTypes[1]);
             
-						std::vector<Value*> C2C1; C2C1.push_back(Control1); C2C1.push_back(Control2);            
-						std::vector<Type*> C2C1ty; C2C1ty.push_back(ArgTypes[1]); C2C1ty.push_back(ArgTypes[2]);            
 						
                         // Construct circuit
 
                         //t is Tdag, T is T
+						// H (targ)
 						CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::H, ArrayRef<Type*>(ArgTypes[2])), 
                                          ArrayRef<Value*>(Target), "", BB)->setTailCall();
 
-						CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::Tdag, ArrayRef<Type*>(ArgTypes[1])), 
+						// T (ctrl1)
+						CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::T, ArrayRef<Type*>(ArgTypes[0])), 
                                          ArrayRef<Value*>(Control1), "", BB)->setTailCall();
 
-						CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::T, ArrayRef<Type*>(ArgTypes[2])),
+						// T (ctrl2)
+						CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::T, ArrayRef<Type*>(ArgTypes[1])),
                                          ArrayRef<Value*>(Control2), "", BB)->setTailCall();
 
-						CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::T, ArrayRef<Type*>(ArgTypes[0])),
+						// T (targ)
+						CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::T, ArrayRef<Type*>(ArgTypes[2])),
                                          ArrayRef<Value*>(Target), "", BB)->setTailCall();
                                    
-						CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::CNOT, ArrayRef<Type*>(C1C2ty)),
-						                 ArrayRef<Value*>(C1C2), "", BB)->setTailCall();
-
-						CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::CNOT, ArrayRef<Type*>(TC1ty)),
-						                 ArrayRef<Value*>(TC1), "", BB)->setTailCall();
-            
-            CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::Tdag, ArrayRef<Type*>(ArgTypes[1])),
-						                 ArrayRef<Value*>(Control1), "", BB)->setTailCall();
-            
-            CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::CNOT, ArrayRef<Type*>(C2Tty)),
-						                 ArrayRef<Value*>(C2T), "", BB)->setTailCall();
-            
-            CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::CNOT, ArrayRef<Type*>(C2C1ty)),
+						// CNOT (ctrl2, ctrl1)
+						CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::CNOT, ArrayRef<Type*>(C2C1ty)),
 						                 ArrayRef<Value*>(C2C1), "", BB)->setTailCall();
+
+						// CNOT (targ, ctrl2)
+						CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::CNOT, ArrayRef<Type*>(TC2ty)),
+						                 ArrayRef<Value*>(TC2), "", BB)->setTailCall();
             
+						// CNOT (ctrl1, targ)
+						CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::CNOT, ArrayRef<Type*>(C1Tty)),
+						                 ArrayRef<Value*>(C1T), "", BB)->setTailCall();
+  
+						// Tdag (ctrl2)
             CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::Tdag, ArrayRef<Type*>(ArgTypes[1])),
-						                 ArrayRef<Value*>(Control1), "", BB)->setTailCall();
-            
-            CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::Tdag, ArrayRef<Type*>(ArgTypes[2])),
 						                 ArrayRef<Value*>(Control2), "", BB)->setTailCall();
             
-            CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::T, ArrayRef<Type*>(ArgTypes[0])),
-			                             ArrayRef<Value*>(Target), "", BB)->setTailCall();
+						// T (targ)
+            CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::T, ArrayRef<Type*>(ArgTypes[2])),
+						                 ArrayRef<Value*>(Target), "", BB)->setTailCall();
             
-            CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::CNOT, ArrayRef<Type*>(TC1ty)),
-						                 ArrayRef<Value*>(TC1), "", BB)->setTailCall();
-            
-            CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::S, ArrayRef<Type*>(ArgTypes[1])),
-						                 ArrayRef<Value*>(Control1), "", BB)->setTailCall();
-            
-            CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::CNOT, ArrayRef<Type*>(C2Tty)),
-						                 ArrayRef<Value*>(C2T), "", BB)->setTailCall();
-            
+						// CNOT (ctrl1, ctrl2)
             CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::CNOT, ArrayRef<Type*>(C1C2ty)),
 						                 ArrayRef<Value*>(C1C2), "", BB)->setTailCall();
             
-            CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::H, ArrayRef<Type*>(ArgTypes[0])),
+						// Tdag (ctrl1)
+            CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::Tdag, ArrayRef<Type*>(ArgTypes[0])),
+						                 ArrayRef<Value*>(Control1), "", BB)->setTailCall();
+            
+						// Tdag (ctrl2)
+            CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::Tdag, ArrayRef<Type*>(ArgTypes[1])),
+						                 ArrayRef<Value*>(Control2), "", BB)->setTailCall();
+            
+						// CNOT (targ, ctrl2)
+            CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::CNOT, ArrayRef<Type*>(TC2ty)),
+						                 ArrayRef<Value*>(TC2), "", BB)->setTailCall();
+           
+						// CNOT (ctrl1, targ)
+            CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::CNOT, ArrayRef<Type*>(C1Tty)),
+						                 ArrayRef<Value*>(C1T), "", BB)->setTailCall();
+            
+						// CNOT (ctrl2, ctrl1)
+            CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::CNOT, ArrayRef<Type*>(C2C1ty)),
+						                 ArrayRef<Value*>(C2C1), "", BB)->setTailCall();
+            
+						// H (targ)
+            CallInst::Create(Intrinsic::getDeclaration(M, Intrinsic::H, ArrayRef<Type*>(ArgTypes[2])),
 						                 ArrayRef<Value*>(Target), "", BB)->setTailCall();
                         //end TODO
 

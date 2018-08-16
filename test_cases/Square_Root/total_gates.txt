@@ -1,2 +1,2 @@
-total_gates = 18370
+total_gates = 17452
 

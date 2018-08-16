@@ -1,2 +1,2 @@
-total_gates = 27
+total_gates = 26
 
