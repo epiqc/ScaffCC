@@ -18,22 +18,21 @@ module Sqr ( qbit* a , qbit* b ,  ) {
  	CNOT ( b[9] , a[9] );
  }
 
-module ToffoliImpl_Q_Q_Q ( qbit target , qbit control1 , qbit control2 ,  ) {
+module ToffoliImpl_Q_Q_Q ( qbit control1 , qbit control2 , qbit target ,  ) {
  	H ( target );
- 	Tdag ( control1 );
+ 	T ( control1 );
  	T ( control2 );
  	T ( target );
  	CNOT ( control2 , control1 );
- 	CNOT ( control1 , target );
- 	Tdag ( control1 );
  	CNOT ( target , control2 );
+ 	CNOT ( control1 , target );
+ 	Tdag ( control2 );
+ 	T ( target );
  	CNOT ( control1 , control2 );
  	Tdag ( control1 );
  	Tdag ( control2 );
- 	T ( target );
- 	CNOT ( control1 , target );
- 	S ( control1 );
  	CNOT ( target , control2 );
+ 	CNOT ( control1 , target );
  	CNOT ( control2 , control1 );
  	H ( target );
  }
