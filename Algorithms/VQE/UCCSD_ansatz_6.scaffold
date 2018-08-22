@@ -36,27 +36,27 @@ module DoubleExcitationOperator(qbit reg[N], int p, int q, int r, int s) {
     // NB(pranav): for some reason, ScaffCC wouldn't let me move the M operator
     // into a separate module. Seems like a ScaffCC bug.
     switch (i) {  // M operator (as defined in A1)
-      case 1: H(reg[p]); H(reg[q]); H(reg[s]); H(reg[s]); break;
-      case 2: Y_Rx(reg[p]); Y_Rx(reg[q]); Y_Rx(reg[s]); Y_Rx(reg[s]); break;
-      case 3: H(reg[p]); Y_Rx(reg[q]); H(reg[s]); Y_Rx(reg[s]); break;
-      case 4: Y_Rx(reg[p]); H(reg[q]); Y_Rx(reg[s]); H(reg[s]); break;
-      case 5: Y_Rx(reg[p]); Y_Rx(reg[q]); H(reg[s]); H(reg[s]); break;
-      case 6: H(reg[p]); H(reg[q]); Y_Rx(reg[s]); Y_Rx(reg[s]); break;
-      case 7: Y_Rx(reg[p]); H(reg[q]); H(reg[s]); Y_Rx(reg[s]); break;
-      case 8: H(reg[p]); Y_Rx(reg[q]); Y_Rx(reg[s]); H(reg[s]); break;
+      case 1: H(reg[p]); H(reg[q]); H(reg[r]); H(reg[s]); break;
+      case 2: Y_Rx(reg[p]); Y_Rx(reg[q]); Y_Rx(reg[r]); Y_Rx(reg[s]); break;
+      case 3: H(reg[p]); Y_Rx(reg[q]); H(reg[r]); Y_Rx(reg[s]); break;
+      case 4: Y_Rx(reg[p]); H(reg[q]); Y_Rx(reg[r]); H(reg[s]); break;
+      case 5: Y_Rx(reg[p]); Y_Rx(reg[q]); H(reg[r]); H(reg[s]); break;
+      case 6: H(reg[p]); H(reg[q]); Y_Rx(reg[r]); Y_Rx(reg[s]); break;
+      case 7: Y_Rx(reg[p]); H(reg[q]); H(reg[r]); Y_Rx(reg[s]); break;
+      case 8: H(reg[p]); Y_Rx(reg[q]); Y_Rx(reg[r]); H(reg[s]); break;
     }
     CNOTLadder(reg, p, q+1); CNOT(reg[q], reg[r]); CNOTLadder(reg, r, s+1);
     Rz(reg[s], Theta_p_q_r_s[p][q][r][s]);
     CNOTLadder(reg, s+1, r); CNOT(reg[q], reg[r]); CNOTLadder(reg, q+1, p);
     switch (i) {  // M dagger
-      case 1: H(reg[p]); H(reg[q]); H(reg[s]); H(reg[s]); break;
-      case 2: Y_Rxdagger(reg[p]); Y_Rxdagger(reg[q]); Y_Rxdagger(reg[s]); Y_Rxdagger(reg[s]); break;
-      case 3: H(reg[p]); Y_Rxdagger(reg[q]); H(reg[s]); Y_Rxdagger(reg[s]); break;
-      case 4: Y_Rxdagger(reg[p]); H(reg[q]); Y_Rxdagger(reg[s]); H(reg[s]); break;
-      case 5: Y_Rxdagger(reg[p]); Y_Rxdagger(reg[q]); H(reg[s]); H(reg[s]); break;
-      case 6: H(reg[p]); H(reg[q]); Y_Rxdagger(reg[s]); Y_Rxdagger(reg[s]); break;
-      case 7: Y_Rxdagger(reg[p]); H(reg[q]); H(reg[s]); Y_Rxdagger(reg[s]); break;
-      case 8: H(reg[p]); Y_Rxdagger(reg[q]); Y_Rxdagger(reg[s]); H(reg[s]); break;
+      case 1: H(reg[p]); H(reg[q]); H(reg[r]); H(reg[s]); break;
+      case 2: Y_Rxdagger(reg[p]); Y_Rxdagger(reg[q]); Y_Rxdagger(reg[r]); Y_Rxdagger(reg[s]); break;
+      case 3: H(reg[p]); Y_Rxdagger(reg[q]); H(reg[r]); Y_Rxdagger(reg[s]); break;
+      case 4: Y_Rxdagger(reg[p]); H(reg[q]); Y_Rxdagger(reg[r]); H(reg[s]); break;
+      case 5: Y_Rxdagger(reg[p]); Y_Rxdagger(reg[q]); H(reg[r]); H(reg[s]); break;
+      case 6: H(reg[p]); H(reg[q]); Y_Rxdagger(reg[r]); Y_Rxdagger(reg[s]); break;
+      case 7: Y_Rxdagger(reg[p]); H(reg[q]); H(reg[r]); Y_Rxdagger(reg[s]); break;
+      case 8: H(reg[p]); Y_Rxdagger(reg[q]); Y_Rxdagger(reg[r]); H(reg[s]); break;
     }
   }
 }
