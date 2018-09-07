@@ -1,4 +1,4 @@
 before_install:
-  - sudo apt-get install -y libgmp-dev libgmpxx4ldbl
+  - sudo apt-get install -y libmpfr-dev
 install: make
 language: cpp
