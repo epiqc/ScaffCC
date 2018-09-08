@@ -1,9 +1,9 @@
 env:
   global:
-    - MAKEFLAGS="-j 2"
+    - MAKEFLAGS="-j 2 --no-print-directory -s"
 
 before_install:
   - sudo apt-get install -y libmpfr-dev libboost-all-dev
   - export TRAVIS_WORKER_MAX_LOG_LENGTH=40000000
-install: make --no-print-directory
+install: make
 language: cpp
