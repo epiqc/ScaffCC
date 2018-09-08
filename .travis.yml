@@ -5,5 +5,5 @@ env:
 before_install:
   - sudo apt-get install -y libmpfr-dev libboost-all-dev
   - export TRAVIS_WORKER_MAX_LOG_LENGTH=40000000
-install: make -j2 --no-print-directory -s
+install: make >/dev/null
 language: cpp
