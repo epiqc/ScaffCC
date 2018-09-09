@@ -1,0 +1,14 @@
+module cRz ( qbit ctrl, qbit target, const double angle ) {
+	/* cRz identity matrix:
+		[ [ 1 0 0 0 ]
+			[ 0 1 0 0 ]
+			[ 0 0 e^(-i*angle/2) 0 ]
+			[ 0 0 0 e^(i*angle/2) ] ]
+	*/
+
+	Rz(target, angle/2);
+	CNOT(ctrl, target);
+	Rz(target, -angle/2);
+	CNOT(ctrl, target);
+	Rz(ctrl, angle/2);
+}
