@@ -1,0 +1,46 @@
+// minimal qubit implementation as described in
+// Circuit for Shor’s algorithm using 2n+3 qubits
+// Stephane Beauregard
+// https://arxiv.org/abs/quant-ph/0205095v3
+
+#include <cMODMUL.scaffold>
+#define width 5 // one extra than number of bits in N
+#define N 15
+
+// b[width-1] is most significant bit
+// b[0] is least significant bit
+int main () {
+
+	qbit ctrl[1];
+	PrepZ (ctrl[0], 1);
+
+	const unsigned int a = 6;
+
+	const unsigned int x_val = 6;
+	qbit x[width];
+	for ( int i=0; i<width; i++ ) {
+		PrepZ ( x[i], (x_val>>i)&1 );
+	}
+
+	const unsigned int b_val = 7;
+	qbit b[width];
+	for ( int i=0; i<width; i++ ) {
+		PrepZ ( b[i], (b_val>>i)&1 );
+	}
+
+	qbit ancilla[1];
+	PrepZ ( ancilla[0], 0 );
+
+	endian (width, x);
+	endian (width, b);
+	cMODMUL ( ctrl[0], width, a, x, b, N, ancilla[0] );
+	endian (width, b);
+	endian (width, x);
+
+	for ( int i=0; i<width; i++ ) {
+		// MeasZ(b[i]);
+	}
+	// assert ancilla is zero
+
+	return 0;
+}
