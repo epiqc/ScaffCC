@@ -1,0 +1,54 @@
+// minimal qubit implementation as described in
+// Circuit for Shor’s algorithm using 2n+3 qubits
+// Stephane Beauregard
+// https://arxiv.org/abs/quant-ph/0205095v3
+
+#include <../../../Library/QFT/QFT.scaffold>
+#include <../../../Library/ccRz/ccRz.scaffold>
+
+// output constant a + b
+module cADD (
+	const unsigned int c_width,
+	qbit ctrl0,
+	qbit ctrl1,
+	const unsigned int width,
+	const unsigned int a,
+	qbit b[] // width qubits
+) {
+  for (int b_indx=width-1; b_indx>=0; b_indx--) {
+    for (int a_indx=b_indx; a_indx>=0; a_indx--) {
+			if ((a >> a_indx) & 1) {
+				double angle = M_PI/pow(2,b_indx-a_indx);
+				switch (c_width) {
+					case 0: Rz ( b[b_indx], angle ); break;
+					case 1: cRz ( ctrl0, b[b_indx], angle ); break;
+					case 2: ccRz ( ctrl0, ctrl1, b[b_indx], angle ); break;
+					default: ;
+				}
+			}
+    }
+  }
+}
+
+module ciADD (
+	const unsigned int c_width,
+	qbit ctrl0,
+	qbit ctrl1,
+	const unsigned int width,
+	const unsigned int a,
+	qbit b[] // width qubits
+) {
+  for (int b_indx=0; b_indx<width; b_indx++) {
+    for (int a_indx=0; a_indx<=b_indx; a_indx++) {
+			if ((a >> a_indx) & 1) {
+				double angle = -M_PI/pow(2,b_indx-a_indx);
+				switch (c_width) {
+					case 0: Rz ( b[b_indx], angle ); break;
+					case 1: cRz ( ctrl0, b[b_indx], angle ); break;
+					case 2: ccRz ( ctrl0, ctrl1, b[b_indx], angle ); break;
+					default: ;
+				}
+			}
+    }
+  }
+}

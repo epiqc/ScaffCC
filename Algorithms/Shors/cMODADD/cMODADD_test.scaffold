@@ -1,0 +1,42 @@
+// minimal qubit implementation as described in
+// Circuit for Shor’s algorithm using 2n+3 qubits
+// Stephane Beauregard
+// https://arxiv.org/abs/quant-ph/0205095v3
+
+#include <cMODADD.scaffold>
+
+#define width 5 // one extra than number of bits in N
+#define N 37 // one extra than number of bits in N
+
+// b[_n-1] is most significant bit
+// b[0] is least significant bit
+int main () {
+
+	qbit ctrl[2];
+	PrepZ (ctrl[0], 1);
+	PrepZ (ctrl[1], 1);
+
+	const unsigned int a = 22;
+
+	const unsigned int b_val = 29;
+	qbit b[width];
+	for ( int i=0; i<width; i++ ) {
+		PrepZ ( b[i], (b_val>>i)&1 );
+	}
+
+	qbit ancilla[1];
+	PrepZ ( ancilla[0], 0 );
+
+	endian (width, b);
+	QFT (width, b);
+	cMODADD ( ctrl[0], ctrl[1], width, a, b, N, ancilla[0] );
+	iQFT (width, b);
+	endian (width, b);
+
+	for ( int i=0; i<width; i++ ) {
+		// MeasZ(b[i]);
+	}
+	// assert ancilla is zero
+
+	return 0;
+}

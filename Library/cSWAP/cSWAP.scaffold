@@ -1,0 +1,28 @@
+module cSWAP (
+	qbit ctrl,
+	qbit a,
+	qbit b
+) {
+
+	CNOT(b, a);
+	Toffoli(ctrl, a, b);
+	CNOT(b, a);
+
+}
+
+// Scaffold doesn't allow overloading module names based on module parameter signature
+// cSWAPs is vector of gates on vectors of qubits
+module cSWAPs (
+	qbit ctrl,
+	const unsigned int width,
+	qbit a[],
+	qbit b[]
+) {
+
+	for (int i=0; i<width; i++) {
+		CNOT(b[i], a[i]);
+		Toffoli(ctrl, a[i], b[i]);
+		CNOT(b[i], a[i]);
+	}
+
+}

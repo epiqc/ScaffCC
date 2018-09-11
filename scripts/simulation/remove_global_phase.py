@@ -45,3 +45,4 @@ with open(sys.argv[1]) as infile, open(sys.argv[2], 'w') as outfile:
 
             print(out_string)
             outfile.write(out_string)
+            outfile.write('\n')

@@ -1,0 +1,55 @@
+// minimal qubit implementation as described in
+// Circuit for Shor’s algorithm using 2n+3 qubits
+// Stephane Beauregard
+// https://arxiv.org/abs/quant-ph/0205095v3
+
+#include <../cMODADD/cMODADD.scaffold>
+
+// output (ax+b) mod N
+module cMODMUL (
+	qbit ctrl,
+	const unsigned int width,
+	const unsigned int a,
+	qbit x[], // width qubits
+	qbit b[], // width qubits
+	const unsigned int N,
+	qbit ancilla
+) {
+	QFT(width, b);
+	for (int i=0; i<width; i++) {
+		cMODADD (
+			ctrl,
+			x[width-1-i],
+			width,
+			(a<<i)%N,
+			b,
+			N,
+			ancilla
+		);
+	}
+	iQFT(width, b);
+}
+
+module ciMODMUL (
+	qbit ctrl,
+	const unsigned int width,
+	const unsigned int a,
+	qbit x[], // width qubits
+	qbit b[], // width qubits
+	const unsigned int N,
+	qbit ancilla
+) {
+	QFT(width, b);
+	for (int i=width-1; i>=0; i--) {
+		ciMODADD (
+			ctrl,
+			x[width-1-i],
+			width,
+			(a<<i)%N,
+			b,
+			N,
+			ancilla
+		);
+	}
+	iQFT(width, b);
+}

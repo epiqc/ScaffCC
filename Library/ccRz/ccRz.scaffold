@@ -1,0 +1,15 @@
+// doubly - controlled Rz circuit with angle
+// decompose in terms of V = sqrt(U)
+
+module ccRz (
+	qbit ctrl0,
+	qbit ctrl1,
+	qbit target,
+	const double angle
+) {
+  cRz (ctrl1, target, angle/2);
+  CNOT (ctrl0, ctrl1);
+  cRz (ctrl1, target, -angle/2);
+	CNOT (ctrl0, ctrl1);
+  cRz (ctrl0, target, angle/2);
+}

@@ -1,0 +1,63 @@
+// minimal qubit implementation as described in
+// Circuit for Shor’s algorithm using 2n+3 qubits
+// Stephane Beauregard
+// https://arxiv.org/abs/quant-ph/0205095v3
+
+#include <../cADD/cADD.scaffold>
+
+// output (constant a + b) mod N
+module cMODADD (
+	qbit ctrl0,
+	qbit ctrl1,
+	const unsigned int width,
+	const unsigned int a,
+	qbit b[], // width qubits
+	const unsigned int N,
+	qbit ancilla
+) {
+
+	qbit * dummy;
+
+	cADD (2, ctrl0, ctrl1, width, a, b);
+	ciADD (0, *dummy, *dummy, width, N, b);
+	iQFT (width, b);
+	CNOT (b[0], ancilla);
+	QFT (width, b);
+	cADD (1, ancilla, *dummy, width, N, b);
+	ciADD (2, ctrl0, ctrl1, width, a, b);
+
+	iQFT (width, b);
+	X(b[0]);
+	CNOT (b[0], ancilla);
+	X(b[0]);
+	QFT (width, b);
+	cADD (2, ctrl0, ctrl1, width, a, b);
+}
+
+module ciMODADD (
+	qbit ctrl0,
+	qbit ctrl1,
+	const unsigned int width,
+	const unsigned int a,
+	qbit b[], // width qubits
+	const unsigned int N,
+	qbit ancilla
+) {
+
+	qbit * dummy;
+
+	ciADD (2, ctrl0, ctrl1, width, a, b);
+	iQFT (width, b);
+	X(b[0]);
+	CNOT (b[0], ancilla);
+	X(b[0]);
+	QFT (width, b);
+
+	cADD (2, ctrl0, ctrl1, width, a, b);
+	ciADD (1, ancilla, *dummy, width, N, b);
+	iQFT (width, b);
+	CNOT (b[0], ancilla);
+	QFT (width, b);
+	cADD (0, *dummy, *dummy, width, N, b);
+	ciADD (2, ctrl0, ctrl1, width, a, b);
+}

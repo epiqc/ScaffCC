@@ -1,0 +1,34 @@
+#include <math.h>
+#include "../cRz/cRz.scaffold"
+#include "../SWAP/SWAP.scaffold"
+
+module endian ( const unsigned int width, qbit qbits[] ) {
+	int i = 0, j = width-1;
+	while ( i<width/2 ) {
+		SWAP ( qbits[i], qbits[j] );
+		i++;
+		j--;
+	}
+}
+
+module QFT ( const unsigned int width, qbit qbits[] ) {
+	for ( int t = 0; t < width; t++ ) {
+		H(qbits[t]);
+		for ( int c = t+1; c < width; c++ ) {
+			cRz ( qbits[c], qbits[t], M_PI/(pow(2,c-t)) );
+		}
+	}
+
+	endian (width, qbits);
+}
+
+module iQFT ( const unsigned int width, qbit qbits[] ) {
+	endian (width, qbits);
+
+	for ( int t = width-1; t >= 0; t-- ) {
+		for ( int c = width-1; c > t; c-- ) {
+			cRz ( qbits[c], qbits[t], -M_PI/(pow(2,c-t)) );
+		}
+		H(qbits[t]);
+	}
+}

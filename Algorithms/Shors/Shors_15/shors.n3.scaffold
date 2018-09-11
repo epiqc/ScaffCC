@@ -1,0 +1,81 @@
+//--- Scaffold Code for Shor’s Algorithm ---//
+//Input x -> H -> f(x) -> iQFT
+//f(x) = a^x mod N
+
+// minimal qubit implementation as described in
+// Circuit for Shor’s algorithm using 2n+3 qubits
+// Stephane Beauregard
+// https://arxiv.org/abs/quant-ph/0205095v3
+
+#include "../cMODMUL/cMODMUL.scaffold"
+#include "../../../Library/cSWAP/cSWAP.scaffold"
+#define _width 5 // one extra than number of bits in N
+#define _N 15 // number to be factorized
+// #define _a 7 // randomly chosen s.t. gcd(a,N) = 1
+
+module cUa (
+	qbit ctrl,
+	const unsigned int width,
+	const unsigned int a,
+	const unsigned int a_inv,
+	qbit x[],
+	qbit b[],
+	unsigned int N,
+	qbit ancilla
+) {
+	cMODMUL ( ctrl, width, a, x, b, N, ancilla );
+	cSWAPs ( ctrl, width, x, b );
+	ciMODMUL ( ctrl, width, a_inv, x, b, N, ancilla );
+}
+
+// b[width-1] is most significant bit
+// b[0] is least significant bit
+int main (
+) {
+	const unsigned int upper_sz = 5;
+	qbit upper[upper_sz];
+	for (int i=0; i<upper_sz; i++) {
+		PrepZ ( upper[i], 0 );
+		H (upper[i]);
+	}
+	// QFT(upper_size, upper);
+
+	const unsigned int lower_val = 1;
+	qbit lower[_width];
+	for ( int i=0; i<_width; i++ ) {
+		PrepZ ( lower[i], (lower_val>>i)&1 );
+	}
+
+	const unsigned int b_val = 0;
+	qbit b[_width];
+	for ( int i=0; i<_width; i++ ) {
+		PrepZ ( b[i], (b_val>>i)&1 );
+	}
+
+	qbit ancilla[1];
+	PrepZ ( ancilla[0], 0 );
+
+	endian (_width, lower);
+	endian (_width, b);
+	cUa ( upper[0], _width, 7, 13, lower, b, _N, ancilla[0] );
+	cUa ( upper[1], _width, 4, 4, lower, b, _N, ancilla[0] );
+	for (int i=2; i<upper_sz; i++) {
+		cUa ( upper[i], _width, 1, 1, lower, b, _N, ancilla[0] );
+	}
+	endian (_width, b);
+	endian (_width, lower);
+
+	endian (upper_sz, upper);
+	iQFT(upper_sz, upper);
+
+	for (int i=0; i<upper_sz; i++) {
+		// MeasZ(upper[i]);
+	}
+
+	for ( int i=0; i<_width; i++ ) {
+		MeasZ(lower[i]);
+		MeasZ(b[i]);
+	}
+
+	return 0;
+}

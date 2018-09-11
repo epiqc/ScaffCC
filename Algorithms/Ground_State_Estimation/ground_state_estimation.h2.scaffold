@@ -1,0 +1,257 @@
+#include <math.h>
+
+#define M 4 //number of bottom register qubits
+#define TROTTER 16 //number of bottom register qubits
+
+enum spin {alpha, beta};
+const enum spin sigma[M] = {
+	alpha,
+	beta,
+	alpha,
+	beta
+};
+
+// LIQUID DATA
+// tst=0
+// info=0.00,0.7414
+// nuc=0.713776188
+// Ehf=-1.116685636
+// 0,0=-1.252477495
+// 1,1=-0.475934275
+// 0,0,0,0=0.674493166
+// 0,1,0,1=0.181287518
+// 0,1,1,0=0.663472101
+// 1,1,1,1=0.697398010
+
+// h_double[0][1][1][0]=h_double[1][0][0][1]=0.674493166;
+// h_double[0][2][2][0]=h_double[2][0][0][2]=0.663472101;
+// h_double[0][3][3][0]=h_double[3][0][0][3]=0.663472101;
+// h_double[1][2][2][1]=h_double[2][1][1][2]=0.663472101;
+// h_double[1][3][3][1]=h_double[3][1][1][3]=0.663472101;
+// h_double[2][3][3][2]=h_double[3][2][2][3]=0.697398010;
+//
+// h_double[0][2][0][2]=h_double[1][3][1][3]=0.181287518;
+// h_double[2][0][2][0]=h_double[3][1][3][1]=0.000000;
+// h_double[0][3][1][2]=h_double[0][1][3][2]=0.181287518;
+
+const double h_single[M][M] = {
+	{-1.252477495, 0.0, 0.0, 0.0},
+	{0.0, -1.252477495, 0.0, 0.0},
+	{0.0, 0.0, -0.475934275, 0.0},
+	{0.0, 0.0, 0.0, -0.475934275}
+};
+
+const double h_double[M][M][M][M] =
+{
+	{
+		{{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.0}},
+		{{0.0,0.0,0.0,0.0},{0.674493166,0.0,0.0,0.0},{0.0,0.0,0.0,0.0},{0.0,0.0,0.181287518,0.0}},
+		{{0.0,0.0,0.181287518,0.0},{0.0,0.0,0.0,0.0},{0.663472101,0.0,0.0,0.0},{0.0,0.0,0.0,0.0}},
+		{{0.0,0.0,0.0,0.0},{0.0,0.0,0.181287518,0.0},{0.0,0.0,0.0,0.0},{0.663472101,0.0,0.0,0.0}}
+	},
+	{
+		{{0.0,0.674493166,0.0,0.0},{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.0}},
+		{{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.0}},
+		{{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.0},{0.0,0.663472101,0.0,0.0},{0.0,0.0,0.0,0.0}},
+		{{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.181287518},{0.0,0.0,0.0,0.0},{0.0,0.663472101,0.0,0.0}}
+	},
+	{
+		{{0.0,0.0,0.663472101,0.0},{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.0}},
+		{{0.0,0.0,0.0,0.0},{0.0,0.0,0.663472101,0.0},{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.0}},
+		{{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.0}},
+		{{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.0},{0.0,0.0,0.697398010,0.0}}
+	},
+	{
+		{{0.0,0.0,0.0,0.663472101},{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.0}},
+		{{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.663472101},{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.0}},
+		{{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.697398010},{0.0,0.0,0.0,0.0}},
+		{{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.0}}
+	}
+};
+
+// Controlled Phase gate
+// controlled-[e^(i*theta)  0;0  e^(i*theta)] is equivalent to the phase shift gate [1 0; 0 e^(i*theta)] on the control qubit
+// can be written as a product of G(theta/2) and Rz(theta); G is physically unobservable so it can be neglected
+module ControlledPhase (
+	qbit control,
+	qbit target,
+	double theta
+) {
+	Rz(control, theta);
+}
+
+// Implements a controlled rotation
+// inputs are the target qubit, control qubit and the rotation angle
+module ControlledRotation (
+	qbit control,
+	qbit target,
+	double theta
+) {
+	// Rz (control, theta / 2.0);
+	CNOT (control, target);
+	Rz (target, theta / 2.0);
+	CNOT (control, target);
+	Rz (target, -1.0 * theta / 2.0);
+}
+
+// Implement the Y gate defined in the GFIs Y=Rx(-PI/2), we'll name it Y_Rx
+module Y_Rx(qbit target)
+{
+//	G(target,-PI/4); //indistinguishable global phase
+	Z(target);
+	H(target);
+	S(target);
+	H(target);
+	Z(target);
+}
+
+// Implement the dagger of the Y gate = Rx(PI/2)
+module Y_Rx_Dagger(qbit target)
+{
+//	G(target,-PI/4);
+	H(target);
+	S(target);
+	H(target);
+}
+
+module DoubleExcitationOperator (
+	qbit control,
+	qbit reg[M],
+	int p,
+	int q,
+	int r,
+	int s,
+	double theta0,
+	double theta1,
+	double theta2,
+	double theta3
+) {
+  // Prerequisite: p > q > r > s
+  // See Double Excitation Operator circuit in Table A1 of Whitfield et al 2010
+  for (int i = 0; i < 4; i++) {
+    // NB(pranav): for some reason, ScaffCC wouldn't let me move the M operator
+    // into a separate module. Seems like a ScaffCC bug.
+    switch (i) {  // M operator (as defined in A1)
+			case 0: H(reg[p]); H(reg[q]); Y_Rx(reg[r]); Y_Rx(reg[s]); break;
+			case 1: Y_Rx(reg[p]); Y_Rx(reg[q]); H(reg[r]); H(reg[s]); break;
+			case 2: H(reg[p]); Y_Rx(reg[q]); Y_Rx(reg[r]); H(reg[s]); break;
+			case 3: Y_Rx(reg[p]); H(reg[q]); H(reg[r]); Y_Rx(reg[s]); break;
+    }
+    CNOT(reg[p], reg[q]); CNOT(reg[q], reg[r]); CNOT(reg[r], reg[s]);
+		switch (i) {  // M operator (as defined in A1)
+			case 0: ControlledRotation(control, reg[s], theta0); break;
+			case 1: ControlledRotation(control, reg[s], theta1); break;
+			case 2: ControlledRotation(control, reg[s], theta2); break;
+			case 3: ControlledRotation(control, reg[s], theta3); break;
+		}
+		CNOT(reg[r], reg[s]); CNOT(reg[q], reg[r]); CNOT(reg[p], reg[q]);
+    switch (i) {  // M^dagger operator is identical since matrices are Hermitian
+			case 0: H(reg[p]); H(reg[q]); Y_Rx_Dagger(reg[r]); Y_Rx_Dagger(reg[s]); break;
+			case 1: Y_Rx_Dagger(reg[p]); Y_Rx_Dagger(reg[q]); H(reg[r]); H(reg[s]); break;
+			case 2: H(reg[p]); Y_Rx_Dagger(reg[q]); Y_Rx_Dagger(reg[r]); H(reg[s]); break;
+      case 3: Y_Rx_Dagger(reg[p]); H(reg[q]); H(reg[r]); Y_Rx_Dagger(reg[s]); break;
+    }
+  }
+}
+
+int main ()
+{
+
+	qbit bottomregister[M];
+	// for ( int i=0; i<M; i++ ) {
+	// 	PrepZ ( bottomregister[i], 1 );
+	// }
+	PrepZ ( bottomregister[3], 1 );
+	PrepZ ( bottomregister[2], 1 );
+	PrepZ ( bottomregister[1], 1 );
+	PrepZ ( bottomregister[0], 0 );
+
+	qbit topregister[2];
+	PrepZ ( topregister[0], 0 );
+	H(topregister[0]);
+
+	for (int unitary=0; unitary<1; unitary++) {
+		double time_step = 1.0/(double)TROTTER;
+		for (int rep=0; rep<TROTTER; rep++) {
+
+			// single electron operators
+			for (int i=0; i<M; i++) {
+				ControlledPhase (
+					topregister[0],
+					bottomregister[i],
+					h_single[i][i] * time_step
+				);
+			}
+
+			// two electron operators: number-number operators
+			double theta = 0.0;
+			for (int q=0; q<M; q++) {
+				for (int p=0; p<q; p++) {
+					theta += 0.25 * h_double[p][q][q][p];
+					if (sigma[p]==sigma[q]) {
+						theta -= 0.25 * h_double[p][q][p][q];
+					}
+				}
+			}
+			Rz (topregister[0], theta * time_step); // FIXME: should really be phase
+
+
+
+			for (int p=0; p<M; p++) {
+				double thetas = 0.0;
+				for (int q=0; q<M; q++) {
+					if (p!=q) { // TODO: check this against UCSB documentation
+					// if (p<q) { // TODO: check this against UCSB documentation
+						thetas += h_double[p][q][q][p]; // TODO: this might be accidentally too many
+						if (sigma[p]==sigma[q]) {
+							thetas -= h_double[p][q][p][q]; // TODO: h2020 and h3131 are missing
+						}
+					}
+				}
+
+				ControlledRotation (
+					topregister[0],
+					bottomregister[p],
+					-1.0 * thetas * time_step
+				);
+			}
+
+
+			for (int t=3; t>=0; t--) {
+				for (int c=t-1; c>=0; c--) {
+					CNOT(bottomregister[c], bottomregister[t]);
+
+					double eta = 0.25 * h_double[c][t][t][c];
+					if (sigma[c]==sigma[t]) eta -= 0.25*h_double[c][t][c][t];
+					ControlledRotation(topregister[0], bottomregister[t], 2*eta*time_step);
+
+					CNOT(bottomregister[c], bottomregister[t]);
+				}
+			}
+
+			// two electron operators: excitation-exitation operators
+			DoubleExcitationOperator (
+				topregister[0],
+				bottomregister,
+				0, 1, 2, 3,
+				-time_step * (h_double[0][3][1][2]+h_double[0][1][3][2]) / 4.0,
+				-time_step * (h_double[0][3][1][2]+h_double[0][1][3][2]) / 4.0,
+				time_step * (h_double[0][3][1][2]+h_double[0][1][3][2]) / 4.0,
+				time_step * (h_double[0][3][1][2]+h_double[0][1][3][2]) / 4.0
+			);
+		}
+	}
+
+	// Rz(topregister[0],-M_PI/64);//
+	// Rz(topregister[0],-M_PI/32);//
+	// Rz(topregister[0],-M_PI/16);//
+	// Rz(topregister[0],-M_PI/8);//
+	// Rz(topregister[0],-M_PI/4);//
+	// Rz(topregister[0],-M_PI/2);//
+	H(topregister[0]);
+	// MeasZ(bottomregister[0]);
+	// MeasZ(bottomregister[1]);
+	// MeasZ(bottomregister[2]);
+	// MeasZ(bottomregister[3]);
+	// MeasZ(topregister[0]);
+}
