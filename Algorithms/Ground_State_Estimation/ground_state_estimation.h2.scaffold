@@ -1,7 +1,7 @@
 #include <math.h>
 
 #define M 4 //number of bottom register qubits
-#define TROTTER 16 //number of bottom register qubits
+#define TROTTER 64
 
 enum spin {alpha, beta};
 const enum spin sigma[M] = {
@@ -162,7 +162,7 @@ int main ()
 	// 	PrepZ ( bottomregister[i], 1 );
 	// }
 	PrepZ ( bottomregister[3], 1 );
-	PrepZ ( bottomregister[2], 1 );
+	PrepZ ( bottomregister[2], 0 );
 	PrepZ ( bottomregister[1], 1 );
 	PrepZ ( bottomregister[0], 0 );
 
@@ -217,6 +217,7 @@ int main ()
 			}
 
 
+			// TODO: something in here causing Trotter to not converge
 			for (int t=3; t>=0; t--) {
 				for (int c=t-1; c>=0; c--) {
 					CNOT(bottomregister[c], bottomregister[t]);
@@ -230,6 +231,7 @@ int main ()
 			}
 
 			// two electron operators: excitation-exitation operators
+			// TODO: something in here causing Trotter to not converge
 			DoubleExcitationOperator (
 				topregister[0],
 				bottomregister,
