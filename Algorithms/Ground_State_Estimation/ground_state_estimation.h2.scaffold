@@ -1,7 +1,11 @@
 #include <math.h>
 
 #define M 4 //number of bottom register qubits
-#define TROTTER 64
+#define TROTTER 4
+
+#define _upper_sz 4
+#define _iteration 0
+#define _estimate 0
 
 enum spin {alpha, beta};
 const enum spin sigma[M] = {
@@ -31,8 +35,11 @@ const enum spin sigma[M] = {
 // h_double[2][3][3][2]=h_double[3][2][2][3]=0.697398010;
 //
 // h_double[0][2][0][2]=h_double[1][3][1][3]=0.181287518;
-// h_double[2][0][2][0]=h_double[3][1][3][1]=0.000000;
+// h_double[2][0][2][0]=h_double[3][1][3][1]=0.181287518;
 // h_double[0][3][1][2]=h_double[0][1][3][2]=0.181287518;
+
+// according to 1.4768229
+// h_double[2][1][3][0]=h_double[2][3][1][0]=0.181287518;
 
 const double h_single[M][M] = {
 	{-1.252477495, 0.0, 0.0, 0.0},
@@ -56,14 +63,14 @@ const double h_double[M][M][M][M] =
 		{{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.181287518},{0.0,0.0,0.0,0.0},{0.0,0.663472101,0.0,0.0}}
 	},
 	{
-		{{0.0,0.0,0.663472101,0.0},{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.0}},
+		{{0.0,0.0,0.663472101,0.0},{0.0,0.0,0.0,0.0},{0.181287518,0.0,0.0,0.0},{0.0,0.0,0.0,0.0}},
 		{{0.0,0.0,0.0,0.0},{0.0,0.0,0.663472101,0.0},{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.0}},
 		{{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.0}},
 		{{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.0},{0.0,0.0,0.697398010,0.0}}
 	},
 	{
 		{{0.0,0.0,0.0,0.663472101},{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.0}},
-		{{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.663472101},{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.0}},
+		{{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.663472101},{0.0,0.0,0.0,0.0},{0.0,0.181287518,0.0,0.0}},
 		{{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.697398010},{0.0,0.0,0.0,0.0}},
 		{{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.0},{0.0,0.0,0.0,0.0}}
 	}
@@ -161,28 +168,38 @@ int main ()
 	// for ( int i=0; i<M; i++ ) {
 	// 	PrepZ ( bottomregister[i], 1 );
 	// }
-	PrepZ ( bottomregister[3], 1 );
+	// anitbonding orbitals
+	PrepZ ( bottomregister[3], 0 );
 	PrepZ ( bottomregister[2], 0 );
+	// bonding orbitals
 	PrepZ ( bottomregister[1], 1 );
-	PrepZ ( bottomregister[0], 0 );
+	PrepZ ( bottomregister[0], 1 );
 
 	qbit topregister[2];
 	PrepZ ( topregister[0], 0 );
 	H(topregister[0]);
 
-	for (int unitary=0; unitary<1; unitary++) {
+	for (int unitary=0; unitary<(1<<(_upper_sz-_iteration-1)); unitary++) {
 		double time_step = 1.0/(double)TROTTER;
 		for (int rep=0; rep<TROTTER; rep++) {
+
+			// single electron operators
+			for (int i=0; i<M; i++) {
+				ControlledRotation (
+					topregister[0],
+					bottomregister[i],
+					- 0.5 * h_single[i][i] * time_step
+				);
+			}
 
 			// single electron operators
 			for (int i=0; i<M; i++) {
 				ControlledPhase (
 					topregister[0],
 					bottomregister[i],
-					h_single[i][i] * time_step
+					0.5 * h_single[i][i] * time_step
 				);
 			}
-
 			// two electron operators: number-number operators
 			double theta = 0.0;
 			for (int q=0; q<M; q++) {
@@ -195,8 +212,6 @@ int main ()
 			}
 			Rz (topregister[0], theta * time_step); // FIXME: should really be phase
 
-
-
 			for (int p=0; p<M; p++) {
 				double thetas = 0.0;
 				for (int q=0; q<M; q++) {
@@ -204,7 +219,7 @@ int main ()
 					// if (p<q) { // TODO: check this against UCSB documentation
 						thetas += h_double[p][q][q][p]; // TODO: this might be accidentally too many
 						if (sigma[p]==sigma[q]) {
-							thetas -= h_double[p][q][p][q]; // TODO: h2020 and h3131 are missing
+							thetas -= h_double[p][q][p][q]; // TODO: h2020 and h3131 are missing; McArdle confirms they are zero
 						}
 					}
 				}
@@ -212,19 +227,19 @@ int main ()
 				ControlledRotation (
 					topregister[0],
 					bottomregister[p],
-					-1.0 * thetas * time_step
+					- 0.25 * thetas * time_step
 				);
 			}
 
-
-			// TODO: something in here causing Trotter to not converge
+			// DONE: something in here causing Trotter to not converge
+			// Cross validated against Seeley 2012
 			for (int t=3; t>=0; t--) {
 				for (int c=t-1; c>=0; c--) {
 					CNOT(bottomregister[c], bottomregister[t]);
 
 					double eta = 0.25 * h_double[c][t][t][c];
 					if (sigma[c]==sigma[t]) eta -= 0.25*h_double[c][t][c][t];
-					ControlledRotation(topregister[0], bottomregister[t], 2*eta*time_step);
+					ControlledRotation(topregister[0], bottomregister[t], eta*time_step);
 
 					CNOT(bottomregister[c], bottomregister[t]);
 				}
@@ -236,10 +251,10 @@ int main ()
 				topregister[0],
 				bottomregister,
 				0, 1, 2, 3,
-				-time_step * (h_double[0][3][1][2]+h_double[0][1][3][2]) / 4.0,
-				-time_step * (h_double[0][3][1][2]+h_double[0][1][3][2]) / 4.0,
-				time_step * (h_double[0][3][1][2]+h_double[0][1][3][2]) / 4.0,
-				time_step * (h_double[0][3][1][2]+h_double[0][1][3][2]) / 4.0
+				-time_step * (h_double[0][3][1][2]+h_double[0][1][3][2]) / 8.0,
+				-time_step * (h_double[0][3][1][2]+h_double[0][1][3][2]) / 8.0,
+				time_step * (h_double[0][3][1][2]+h_double[0][1][3][2]) / 8.0,
+				time_step * (h_double[0][3][1][2]+h_double[0][1][3][2]) / 8.0
 			);
 		}
 	}
@@ -250,6 +265,11 @@ int main ()
 	// Rz(topregister[0],-M_PI/8);//
 	// Rz(topregister[0],-M_PI/4);//
 	// Rz(topregister[0],-M_PI/2);//
+	for (int c=0; c<_iteration; c++) {
+		if ((_estimate>>c)&1) {
+			Rz ( topregister[0], -M_PI/pow(2,_iteration-c) );
+		}
+	}
 	H(topregister[0]);
 	// MeasZ(bottomregister[0]);
 	// MeasZ(bottomregister[1]);
