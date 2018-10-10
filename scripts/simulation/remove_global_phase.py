@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import sys
 import re
 from math import sqrt
@@ -43,6 +45,7 @@ with open(sys.argv[1]) as infile, open(sys.argv[2], 'w') as outfile:
                 strings[2]
             )
 
-            print(out_string)
+            if (magnitude>0.00390625):
+                print(out_string)
             outfile.write(out_string)
             outfile.write('\n')
