@@ -937,7 +937,7 @@ void GenQASM::genQASM(Function* F)
 	else if(fToPrint.find("Sdag") != string::npos) fToPrint = "sdg";
 	else if(fToPrint.find("Tdag") != string::npos) fToPrint = "tdg";
 	else if(fToPrint.find("X.") != string::npos) fToPrint = "x";
-	else if(fToPrint.find("Z.") != string::npos) fToPrint = "Z";
+	else if(fToPrint.find("Z.") != string::npos) fToPrint = "z";
 
 
 	std::replace(fToPrint.begin(), fToPrint.end(), '.', '_');
