@@ -15,7 +15,7 @@ module QFT ( const unsigned int width, qbit qbits[] ) {
 	for ( int t = 0; t < width; t++ ) {
 		H(qbits[t]);
 		for ( int c = t+1; c < width; c++ ) {
-			cRz ( qbits[c], qbits[t], M_PI/(pow(2,c-t)) );
+			cRz ( qbits[c], qbits[t], M_PI/pow(2,c-t) );
 		}
 	}
 
@@ -27,7 +27,7 @@ module iQFT ( const unsigned int width, qbit qbits[] ) {
 
 	for ( int t = width-1; t >= 0; t-- ) {
 		for ( int c = width-1; c > t; c-- ) {
-			cRz ( qbits[c], qbits[t], -M_PI/(pow(2,c-t)) );
+			cRz ( qbits[c], qbits[t], -M_PI/pow(2,c-t) );
 		}
 		H(qbits[t]);
 	}
