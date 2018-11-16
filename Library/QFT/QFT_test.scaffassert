@@ -1,0 +1,30 @@
+#include "QFT.scaffold"
+#define width 4
+
+int main () {
+	qbit reg[width];
+
+	for ( int i = 0; i < width; i++ ) {
+		// PrepZ(reg[i], 0);
+		PrepZ(reg[i], (i+1)%2);
+	}
+
+	assert_classical ( reg, width, 10 );
+
+	QFT(width, reg);
+
+	assert_superposition ( reg, width );
+
+	iQFT(width, reg);
+
+	assert_classical ( reg, width, 10 );
+
+	for ( int i=0; i<width; i++ ) {
+		MeasZ(reg[i]);
+	}
+
+	// for ( int i = 0; i < width; i++ ) {
+	// 	H(reg[i]);
+	// }
+	return 0;
+}
