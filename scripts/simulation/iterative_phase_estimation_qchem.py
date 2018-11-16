@@ -3,7 +3,7 @@ import sys
 import re
 from subprocess import check_output
 
-upper_sz = 13
+upper_sz = 6
 estimate = 0
 
 for iteration in range(0, upper_sz):
