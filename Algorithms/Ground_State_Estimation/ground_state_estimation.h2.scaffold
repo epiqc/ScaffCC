@@ -2,7 +2,7 @@
 #include <../../Library/cRz/cRz.scaffold>
 
 #define M 4 //number of bottom register qubits
-#define TROTTER 4
+#define TROTTER 8
 
 #define _upper_sz 4
 #define _iteration 0

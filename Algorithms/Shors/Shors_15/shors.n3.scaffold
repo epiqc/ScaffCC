@@ -80,6 +80,8 @@ int main (
 
 	endian (_upper_sz, upper);
 	iQFT(_upper_sz, upper);
+	endian (_upper_sz, upper);
+
 	// or you can do iterative phase estimation instead of iQFT:
 	// for (int c=0; c<_iteration; c++) {
 	// 	if ((_estimate>>c)&1) {
