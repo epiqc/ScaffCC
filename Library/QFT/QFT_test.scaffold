@@ -1,16 +1,21 @@
 #include "QFT.scaffold"
-#define width 8
+#define width 4
 
 int main () {
 	qbit reg[width];
 
 	for ( int i = 0; i < width; i++ ) {
+		// PrepZ(reg[i], 0);
 		PrepZ(reg[i], (i+1)%2);
 	}
 
 	QFT(width, reg);
-
 	// iQFT(width, reg);
+
+	for ( int i=0; i<width; i++ ) {
+		MeasZ(reg[i]);
+	}
+
 	// for ( int i = 0; i < width; i++ ) {
 	// 	H(reg[i]);
 	// }
