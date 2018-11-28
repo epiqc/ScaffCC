@@ -2,46 +2,50 @@
 
 import sys, re, copy, os
 
-check_indx = 0
-checkpoints = [[]]
+break_indx = 0
+breakpoints = [[]]
 
 with open(sys.argv[1]) as source:
     for line in source:
 
-        if "assert_integer" in line:
-            # start the next checkpoint
-            checkpoints.append(copy.copy(checkpoints[check_indx]))
+        if re.findall("^assert_", line.strip()):
 
-            param_string = re.findall("assert_integer\s*\((.*?)\)\s*;", line.strip())
-            params = [param.strip() for param in param_string[0].split(',')]
+            if "assert_classical" in line:
+                # start the next breakpoint
+                breakpoints.append(copy.copy(breakpoints[break_indx]))
 
-            # close out this checkpoint
-            checkpoints[check_indx].append('for ( int i=0 ; i<{:s} ; i++ )\n'.format(params[1]))
-            checkpoints[check_indx].append('    MeasZ ( {:s}[i] );\n'.format(params[0]))
-            checkpoints[check_indx].append('}\n')
+                param_string = re.findall("^assert_classical\s*\((.*?)\)\s*;", line.strip())
+                params = [param.strip() for param in param_string[0].split(',')]
 
-            check_indx+=1
+                # close out this breakpoint
+                breakpoints[break_indx].append('for ( int i=0 ; i<{:s} ; i++ )\n'.format(params[1]))
+                breakpoints[break_indx].append('    MeasZ ( {:s}[i] );\n'.format(params[0]))
+                breakpoints[break_indx].append('}\n')
 
-        if "assert_uniform" in line:
-            # start the next checkpoint
-            checkpoints.append(copy.copy(checkpoints[check_indx]))
+                break_indx+=1
 
-            param_string = re.findall("assert_uniform\s*\((.*?)\)\s*;", line.strip())
-            params = [param.strip() for param in param_string[0].split(',')]
+            elif "assert_superposition" in line:
+                # start the next breakpoint
+                breakpoints.append(copy.copy(breakpoints[break_indx]))
 
-            # close out this checkpoint
-            checkpoints[check_indx].append('for ( int i=0 ; i<{:s} ; i++ )\n'.format(params[1]))
-            checkpoints[check_indx].append('    MeasZ ( {:s}[i] );\n'.format(params[0]))
-            checkpoints[check_indx].append('}\n')
+                param_string = re.findall("^assert_superposition\s*\((.*?)\)\s*;", line.strip())
+                params = [param.strip() for param in param_string[0].split(',')]
 
-            check_indx+=1
+                # close out this breakpoint
+                breakpoints[break_indx].append('for ( int i=0 ; i<{:s} ; i++ )\n'.format(params[1]))
+                breakpoints[break_indx].append('    MeasZ ( {:s}[i] );\n'.format(params[0]))
+                breakpoints[break_indx].append('}\n')
+
+                break_indx+=1
 
         else:
-            checkpoints[check_indx].append(line)
+            breakpoints[break_indx].append(line)
 
-# generate checkpoints
-for check_indx in range(len(checkpoints)):
-    out_name = os.path.basename(sys.argv[1]) + str(check_indx) + '.scaffold'
+# generate breakpoints
+for break_indx in range(len(breakpoints)):
+    out_name = os.path.splitext(os.path.basename(sys.argv[1]))[0] + '.breakpoint_' + str(break_indx+1) + '.scaffold'
     with open(out_name, 'w') as outfile:
-        for line in checkpoints[check_indx]:
+        for line in breakpoints[break_indx]:
             outfile.write(line)
+
+print (break_indx+1)

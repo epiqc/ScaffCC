@@ -38,3 +38,21 @@ with open(sys.argv[1]) as csvfile:
 print cross_tab
 
 print stats.chi2_contingency(cross_tab)
+
+
+# chi2_stat, p_val, dof, ex = stats.chi2_contingency(shor)
+#
+# print("===Chi2 Stat===")
+# print(chi2_stat)
+# print("\n")
+#
+# print("===Degrees of Freedom===")
+# print(dof)
+# print("\n")
+#
+# print("===P-Value===")
+# print(p_val)
+# print("\n")
+#
+# print("===Contingency Table===")
+# print(ex)

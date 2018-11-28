@@ -20,3 +20,5 @@ with open(sys.argv[1]) as csvfile:
 
 print tallies
 print stats.chisquare(tallies.values())
+
+# chisquare([16, 18, 16, 14, 12, 12], f_exp=[16, 16, 16, 16, 16, 8])
