@@ -1,25 +1,26 @@
 #!/bin/bash
 
-SCAFFCC_PATH=/n/fs/qdb/ScaffCC
+export SCAFFCC_PATH=/n/fs/qdb/ScaffCC
 TEST_NAME=${1%.scaffassert}
 
 # CLEANUP
 $SCAFFCC_PATH/scaffold.sh -c $1
-rm *.breakpoint.*.scaffold
+rm *.breakpoint_*.scaffold
 rm sbatch.bash
-rm *.breakpoint.*.ll
-rm *.breakpoint.*.tmp
-rm *.breakpoint.*.resources
-rm *.breakpoint.*.qasmh
-rm *.breakpoint.*.qasmf
-rm *.breakpoint.*.qc
-rm *.out
-rm *.err
-rm *.csv
+rm *.breakpoint_*.ll
+rm *.breakpoint_*.tmp
+rm *.breakpoint_*.resources
+rm *.breakpoint_*.qasmh
+rm *.breakpoint_*.qasmf
+rm *.breakpoint_*.qc
+rm *.breakpoint_*.out
+rm *.breakpoint_*.err
+rm *.breakpoint_*.csv
+rm *.breakpoint_*.bash
 
 # split into breakpoints
 BREAKPOINTS=$($SCAFFCC_PATH/scripts/simulation/scaffassert.py $1)
-ENSEMBLE=3
+ENSEMBLE=8
 
 # compilation without slurm:
 # for ((i=1;i<=$BREAKPOINTS;i++))
@@ -89,6 +90,8 @@ $SCAFFCC_PATH/../qx_simulator_linux_x86_64/qx_simulator_1.0.beta_linux_x86_64 $T
 $SCAFFCC_PATH/scripts/simulation/register_value_csv.py \
 $TEST_NAME.breakpoint_\$SLURM_ARRAY_TASK_ID.qc \
 $TEST_NAME.breakpoint_\$SLURM_ARRAY_TASK_ID.csv
+
+bash $TEST_NAME.breakpoint_\$SLURM_ARRAY_TASK_ID.bash
 
 # scripts/simulation/assert_uniform.py ${source%.scaffold}.csv 4
 # scripts/simulation/assert_integer.py ${source%.scaffold}.csv 5 30

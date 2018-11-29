@@ -2,14 +2,14 @@
 import sys, re, cmath, csv, os, glob
 
 regex = re.compile("([a-zA-Z]+)([0-9]+)")
-outcome = { 'polar_r':0, 'polar_phi':0, 'rect_real':0, 'rect_imag':0 }
+outcome = { 'probability':0, 'polar_r':0, 'polar_phi':0, 'rect_real':0, 'rect_imag':0 }
 reg_map = []
 
 # open QX source file
 with open(sys.argv[1], 'r') as qcfile:
     for line in qcfile:
         if 'map q' in line:
-            print line
+            # print line
             words = line.split()
             reg_index_pair = regex.match(words[2])
             register = reg_index_pair.group(1)
@@ -36,7 +36,7 @@ with open(sys.argv[2], 'a+') as csvfile:
             first_basis = True
             phase_global = 0.0
             for line in file:
-                print line
+                # print line
                 if line.strip() == "--------------[quantum state]--------------":
                     print("--------------[quantum state]--------------")
                     state_lines = True
@@ -55,6 +55,8 @@ with open(sys.argv[2], 'a+') as csvfile:
                     # if (outcome['polar_r']>0.0):
                     if (outcome['polar_r']>1.0/256.0):
 
+                        outcome['probability'] = outcome['polar_r'] * outcome['polar_r']
+
                         # if this is the first basis state then this is the global phase to factor out
                         if first_basis:
                             phase_global = outcome['polar_phi']
@@ -69,7 +71,8 @@ with open(sys.argv[2], 'a+') as csvfile:
                         for elem in zip(strings[2][::-1],reg_map):
                             outcome[elem[1][0]] += int(elem[0]) << elem[1][1]
 
-                        out_string = 'polar: ({:f},{:f}) rect: ({:f},{:f}) |{:s}>'.format(
+                        out_string = 'probability: {:f} polar: ({:f},{:f}) rect: ({:f},{:f}) |{:s}>'.format(
+                            outcome['probability'],
                             outcome['polar_r'],
                             outcome['polar_phi'],
                             outcome['rect_real'],
