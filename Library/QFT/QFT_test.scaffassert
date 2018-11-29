@@ -9,15 +9,15 @@ int main () {
 		PrepZ(reg[i], (i+1)%2);
 	}
 
-	assert_classical ( reg, width, 10 );
+	assert_classical ( reg, 4, 5 );
 
 	QFT(width, reg);
 
-	assert_superposition ( reg, width );
+	assert_superposition ( reg, 4 );
 
 	iQFT(width, reg);
 
-	assert_classical ( reg, width, 10 );
+	assert_classical ( reg, 4, 5 );
 
 	for ( int i=0; i<width; i++ ) {
 		MeasZ(reg[i]);
