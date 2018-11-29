@@ -1,0 +1,116 @@
+// --- Scaffold Code for Shor’s Algorithm ---//
+//Input x -> H -> f(x) -> iQFT
+//f(x) = a^x mod N
+
+// minimal qubit implementation as described in
+// Circuit for Shor’s algorithm using 2n+3 qubits
+// Stephane Beauregard
+// https://arxiv.org/abs/quant-ph/0205095v3
+
+#include "../cMODMUL/cMODMUL.scaffold"
+#include "../../../Library/cSWAP/cSWAP.scaffold"
+
+#define _a_val 7 // randomly chosen s.t. gcd(a,N) = 1
+#define _a_inv 13 // randomly chosen s.t. gcd(a,N) = 1
+
+#define _upper_sz 3 // total iterations of phase estimation
+#define _iteration 2 // current iteration index
+#define _estimate 0 // tally of less significant bits
+
+module cUa (
+	qbit ctrl,
+	const unsigned int width,
+	const unsigned int a,
+	const unsigned int a_inv,
+	qbit x[],
+	qbit b[],
+	unsigned int N,
+	qbit ancilla
+) {
+	cMODMUL ( ctrl, width, a, x, b, N, ancilla );
+	cSWAPs ( ctrl, width, x, b );
+	ciMODMUL ( ctrl, width, a_inv, x, b, N, ancilla );
+}
+
+// b[width-1] is most significant bit
+// b[0] is least significant bit
+int main (
+) {
+	const unsigned int width = 5; // one extra than number of bits in N
+	const unsigned int N = 15; // number to be factorized
+
+	// prepare upper register
+	qbit upper[_upper_sz];
+	for (int i=0; i<_upper_sz; i++) {
+		PrepZ ( upper[i], 0 );
+		H (upper[i]);
+	}
+	// the above is just a degenerate case of QFT
+	// QFT(_upper_size, upper);
+	// assert_superposition(upper,3);
+
+	// prepare lower register to any value
+	const unsigned int lower_val = 1;
+	qbit lower[width];
+	for ( int i=0; i<width; i++ ) {
+		PrepZ ( lower[i], (lower_val>>i)&1 );
+	}
+	// assert_classical(lower,5,1);
+
+	// prepare ancilla b to zero
+	const unsigned int b_val = 0;
+	qbit b[width];
+	for ( int i=0; i<width; i++ ) {
+		PrepZ ( b[i], (b_val>>i)&1 );
+	}
+	// assert_classical(b,5,0);
+
+	qbit ancilla[1];
+	PrepZ ( ancilla[0], 0 );
+
+	endian (width, lower);
+	endian (width, b);
+
+	// cUa ( upper[0], width, _a_val, _a_inv, lower, b, N, ancilla[0] );
+	cUa ( upper[0], width, 7, 13, lower, b, N, ancilla[0] );
+	// cUa ( upper[0], width, 7, 12, lower, b, N, ancilla[0] );
+	if (1<_upper_sz) cUa ( upper[1], width, 4, 4, lower, b, N, ancilla[0] );
+	for (int i=2; i<_upper_sz; i++) {
+		cUa ( upper[i], width, 1, 1, lower, b, N, ancilla[0] );
+	}
+
+	endian (width, b);
+	// assert_classical(b,5,0);
+
+	endian (width, lower);
+	// assert_classical(lower,5,13); // 1, 4, 7, 13
+
+	endian (_upper_sz, upper);
+	iQFT(_upper_sz, upper);
+	endian (_upper_sz, upper);
+
+	// assert_classical(upper,3,6); // 0, 2, 4, 6
+	assert_product(upper,3,b,5);
+	assert_product(upper,3,lower,5);
+	assert_product(b,5,lower,5);
+
+	// or you can do iterative phase estimation instead of iQFT:
+	// for (int c=0; c<_iteration; c++) {
+	// 	if ((_estimate>>c)&1) {
+	// 		Rz ( upper[0], -M_PI/pow(2,_iteration-c) );
+	// 	}
+	// }
+	// H(upper[0]);
+
+	for (int i=0; i<_upper_sz; i++) {
+		// MeasZ(upper[i]);
+	}
+
+	for ( int i=0; i<width; i++ ) {
+		// MeasZ(lower[i]);
+		// MeasZ(b[i]);
+	}
+	// MeasZ(ancilla[0]);
+
+	return 0;
+}

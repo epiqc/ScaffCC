@@ -1,0 +1,48 @@
+// minimal qubit implementation as described in
+// Circuit for Shor’s algorithm using 2n+3 qubits
+// Stephane Beauregard
+// https://arxiv.org/abs/quant-ph/0205095v3
+
+#include <cADD.scaffold>
+
+#define width 5 // one extra than number of bits in N
+
+// b[width-1] is most significant bit
+// b[0] is least significant bit
+int main () {
+
+	qbit ctrl[2];
+	PrepZ (ctrl[0], 1);
+	PrepZ (ctrl[1], 1);
+	assert_classical(ctrl,2,3);
+
+	const unsigned int a = 15;
+
+	const unsigned int b_val = 15;
+	qbit b[width];
+	for ( int i=0; i<width; i++ ) {
+		PrepZ ( b[i], (b_val>>i)&1 );
+	}
+	assert_classical(b,5,15);
+
+	endian (width, b);
+	assert_classical(b,5,30);
+
+	QFT (width, b);
+	assert_superposition(b,5);
+
+	cADD ( 2, ctrl[0], ctrl[1], width, a, b );
+	assert_superposition(b,5);
+
+	iQFT (width, b);
+	assert_classical(b,5,15);
+
+	endian (width, b);
+	assert_classical(b,5,30);
+
+	for ( int i=0; i<width; i++ ) {
+		// MeasZ(b[i]);
+	}
+
+	return 0;
+}
