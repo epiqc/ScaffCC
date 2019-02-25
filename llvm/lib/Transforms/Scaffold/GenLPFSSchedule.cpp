@@ -96,7 +96,7 @@ LOCAL_MOVES_SCHED("local_moves_sched", cl::init(0), cl::Hidden,
 
 #define MAX_GATE_ARGS 30
 #define MAX_BT_COUNT 15 //max backtrace allowed - to avoid infinite recursive loops
-#define NUM_QGATES 17
+#define NUM_QGATES 19
 #define _CNOT 0
 #define _H 1
 #define _S 2
