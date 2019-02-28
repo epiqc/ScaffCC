@@ -64,7 +64,7 @@ Building ScaffCC
 
             xcode-select --install
 
-2.  Python 2.7 (or later): Python is usually bundled with OS X. The built-in version should be sufficient.
+2.  Python 2.7: Python is usually bundled with OS X. The built-in version should be sufficient.
  
 #### For Unix build
 
@@ -139,7 +139,7 @@ of your system (“yum" on Red Hat or “apt-get" on Ubuntu).
                 sudo make && sudo make check && sudo make install
                 
 
-7.  Python 2.7 (or later)
+7.  Python 2.7
 
 8.  CMake (For Integrating RKQC Functionality)
 
