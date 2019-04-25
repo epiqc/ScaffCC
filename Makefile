@@ -113,7 +113,7 @@ CFLAGS=-L ../build/Debug+Asserts/lib \
 
 SCAFFOLD=scaffold
 
-all: Sqct Clang
+all: Clang
 
 Clang: llvm build
 	@cd llvm/tools && /bin/rm -f clang && /bin/ln -s ../../clang;
@@ -141,12 +141,8 @@ llvm:
 Scaffold:
 	@cd scaffold && make;
 
-Sqct:
-	@cd Rotations/sqct && make
-
 clean:
-	@cd Rotations/sqct && make clean
 	#cd scaffold && make clean
 	@if [ -d build ]; then cd build && make clean; fi
 
-.PHONY: clean Sqct Scaffold Clang
+.PHONY: clean Scaffold Clang

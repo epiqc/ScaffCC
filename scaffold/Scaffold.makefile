@@ -13,7 +13,6 @@ ROTATIONS=0
 
 BUILD=$(ROOT)/build/Release+Asserts
 
-SQCTPATH=$(ROOT)/Rotations/sqct/rotZ
 GRIDSYNTHPATH=$(ROOT)/Rotations/gridsynth/gridsynth
 ROTATIONPATH=$(GRIDSYNTHPATH) # select rotation decomposition tool
 SCRIPTSPATH=$(ROOT)/scripts/ # select path to scripts
