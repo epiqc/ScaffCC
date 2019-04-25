@@ -130,7 +130,10 @@ $(FILE)6.ll: $(FILE)4.ll
 # Perform Rotation decomposition if requested and rotation decomp tool is built
 $(FILE)7.ll: $(FILE)6.ll
 	@if [ ! -e $(ROTATIONPATH) ]; then \
-		echo "[Scaffold.makefile] Rotation tool not built, skipping rotation decomposition ..."; \
+		echo "[Scaffold.makefile]"; \
+		echo "[Scaffold.makefile] WARNING: gridsynth not found, skipping rotation decomposition ..."; \
+		echo "[Scaffold.makefile] (Download gridsynth from https://www.mathstat.dal.ca/~selinger/newsynth and place the binary in ScaffCC/Rotations/gridsynth/)"; \
+		echo "[Scaffold.makefile]"; \
 		cp $(FILE)6.ll $(FILE)7.ll; \
 	elif [ $(ROTATIONS) -eq 1 ]; then \
 		echo "[Scaffold.makefile] Decomposing Rotations ..." && \
