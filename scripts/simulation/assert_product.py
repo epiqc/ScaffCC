@@ -20,8 +20,8 @@ with open(sys.argv[1]) as csvfile:
             if reg_val not in reg_vals[reg]:
                 reg_vals[reg].append(reg_val)
 
-# print "reg_vals="
-# print reg_vals
+# print ("reg_vals=")
+# print (reg_vals)
 
 # create a cross table with the right dimensions
 dimensions = []
@@ -37,18 +37,18 @@ with open(sys.argv[1]) as csvfile:
         for reg in reg_vals.keys():
             reg_val = int(row[reg])
             index.append(reg_vals[reg].index(reg_val))
-        # print index
+        # print (index)
         sum = cross_tab.item( tuple(index) ) + float( row['probability'] )
-        # print "cross_tab.item( tuple(index) ) = "
-        # print cross_tab.item( tuple(index) )
-        # print "float( row['probability'] ) = "
-        # print float( row['probability'] )
-        # print "sum = "
-        # print sum
+        # print ("cross_tab.item( tuple(index) ) = ")
+        # print (cross_tab.item( tuple(index) ))
+        # print ("float( row['probability'] ) = ")
+        # print (float( row['probability'] ))
+        # print ("sum = ")
+        # print (sum)
         cross_tab.itemset ( tuple(index), sum )
 
-# print "cross_tab="
-# print cross_tab
+# print ("cross_tab=")
+# print (cross_tab)
 
 chi2_stat, p_val, dof, ex = stats.chi2_contingency(cross_tab)
 

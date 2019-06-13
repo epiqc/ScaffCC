@@ -1,15 +1,16 @@
 #!/usr/bin/env python
-import sys, re, cmath, csv, os, glob
+import sys, re, cmath, os, glob
+from csv import DictWriter
 
 regex = re.compile("([a-zA-Z]+)([0-9]+)")
 outcome = { 'probability':0, 'polar_r':0, 'polar_phi':0, 'rect_real':0, 'rect_imag':0 }
 reg_map = []
 
-# open QX source file
+# open QX source file and parse it for the register names
 with open(sys.argv[1], 'r') as qcfile:
     for line in qcfile:
         if 'map q' in line:
-            # print line
+            print (line)
             words = line.split()
             reg_index_pair = regex.match(words[2])
             register = reg_index_pair.group(1)
@@ -18,25 +19,29 @@ with open(sys.argv[1], 'r') as qcfile:
             reg_map.append((register,index))
             outcome[register] = 0
 
-# print reg_map
+# print ("reg_map = ")
+# print (reg_map)
 
-with open(sys.argv[2], 'a+') as csvfile:
+with open(sys.argv[2], 'a+') as csvfile: # open for appending
 
-    writer = csv.DictWriter(csvfile, fieldnames=list(outcome.keys()))
+    writer = DictWriter(csvfile, fieldnames=list(outcome.keys()))
     if not csvfile.read():
         writer.writeheader()
 
+    # get the printouts from all the trials
     filenames = glob.glob(os.path.splitext(sys.argv[1])[0]+'.trial_*.out')
-    print filenames
+    print ("filenames = ")
+    print (filenames)
     for filename in filenames:
         with open(filename) as file:
 
             # Parse QX Simulator output format
-            state_lines = False
-            first_basis = True
+            state_lines = False # whether these lines are state amplitude lines
+            first_basis = True # whether this is the first state such that we need to find the global phase
             phase_global = 0.0
             for line in file:
-                # print line
+                # print ("line = ")
+                # print (line)
                 if line.strip() == "--------------[quantum state]--------------":
                     print("--------------[quantum state]--------------")
                     state_lines = True
@@ -67,7 +72,8 @@ with open(sys.argv[2], 'a+') as csvfile:
                         outcome['rect_real'] = rect.real
                         outcome['rect_imag'] = rect.imag
 
-                        # print zip(strings[2][::-1],reg_mapping)
+                        # print ("zip(strings[2][::-1],reg_map) = ")
+                        # print (zip(strings[2][::-1],reg_map))
                         for elem in zip(strings[2][::-1],reg_map):
                             outcome[elem[1][0]] += int(elem[0]) << elem[1][1]
 
@@ -79,5 +85,6 @@ with open(sys.argv[2], 'a+') as csvfile:
                             outcome['rect_imag'],
                             strings[2],
                         )
+                        print("out_string = ")
                         print(out_string)
                         writer.writerow(outcome)

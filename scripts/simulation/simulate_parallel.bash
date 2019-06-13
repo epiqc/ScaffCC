@@ -20,7 +20,7 @@ rm *.breakpoint_*.bash
 
 # split into breakpoints
 BREAKPOINTS=$($SCAFFCC_PATH/scripts/simulation/scaffassert.py $1)
-ENSEMBLE=16
+ENSEMBLE=1
 
 # compilation without slurm:
 # for ((i=1;i<=$BREAKPOINTS;i++))

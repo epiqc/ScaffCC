@@ -41,4 +41,4 @@ with open(sys.argv[1]) as infile0, open(sys.argv[2]) as infile1:
             fidelity_real,
             fidelity_imag
         )
-        print out_string
+        print (out_string)

@@ -20,7 +20,7 @@ rm *.breakpoint_*.bash
 # split into breakpoints
 BREAKPOINTS=$($SCAFFCC_PATH/scripts/simulation/scaffassert.py $1)
 # number of measurements we want for each breakpoint
-ENSEMBLE=1
+ENSEMBLE=8
 
 # get QX Simulator
 if [ ! -e $SCAFFCC_PATH/../qx_simulator_linux_x86_64/qx_simulator_1.0.beta_linux_x86_64 ]
@@ -39,19 +39,22 @@ do
   $SCAFFCC_PATH/scaffold.sh -s $TEST_NAME.breakpoint_${bpIndx}.scaffold
 
   # SIMULATE the whole ensemble
-  # map
+  # map the ensemble of measurements into several runs of the simulator
   for ((ensIndx=1;ensIndx<=$ENSEMBLE;ensIndx++))
   do
-    $SCAFFCC_PATH/../qx_simulator_linux_x86_64/qx_simulator_1.0.beta_linux_x86_64 $TEST_NAME.breakpoint_${bpIndx}.qc
+    $SCAFFCC_PATH/../qx_simulator_linux_x86_64/qx_simulator_1.0.beta_linux_x86_64 \
+    $TEST_NAME.breakpoint_${bpIndx}.qc > \
+    $TEST_NAME.breakpoint_${bpIndx}.trial_${ensIndx}.out
   done
 
-  # reduce
+  # reduce the measurement results into a summary CSV file
   $SCAFFCC_PATH/scripts/simulation/register_value_csv.py \
   $TEST_NAME.breakpoint_${bpIndx}.qc \
   $TEST_NAME.breakpoint_${bpIndx}.csv
 
+  # do statistical tests on the summary CSV files
+  # check for the assertions as recorded in the bash file
   bash $TEST_NAME.breakpoint_${bpIndx}.bash
-
   # scripts/simulation/assert_uniform.py ${source%.scaffold}.csv 4
   # scripts/simulation/assert_integer.py ${source%.scaffold}.csv 5 30
   # scripts/simulation/assert_product.py ${source%.scaffold}.csv
