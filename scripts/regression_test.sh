@@ -3,7 +3,12 @@
 DIR=$(dirname $0)
 ROOT=$DIR/..
 OPT=$ROOT/build/Release+Asserts/bin/opt
-SCAF=$ROOT/build/Release+Asserts/lib/Scaffold.so
+UNAME_S=$(uname -s)
+if [ $UNAME_S = "Darwin" ]; then
+    SCAF=$ROOT/build/Release+Asserts/lib/Scaffold.dylib
+else
+    SCAF=$ROOT/build/Release+Asserts/lib/Scaffold.so
+fi
 
 echo -e "          Regression Test          "
 echo -e "==================================="

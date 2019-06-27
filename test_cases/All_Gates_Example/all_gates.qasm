@@ -4,7 +4,7 @@ qreg q[3];
 creg c[1];
 x q[0];
 Y_i16 q[0];
-Z q[0];
+z q[0];
 h q[0];
 t q[0];
 s q[0];
