@@ -1,0 +1,56 @@
+// minimal qubit implementation as described in
+// Circuit for Shor’s algorithm using 2n+3 qubits
+// Stephane Beauregard
+// https://arxiv.org/abs/quant-ph/0205095v3
+
+#include <cADD.scaffold>
+#define width 5 // one extra than number of bits in N
+// b[width-1] is most significant bit
+// b[0] is least significant bit
+int main () {
+
+	qbit ctrl[2];
+	PrepZ (ctrl[0], 1);
+	H (ctrl[0]);
+	PrepZ (ctrl[1], 1);
+	H (ctrl[1]);
+
+	const unsigned int a = 13;
+	const unsigned int b_val = 12;
+	qbit b[width];
+	for ( int i=0; i<width; i++ ) {
+		PrepZ ( b[i], (b_val>>i)&1 );
+	}
+	// assert_classical(b,5,12); // 0+8+4+0+0 // 01100
+
+	endian (width, b);
+	// assert_classical(b,5,6); // 00110 //
+	QFT (width, b);
+	// assert_superposition(b,5);
+	cADD ( 1, ctrl[0], ctrl[1], width, a, b );
+	// assert_superposition(b,5);
+	iQFT (width, b);
+	// assert_classical(b,5,19); // 10011 // 16+2+1
+	endian (width, b);
+	// assert_classical(b,5,25);  // 25 = 16+8+0+0+1
+	assert_product ( ctrl, 2, b, 5 );
+
+	// now reverse compute it
+	endian (width, b);
+	// assert_classical(b,5,19); // 10011 // 16+2+1
+	QFT (width, b);
+	// assert_superposition(b,5);
+	ciADD ( 1, ctrl[0], ctrl[1], width, a, b );
+	// assert_superposition(b,5);
+	iQFT (width, b);
+	// assert_classical(b,5,6); // 00110 //
+	endian (width, b);
+	// assert_classical(b,5,12); // 0+8+4+0+0 // 01100
+	assert_product ( ctrl, 2, b, 5 );
+
+	for ( int i=0; i<width; i++ ) {
+		// MeasZ(b[i]);
+	}
+
+	return 0;
+}

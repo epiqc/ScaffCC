@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 import sys
 import re
 from math import sqrt
@@ -27,4 +28,4 @@ with open(sys.argv[1]) as infile0, open(sys.argv[2]) as infile1:
             imag_diff*imag_diff
         )
 
-        print trace_distance
+        print (trace_distance)

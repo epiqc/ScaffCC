@@ -4,14 +4,14 @@
 *
 * Oana Theogarajan, UCSB
 *
-* 
+*
 * Implements the QCS GFI for the Ground State Estimation Algorithm
 *
 * December 2011
 *
 *****************************************************************************************/
 // The ground state is stored in M qubits coresponding to spin-orbital states (the quantum register qbit bottomregister[M])
-// There are M/2 spatial orbitals, each with spin up and down 
+// There are M/2 spatial orbitals, each with spin up and down
 // The qubits are indexed by p=0 to M-1 corresponding to i,j i=0 to M/2-1, j=+,- (i=spatial quantum number, j=spin quantum number)
 // So qubits 0,1,2,3,4,5,.... correspond to states with quantum numbers 0+,0-,1+,1-,2+,2-,....
 
@@ -34,10 +34,10 @@
 #define Emax 2.2 //dummy value for now - we don't know it, not in the GFIs
 #define DeltaE 0.0184
 */
-#define tau 341.47746 //ajavadia 
+#define tau 341.47746 //ajavadia
 
 // file containing one electron integrals as a one dimensional array - one element per line
-//const char *integralsFile1="hmol1.txt"; 
+//const char *integralsFile1="hmol1.txt";
 // file containing two electron integrals as a one dimensional array - one element per line
 //const char *integralsFile2="hmols2.txt";
 
@@ -45,7 +45,7 @@
 #define SZ2 20
 
 // hmol1.txt
-double const hmol1[SZ1][SZ1] = 
+double const hmol1[SZ1][SZ1] =
 {
 {-350.29076436161165,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0},
 {-1.3305426082250455e-11,-350.29076949405697,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0},
@@ -9053,7 +9053,7 @@ module Swap(qbit q1,qbit q2)
 
 // Implements a controlled rotation
 // inputs are the target qubit, control qubit and the rotation angle
-module ControlledRotation(qbit target, qbit control, double theta)   
+module ControlledRotation(qbit target, qbit control, double theta)
 {
 	Rz(target, theta / 2.0);
 	CNOT(control, target);
@@ -9062,9 +9062,9 @@ module ControlledRotation(qbit target, qbit control, double theta)
 }
 
 // Implement the Y gate defined in the GFIs Y=Rx(-PI/2), we'll name it Y_Rx
-module Y_Rx(qbit target)  
+module Y_Rx(qbit target)
 {
-//	G(target,-PI/4); //indistinguishable global phase
+  // G(target,-PI/4); //indistinguishable global phase
 	Z(target);
 	H(target);
 	S(target);
@@ -9084,7 +9084,7 @@ module Y_Rx_Dagger(qbit target)
 // Controlled Phase gate
 // controlled-[e^(i*theta)  0;0  e^(i*theta)] is equivalent to the phase shift gate [1 0; 0 e^(i*theta)] on the control qubit
 // can be written as a product of G(theta/2) and Rz(theta); G is physically unobservable so it can be neglected
-module ControlledPhase(qbit target, qbit control, double theta)   
+module ControlledPhase(qbit target, qbit control, double theta)
 {
 	Rz(control, theta);
 }
@@ -9102,10 +9102,10 @@ module ControlledRotationPiMinus(qbit target, qbit control,int j)
 
 // Cascade CNOT between qubits p and q (with p>q) and controlled z rotation of angle theta on qubit q
 // The control qubit is passed as a parameter and it will be one of the top register qubits
-module CascadeControlledRotation(qbit reg[M], int p, int q,double theta,qbit control)			
-{								
+module CascadeControlledRotation(qbit reg[M], int p, int q,double theta,qbit control)
+{
   int i;
-                                                          
+
   for (i=p;i>q;i--)
       CNOT(reg[i],reg[i-1]);
   ControlledRotation(reg[q],control,theta);
@@ -9117,9 +9117,9 @@ module CascadeControlledRotation(qbit reg[M], int p, int q,double theta,qbit con
 // p>q>r>s
 // Cascade CNOT between p and q, CNOT between q and r and again cascade CNOT between r and s; controlled rotation of angle theta on qubit s
 // The control qubit is passed as a parameter and it will be one of the top register qubits
-module CascadeControlledRotation_pqrs(qbit reg[M], int p, int q,int r, int s, double theta,qbit control)			
+module CascadeControlledRotation_pqrs(qbit reg[M], int p, int q,int r, int s, double theta,qbit control)
 {
-  int i;	  			       	   	    	   	  					  	  	      	    
+  int i;
   for (i=p;i>q;i--)
       CNOT(reg[i],reg[i-1]);
   CNOT(reg[p],reg[r]);
@@ -9137,9 +9137,9 @@ module CascadeControlledRotation_pqrs(qbit reg[M], int p, int q,int r, int s, do
 // p>r>q
 // Cascade CNOT between p and r, CNOT between r and q and controlled rotation of angle theta on qubit q
 // The control qubit is passed as a parameter and it will be one of the top register qubits
-module CascadeControlledRotation_prq(qbit reg[M], int p, int q,int r, double theta,qbit control)			
+module CascadeControlledRotation_prq(qbit reg[M], int p, int q,int r, double theta,qbit control)
 {
-  int i;	  	     	     	    	      	 					  	  	      	    	   		       	   	    	   	  					  	  
+  int i;
   for (i=p;i>r;i--)
       CNOT(reg[i],reg[i-1]);
   CNOT(reg[r],reg[q]);
@@ -9151,10 +9151,10 @@ module CascadeControlledRotation_prq(qbit reg[M], int p, int q,int r, double the
 
 // q>p>r
 // CNOT between q and p, cascade CNOT between p and r and controlled rotation of angle theta on qubit r
-// The control qubit is passed as a parameter and it will be one of the top register qubits	  
-module CascadeControlledRotation_qpr(qbit reg[M], int p, int q,int r, double theta,qbit control)			
-{	 
-  int i;	     	     	    	      	 					  	  	      	    	 		      	   	    	   	  					  	  
+// The control qubit is passed as a parameter and it will be one of the top register qubits
+module CascadeControlledRotation_qpr(qbit reg[M], int p, int q,int r, double theta,qbit control)
+{
+  int i;
   CNOT(reg[q],reg[p]);
   for (i=p;i>r;i--)
       CNOT(reg[i],reg[i-1]);
@@ -9165,10 +9165,10 @@ module CascadeControlledRotation_qpr(qbit reg[M], int p, int q,int r, double the
 }
 
 
-// Controlled version of the number operator "circuit primitive" on qubit p of the bottom register 
-// The control qubit is passed as a parameter and it will be one of the top register qubits	 
-module NumberOperator(qbit target,double theta, qbit control)     
-{											
+// Controlled version of the number operator "circuit primitive" on qubit p of the bottom register
+// The control qubit is passed as a parameter and it will be one of the top register qubits
+module NumberOperator(qbit target,double theta, qbit control)
+{
   ControlledPhase(target,control,theta/2.0);
   ControlledRotation(target,control,theta);
 }
@@ -9176,7 +9176,7 @@ module NumberOperator(qbit target,double theta, qbit control)
 
 //p>q
 // Controlled version of the Excitation Operator Template circuit primitive
-// The control qubit is passed as a parameter and it will be one of the top register qubits	 
+// The control qubit is passed as a parameter and it will be one of the top register qubits
 module ExcitationOperatorTemplate(qbit reg[M], int p, int q,double theta, qbit control)
 {
   H(reg[q]);
@@ -9188,7 +9188,7 @@ module ExcitationOperatorTemplate(qbit reg[M], int p, int q,double theta, qbit c
   Y_Rx(reg[p]);
   CascadeControlledRotation(reg,p,q,theta,control);
   Y_Rx_Dagger(reg[q]);
-  Y_Rx_Dagger(reg[p]);  
+  Y_Rx_Dagger(reg[p]);
 }
 
 
@@ -9199,9 +9199,9 @@ module ExcitationOperator(qbit reg[M], int p, int q, double theta,qbit control)
 }
 
 //controlled version of the coulomb Exchange Operator circuit primitive on qubits p and q
-// Assumes p>q - will be called only for qubits with p>q 
-module CoulombExchgOperator(qbit reg[M],int p, int q, double theta, qbit control)  
-{															
+// Assumes p>q - will be called only for qubits with p>q
+module CoulombExchgOperator(qbit reg[M],int p, int q, double theta, qbit control)
+{
   ControlledPhase(reg[p],control,theta/2);
   ControlledRotation(reg[q],control,theta);
   ControlledRotation(reg[p],control,theta);
@@ -9211,7 +9211,7 @@ module CoulombExchgOperator(qbit reg[M],int p, int q, double theta, qbit control
 }
 
 //Implements controlled version of Number Excitation Operator circuit primitive for the case p>q>r
-module  NrExcitationOperator_PQR(qbit reg[M],int p, int q,int r, double theta, qbit control)     
+module  NrExcitationOperator_PQR(qbit reg[M],int p, int q,int r, double theta, qbit control)
 {
   ExcitationOperatorTemplate(reg,p,r,theta,control);
 
@@ -9225,12 +9225,12 @@ module  NrExcitationOperator_PQR(qbit reg[M],int p, int q,int r, double theta, q
   Y_Rx(reg[p]);
   CascadeControlledRotation_pqrs(reg,p,q+1,q-1,r,-theta,control);
   Y_Rx_Dagger(reg[r]);
-  Y_Rx_Dagger(reg[p]);  
+  Y_Rx_Dagger(reg[p]);
 }
 
 
 //Implements controlled version of Number Excitation Operator circuit primitive for the case p>r>q
-module  NrExcitationOperator_PRQ(qbit reg[M],int p, int q,int r, double theta, qbit control)     
+module  NrExcitationOperator_PRQ(qbit reg[M],int p, int q,int r, double theta, qbit control)
 {
   ExcitationOperatorTemplate(reg,p,r,theta,control);
 
@@ -9244,12 +9244,12 @@ module  NrExcitationOperator_PRQ(qbit reg[M],int p, int q,int r, double theta, q
   Y_Rx(reg[p]);
   CascadeControlledRotation_prq(reg,p,q,r,-theta,control);
   Y_Rx_Dagger(reg[r]);
-  Y_Rx_Dagger(reg[p]);  
+  Y_Rx_Dagger(reg[p]);
 }
 
 
 //Implements controlled version of Number Excitation Operator circuit primitive for the case q>p>r
-module  NrExcitationOperator_QPR(qbit reg[M],int p, int q,int r, double theta, qbit control)     
+module  NrExcitationOperator_QPR(qbit reg[M],int p, int q,int r, double theta, qbit control)
 {
   ExcitationOperatorTemplate(reg,p,r,theta,control);
 
@@ -9263,13 +9263,13 @@ module  NrExcitationOperator_QPR(qbit reg[M],int p, int q,int r, double theta, q
   Y_Rx(reg[p]);
   CascadeControlledRotation_qpr(reg,p,q,r,-theta,control);
   Y_Rx_Dagger(reg[r]);
-  Y_Rx_Dagger(reg[p]);  
+  Y_Rx_Dagger(reg[p]);
 }
 
 
-// controlled version of Number Excitation Operator circuit primitive 
+// controlled version of Number Excitation Operator circuit primitive
 // Assumes p>r and handles separately the 3 different circuits for the 3 cases p>q>r, p>r>q, q>p>r
-module NrExcitationOperator(qbit reg[M],int p, int q,int r, double theta, qbit control)   
+module NrExcitationOperator(qbit reg[M],int p, int q,int r, double theta, qbit control)
 {
   if (q<r)
     NrExcitationOperator_PRQ(reg,p, q, r, theta,control);
@@ -9282,7 +9282,7 @@ module NrExcitationOperator(qbit reg[M],int p, int q,int r, double theta, qbit c
 
 // Controlled version of the Double Excitation Operator circuit primitive
 // Assumes p>q>r>s
-module DoubleExcitationOperator(qbit reg[M],int p, int q,int r, int s, double theta1, double theta2, double theta3, double theta4, qbit control)  
+module DoubleExcitationOperator(qbit reg[M],int p, int q,int r, int s, double theta1, double theta2, double theta3, double theta4, qbit control)
 {
   //1
   H(reg[s]);
@@ -9374,9 +9374,9 @@ module DoubleExcitationOperator(qbit reg[M],int p, int q,int r, int s, double th
   Y_Rx_Dagger(reg[p]);
 }
 
-// The controlled version of PauliH1 module form the GFI pseudocode 
+// The controlled version of PauliH1 module form the GFI pseudocode
 // Includes the Hamiltonian terms involving one electron integrals
-module PauliH1(qbit bottomregister[M],qbit control)    
+module PauliH1(qbit bottomregister[M],qbit control)
 {
   int p,q,pp,qq;
   double theta;
@@ -9404,7 +9404,7 @@ module PauliH1(qbit bottomregister[M],qbit control)
       //get the spatial indices for the integrals
       pp=p/2;
       qq=q/2;
-      
+
       //theta=hpq[p,q]*tau/100;
       //read h[p,q] from file using the corresponding spatial indices pp,qq
       // theta=readline(integralsFile1,Index2to1Dimension(pp,qq));
@@ -9415,13 +9415,13 @@ module PauliH1(qbit bottomregister[M],qbit control)
       theta=theta*((p-q+1)%2);
 
       if(theta!=0)
-        ExcitationOperator(bottomregister,p,q,theta,control);	   	
+        ExcitationOperator(bottomregister,p,q,theta,control);
     }
-  } 
+  }
 }
 
 
-// The controlled version of PauliH2 module form the GFI pseudocode 
+// The controlled version of PauliH2 module form the GFI pseudocode
 // Includes the Hamiltonian terms involving two electron integrals
 module PauliH2(qbit bottomregister[M],qbit control)
 {
@@ -9436,22 +9436,22 @@ module PauliH2(qbit bottomregister[M],qbit control)
       pp=p/2;
       qq=q/2;
       // theta=(1/2)*(h[p,q,p,q]-h[p,q,q,p])*tau/100;
-      
+
       //read h[p,q,p,q] from file using the corresponding spatial indices pp,qq,rr
       // tmp1=readline(integralsFile2,Index4to1Dimension(pp,qq,pp,qq));
       tmp1=hmol2[pp][qq][pp][qq];
-      
+
       //read h[p,q,q,p] from file using the corresponding spatial indices pp,qq,rr
       // tmp2=readline(integralsFile2,Index4to1Dimension(pp,qq,qq,pp));
       tmp2=hmol2[pp][qq][qq][pp];
-      
+
       //only apply module if theta not zero, make theta=0 if spins are not equal for il and jk in h_ijkl
       //for h[p,q,q,p] the spins are always equal since il=pp and jk=qq, so it is always non-zero
-      theta1=(1/2.0)*(tmp1*((p-q+1)%2)-tmp2)*tau/100; 
+      theta1=(1/2.0)*(tmp1*((p-q+1)%2)-tmp2)*tau/100;
       if(theta1!=0)
       {
-        CoulombExchgOperator(bottomregister,p,q,theta1,control);	
-      }   	
+        CoulombExchgOperator(bottomregister,p,q,theta1,control);
+      }
     }
   }
   for (r=0;r<M;r++)
@@ -9471,16 +9471,16 @@ module PauliH2(qbit bottomregister[M],qbit control)
           //read h[p,q,q,r] from file using the corresponding spatial indices pp,qq,rr
           // tmp1=readline(integralsFile2,Index4to1Dimension(pp,qq,qq,rr));
           tmp1=hmol2[pp][qq][qq][rr];
-          
+
           //read h[p,q,r,q] from file using the corresponding spatial indices pp,qq,rr
           // tmp2=readline(integralsFile2,Index4to1Dimension(pp,qq,rr,qq));
           tmp2=hmol2[pp][qq][rr][qq];
-          
+
           //only apply module if theta not zero, make theta=0 if spins are not equal for il and jk in h_ijkl
-        
+
           //theta1=(1/4.0)*(tau/100)*(tmp1*((p-r+1)%2)-tmp2*((abs(p-q)+1)%2)*((abs(r-q)+1)%2));
           theta1=(1/4.0)*(tau/100)*(tmp1*((p-r+1)%2)-tmp2*((p-q+1)%2)*((r-q+1)%2)); // ajavadia (remove abs)
-          
+
           if(theta1!=0)
           {
             NrExcitationOperator(bottomregister,p,q,r,theta1,control);   //the decision of which of the 3 cases for q (q>p>r, p>q>r, p>r>q)
@@ -9488,11 +9488,11 @@ module PauliH2(qbit bottomregister[M],qbit control)
           }
         }
       }
-    }     	
+    }
   }
   for (s=0;s<M;s++)
   {
-    for (r=s+1;r<M;r++)    
+    for (r=s+1;r<M;r++)
     {
       for (q=r+1;q<M;q++)
       {
@@ -9507,7 +9507,7 @@ module PauliH2(qbit bottomregister[M],qbit control)
           //read h[p,q,r,s] from file using the corresponding spatial indices pp,qq,rr
           // tmp1=readline(integralsFile2,Index4to1Dimension(pp,qq,rr,ss));
           tmp1=hmol2[pp][qq][rr][ss];
-           
+
           //read h[p,q,s,r] form file using the corresponding spatial indices pp,qq,rr
           // tmp2=readline(integralsFile2,Index4to1Dimension(pp,qq,ss,rr));
           tmp2=hmol2[pp][qq][ss][rr];
@@ -9519,23 +9519,23 @@ module PauliH2(qbit bottomregister[M],qbit control)
           //read h[p,r,q,s] form file using the corresponding spatial indices pp,qq,rr
           // tmp3=readline(integralsFile2,Index4to1Dimension(pp,rr,qq,ss));
           tmp3=hmol2[pp][rr][qq][ss];
-            
+
           //read h[p,r,s,q]; from file using the corresponding spatial indices pp,qq,rr
           // tmp4=readline(integralsFile2,Index4to1Dimension(pp,rr,ss,qq));
           tmp4=hmol2[pp][rr][ss][qq];
-            
+
           //calculate a2 taking into account spin
           a2=tmp3*((p-s+1)%2)*((q-r+1)%2)-tmp4*((p-q+1)%2)*((r-s+1)%2);
-            
+
           //a3=h[p,s,q,r]-h[p,s,r,q];
           //read h[p,s,q,r] from file using the corresponding spatial indices pp,qq,rr
           // tmp5=readline(integralsFile2,Index4to1Dimension(pp,ss,qq,rr));
           tmp5=hmol2[pp][ss][qq][rr];
-            
+
           //read h[p,s,r,q] from file using the corresponding spatial indices pp,qq,rr
           // tmp6=readline(integralsFile2,Index4to1Dimension(pp,ss,rr,qq));
           tmp6=hmol2[pp][ss][rr][qq];
-            
+
           //calculate a3 taking into account spin
           a3=tmp5*((p-r+1)%2)*((q-s+1)%2)-tmp6*((p-q+1)%2)*((r-s+1)%2);
 
@@ -9550,34 +9550,34 @@ module PauliH2(qbit bottomregister[M],qbit control)
           }
         }
       }
-    }     	
+    }
   }
 }
 
 // Controlled version of the ApproxU GFI pseudocode module
 // applies U_k for a given k
-module ApproxU(qbit bottomregister[M],int k,qbit control)   
+module ApproxU(qbit bottomregister[M],int k,qbit control)
 {
 
 	int i;
-	int N_k=100;	
+	int N_k=100;
 	N_k=N_k*pow(2,k);
 
-	ControlledPhase(bottomregister[0],control,Emax*tau*pow(2, k-1));	
-	
-	//apply PauliH1 and Pauli H2 N_k times 
+	ControlledPhase(bottomregister[0],control,Emax*tau*pow(2, k-1));
+
+	//apply PauliH1 and Pauli H2 N_k times
   for (i=0;i<N_k;i++)
   {
-    PauliH1(bottomregister,control);	
+    PauliH1(bottomregister,control);
     PauliH2(bottomregister,control);
   }
-		
+
 }
 
 //Inverse Quantum Fourier transform on top register
 module InverseQFT(qbit topregister[b])
 {
-	int i,j;	
+	int i,j;
 	for (i=0;i<b;i++)
   {
 		H(topregister[i]);
@@ -9598,28 +9598,28 @@ int main()
 	int meas=0;
 	double E0;
 	int m[b];
-	qbit topregister[b]; // the number of top register qubits 
-	qbit bottomregister[M];  
-	
+	qbit topregister[b]; // the number of top register qubits
+	qbit bottomregister[M];
+
 	//tau=2*PI/DeltaE; // ajavadia
-	
-	
+
+
 	//prepare ground state
 	// forall(i=0;i<M;i++)
 	for(i=0;i<M;i++)
-	{	
+	{
 		if(i<N)
 			PrepZ(bottomregister[i],1);
 		else
 			PrepZ(bottomregister[i],0);
 	}
-	
-	
+
+
 	// forall (i=0;i<b;i++)
 	for (i=0;i<b;i++)
   {
 		PrepZ(topregister[i],0); //prepare the top register in 0 state
-		H(topregister[i]);  
+		H(topregister[i]);
 		ApproxU(bottomregister,i, topregister[i]);   //call ApproxU_k controlled by qubit k in the top register
   }
 
@@ -9628,11 +9628,11 @@ int main()
 	// forall (i=0;i<b;i++)
 	for (i=0;i<b;i++)
     m[i] = MeasZ(topregister[i]);  //measure each of the top register qubits
-	
+
 	// forall (i=0;i<b;i++)
 	for (i=0;i<b;i++)
     meas=meas+m[i]*pow(2,i);		    //calculate m= phase using the results of the measurement
-	   
+
 	E0=Emax-DeltaE*meas/pow(2,b);
 
   return 0;
