@@ -26,12 +26,15 @@ OPT=$(BUILD)/bin/opt
 
 CC_FLAGS=-c -emit-llvm -I/usr/include -I/usr/include/x86_64-linux-gnu -I/usr/lib/gcc/x86_64-linux-gnu/4.8/include -I$(DIRNAME)
 
+OSX_FLAGS=""
+
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Linux)
 SCAFFOLD_LIB=$(ROOT)/build/Release+Asserts/lib/Scaffold.so
 endif
 ifeq ($(UNAME_S),Darwin)
 SCAFFOLD_LIB=$(ROOT)/build/lib/LLVMScaffold.dylib
+OSX_FLAGS=-isysroot $(shell xcrun --sdk macosx --show-sdk-path)
 endif
 
 
@@ -89,7 +92,7 @@ $(FILE)_merged.scaffold: $(FILENAME)
 # Compile Scaffold to LLVM bytecode
 $(FILE).ll: $(FILE)_merged.scaffold
 	@echo "[Scaffold.makefile] Compiling $(FILE)_merged.scaffold ..."
-	@$(CC) $(FILE)_merged.scaffold $(CC_FLAGS) -o $(FILE).ll
+	@$(CC) $(FILE)_merged.scaffold $(CC_FLAGS) $(OSX_FLAGS) -o $(FILE).ll
 
 $(FILE)1.ll: $(FILE).ll
 	@echo "[Scaffold.makefile] Transforming cbits ..."
@@ -197,7 +200,7 @@ $(FILE).qasmf: $(FILE)12.ll
 	@$(OPT) -S -load $(SCAFFOLD_LIB) -FlattenModule -all 1 $(FILE)12.ll -o $(FILE)12.inlined.ll 2> /dev/null
 	@$(OPT) -load $(SCAFFOLD_LIB) -gen-qasm $(FILE)12.inlined.ll 2> $(FILE).qasmh > /dev/null
 	@$(PYTHON) $(ROOT)/scaffold/flatten-qasm.py $(FILE).qasmh
-	@$(CC) $(FILE)_qasm.scaffold -o $(FILE)_qasm
+	@$(CC) $(OSX_FLAGS) $(FILE)_qasm.scaffold -o $(FILE)_qasm
 	@./$(FILE)_qasm > $(FILE).tmp
 	@cat fdecl.out $(FILE).tmp > $(FILE).qasmf
 	@echo "[Scaffold.makefile] Flat QASM written to $(FILE).qasmf ..."    
