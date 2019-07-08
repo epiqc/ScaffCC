@@ -128,10 +128,11 @@ Clang: llvm build
 		fi \
 	else \
 		if [ "$(UNAME_S)" = "Darwin" ]; then \
-		    mkdir -p build && cd build && ../llvm/configure --disable-debug-symbols CC=gcc CXX=g++ && make ENABLE_LIBCPP=1; fi
+		    mkdir -p build && cd build && ../llvm/configure --disable-debug-symbols CC=gcc CXX=g++ && make ENABLE_LIBCPP=1; \
 	    else \
-		    mkdir -p build && cd build && ../llvm/configure --disable-debug-symbols CC=gcc CXX=g++ && make ; fi
+		    mkdir -p build && cd build && ../llvm/configure --disable-debug-symbols CC=gcc CXX=g++ && make ; \
 		fi \
+	fi
 	@if [ -z `echo ${PATH} | grep ${PWD}/Debug+Asserts/bin` ]; then \
 		export PATH=${PATH}:${PWD}/Debug+Asserts/bin; \
 	else true; fi
