@@ -24,7 +24,6 @@
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 
 using namespace llvm;
-
 namespace {
 	// We need to use a ModulePass in order to create new Functions
 	struct GenRKQC : public ModulePass {
@@ -53,7 +52,7 @@ namespace {
 			}
 
 			void create_a_swap_b(CallInst& I, Function* RKQC_Func, std::string& rkqcName){
-				if(!RKQC_Func){
+                if(!RKQC_Func){
 					std::vector<Type*> ArgTypes(2);
 					for(int i=0;i<2;i++) ArgTypes[i] = I.getArgOperand(i)->getType();//Type::getInt16Ty(getGlobalContext());
 					FunctionType *FuncType = FunctionType::get(Type::getVoidTy(getGlobalContext()),
@@ -89,11 +88,10 @@ namespace {
 					ReturnInst::Create(getGlobalContext(), 0, BB);
 				}
 				std::vector<Value*>  Args(2);
-				for (int i=0; i<3; i++) Args[i] = I.getArgOperand(i);
+				for (int i=0; i<2; i++) Args[i] = I.getArgOperand(i);
 				BasicBlock::iterator ii(&I);
-				ReplaceInstWithInst(I.getParent()->getInstList(), ii,
-					CallInst::Create(RKQC_Func, ArrayRef<Value*>(Args)));
-			}
+				ReplaceInstWithInst(I.getParent()->getInstList(), ii, CallInst::Create(RKQC_Func, ArrayRef<Value*>(Args)));
+            }
 
 
 			void create_assign_value_of_b_to_a(CallInst& I, Function* RKQC_Func, std::string& rkqcName){
@@ -336,9 +334,9 @@ namespace {
 
 			void visitCallInst(CallInst &I) {
 				// Determine whether this is an RKQC function 
-				Function *CF = I.getCalledFunction();
+                Function *CF = I.getCalledFunction();
 				if (CF->isIntrinsic()){
-					std::string name = CF->getName();
+                    std::string name = CF->getName();
 					if(name.find("rkqc")!=std::string::npos) {
 					// Retrieve name of function
 						std::size_t func_loc = name.find("rkqc");
@@ -353,10 +351,10 @@ namespace {
 						}
 						else if(rkqcFuncName.find( "assign_value_of_b_to_a") != std::string::npos){
 							create_assign_value_of_b_to_a(I, RKQC_Func, rkqcName);
-						}
+                        }
 						else if(rkqcFuncName.find( "a_eq_a_plus_b") != std::string::npos){
     						create_a_eq_a_plus_b(I, RKQC_Func, rkqcName);
-    					}
+                        }
 						else if(rkqcFuncName.find("assign_value_of_0_to_a") != std::string::npos){
 							create_assign_value_of_0_to_a(I, RKQC_Func, rkqcName);
 						}
@@ -403,12 +401,12 @@ namespace {
 						}
 
 					}// endif 'found RKQC'
-				} 	
+				}
 			} // visitCallInst()
 		}; // struct RKQCVisitor
 
 		virtual bool runOnModule(Module &M) {
-			RKQCVisitor RV(&M);
+            RKQCVisitor RV(&M);
 			RV.visit(M);
 			return true;
 		} // runOnModule()

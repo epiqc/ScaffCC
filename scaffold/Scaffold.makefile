@@ -12,7 +12,9 @@ CTQG=0
 ROTATIONS=0
 
 BUILD=$(ROOT)/build/Release+Asserts
+#BUILD=$(ROOT)/build
 
+SQCTPATH=$(ROOT)/Rotations/sqct/rotZ
 GRIDSYNTHPATH=$(ROOT)/Rotations/gridsynth/gridsynth
 ROTATIONPATH=$(GRIDSYNTHPATH) # select rotation decomposition tool
 SCRIPTSPATH=$(ROOT)/scripts/ # select path to scripts
@@ -24,12 +26,15 @@ OPT=$(BUILD)/bin/opt
 
 CC_FLAGS=-c -emit-llvm -I/usr/include -I/usr/include/x86_64-linux-gnu -I/usr/lib/gcc/x86_64-linux-gnu/4.8/include -I$(DIRNAME)
 
+OSX_FLAGS=""
+
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Linux)
 SCAFFOLD_LIB=$(ROOT)/build/Release+Asserts/lib/Scaffold.so
 endif
 ifeq ($(UNAME_S),Darwin)
 SCAFFOLD_LIB=$(ROOT)/build/Release+Asserts/lib/Scaffold.dylib
+OSX_FLAGS=-isysroot $(shell xcrun --sdk macosx --show-sdk-path)
 endif
 
 
@@ -77,8 +82,8 @@ $(FILE)_merged.scaffold: $(FILENAME)
 		echo "[Scaffold.makefile] Compiling CTQG ..."; \
 		$(ROOT)/ctqg/CTQG/ctqg $(CFILE).ctqg; \
 		echo "[Scaffold.makefile] Merging CTQG output back into Scaffold ..."; \
-    $(PERL) $(ROOT)/ctqg/trans/trans.pl $(CFILE).qasm > trans.qasm; \
-    mv trans.qasm $(CFILE).qasm; \
+	$(PERL) $(ROOT)/ctqg/trans/trans.pl $(CFILE).qasm > trans.qasm; \
+	mv trans.qasm $(CFILE).qasm; \
 		$(PERL) $(ROOT)/ctqg/trans/merge.pl $(CFILE).qasm; \
 	else \
 		cp $(FILENAME) $(FILE)_merged.scaffold; \
@@ -87,7 +92,7 @@ $(FILE)_merged.scaffold: $(FILENAME)
 # Compile Scaffold to LLVM bytecode
 $(FILE).ll: $(FILE)_merged.scaffold
 	@echo "[Scaffold.makefile] Compiling $(FILE)_merged.scaffold ..."
-	@$(CC) $(FILE)_merged.scaffold $(CC_FLAGS) -o $(FILE).ll
+	@$(CC) $(FILE)_merged.scaffold $(CC_FLAGS) $(OSX_FLAGS) -o $(FILE).ll
 
 $(FILE)1.ll: $(FILE).ll
 	@echo "[Scaffold.makefile] Transforming cbits ..."
@@ -129,15 +134,12 @@ $(FILE)6.ll: $(FILE)4.ll
 # Perform Rotation decomposition if requested and rotation decomp tool is built
 $(FILE)7.ll: $(FILE)6.ll
 	@if [ ! -e $(ROTATIONPATH) ]; then \
-		echo "[Scaffold.makefile]"; \
-		echo "[Scaffold.makefile] WARNING: gridsynth not found, skipping rotation decomposition ..."; \
-		echo "[Scaffold.makefile] (Download gridsynth from https://www.mathstat.dal.ca/~selinger/newsynth and place the binary in ScaffCC/Rotations/gridsynth/)"; \
-		echo "[Scaffold.makefile]"; \
+		echo "[Scaffold.makefile] Rotation tool not built, skipping rotation decomposition ..."; \
 		cp $(FILE)6.ll $(FILE)7.ll; \
 	elif [ $(ROTATIONS) -eq 1 ]; then \
 		echo "[Scaffold.makefile] Decomposing Rotations ..." && \
 		export ROTATIONPATH=$(ROTATIONPATH) && \
-    export PRECISION=$(PRECISION); \
+	export PRECISION=$(PRECISION); \
 		$(OPT) -S -load $(SCAFFOLD_LIB) -Rotations $(FILE)6.ll -o $(FILE)7.ll > /dev/null; \
 	else \
 		cp $(FILE)6.ll $(FILE)7.ll; \
@@ -151,16 +153,16 @@ $(FILE)8.ll: $(FILE)7.ll
 # Compile RKQC 
 $(FILE)9.ll: $(FILE)8.ll
 	@if [ $(RKQC) -eq 1 ]; then \
-        echo "[Scaffold.makefile] Compiling RKQC Functions ..."; \
-        $(OPT) -S -load $(SCAFFOLD_LIB) -GenRKQC $(FILE)8.ll -o $(FILE)9.ll > /dev/null 2> $(FILE).errs; \
+		echo "[Scaffold.makefile] Compiling RKQC Functions ..."; \
+		$(OPT) -S -load $(SCAFFOLD_LIB) -GenRKQC $(FILE)8.ll -o $(FILE)9.ll > /dev/null 2> $(FILE).errs; \
 	else \
 		mv $(FILE)8.ll $(FILE)9.ll; \
-    fi
+	fi
 
 # Perform Toffoli decomposition if TOFF is 1
 $(FILE)11.ll: $(FILE)9.ll
 	@if [ $(TOFF) -eq 1 ]; then \
-    echo "[Scaffold.makefile] Toffoli Decomposition ..."; \
+	echo "[Scaffold.makefile] Toffoli Decomposition ..."; \
 		$(OPT) -S -load $(SCAFFOLD_LIB) -ToffoliReplace $(FILE)9.ll -o $(FILE)11.ll > /dev/null; \
 	else \
 		cp $(FILE)9.ll $(FILE)11.ll; \
@@ -173,7 +175,7 @@ $(FILE)12.ll: $(FILE)11.ll
 
 # Generate resource counts from final LLVM output
 $(FILE).resources: $(FILE)12.ll
-	@echo "[Scaffold.makefile] Generating resource count ..."    
+	@echo "[Scaffold.makefile] Generating resource count ..."	
 	@$(OPT) -load $(SCAFFOLD_LIB) -ResourceCount $(FILE)12.ll 2> $(FILE).resources > /dev/null
 	@echo "[Scaffold.makefile] Resources written to $(FILE).resources ..."  
 
@@ -198,10 +200,10 @@ $(FILE).qasmf: $(FILE)12.ll
 	@$(OPT) -S -load $(SCAFFOLD_LIB) -FlattenModule -all 1 $(FILE)12.ll -o $(FILE)12.inlined.ll 2> /dev/null
 	@$(OPT) -load $(SCAFFOLD_LIB) -gen-qasm $(FILE)12.inlined.ll 2> $(FILE).qasmh > /dev/null
 	@$(PYTHON) $(ROOT)/scaffold/flatten-qasm.py $(FILE).qasmh
-	@$(CC) $(FILE)_qasm.scaffold -o $(FILE)_qasm
+	@$(CC) $(OSX_FLAGS) $(FILE)_qasm.scaffold -o $(FILE)_qasm
 	@./$(FILE)_qasm > $(FILE).tmp
 	@cat fdecl.out $(FILE).tmp > $(FILE).qasmf
-	@echo "[Scaffold.makefile] Flat QASM written to $(FILE).qasmf ..."    
+	@echo "[Scaffold.makefile] Flat QASM written to $(FILE).qasmf ..."	
 
 # Generate OpenQASM
 $(FILE).qasm: $(FILE)12.ll
