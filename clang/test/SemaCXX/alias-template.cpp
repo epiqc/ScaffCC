@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -verify -std=c++11 %s
+// RUN: %clang_cc1 -verify -std=c++14 -fcxx-exceptions %s
 
 namespace RedeclAliasTypedef {
   template<typename U> using T = int;
@@ -35,8 +35,8 @@ namespace VariableLengthArrays {
   template<typename Z> using T = int[n]; // expected-error {{variable length array declaration not allowed at file scope}}
 
   const int m = 42;
-  template<typename Z> using U = int[m]; // expected-note {{previous definition}}
-  template<typename Z> using U = int[42]; // ok
+  template<typename Z> using U = int[m];
+  template<typename Z> using U = int[42]; // expected-note {{previous definition}} 
   template<typename Z> using U = int; // expected-error {{type alias template redefinition with different types ('int' vs 'int [42]')}}
 }
 
@@ -68,12 +68,10 @@ namespace InFunctions {
 
 namespace ClassNameRedecl {
   class C0 {
-    // FIXME: this diagnostic is pretty poor
-    template<typename U> using C0 = int; // expected-error {{name defined in alias declaration must be an identifier}}
+    template<typename U> using C0 = int; // expected-error {{member 'C0' has the same name as its class}}
   };
   class C1 {
-    // FIXME: this diagnostic is pretty poor
-    template<typename U> using C1 = C1; // expected-error {{name defined in alias declaration must be an identifier}}
+    template<typename U> using C1 = C1; // expected-error {{member 'C1' has the same name as its class}}
   };
   class C2 {
     template<typename U> using C0 = C1; // ok
@@ -102,12 +100,10 @@ class CtorDtorName {
 };
 
 namespace TagName {
-  template<typename Z> using S = struct { int n; }; // expected-error {{can not be defined}}
-  template<typename Z> using T = class { int n; }; // expected-error {{can not be defined}}
-  template<typename Z> using U = enum { a, b, c }; // expected-error {{can not be defined}}
-  template<typename Z> using V = struct V { int n; }; // expected-error {{redefinition of 'V' as different kind of symbol}} \
-                                                         expected-error {{'TagName::V' can not be defined in a type alias template}} \
-                                                         expected-note {{previous definition is here}}
+  template<typename Z> using S = struct { int n; }; // expected-error {{cannot be defined}}
+  template<typename Z> using T = class { int n; }; // expected-error {{cannot be defined}}
+  template<typename Z> using U = enum { a, b, c }; // expected-error {{cannot be defined}}
+  template<typename Z> using V = struct V { int n; }; // expected-error {{'TagName::V' cannot be defined in a type alias template}}
 }
 
 namespace StdExample {
@@ -138,10 +134,62 @@ namespace Access {
 namespace VoidArg {
   template<typename Z> using V = void;
   V<int> f(int); // ok
-  V<char> g(V<double>); // expected-error {{empty parameter list defined with a type alias of 'void' not allowed}}
+  V<char> g(V<double>); // ok (DR577)
 }
 
 namespace Curried {
   template<typename T, typename U> struct S;
   template<typename T> template<typename U> using SS = S<T, U>; // expected-error {{extraneous template parameter list in alias template declaration}}
+}
+
+// PR12647
+namespace SFINAE {
+  template<bool> struct enable_if; // expected-note 2{{here}}
+  template<> struct enable_if<true> { using type = void; };
+
+  template<typename T> struct is_enum { static constexpr bool value = __is_enum(T); };
+
+  template<typename T> using EnableIf = typename enable_if<T::value>::type; // expected-error {{undefined template}}
+  template<typename T> using DisableIf = typename enable_if<!T::value>::type; // expected-error {{undefined template}}
+
+  template<typename T> EnableIf<is_enum<T>> f();
+  template<typename T> DisableIf<is_enum<T>> f();
+
+  enum E { e };
+
+  int main() {
+    f<int>();
+    f<E>();
+  }
+
+  template<typename T, typename U = EnableIf<is_enum<T>>> struct fail1 {}; // expected-note {{here}}
+  template<typename T> struct fail2 : DisableIf<is_enum<T>> {}; // expected-note {{here}}
+
+  fail1<int> f1; // expected-note {{here}}
+  fail2<E> f2; // expected-note {{here}}
+}
+
+namespace PR24212 {
+struct X {};
+template <int I>
+struct S {
+  template <int J>
+  using T = X[J];
+  using U = T<I>;
+};
+static_assert(__is_same(S<3>::U, X[2]), ""); // expected-error {{static_assert failed}}
+}
+
+namespace PR39623 {
+template <class T>
+using void_t = void;
+
+template <class T, class = void_t<typename T::wait_what>>
+int sfinae_me() { return 0; } // expected-note{{candidate template ignored: substitution failure}}
+
+int g = sfinae_me<int>(); // expected-error{{no matching function for call to 'sfinae_me'}}
+}
+
+namespace NullExceptionDecl {
+template<int... I> auto get = []() { try { } catch(...) {}; return I; }; // expected-error{{initializer contains unexpanded parameter pack 'I'}}
 }

@@ -21,3 +21,14 @@ void NewBracedInitList() {
   // A warning on this would be sufficient once we can handle it correctly.
   new int {}; // expected-error {{}}
 }
+
+struct Auto {
+  static int n;
+};
+auto Auto::n = 0; // expected-warning {{'auto' type specifier is a C++11 extension}}
+auto Auto::m = 0; // expected-error {{no member named 'm' in 'Auto'}}
+                  // expected-warning@-1 {{'auto' type specifier is a C++11 extension}}
+
+struct Conv { template<typename T> operator T(); };
+bool pr21367_a = new int && false;
+bool pr21367_b = &Conv::operator int && false;

@@ -1,4 +1,7 @@
-// RUN: %clang_cc1 -emit-llvm-only -fgnu-runtime %s
+// RUN: %clang_cc1 -emit-llvm-only -fobjc-runtime=gcc %s
+
+// PR13820
+// REQUIRES: LP64
 
 @protocol MadeUpProtocol;
 

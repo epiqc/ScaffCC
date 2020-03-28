@@ -9,12 +9,18 @@
 
 #include "ARMTargetObjectFile.h"
 #include "ARMSubtarget.h"
+#include "ARMTargetMachine.h"
+#include "llvm/BinaryFormat/Dwarf.h"
+#include "llvm/BinaryFormat/ELF.h"
+#include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCContext.h"
+#include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCSectionELF.h"
-#include "llvm/Support/Dwarf.h"
-#include "llvm/Support/ELF.h"
+#include "llvm/MC/MCTargetOptions.h"
+#include "llvm/MC/SectionKind.h"
 #include "llvm/Target/TargetMachine.h"
-#include "llvm/ADT/StringExtras.h"
+#include <cassert>
+
 using namespace llvm;
 using namespace dwarf;
 
@@ -24,56 +30,71 @@ using namespace dwarf;
 
 void ARMElfTargetObjectFile::Initialize(MCContext &Ctx,
                                         const TargetMachine &TM) {
+  const ARMBaseTargetMachine &ARM_TM = static_cast<const ARMBaseTargetMachine &>(TM);
+  bool isAAPCS_ABI = ARM_TM.TargetABI == ARMBaseTargetMachine::ARMABI::ARM_ABI_AAPCS;
+  bool genExecuteOnly =
+      ARM_TM.getMCSubtargetInfo()->hasFeature(ARM::FeatureExecuteOnly);
+
   TargetLoweringObjectFileELF::Initialize(Ctx, TM);
-  isAAPCS_ABI = TM.getSubtarget<ARMSubtarget>().isAAPCS_ABI();
+  InitializeELF(isAAPCS_ABI);
 
   if (isAAPCS_ABI) {
-    StaticCtorSection =
-      getContext().getELFSection(".init_array", ELF::SHT_INIT_ARRAY,
-                                 ELF::SHF_WRITE |
-                                 ELF::SHF_ALLOC,
-                                 SectionKind::getDataRel());
-    StaticDtorSection =
-      getContext().getELFSection(".fini_array", ELF::SHT_FINI_ARRAY,
-                                 ELF::SHF_WRITE |
-                                 ELF::SHF_ALLOC,
-                                 SectionKind::getDataRel());
-    LSDASection = NULL;
+    LSDASection = nullptr;
   }
 
-  AttributesSection =
-    getContext().getELFSection(".ARM.attributes",
-                               ELF::SHT_ARM_ATTRIBUTES,
-                               0,
-                               SectionKind::getMetadata());
+  // Make code section unreadable when in execute-only mode
+  if (genExecuteOnly) {
+    unsigned Type = ELF::SHT_PROGBITS;
+    unsigned Flags =
+        ELF::SHF_EXECINSTR | ELF::SHF_ALLOC | ELF::SHF_ARM_PURECODE;
+    // Since we cannot modify flags for an existing section, we create a new
+    // section with the right flags, and use 0 as the unique ID for
+    // execute-only text
+    TextSection = Ctx.getELFSection(".text", Type, Flags, 0, "", 0U);
+  }
 }
 
-const MCSection *
-ARMElfTargetObjectFile::getStaticCtorSection(unsigned Priority) const {
-  if (!isAAPCS_ABI)
-    return TargetLoweringObjectFileELF::getStaticCtorSection(Priority);
+const MCExpr *ARMElfTargetObjectFile::getTTypeGlobalReference(
+    const GlobalValue *GV, unsigned Encoding, const TargetMachine &TM,
+    MachineModuleInfo *MMI, MCStreamer &Streamer) const {
+  if (TM.getMCAsmInfo()->getExceptionHandlingType() != ExceptionHandling::ARM)
+    return TargetLoweringObjectFileELF::getTTypeGlobalReference(
+        GV, Encoding, TM, MMI, Streamer);
 
-  if (Priority == 65535)
-    return StaticCtorSection;
+  assert(Encoding == DW_EH_PE_absptr && "Can handle absptr encoding only");
 
-  // Emit ctors in priority order.
-  std::string Name = std::string(".init_array.") + utostr(Priority);
-  return getContext().getELFSection(Name, ELF::SHT_INIT_ARRAY,
-                                    ELF::SHF_ALLOC | ELF::SHF_WRITE,
-                                    SectionKind::getDataRel());
+  return MCSymbolRefExpr::create(TM.getSymbol(GV),
+                                 MCSymbolRefExpr::VK_ARM_TARGET2, getContext());
 }
 
-const MCSection *
-ARMElfTargetObjectFile::getStaticDtorSection(unsigned Priority) const {
-  if (!isAAPCS_ABI)
-    return TargetLoweringObjectFileELF::getStaticDtorSection(Priority);
+const MCExpr *ARMElfTargetObjectFile::
+getDebugThreadLocalSymbol(const MCSymbol *Sym) const {
+  return MCSymbolRefExpr::create(Sym, MCSymbolRefExpr::VK_ARM_TLSLDO,
+                                 getContext());
+}
 
-  if (Priority == 65535)
-    return StaticDtorSection;
+static bool isExecuteOnlyFunction(const GlobalObject *GO, SectionKind SK,
+                                  const TargetMachine &TM) {
+  if (const Function *F = dyn_cast<Function>(GO))
+    if (TM.getSubtarget<ARMSubtarget>(*F).genExecuteOnly() && SK.isText())
+      return true;
+  return false;
+}
 
-  // Emit dtors in priority order.
-  std::string Name = std::string(".fini_array.") + utostr(Priority);
-  return getContext().getELFSection(Name, ELF::SHT_FINI_ARRAY,
-                                    ELF::SHF_ALLOC | ELF::SHF_WRITE,
-                                    SectionKind::getDataRel());
+MCSection *ARMElfTargetObjectFile::getExplicitSectionGlobal(
+    const GlobalObject *GO, SectionKind SK, const TargetMachine &TM) const {
+  // Set execute-only access for the explicit section
+  if (isExecuteOnlyFunction(GO, SK, TM))
+    SK = SectionKind::getExecuteOnly();
+
+  return TargetLoweringObjectFileELF::getExplicitSectionGlobal(GO, SK, TM);
+}
+
+MCSection *ARMElfTargetObjectFile::SelectSectionForGlobal(
+    const GlobalObject *GO, SectionKind SK, const TargetMachine &TM) const {
+  // Place the global in the execute-only text section
+  if (isExecuteOnlyFunction(GO, SK, TM))
+    SK = SectionKind::getExecuteOnly();
+
+  return TargetLoweringObjectFileELF::SelectSectionForGlobal(GO, SK, TM);
 }

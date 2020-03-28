@@ -4,8 +4,9 @@
 
 define void @zero_u(%struct.unaligned* nocapture %p) nounwind {
 entry:
-; CHECK: usw $zero
-  %x = getelementptr inbounds %struct.unaligned* %p, i32 0, i32 0
+; CHECK: swl $zero
+; CHECK: swr $zero
+  %x = getelementptr inbounds %struct.unaligned, %struct.unaligned* %p, i32 0, i32 0
   store i32 0, i32* %x, align 1
   ret void
 }

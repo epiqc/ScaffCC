@@ -42,7 +42,7 @@ bb3:                                              ; preds = %entry
   %17 = fdiv double %16, %0
   %18 = fadd double 0.000000e+00, %17
   %19 = call double @acos(double %18) nounwind readonly
-  %20 = load double* null, align 4
+  %20 = load double, double* null, align 4
   %21 = fmul double %20, 0x401921FB54442D18
   %22 = call double @sin(double %19) nounwind readonly
   %23 = fmul double %22, 0.000000e+00
@@ -59,7 +59,7 @@ bb3:                                              ; preds = %entry
   %34 = fadd double %31, 0.000000e+00
   %35 = fadd double %32, 0.000000e+00
   %36 = bitcast %struct.ggPoint3* %x to i8*
-  call void @llvm.memcpy.p0i8.p0i8.i32(i8* null, i8* %36, i32 24, i32 4, i1 false)
+  call void @llvm.memcpy.p0i8.p0i8.i32(i8* align 4 null, i8* align 4 %36, i32 24, i1 false)
   store double %33, double* null, align 8
   br i1 false, label %_Z20ggRaySphereIntersectRK6ggRay3RK8ggSphereddRd.exit, label %bb5.i.i.i
 
@@ -76,4 +76,4 @@ bb7:                                              ; preds = %entry
   ret i32 0
 }
 
-declare void @llvm.memcpy.p0i8.p0i8.i32(i8* nocapture, i8* nocapture, i32, i32, i1) nounwind
+declare void @llvm.memcpy.p0i8.p0i8.i32(i8* nocapture, i8* nocapture, i32, i1) nounwind

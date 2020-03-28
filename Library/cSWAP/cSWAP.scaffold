@@ -1,4 +1,4 @@
-module cSWAP (
+scaff_module cSWAP (
 	qbit ctrl,
 	qbit a,
 	qbit b
@@ -10,9 +10,9 @@ module cSWAP (
 
 }
 
-// Scaffold doesn't allow overloading module names based on module parameter signature
+// Scaffold doesn't allow overloading scaff_module names based on scaff_module parameter signature
 // cSWAPs is vector of gates on vectors of qubits
-module cSWAPs (
+scaff_module cSWAPs (
 	qbit ctrl,
 	const unsigned int width,
 	qbit a[],

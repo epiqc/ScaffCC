@@ -6,7 +6,8 @@ namespace test0 {
   };
 
   class B {
-    template <class T> friend class A<T>::Member;
+    template <class T> friend class A<T>::Member; // expected-warning {{not supported}}
+    int n;
   };
 
   A<int> a;
@@ -19,7 +20,7 @@ namespace test1 {
 
   class C {
     static void foo();
-    template <class T> friend void A<T>::f();
+    template <class T> friend void A<T>::f(); // expected-warning {{not supported}}
   };
 
   template <class T> struct A {
@@ -41,7 +42,7 @@ namespace test2 {
 
   class C {
     static void foo();
-    template <class T> friend void A<T>::g();
+    template <class T> friend void A<T>::g(); // expected-warning {{not supported}}
   };
 
   template <class T> struct A {
@@ -67,7 +68,7 @@ namespace test3 {
 
   template <class U> class C {
     int i;
-    template <class T> friend struct A<T>::Inner;
+    template <class T> friend struct A<T>::Inner; // expected-warning {{not supported}}
   };
 
   template <class T> int A<T>::Inner::foo() {
@@ -85,7 +86,7 @@ namespace test4 {
     
     template <class V>
     template <class U>
-    friend void X<V>::operator+=(U);
+    friend void X<V>::operator+=(U); // expected-warning {{not supported}}
   };
 
   void test() {   
@@ -95,7 +96,7 @@ namespace test4 {
 
 namespace test5 {
   template<template <class> class T> struct A {
-    template<template <class> class T> friend void A<T>::foo();
+    template<template <class> class U> friend void A<U>::foo(); // expected-warning {{not supported}}
   };
 
   template <class> struct B {};

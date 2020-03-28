@@ -1,4 +1,4 @@
-; RUN: llc < %s -regalloc=greedy -mcpu=cortex-a8 -relocation-model=pic -disable-fp-elim -verify-machineinstrs | FileCheck %s
+; RUN: llc < %s -regalloc=greedy -mcpu=cortex-a8 -relocation-model=pic -frame-pointer=all -verify-machineinstrs | FileCheck %s
 ;
 ; ARM tests that crash or fail with the greedy register allocator.
 
@@ -30,7 +30,7 @@ for.end:                                          ; preds = %cond.end
   %call85 = tail call double @exp(double %mul84) nounwind
   %mul86 = fmul double %conv78, %call85
   %add88 = fadd double 0.000000e+00, %mul86
-; CHECK: blx _exp
+; CHECK: bl _exp
   %call100 = tail call double @exp(double %mul84) nounwind
   %mul101 = fmul double undef, %call100
   %add103 = fadd double %add46, %mul101
@@ -61,7 +61,7 @@ for.end:                                          ; preds = %cond.end
 
 ; CHECK: insert_elem
 ; This test has a sub-register copy with a kill flag:
-;   %vreg6:ssub_3<def> = COPY %vreg6:ssub_2<kill>; QPR_VFP2:%vreg6
+;   %6:ssub_3 = COPY killed %6:ssub_2; QPR_VFP2:%6
 ; The rewriter must do something sensible with that, or the scavenger crashes.
 define void @insert_elem() nounwind {
 entry:
@@ -80,5 +80,51 @@ if.then195:                                       ; preds = %if.then84
   br label %if.end251
 
 if.end251:                                        ; preds = %if.then195, %if.then84, %entry
+  ret void
+}
+
+; Coalescer failure: removeCopyByCommutingDef leaves a bad kill flag
+; behind.
+define void @rdar11950722() nounwind readonly optsize ssp align 2 {
+entry:
+  br i1 undef, label %land.lhs.true7, label %lor.lhs.false.i
+
+lor.lhs.false.i:
+  br i1 undef, label %if.then10.i, label %land.lhs.true7
+
+if.then10.i:
+  %xFlags.1.i = select i1 undef, i32 0, i32 undef
+  br i1 undef, label %land.lhs.true33.i, label %f.exit
+
+land.lhs.true33.i:
+  %and26.i = and i32 %xFlags.1.i, 8
+  %cmp27.i = icmp eq i32 %and26.i, 0
+  %and29.i = and i32 %xFlags.1.i, 2147483645
+  %xFlags.1.and29.i = select i1 %cmp27.i, i32 %xFlags.1.i, i32 %and29.i
+  %and34.i = and i32 %xFlags.1.i, 8
+  %cmp35.i = icmp eq i32 %and34.i, 0
+  %and37.i = and i32 %xFlags.1.i, 2147483645
+  %yFlags.1.and37.i = select i1 %cmp35.i, i32 %xFlags.1.i, i32 %and37.i
+  br label %f.exit
+
+f.exit:
+  %xFlags.3.i = phi i32 [ %xFlags.1.and29.i, %land.lhs.true33.i ], [ %xFlags.1.i, %if.then10.i ]
+  %yFlags.2.i = phi i32 [ %yFlags.1.and37.i, %land.lhs.true33.i ], [ %xFlags.1.i, %if.then10.i ]
+  %cmp40.i = icmp eq i32 %xFlags.3.i, %yFlags.2.i
+  br i1 %cmp40.i, label %land.lhs.true7, label %land.end
+
+land.lhs.true7:
+  br i1 undef, label %land.lhs.true34, label %lor.lhs.false27
+
+lor.lhs.false27:
+  br i1 undef, label %land.lhs.true34, label %land.end
+
+land.lhs.true34:
+  br i1 undef, label %land.end, label %lor.lhs.false44
+
+lor.lhs.false44:
+  ret void
+
+land.end:
   ret void
 }

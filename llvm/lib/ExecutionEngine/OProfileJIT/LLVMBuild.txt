@@ -18,6 +18,7 @@
 [common]
 
 [component_0]
-type = Library
+type = OptionalLibrary
 name = OProfileJIT
 parent = ExecutionEngine
+required_libraries = DebugInfoDWARF Support Object ExecutionEngine

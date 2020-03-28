@@ -1,4 +1,4 @@
-//===-- GraphWriter.cpp - Implements GraphWriter support routines ---------===//
+//===- GraphWriter.cpp - Implements GraphWriter support routines ----------===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -11,11 +11,23 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/GraphWriter.h"
-#include "llvm/Support/Path.h"
-#include "llvm/Support/Program.h"
+#include "llvm/ADT/SmallString.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/Config/config.h"
+#include "llvm/Support/CommandLine.h"
+#include "llvm/Support/Compiler.h"
+#include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/ErrorOr.h"
+#include "llvm/Support/FileSystem.h"
+#include "llvm/Support/Program.h"
+#include "llvm/Support/raw_ostream.h"
+#include <cassert>
+#include <system_error>
+#include <string>
+#include <vector>
+
 using namespace llvm;
 
 static cl::opt<bool> ViewBackground("view-background", cl::Hidden,
@@ -43,6 +55,7 @@ std::string llvm::DOT::EscapeString(const std::string &Label) {
             Str.erase(Str.begin()+i); continue;
           default: break;
         }
+        LLVM_FALLTHROUGH;
     case '{': case '}':
     case '<': case '>':
     case '|': case '"':
@@ -53,147 +66,234 @@ std::string llvm::DOT::EscapeString(const std::string &Label) {
   return Str;
 }
 
-// Execute the graph viewer. Return true if successful.
-static bool LLVM_ATTRIBUTE_UNUSED
-ExecGraphViewer(const sys::Path &ExecPath, std::vector<const char*> &args,
-                const sys::Path &Filename, bool wait, std::string &ErrMsg) {
-  if (wait) {
-    if (sys::Program::ExecuteAndWait(ExecPath, &args[0],0,0,0,0,&ErrMsg)) {
-      errs() << "Error: " << ErrMsg << "\n";
-      return false;
-    }
-    Filename.eraseFromDisk();
-    errs() << " done. \n";
-  }
-  else {
-    sys::Program::ExecuteNoWait(ExecPath, &args[0],0,0,0,&ErrMsg);
-    errs() << "Remember to erase graph file: " << Filename.str() << "\n";
-  }
-  return true;
+/// Get a color string for this node number. Simply round-robin selects
+/// from a reasonable number of colors.
+StringRef llvm::DOT::getColorString(unsigned ColorNumber) {
+  static const int NumColors = 20;
+  static const char* Colors[NumColors] = {
+    "aaaaaa", "aa0000", "00aa00", "aa5500", "0055ff", "aa00aa", "00aaaa",
+    "555555", "ff5555", "55ff55", "ffff55", "5555ff", "ff55ff", "55ffff",
+    "ffaaaa", "aaffaa", "ffffaa", "aaaaff", "ffaaff", "aaffff"};
+  return Colors[ColorNumber % NumColors];
 }
 
-void llvm::DisplayGraph(const sys::Path &Filename, bool wait,
-                        GraphProgram::Name program) {
-  wait &= !ViewBackground;
-  std::string ErrMsg;
-#if HAVE_GRAPHVIZ
-  sys::Path Graphviz(LLVM_PATH_GRAPHVIZ);
-
-  std::vector<const char*> args;
-  args.push_back(Graphviz.c_str());
-  args.push_back(Filename.c_str());
-  args.push_back(0);
-
-  errs() << "Running 'Graphviz' program... ";
-  if (!ExecGraphViewer(Graphviz, args, Filename, wait, ErrMsg))
-    return;
-
-#elif HAVE_XDOT_PY
-  std::vector<const char*> args;
-  args.push_back(LLVM_PATH_XDOT_PY);
-  args.push_back(Filename.c_str());
-
-  switch (program) {
-  case GraphProgram::DOT:   args.push_back("-f"); args.push_back("dot"); break;
-  case GraphProgram::FDP:   args.push_back("-f"); args.push_back("fdp"); break;
-  case GraphProgram::NEATO: args.push_back("-f"); args.push_back("neato");break;
-  case GraphProgram::TWOPI: args.push_back("-f"); args.push_back("twopi");break;
-  case GraphProgram::CIRCO: args.push_back("-f"); args.push_back("circo");break;
-  default: errs() << "Unknown graph layout name; using default.\n";
+std::string llvm::createGraphFilename(const Twine &Name, int &FD) {
+  FD = -1;
+  SmallString<128> Filename;
+  std::error_code EC = sys::fs::createTemporaryFile(Name, "dot", FD, Filename);
+  if (EC) {
+    errs() << "Error: " << EC.message() << "\n";
+    return "";
   }
 
-  args.push_back(0);
+  errs() << "Writing '" << Filename << "'... ";
+  return Filename.str();
+}
 
-  errs() << "Running 'xdot.py' program... ";
-  if (!ExecGraphViewer(sys::Path(LLVM_PATH_XDOT_PY), args, Filename, wait, ErrMsg))
-    return;
+// Execute the graph viewer. Return true if there were errors.
+static bool ExecGraphViewer(StringRef ExecPath, std::vector<StringRef> &args,
+                            StringRef Filename, bool wait,
+                            std::string &ErrMsg) {
+  if (wait) {
+    if (sys::ExecuteAndWait(ExecPath, args, None, {}, 0, 0, &ErrMsg)) {
+      errs() << "Error: " << ErrMsg << "\n";
+      return true;
+    }
+    sys::fs::remove(Filename);
+    errs() << " done. \n";
+  } else {
+    sys::ExecuteNoWait(ExecPath, args, None, {}, 0, &ErrMsg);
+    errs() << "Remember to erase graph file: " << Filename << "\n";
+  }
+  return false;
+}
 
-#elif (HAVE_GV && (HAVE_DOT || HAVE_FDP || HAVE_NEATO || \
-                   HAVE_TWOPI || HAVE_CIRCO))
-  sys::Path PSFilename = Filename;
-  PSFilename.appendSuffix("ps");
+namespace {
 
-  sys::Path prog;
+struct GraphSession {
+  std::string LogBuffer;
 
-  // Set default grapher
-#if HAVE_CIRCO
-  prog = sys::Path(LLVM_PATH_CIRCO);
+  bool TryFindProgram(StringRef Names, std::string &ProgramPath) {
+    raw_string_ostream Log(LogBuffer);
+    SmallVector<StringRef, 8> parts;
+    Names.split(parts, '|');
+    for (auto Name : parts) {
+      if (ErrorOr<std::string> P = sys::findProgramByName(Name)) {
+        ProgramPath = *P;
+        return true;
+      }
+      Log << "  Tried '" << Name << "'\n";
+    }
+    return false;
+  }
+};
+
+} // end anonymous namespace
+
+static const char *getProgramName(GraphProgram::Name program) {
+  switch (program) {
+  case GraphProgram::DOT:
+    return "dot";
+  case GraphProgram::FDP:
+    return "fdp";
+  case GraphProgram::NEATO:
+    return "neato";
+  case GraphProgram::TWOPI:
+    return "twopi";
+  case GraphProgram::CIRCO:
+    return "circo";
+  }
+  llvm_unreachable("bad kind");
+}
+
+bool llvm::DisplayGraph(StringRef FilenameRef, bool wait,
+                        GraphProgram::Name program) {
+  std::string Filename = FilenameRef;
+  std::string ErrMsg;
+  std::string ViewerPath;
+  GraphSession S;
+
+#ifdef __APPLE__
+  wait &= !ViewBackground;
+  if (S.TryFindProgram("open", ViewerPath)) {
+    std::vector<StringRef> args;
+    args.push_back(ViewerPath);
+    if (wait)
+      args.push_back("-W");
+    args.push_back(Filename);
+    errs() << "Trying 'open' program... ";
+    if (!ExecGraphViewer(ViewerPath, args, Filename, wait, ErrMsg))
+      return false;
+  }
 #endif
-#if HAVE_TWOPI
-  prog = sys::Path(LLVM_PATH_TWOPI);
+  if (S.TryFindProgram("xdg-open", ViewerPath)) {
+    std::vector<StringRef> args;
+    args.push_back(ViewerPath);
+    args.push_back(Filename);
+    errs() << "Trying 'xdg-open' program... ";
+    if (!ExecGraphViewer(ViewerPath, args, Filename, wait, ErrMsg))
+      return false;
+  }
+
+  // Graphviz
+  if (S.TryFindProgram("Graphviz", ViewerPath)) {
+    std::vector<StringRef> args;
+    args.push_back(ViewerPath);
+    args.push_back(Filename);
+
+    errs() << "Running 'Graphviz' program... ";
+    return ExecGraphViewer(ViewerPath, args, Filename, wait, ErrMsg);
+  }
+
+  // xdot
+  if (S.TryFindProgram("xdot|xdot.py", ViewerPath)) {
+    std::vector<StringRef> args;
+    args.push_back(ViewerPath);
+    args.push_back(Filename);
+
+    args.push_back("-f");
+    args.push_back(getProgramName(program));
+
+    errs() << "Running 'xdot.py' program... ";
+    return ExecGraphViewer(ViewerPath, args, Filename, wait, ErrMsg);
+  }
+
+  enum ViewerKind {
+    VK_None,
+    VK_OSXOpen,
+    VK_XDGOpen,
+    VK_Ghostview,
+    VK_CmdStart
+  };
+  ViewerKind Viewer = VK_None;
+#ifdef __APPLE__
+  if (!Viewer && S.TryFindProgram("open", ViewerPath))
+    Viewer = VK_OSXOpen;
 #endif
-#if HAVE_NEATO
-  prog = sys::Path(LLVM_PATH_NEATO);
-#endif
-#if HAVE_FDP
-  prog = sys::Path(LLVM_PATH_FDP);
-#endif
-#if HAVE_DOT
-  prog = sys::Path(LLVM_PATH_DOT);
+  if (!Viewer && S.TryFindProgram("gv", ViewerPath))
+    Viewer = VK_Ghostview;
+  if (!Viewer && S.TryFindProgram("xdg-open", ViewerPath))
+    Viewer = VK_XDGOpen;
+#ifdef _WIN32
+  if (!Viewer && S.TryFindProgram("cmd", ViewerPath)) {
+    Viewer = VK_CmdStart;
+  }
 #endif
 
-  // Find which program the user wants
-#if HAVE_DOT
-  if (program == GraphProgram::DOT)
-    prog = sys::Path(LLVM_PATH_DOT);
-#endif
-#if (HAVE_FDP)
-  if (program == GraphProgram::FDP)
-    prog = sys::Path(LLVM_PATH_FDP);
-#endif
-#if (HAVE_NEATO)
-  if (program == GraphProgram::NEATO)
-    prog = sys::Path(LLVM_PATH_NEATO);
-#endif
-#if (HAVE_TWOPI)
-  if (program == GraphProgram::TWOPI)
-    prog = sys::Path(LLVM_PATH_TWOPI);
-#endif
-#if (HAVE_CIRCO)
-  if (program == GraphProgram::CIRCO)
-    prog = sys::Path(LLVM_PATH_CIRCO);
-#endif
+  // PostScript or PDF graph generator + PostScript/PDF viewer
+  std::string GeneratorPath;
+  if (Viewer &&
+      (S.TryFindProgram(getProgramName(program), GeneratorPath) ||
+       S.TryFindProgram("dot|fdp|neato|twopi|circo", GeneratorPath))) {
+    std::string OutputFilename =
+        Filename + (Viewer == VK_CmdStart ? ".pdf" : ".ps");
 
-  std::vector<const char*> args;
-  args.push_back(prog.c_str());
-  args.push_back("-Tps");
-  args.push_back("-Nfontname=Courier");
-  args.push_back("-Gsize=7.5,10");
-  args.push_back(Filename.c_str());
-  args.push_back("-o");
-  args.push_back(PSFilename.c_str());
-  args.push_back(0);
+    std::vector<StringRef> args;
+    args.push_back(GeneratorPath);
+    if (Viewer == VK_CmdStart)
+      args.push_back("-Tpdf");
+    else
+      args.push_back("-Tps");
+    args.push_back("-Nfontname=Courier");
+    args.push_back("-Gsize=7.5,10");
+    args.push_back(Filename);
+    args.push_back("-o");
+    args.push_back(OutputFilename);
 
-  errs() << "Running '" << prog.str() << "' program... ";
+    errs() << "Running '" << GeneratorPath << "' program... ";
 
-  if (!ExecGraphViewer(prog, args, Filename, wait, ErrMsg))
-    return;
+    if (ExecGraphViewer(GeneratorPath, args, Filename, true, ErrMsg))
+      return true;
 
-  sys::Path gv(LLVM_PATH_GV);
-  args.clear();
-  args.push_back(gv.c_str());
-  args.push_back(PSFilename.c_str());
-  args.push_back("--spartan");
-  args.push_back(0);
+    // The lifetime of StartArg must include the call of ExecGraphViewer
+    // because the args are passed as vector of char*.
+    std::string StartArg;
 
-  ErrMsg.clear();
-  if (!ExecGraphViewer(gv, args, PSFilename, wait, ErrMsg))
-    return;
+    args.clear();
+    args.push_back(ViewerPath);
+    switch (Viewer) {
+    case VK_OSXOpen:
+      args.push_back("-W");
+      args.push_back(OutputFilename);
+      break;
+    case VK_XDGOpen:
+      wait = false;
+      args.push_back(OutputFilename);
+      break;
+    case VK_Ghostview:
+      args.push_back("--spartan");
+      args.push_back(OutputFilename);
+      break;
+    case VK_CmdStart:
+      args.push_back("/S");
+      args.push_back("/C");
+      StartArg =
+          (StringRef("start ") + (wait ? "/WAIT " : "") + OutputFilename).str();
+      args.push_back(StartArg);
+      break;
+    case VK_None:
+      llvm_unreachable("Invalid viewer");
+    }
 
-#elif HAVE_DOTTY
-  sys::Path dotty(LLVM_PATH_DOTTY);
+    ErrMsg.clear();
+    return ExecGraphViewer(ViewerPath, args, OutputFilename, wait, ErrMsg);
+  }
 
-  std::vector<const char*> args;
-  args.push_back(dotty.c_str());
-  args.push_back(Filename.c_str());
-  args.push_back(0);
+  // dotty
+  if (S.TryFindProgram("dotty", ViewerPath)) {
+    std::vector<StringRef> args;
+    args.push_back(ViewerPath);
+    args.push_back(Filename);
 
 // Dotty spawns another app and doesn't wait until it returns
-#if defined (__MINGW32__) || defined (_WINDOWS)
-  wait = false;
+#ifdef _WIN32
+    wait = false;
 #endif
-  errs() << "Running 'dotty' program... ";
-  if (!ExecGraphViewer(dotty, args, Filename, wait, ErrMsg))
-    return;
-#endif
+    errs() << "Running 'dotty' program... ";
+    return ExecGraphViewer(ViewerPath, args, Filename, wait, ErrMsg);
+  }
+
+  errs() << "Error: Couldn't find a usable graph viewer program:\n";
+  errs() << S.LogBuffer << "\n";
+  return true;
 }

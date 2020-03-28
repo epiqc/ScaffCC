@@ -1,14 +1,11 @@
-set(MODULE TRUE)
+set(LLVM_EXPORTED_SYMBOL_FILE ${CMAKE_CURRENT_SOURCE_DIR}/SampleAnalyzerPlugin.exports)
+add_llvm_library(SampleAnalyzerPlugin MODULE MainCallChecker.cpp PLUGIN_TOOL clang)
 
-set( LLVM_USED_LIBS
-  clangStaticAnalyzerCore
-  )
-
-set( LLVM_LINK_COMPONENTS support mc)
-
-add_clang_library(SampleAnalyzerPlugin MainCallChecker.cpp)
-
-set_target_properties(SampleAnalyzerPlugin
-  PROPERTIES
-  LINKER_LANGUAGE CXX
-  PREFIX "")
+if(LLVM_ENABLE_PLUGINS AND (WIN32 OR CYGWIN))
+  target_link_libraries(SampleAnalyzerPlugin PRIVATE
+    clangAnalysis
+    clangAST
+    clangStaticAnalyzerCore
+    LLVMSupport
+    )
+endif()

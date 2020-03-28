@@ -8,24 +8,24 @@
 //===----------------------------------------------------------------------===//
 //
 // This files defines PointerSubChecker, a builtin checker that checks for
-// pointer subtractions on two pointers pointing to different memory chunks. 
+// pointer subtractions on two pointers pointing to different memory chunks.
 // This check corresponds to CWE-469.
 //
 //===----------------------------------------------------------------------===//
 
-#include "ClangSACheckers.h"
+#include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
+#include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
 #include "clang/StaticAnalyzer/Core/Checker.h"
 #include "clang/StaticAnalyzer/Core/CheckerManager.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
-#include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
 
 using namespace clang;
 using namespace ento;
 
 namespace {
-class PointerSubChecker 
+class PointerSubChecker
   : public Checker< check::PreStmt<BinaryOperator> > {
-  mutable OwningPtr<BuiltinBug> BT;
+  mutable std::unique_ptr<BuiltinBug> BT;
 
 public:
   void checkPreStmt(const BinaryOperator *B, CheckerContext &C) const;
@@ -39,10 +39,8 @@ void PointerSubChecker::checkPreStmt(const BinaryOperator *B,
   if (B->getOpcode() != BO_Sub)
     return;
 
-  ProgramStateRef state = C.getState();
-  const LocationContext *LCtx = C.getLocationContext();
-  SVal LV = state->getSVal(B->getLHS(), LCtx);
-  SVal RV = state->getSVal(B->getRHS(), LCtx);
+  SVal LV = C.getSVal(B->getLHS());
+  SVal RV = C.getSVal(B->getRHS());
 
   const MemRegion *LR = LV.getAsRegion();
   const MemRegion *RR = RV.getAsRegion();
@@ -60,14 +58,15 @@ void PointerSubChecker::checkPreStmt(const BinaryOperator *B,
   if (isa<SymbolicRegion>(BaseLR) || isa<SymbolicRegion>(BaseRR))
     return;
 
-  if (ExplodedNode *N = C.addTransition()) {
+  if (ExplodedNode *N = C.generateNonFatalErrorNode()) {
     if (!BT)
-      BT.reset(new BuiltinBug("Pointer subtraction", 
-                          "Subtraction of two pointers that do not point to "
-                          "the same memory chunk may cause incorrect result."));
-    BugReport *R = new BugReport(*BT, BT->getDescription(), N);
+      BT.reset(
+          new BuiltinBug(this, "Pointer subtraction",
+                         "Subtraction of two pointers that do not point to "
+                         "the same memory chunk may cause incorrect result."));
+    auto R = llvm::make_unique<BugReport>(*BT, BT->getDescription(), N);
     R->addRange(B->getSourceRange());
-    C.EmitReport(R);
+    C.emitReport(std::move(R));
   }
 }
 

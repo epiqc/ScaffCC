@@ -1,4 +1,4 @@
-; RUN: llc < %s -mtriple=thumbv7-apple-darwin10 -relocation-model=pic -disable-fp-elim -mcpu=cortex-a8
+; RUN: llc < %s -mtriple=thumbv7-apple-darwin10 -relocation-model=pic -frame-pointer=all -mcpu=cortex-a8
 
 ; rdar://9117613
 
@@ -16,11 +16,11 @@ bb:                                               ; preds = %entry
 
 bb1:                                              ; preds = %entry
   %0 = call %struct.ui* @vn_pp_to_ui(i32* undef) nounwind
-  call void @llvm.memset.p0i8.i32(i8* undef, i8 0, i32 40, i32 4, i1 false)
-  %1 = getelementptr inbounds %struct.ui* %0, i32 0, i32 0
+  call void @llvm.memset.p0i8.i32(i8* align 4 undef, i8 0, i32 40, i1 false)
+  %1 = getelementptr inbounds %struct.ui, %struct.ui* %0, i32 0, i32 0
   store %struct.mo* undef, %struct.mo** %1, align 4
-  %2 = getelementptr inbounds %struct.ui* %0, i32 0, i32 5
-  %3 = load i64* %2, align 4
+  %2 = getelementptr inbounds %struct.ui, %struct.ui* %0, i32 0, i32 5
+  %3 = load i64, i64* %2, align 4
   %4 = call i32 @mo_create_nnm(%struct.mo* undef, i64 %3, i32** undef) nounwind
   br i1 undef, label %bb3, label %bb2
 
@@ -40,7 +40,7 @@ bb6:                                              ; preds = %bb3
 
 declare %struct.ui* @vn_pp_to_ui(i32*)
 
-declare void @llvm.memset.p0i8.i32(i8* nocapture, i8, i32, i32, i1) nounwind
+declare void @llvm.memset.p0i8.i32(i8* nocapture, i8, i32, i1) nounwind
 
 declare i32 @mo_create_nnm(%struct.mo*, i64, i32**)
 

@@ -15,6 +15,8 @@ using namespace llvm;
 namespace {
 
 typedef IntervalMap<unsigned, unsigned, 4> UUMap;
+typedef IntervalMap<unsigned, unsigned, 4,
+                    IntervalMapHalfOpenInfo<unsigned>> UUHalfOpenMap;
 
 // Empty map tests
 TEST(IntervalMapTest, EmptyMap) {
@@ -125,9 +127,23 @@ TEST(IntervalMapTest, SingleEntryMap) {
   EXPECT_EQ(200u, I.stop());
   EXPECT_EQ(2u, I.value());
 
+  // Shrink the interval to have a length of 1
+  I.setStop(150);
+  ASSERT_TRUE(I.valid());
+  EXPECT_EQ(150u, I.start());
+  EXPECT_EQ(150u, I.stop());
+  EXPECT_EQ(2u, I.value());
+
   I.setStop(160);
   ASSERT_TRUE(I.valid());
   EXPECT_EQ(150u, I.start());
+  EXPECT_EQ(160u, I.stop());
+  EXPECT_EQ(2u, I.value());
+
+  // Shrink the interval to have a length of 1
+  I.setStart(160);
+  ASSERT_TRUE(I.valid());
+  EXPECT_EQ(160u, I.start());
   EXPECT_EQ(160u, I.stop());
   EXPECT_EQ(2u, I.value());
 
@@ -135,6 +151,37 @@ TEST(IntervalMapTest, SingleEntryMap) {
   I.erase();
   EXPECT_TRUE(map.empty());
   EXPECT_EQ(0, std::distance(map.begin(), map.end()));
+}
+
+// Single entry half-open map tests
+TEST(IntervalMapTest, SingleEntryHalfOpenMap) {
+  UUHalfOpenMap::Allocator allocator;
+  UUHalfOpenMap map(allocator);
+  map.insert(100, 150, 1);
+  EXPECT_FALSE(map.empty());
+
+  UUHalfOpenMap::iterator I = map.begin();
+  ASSERT_TRUE(I.valid());
+
+  // Shrink the interval to have a length of 1
+  I.setStart(149);
+  ASSERT_TRUE(I.valid());
+  EXPECT_EQ(149u, I.start());
+  EXPECT_EQ(150u, I.stop());
+  EXPECT_EQ(1u, I.value());
+
+  I.setStop(160);
+  ASSERT_TRUE(I.valid());
+  EXPECT_EQ(149u, I.start());
+  EXPECT_EQ(160u, I.stop());
+  EXPECT_EQ(1u, I.value());
+
+  // Shrink the interval to have a length of 1
+  I.setStop(150);
+  ASSERT_TRUE(I.valid());
+  EXPECT_EQ(149u, I.start());
+  EXPECT_EQ(150u, I.stop());
+  EXPECT_EQ(1u, I.value());
 }
 
 // Flat coalescing tests.
@@ -562,6 +609,50 @@ TEST(IntervalMapTest, RandomCoalescing) {
   EXPECT_EQ(40959u, map.stop());
   EXPECT_EQ(1, std::distance(map.begin(), map.end()));
 
+}
+
+TEST(IntervalMapTest, Overlaps) {
+  UUMap::Allocator allocator;
+  UUMap map(allocator);
+  map.insert(10, 20, 0);
+  map.insert(30, 40, 0);
+  map.insert(50, 60, 0);
+
+  EXPECT_FALSE(map.overlaps(0, 9));
+  EXPECT_TRUE(map.overlaps(0, 10));
+  EXPECT_TRUE(map.overlaps(0, 15));
+  EXPECT_TRUE(map.overlaps(0, 25));
+  EXPECT_TRUE(map.overlaps(0, 45));
+  EXPECT_TRUE(map.overlaps(10, 45));
+  EXPECT_TRUE(map.overlaps(30, 45));
+  EXPECT_TRUE(map.overlaps(35, 36));
+  EXPECT_TRUE(map.overlaps(40, 45));
+  EXPECT_FALSE(map.overlaps(45, 45));
+  EXPECT_TRUE(map.overlaps(60, 60));
+  EXPECT_TRUE(map.overlaps(60, 66));
+  EXPECT_FALSE(map.overlaps(66, 66));
+}
+
+TEST(IntervalMapTest, OverlapsHalfOpen) {
+  UUHalfOpenMap::Allocator allocator;
+  UUHalfOpenMap map(allocator);
+  map.insert(10, 20, 0);
+  map.insert(30, 40, 0);
+  map.insert(50, 60, 0);
+
+  EXPECT_FALSE(map.overlaps(0, 9));
+  EXPECT_FALSE(map.overlaps(0, 10));
+  EXPECT_TRUE(map.overlaps(0, 15));
+  EXPECT_TRUE(map.overlaps(0, 25));
+  EXPECT_TRUE(map.overlaps(0, 45));
+  EXPECT_TRUE(map.overlaps(10, 45));
+  EXPECT_TRUE(map.overlaps(30, 45));
+  EXPECT_TRUE(map.overlaps(35, 36));
+  EXPECT_FALSE(map.overlaps(40, 45));
+  EXPECT_FALSE(map.overlaps(45, 46));
+  EXPECT_FALSE(map.overlaps(60, 61));
+  EXPECT_FALSE(map.overlaps(60, 66));
+  EXPECT_FALSE(map.overlaps(66, 67));
 }
 
 TEST(IntervalMapOverlapsTest, SmallMaps) {

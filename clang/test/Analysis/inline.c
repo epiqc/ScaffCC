@@ -1,8 +1,12 @@
-// RUN: %clang_cc1 -analyze -analyzer-checker=core -analyzer-ipa=inlining -analyzer-store region -verify %s
+// RUN: %clang_analyze_cc1 -analyzer-checker=core,debug.ExprInspection -verify %s
+
+void clang_analyzer_eval(int);
+void clang_analyzer_checkInlined(int);
 
 int test1_f1() {
   int y = 1;
   y++;
+  clang_analyzer_checkInlined(1); // expected-warning{{TRUE}}
   return y;
 }
 
@@ -90,3 +94,25 @@ int test_rdar10977037() {
 }
 
 
+// Test inlining a forward-declared function.
+// This regressed when CallEvent was first introduced.
+int plus1(int x);
+void test() {
+  clang_analyzer_eval(plus1(2) == 3); // expected-warning{{TRUE}}
+}
+
+int plus1(int x) {
+  return x + 1;
+}
+
+
+void never_called_by_anyone() {
+  clang_analyzer_checkInlined(0); // no-warning
+}
+
+
+void knr_one_argument(a) int a; { }
+
+void call_with_less_arguments() {
+  knr_one_argument(); // expected-warning{{too few arguments}} expected-warning{{Function taking 1 argument is called with fewer (0)}}
+}

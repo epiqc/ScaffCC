@@ -7,34 +7,41 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_PPC_PPCFIXUPKINDS_H
-#define LLVM_PPC_PPCFIXUPKINDS_H
+#ifndef LLVM_LIB_TARGET_POWERPC_MCTARGETDESC_PPCFIXUPKINDS_H
+#define LLVM_LIB_TARGET_POWERPC_MCTARGETDESC_PPCFIXUPKINDS_H
 
 #include "llvm/MC/MCFixup.h"
+
+#undef PPC
 
 namespace llvm {
 namespace PPC {
 enum Fixups {
-  // fixup_ppc_br24 - 24-bit PC relative relocation for direct branches like 'b'
-  // and 'bl'.
+  // 24-bit PC relative relocation for direct branches like 'b' and 'bl'.
   fixup_ppc_br24 = FirstTargetFixupKind,
-  
-  /// fixup_ppc_brcond14 - 14-bit PC relative relocation for conditional
-  /// branches.
+
+  /// 14-bit PC relative relocation for conditional branches.
   fixup_ppc_brcond14,
-  
-  /// fixup_ppc_lo16 - A 16-bit fixup corresponding to lo16(_foo) for instrs
-  /// like 'li'.
-  fixup_ppc_lo16,
-  
-  /// fixup_ppc_ha16 - A 16-bit fixup corresponding to ha16(_foo) for instrs
-  /// like 'lis'.
-  fixup_ppc_ha16,
-  
-  /// fixup_ppc_lo14 - A 14-bit fixup corresponding to lo16(_foo) for instrs
-  /// like 'std'.
-  fixup_ppc_lo14,
-  
+
+  /// 24-bit absolute relocation for direct branches like 'ba' and 'bla'.
+  fixup_ppc_br24abs,
+
+  /// 14-bit absolute relocation for conditional branches.
+  fixup_ppc_brcond14abs,
+
+  /// A 16-bit fixup corresponding to lo16(_foo) or ha16(_foo) for instrs like
+  /// 'li' or 'addis'.
+  fixup_ppc_half16,
+
+  /// A 14-bit fixup corresponding to lo16(_foo) with implied 2 zero bits for
+  /// instrs like 'std'.
+  fixup_ppc_half16ds,
+
+  /// Not a true fixup, but ties a symbol to a call to __tls_get_addr for the
+  /// TLS general and local dynamic models, or inserts the thread-pointer
+  /// register number.
+  fixup_ppc_nofixup,
+
   // Marker
   LastTargetFixupKind,
   NumTargetFixupKinds = LastTargetFixupKind - FirstTargetFixupKind

@@ -1,7 +1,7 @@
-// RUN: %clang_cc1 -analyze -analyzer-checker=core -analyzer-store=region -verify %s
+// RUN: %clang_analyze_cc1 -analyzer-checker=core -analyzer-store=region -verify %s -Wno-undefined-bool-conversion
 
-// FIXME: Only the stack-address checking in Sema catches this right now, and
-// the stack analyzer doesn't handle the ImplicitCastExpr (lvalue).
+typedef __INTPTR_TYPE__ intptr_t;
+
 const int& g() {
   int s;
   return s; // expected-warning{{Address of stack memory associated with local variable 's' returned}} expected-warning{{reference to stack memory associated with local variable 's' returned}}
@@ -20,19 +20,23 @@ const int& g3() {
   return s3; // expected-warning{{Address of stack memory associated with local variable 's1' returned}} expected-warning {{reference to stack memory associated with local variable 's1' returned}}
 }
 
+void g4() {
+  static const int &x = 3; // no warning
+}
+
 int get_value();
 
-const int &get_reference1() { return get_value(); } // expected-warning{{Address of stack memory associated with temporary object of type 'const int' returned}} expected-warning {{returning reference to local temporary}}
+const int &get_reference1() { return get_value(); } // expected-warning{{Address of stack memory associated with temporary object of type 'int' returned}} expected-warning {{returning reference to local temporary}}
 
 const int &get_reference2() {
   const int &x = get_value(); // expected-note {{binding reference variable 'x' here}}
-  return x; // expected-warning{{Address of stack memory associated with temporary object of type 'const int' returned}} expected-warning {{returning reference to local temporary}}
+  return x; // expected-warning{{Address of stack memory associated with temporary object of type 'int' returned}} expected-warning {{returning reference to local temporary}}
 }
 
 const int &get_reference3() {
   const int &x1 = get_value(); // expected-note {{binding reference variable 'x1' here}}
   const int &x2 = x1; // expected-note {{binding reference variable 'x2' here}}
-  return x2; // expected-warning{{Address of stack memory associated with temporary object of type 'const int' returned}} expected-warning {{returning reference to local temporary}}
+  return x2; // expected-warning{{Address of stack memory associated with temporary object of type 'int' returned}} expected-warning {{returning reference to local temporary}}
 }
 
 int global_var;
@@ -56,7 +60,7 @@ int *f3() {
 const int *f4() {
   const int &x1 = get_value(); // expected-note {{binding reference variable 'x1' here}}
   const int &x2 = x1; // expected-note {{binding reference variable 'x2' here}}
-  return &x2; // expected-warning{{Address of stack memory associated with temporary object of type 'const int' returned}} expected-warning {{returning address of local temporary}}
+  return &x2; // expected-warning{{Address of stack memory associated with temporary object of type 'int' returned}} expected-warning {{returning address of local temporary}}
 }
 
 struct S {
@@ -84,3 +88,52 @@ struct TS {
     return x;
   }
 };
+
+// rdar://11345441
+int* f5() {
+  int& i = i; // expected-warning {{Assigned value is garbage or undefined}} expected-warning{{reference 'i' is not yet bound to a value when used within its own initialization}}
+  return &i;
+}
+
+void *radar13226577() {
+    void *p = &p;
+    return p; // expected-warning {{stack memory associated with local variable 'p' returned to caller}}
+}
+
+namespace rdar13296133 {
+  class ConvertsToBool {
+  public:
+    operator bool() const { return this; }
+  };
+
+  class ConvertsToIntptr {
+  public:
+    operator intptr_t() const { return reinterpret_cast<intptr_t>(this); }
+  };
+
+  class ConvertsToPointer {
+  public:
+    operator const void *() const { return this; }
+  };
+
+  intptr_t returnAsNonLoc() {
+    ConvertsToIntptr obj;
+    return obj; // expected-warning{{Address of stack memory associated with local variable 'obj' returned to caller}}
+  }
+
+  bool returnAsBool() {
+    ConvertsToBool obj;
+    return obj; // no-warning
+  }
+
+  intptr_t returnAsNonLocViaPointer() {
+    ConvertsToPointer obj;
+    return reinterpret_cast<intptr_t>(static_cast<const void *>(obj)); // expected-warning{{Address of stack memory associated with local variable 'obj' returned to caller}}
+  }
+
+  bool returnAsBoolViaPointer() {
+    ConvertsToPointer obj;
+    return obj; // no-warning
+  }
+}
+

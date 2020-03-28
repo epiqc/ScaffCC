@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -fsyntax-only -verify -ffreestanding -Wundefined-reinterpret-cast %s
+// RUN: %clang_cc1 -fsyntax-only -verify -ffreestanding -Wundefined-reinterpret-cast -Wno-unused-volatile-lvalue %s
 
 #include <stdint.h>
 
@@ -96,12 +96,12 @@ void memptrs()
   void (structure::*psf)() = 0;
   (void)reinterpret_cast<int (structure::*)()>(psf);
 
-  (void)reinterpret_cast<void (structure::*)()>(psi); // expected-error {{reinterpret_cast from 'const int structure::*' to 'void (structure::*)()' is not allowed}}
-  (void)reinterpret_cast<int structure::*>(psf); // expected-error {{reinterpret_cast from 'void (structure::*)()' to 'int structure::*' is not allowed}}
+  (void)reinterpret_cast<void (structure::*)()>(psi); // expected-error-re {{reinterpret_cast from 'const int structure::*' to 'void (structure::*)(){{( __attribute__\(\(thiscall\)\))?}}' is not allowed}}
+  (void)reinterpret_cast<int structure::*>(psf); // expected-error-re {{reinterpret_cast from 'void (structure::*)(){{( __attribute__\(\(thiscall\)\))?}}' to 'int structure::*' is not allowed}}
 
   // Cannot cast from integers to member pointers, not even the null pointer
   // literal.
-  (void)reinterpret_cast<void (structure::*)()>(0); // expected-error {{reinterpret_cast from 'int' to 'void (structure::*)()' is not allowed}}
+  (void)reinterpret_cast<void (structure::*)()>(0); // expected-error-re {{reinterpret_cast from 'int' to 'void (structure::*)(){{( __attribute__\(\(thiscall\)\))?}}' is not allowed}}
   (void)reinterpret_cast<int structure::*>(0); // expected-error {{reinterpret_cast from 'int' to 'int structure::*' is not allowed}}
 }
 
@@ -125,7 +125,7 @@ void const_arrays() {
 
 namespace PR9564 {
   struct a { int a : 10; }; a x;
-  int *y = &reinterpret_cast<int&>(x.a); // expected-error {{not allowed}}
+  int *y = &reinterpret_cast<int&>(x.a); // expected-error {{reinterpret_cast from bit-field lvalue to reference type 'int &'}}
 
   __attribute((ext_vector_type(4))) typedef float v4;
   float& w(v4 &a) { return reinterpret_cast<float&>(a[1]); } // expected-error {{not allowed}}
@@ -201,11 +201,11 @@ void dereference_reinterpret_cast() {
   (void)*reinterpret_cast<float*>(v_ptr);
 
   // Casting to void pointer
-  (void)*reinterpret_cast<void*>(&a);
-  (void)*reinterpret_cast<void*>(&b);
-  (void)*reinterpret_cast<void*>(&l);
-  (void)*reinterpret_cast<void*>(&d);
-  (void)*reinterpret_cast<void*>(&f);
+  (void)*reinterpret_cast<void*>(&a); // expected-warning {{ISO C++ does not allow}}
+  (void)*reinterpret_cast<void*>(&b); // expected-warning {{ISO C++ does not allow}}
+  (void)*reinterpret_cast<void*>(&l); // expected-warning {{ISO C++ does not allow}}
+  (void)*reinterpret_cast<void*>(&d); // expected-warning {{ISO C++ does not allow}}
+  (void)*reinterpret_cast<void*>(&f); // expected-warning {{ISO C++ does not allow}}
 }
 
 void reinterpret_cast_whitelist () {

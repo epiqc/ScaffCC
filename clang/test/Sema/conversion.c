@@ -359,7 +359,7 @@ void f7676608(int);
 void test_7676608(void) {
   float q = 0.7f;
   char c = 5;
-  f7676608(c *= q);
+  f7676608(c *= q); // expected-warning {{conversion}}
 }
 
 // <rdar://problem/7904686>
@@ -416,4 +416,35 @@ void test26(int si, long sl) {
   si = si % sl;
   si = si / sl;
   si = sl / si; // expected-warning {{implicit conversion loses integer precision: 'long' to 'int'}}
+}
+
+// rdar://16502418
+typedef unsigned short uint16_t;
+typedef unsigned int uint32_t;
+typedef __attribute__ ((ext_vector_type(16),__aligned__(32))) uint16_t ushort16;
+typedef __attribute__ ((ext_vector_type( 8),__aligned__( 32))) uint32_t uint8;
+
+void test27(ushort16 constants) {
+    uint8 pairedConstants = (uint8) constants;
+    ushort16 crCbScale = pairedConstants.s4; // expected-warning {{implicit conversion loses integer precision: 'uint32_t' (aka 'unsigned int') to 'ushort16'}}
+    ushort16 brBias = pairedConstants.s6; // expected-warning {{implicit conversion loses integer precision: 'uint32_t' (aka 'unsigned int') to 'ushort16'}}
+}
+
+
+float double2float_test1(double a) {
+    return a; // expected-warning {{implicit conversion loses floating-point precision: 'double' to 'float'}}
+}
+
+void double2float_test2(double a, float *b) {
+  *b += a; // expected-warning {{implicit conversion when assigning computation result loses floating-point precision: 'double' to 'float'}}
+}
+
+float sinf (float x);
+double double2float_test3(double a) {
+    return sinf(a); // expected-warning {{implicit conversion loses floating-point precision: 'double' to 'float'}}
+}
+
+float double2float_test4(double a, float b) {
+  b -= a; // expected-warning {{implicit conversion when assigning computation result loses floating-point precision: 'double' to 'float'}}
+  return b;
 }

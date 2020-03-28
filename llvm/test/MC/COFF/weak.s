@@ -1,7 +1,8 @@
 // This tests that default-null weak symbols (a GNU extension) are created
 // properly via the .weak directive.
 
-// RUN: llvm-mc -filetype=obj -triple i686-pc-win32 < %s | coff-dump.py | FileCheck %s
+// RUN: llvm-mc -filetype=obj -triple i686-pc-win32 %s | llvm-readobj -t | FileCheck %s
+// RUN: llvm-mc -filetype=obj -triple x86_64-pc-win32 %s | llvm-readobj -t | FileCheck %s
 
     .def    _main;
     .scl    2;
@@ -11,13 +12,13 @@
     .globl  _main
     .align  16, 0x90
 _main:                                  # @main
-# BB#0:                                 # %entry
+# %bb.0:                                # %entry
     subl    $4, %esp
     movl    $_test_weak, %eax
     testl   %eax, %eax
     je      LBB0_2
-# BB#1:                                 # %if.then
-    calll   _test_weak
+# %bb.1:                                # %if.then
+    call    _test_weak
     movl    $1, %eax
     addl    $4, %esp
     ret
@@ -28,24 +29,65 @@ LBB0_2:                                 # %return
 
     .weak   _test_weak
 
-// CHECK: Symbols = [
+    .weak   _test_weak_alias
+    _test_weak_alias=_main
 
-// CHECK:      Name               = _test_weak
-// CHECK-NEXT: Value              = 0
-// CHECK-NEXT: SectionNumber      = 0
-// CHECK-NEXT: SimpleType         = IMAGE_SYM_TYPE_NULL (0)
-// CHECK-NEXT: ComplexType        = IMAGE_SYM_DTYPE_NULL (0)
-// CHECK-NEXT: StorageClass       = IMAGE_SYM_CLASS_WEAK_EXTERNAL (105)
-// CHECK-NEXT: NumberOfAuxSymbols = 1
-// CHECK-NEXT: AuxillaryData      =
-// CHECK-NEXT: 05 00 00 00 02 00 00 00 - 00 00 00 00 00 00 00 00 |................|
-// CHECK-NEXT: 00 00                                             |..|
+// CHECK: Symbols [
 
-// CHECK:      Name               = .weak._test_weak.default
-// CHECK-NEXT: Value              = 0
-// CHECK-NEXT: SectionNumber      = 65535
-// CHECK-NEXT: SimpleType         = IMAGE_SYM_TYPE_NULL (0)
-// CHECK-NEXT: ComplexType        = IMAGE_SYM_DTYPE_NULL (0)
-// CHECK-NEXT: StorageClass       = IMAGE_SYM_CLASS_EXTERNAL (2)
-// CHECK-NEXT: NumberOfAuxSymbols = 0
-// CHECK-NEXT: AuxillaryData      =
+// CHECK:      Symbol {
+// CHECK:        Name: _main
+// CHECK-NEXT:   Value: 0
+// CHECK-NEXT:   Section: .text
+// CHECK-NEXT:   BaseType: Null
+// CHECK-NEXT:   ComplexType: Function
+// CHECK-NEXT:   StorageClass: External
+// CHECK-NEXT:   AuxSymbolCount: 0
+// CHECK-NEXT: }
+
+// CHECK:      Symbol {
+// CHECK:        Name:           _test_weak
+// CHECK-NEXT:   Value:          0
+// CHECK-NEXT:   Section:        IMAGE_SYM_UNDEFINED (0)
+// CHECK-NEXT:   BaseType:       Null
+// CHECK-NEXT:   ComplexType:    Null
+// CHECK-NEXT:   StorageClass:   WeakExternal
+// CHECK-NEXT:   AuxSymbolCount: 1
+// CHECK-NEXT:   AuxWeakExternal {
+// CHECK-NEXT:     Linked: .weak._test_weak.default
+// CHECK-NEXT:      Search: Library
+// CHECK-NEXT:   }
+// CHECK-NEXT: }
+
+// CHECK:      Symbol {
+// CHECK:        Name:                .weak._test_weak.default
+// CHECK-NEXT:   Value:               0
+// CHECK-NEXT:   Section:             IMAGE_SYM_ABSOLUTE (-1)
+// CHECK-NEXT:   BaseType:            Null
+// CHECK-NEXT:   ComplexType:         Null
+// CHECK-NEXT:   StorageClass:        External
+// CHECK-NEXT:   AuxSymbolCount:      0
+// CHECK-NEXT: }
+
+// CHECK:      Symbol {
+// CHECK:        Name:           _test_weak_alias
+// CHECK-NEXT:   Value:          0
+// CHECK-NEXT:   Section:        IMAGE_SYM_UNDEFINED (0)
+// CHECK-NEXT:   BaseType:       Null
+// CHECK-NEXT:   ComplexType:    Null
+// CHECK-NEXT:   StorageClass:   WeakExternal
+// CHECK-NEXT:   AuxSymbolCount: 1
+// CHECK-NEXT:   AuxWeakExternal {
+// CHECK-NEXT:     Linked: .weak._test_weak_alias.default
+// CHECK-NEXT:      Search: Library
+// CHECK-NEXT:   }
+// CHECK-NEXT: }
+
+// CHECK:      Symbol {
+// CHECK:        Name: .weak._test_weak_alias.default
+// CHECK-NEXT:   Value: 0
+// CHECK-NEXT:   Section: .text
+// CHECK-NEXT:   BaseType: Null
+// CHECK-NEXT:   ComplexType: Null
+// CHECK-NEXT:   StorageClass: External
+// CHECK-NEXT:   AuxSymbolCount: 0
+// CHECK-NEXT: }

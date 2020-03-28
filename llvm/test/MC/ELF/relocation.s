@@ -1,7 +1,15 @@
-// RUN: llvm-mc -filetype=obj -triple x86_64-pc-linux-gnu %s -o - | elf-dump  --dump-section-data | FileCheck  %s
+// RUN: llvm-mc -filetype=obj -triple x86_64-pc-linux-gnu %s -o - | llvm-readobj -s -sr  | FileCheck  %s
 
 // Test that we produce the correct relocation.
 
+
+        .section	.pr23272,"aGw",@progbits,pr23272,comdat
+	.globl pr23272
+pr23272:
+pr23272_2:
+pr23272_3 = pr23272_2
+
+        .text
 bar:
         movl	$bar, %edx        # R_X86_64_32
         movq	$bar, %rdx        # R_X86_64_32S
@@ -14,108 +22,94 @@ bar:
         leaq	foo@TPOFF(%rax), %rax    # R_X86_64_TPOFF32
         leaq	foo@TLSLD(%rip), %rdi    # R_X86_64_TLSLD
         leaq	foo@dtpoff(%rax), %rcx   # R_X86_64_DTPOFF32
+        movabs  foo@GOT, %rax		 # R_X86_64_GOT64
+        movabs  foo@GOTOFF, %rax	 # R_X86_64_GOTOFF64
         pushq    $bar
         movq	foo(%rip), %rdx
         leaq    foo-bar(%r14),%r14
         addq	$bar,%rax         # R_X86_64_32S
+	.quad	foo@DTPOFF
+        movabsq	$baz@TPOFF, %rax
+	.word   foo-bar
+	.byte   foo-bar
+
+        # this should probably be an error...
+	zed = foo +2
+	call zed@PLT
+
+        leaq    -1+foo(%rip), %r11
+
+        leaq  _GLOBAL_OFFSET_TABLE_(%rax), %r15
+        leaq  _GLOBAL_OFFSET_TABLE_(%rip), %r15
+        movl  $_GLOBAL_OFFSET_TABLE_, %eax
+        movabs  $_GLOBAL_OFFSET_TABLE_, %rax
+
+        .quad    blah@SIZE                        # R_X86_64_SIZE64
+        .quad    blah@SIZE + 32                   # R_X86_64_SIZE64
+        .quad    blah@SIZE - 32                   # R_X86_64_SIZE64
+         movl    blah@SIZE, %eax                  # R_X86_64_SIZE32
+         movl    blah@SIZE + 32, %eax             # R_X86_64_SIZE32
+         movl    blah@SIZE - 32, %eax             # R_X86_64_SIZE32
+
+        .long   foo@gotpcrel
+        .long foo@plt
+
+        .quad	pr23272_2 - pr23272
+        .quad	pr23272_3 - pr23272
+
+	.global pr24486
+pr24486:
+	pr24486_alias = pr24486
+	.long pr24486_alias
+
+        .code16
+        call pr23771
+
+        .weak weak_sym
+weak_sym:
+        .long  pr23272-weak_sym
 
 
-// CHECK:  # Section 1
-// CHECK: (('sh_name', 0x00000006) # '.text'
-
-// CHECK: # Relocation 0
-// CHECK-NEXT:  (('r_offset', 0x0000000000000001)
-// CHECK-NEXT:   ('r_sym', 0x00000002)
-// CHECK-NEXT:   ('r_type', 0x0000000a)
-// CHECK-NEXT:   ('r_addend',
-
-// CHECK: # Relocation 1
-// CHECK-NEXT:  (('r_offset', 0x0000000000000008)
-// CHECK-NEXT:   ('r_sym', 0x00000002)
-// CHECK-NEXT:   ('r_type', 0x0000000b)
-// CHECK-NEXT:   ('r_addend',
-
-// CHECK: # Relocation 2
-// CHECK-NEXT:  (('r_offset', 0x0000000000000013)
-// CHECK-NEXT:   ('r_sym', 0x00000002)
-// CHECK-NEXT:   ('r_type', 0x0000000b)
-// CHECK-NEXT:   ('r_addend',
-
-// CHECK: # Relocation 3
-// CHECK-NEXT:  (('r_offset', 0x000000000000001a)
-// CHECK-NEXT:   ('r_sym', 0x00000002)
-// CHECK-NEXT:   ('r_type', 0x0000000b)
-// CHECK-NEXT:   ('r_addend',
-
-// CHECK: # Relocation 4
-// CHECK-NEXT:  (('r_offset', 0x0000000000000022)
-// CHECK-NEXT:   ('r_sym', 0x00000002)
-// CHECK-NEXT:   ('r_type', 0x0000000b)
-// CHECK-NEXT:   ('r_addend',
-
-// CHECK: # Relocation 5
-// CHECK-NEXT:  (('r_offset', 0x0000000000000026)
-// CHECK-NEXT:   ('r_sym', 0x00000002)
-// CHECK-NEXT:   ('r_type', 0x0000000a)
-// CHECK-NEXT:   ('r_addend',
-
-// CHECK: # Relocation 6
-// CHECK-NEXT:  (('r_offset', 0x000000000000002d)
-// CHECK-NEXT:   ('r_sym', 0x00000006)
-// CHECK-NEXT:   ('r_type', 0x00000016)
-// CHECK-NEXT:   ('r_addend', 0xfffffffffffffffc)
-
-// CHECK:  # Relocation 7
-// CHECK-NEXT:  (('r_offset', 0x0000000000000034)
-// CHECK-NEXT:   ('r_sym', 0x00000006)
-// CHECK-NEXT:   ('r_type', 0x00000013)
-// CHECK-NEXT:   ('r_addend', 0xfffffffffffffffc)
-
-// CHECK:  # Relocation 8
-// CHECK-NEXT:  (('r_offset', 0x000000000000003b)
-// CHECK-NEXT:   ('r_sym', 0x00000006)
-// CHECK-NEXT:   ('r_type', 0x00000017)
-// CHECK-NEXT:   ('r_addend', 0x0000000000000000)
-
-// CHECK:  # Relocation 9
-// CHECK-NEXT:  (('r_offset', 0x0000000000000042)
-// CHECK-NEXT:   ('r_sym', 0x00000006)
-// CHECK-NEXT:   ('r_type', 0x00000014)
-// CHECK-NEXT:   ('r_addend', 0xfffffffffffffffc)
-
-// CHECK:  # Relocation 10
-// CHECK-NEXT:  (('r_offset', 0x0000000000000049)
-// CHECK-NEXT:   ('r_sym', 0x00000006)
-// CHECK-NEXT:   ('r_type', 0x00000015)
-// CHECK-NEXT:   ('r_addend', 0x0000000000000000)
-
-// CHECK: # Relocation 11
-// CHECK-NEXT:  (('r_offset', 0x000000000000004e)
-// CHECK-NEXT:   ('r_sym', 0x00000002)
-// CHECK-NEXT:   ('r_type', 0x0000000b)
-// CHECK-NEXT:   ('r_addend', 0x0000000000000000)
-
-// CHECK: # Relocation 12
-// CHECK-NEXT: (('r_offset', 0x0000000000000055)
-// CHECK-NEXT:  ('r_sym', 0x00000006)
-// CHECK-NEXT:  ('r_type', 0x00000002)
-// CHECK-NEXT:  ('r_addend', 0xfffffffffffffffc)
-
-// CHECK: # Relocation 13
-// CHECK-NEXT: (('r_offset', 0x000000000000005c)
-// CHECK-NEXT:  ('r_sym', 0x00000006)
-// CHECK-NEXT:  ('r_type', 0x00000002)
-// CHECK-NEXT:  ('r_addend', 0x000000000000005c)
-
-// CHECK: # Relocation 14
-// CHECK-NEXT: (('r_offset', 0x0000000000000063)
-// CHECK-NEXT:  ('r_sym', 0x00000002)
-// CHECK-NEXT:  ('r_type', 0x0000000b)
-// CHECK-NEXT:  ('r_addend', 0x0000000000000000)
-
-// CHECK:   # Symbol 2
-// CHECK: (('st_name', 0x00000000) # ''
-// CHECK:  ('st_bind', 0x0)
-// CHECK:  ('st_type', 0x3)
-// CHECK:  ('st_other', 0x00)
-// CHECK:  ('st_shndx', 0x0001)
+// CHECK:        Section {
+// CHECK:          Name: .rela.text
+// CHECK:          Relocations [
+// CHECK-NEXT:       0x1 R_X86_64_32        .text
+// CHECK-NEXT:       0x8 R_X86_64_32S       .text
+// CHECK-NEXT:       0x13 R_X86_64_32S      .text
+// CHECK-NEXT:       0x1A R_X86_64_32S      .text
+// CHECK-NEXT:       0x22 R_X86_64_32S      .text
+// CHECK-NEXT:       0x26 R_X86_64_32       .text
+// CHECK-NEXT:       0x2D R_X86_64_GOTTPOFF foo 0xFFFFFFFFFFFFFFFC
+// CHECK-NEXT:       0x34 R_X86_64_TLSGD    foo 0xFFFFFFFFFFFFFFFC
+// CHECK-NEXT:       0x3B R_X86_64_TPOFF32  foo 0x0
+// CHECK-NEXT:       0x42 R_X86_64_TLSLD    foo 0xFFFFFFFFFFFFFFFC
+// CHECK-NEXT:       0x49 R_X86_64_DTPOFF32 foo 0x0
+// CHECK-NEXT:       0x4F R_X86_64_GOT64 foo 0x0
+// CHECK-NEXT:       0x59 R_X86_64_GOTOFF64 foo 0x0
+// CHECK-NEXT:       0x62 R_X86_64_32S .text 0x0
+// CHECK-NEXT:       0x69 R_X86_64_PC32 foo 0xFFFFFFFFFFFFFFFC
+// CHECK-NEXT:       0x70 R_X86_64_PC32 foo 0x70
+// CHECK-NEXT:       0x77 R_X86_64_32S .text 0x0
+// CHECK-NEXT:       0x7B R_X86_64_DTPOFF64 foo 0x0
+// CHECK-NEXT:       0x85 R_X86_64_TPOFF64 baz 0x0
+// CHECK-NEXT:       0x8D R_X86_64_PC16 foo 0x8D
+// CHECK-NEXT:       0x8F R_X86_64_PC8 foo 0x8F
+// CHECK-NEXT:       0x91 R_X86_64_PLT32 zed 0xFFFFFFFFFFFFFFFC
+// CHECK-NEXT:       0x98 R_X86_64_PC32 foo 0xFFFFFFFFFFFFFFFB
+// CHECK-NEXT:       0x9F R_X86_64_GOTPC32 _GLOBAL_OFFSET_TABLE_ 0x3
+// CHECK-NEXT:       0xA6 R_X86_64_GOTPC32 _GLOBAL_OFFSET_TABLE_ 0xFFFFFFFFFFFFFFFC
+// CHECK-NEXT:       0xAB R_X86_64_GOTPC32 _GLOBAL_OFFSET_TABLE_ 0x1
+// CHECK-NEXT:       0xB1 R_X86_64_GOTPC64 _GLOBAL_OFFSET_TABLE_ 0x2
+// CHECK-NEXT:       0xB9 R_X86_64_SIZE64 blah 0x0
+// CHECK-NEXT:       0xC1 R_X86_64_SIZE64 blah 0x20
+// CHECK-NEXT:       0xC9 R_X86_64_SIZE64 blah 0xFFFFFFFFFFFFFFE0
+// CHECK-NEXT:       0xD4 R_X86_64_SIZE32 blah 0x0
+// CHECK-NEXT:       0xDB R_X86_64_SIZE32 blah 0x20
+// CHECK-NEXT:       0xE2 R_X86_64_SIZE32 blah 0xFFFFFFFFFFFFFFE0
+// CHECK-NEXT:       0xE6 R_X86_64_GOTPCREL foo 0x0
+// CHECK-NEXT:       0xEA R_X86_64_PLT32 foo 0x0
+// CHECK-NEXT:       0xFE R_X86_64_32 .text 0xFE
+// CHECK-NEXT:       0x103 R_X86_64_PC16 pr23771 0xFFFFFFFFFFFFFFFE
+// CHECK-NEXT:       0x105 R_X86_64_PC32 pr23272 0x0
+// CHECK-NEXT:     ]
+// CHECK-NEXT:   }

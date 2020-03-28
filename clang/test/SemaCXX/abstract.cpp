@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -fsyntax-only -verify %s -std=c++11
+// RUN: %clang_cc1 -fsyntax-only -verify %s -std=c++11 -Wabstract-vbase-init
 
 #ifndef __GXX_EXPERIMENTAL_CXX0X__
 #define __CONCAT(__X, __Y) __CONCAT1(__X, __Y)
@@ -7,6 +7,10 @@
 #define static_assert(__b, __m) \
   typedef int __CONCAT(__sa, __LINE__)[__b ? 1 : -1]
 #endif
+
+union IncompleteUnion;
+
+static_assert(!__is_abstract(IncompleteUnion), "unions are never abstract");
 
 class C {
   virtual void f() = 0; // expected-note {{unimplemented pure virtual method 'f'}}
@@ -250,6 +254,13 @@ namespace test4 {
   };
 }
 
+namespace test5 {
+  struct A { A(int); virtual ~A() = 0; }; // expected-note {{pure virtual method}}
+  const A &a = 0; // expected-error {{abstract class}}
+  void f(const A &a = 0); // expected-error {{abstract class}}
+  void g() { f(0); } // expected-error {{abstract class}}
+}
+
 // PR9247: Crash on invalid in clang::Sema::ActOnFinishCXXMemberSpecification
 namespace pr9247 {
   struct A {
@@ -257,5 +268,46 @@ namespace pr9247 {
     struct B {
       C* f(int foo);
     };
+  };
+}
+
+namespace pr12658 {
+  class C {
+    public:
+      C(int v){}
+      virtual void f() = 0; // expected-note {{unimplemented pure virtual method 'f' in 'C'}}
+  };
+
+  void foo( C& c ) {}
+
+  void bar( void ) {
+    foo(C(99)); // expected-error {{allocating an object of abstract class type 'pr12658::C'}}
+  }
+}
+
+namespace pr16659 {
+  struct A {
+    A(int);
+    virtual void x() = 0; // expected-note {{unimplemented pure virtual method 'x' in 'RedundantInit'}}
+  };
+  struct B : virtual A {};
+  struct C : B {
+    C() : A(37) {}
+    void x() override {}
+  };
+
+  struct X {
+    friend class Z;
+  private:
+    X &operator=(const X&);
+  };
+  struct Y : virtual X { // expected-note {{::X' has an inaccessible copy assignment}}
+    virtual ~Y() = 0;
+  };
+  struct Z : Y {}; // expected-note {{::Y' has a deleted copy assignment}}
+  void f(Z &a, const Z &b) { a = b; } // expected-error {{copy assignment operator is implicitly deleted}}
+
+  struct RedundantInit : virtual A {
+    RedundantInit() : A(0) {} // expected-warning {{initializer for virtual base class 'pr16659::A' of abstract class 'RedundantInit' will never be used}}
   };
 }

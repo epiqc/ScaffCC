@@ -22,6 +22,18 @@ def FeatureX
  : SubtargetFeature<"ext", "ExtendedInsts", "true",
                     "Enable MSP430-X extensions">;
 
+def FeatureHWMult16
+ : SubtargetFeature<"hwmult16", "HWMultMode", "HWMult16",
+                    "Enable 16-bit hardware multiplier">;
+
+def FeatureHWMult32
+ : SubtargetFeature<"hwmult32", "HWMultMode", "HWMult32",
+                    "Enable 32-bit hardware multiplier">;
+
+def FeatureHWMultF5
+ : SubtargetFeature<"hwmultf5", "HWMultMode", "HWMultF5",
+                    "Enable F5 series hardware multiplier">;
+
 //===----------------------------------------------------------------------===//
 // MSP430 supported processors.
 //===----------------------------------------------------------------------===//
@@ -29,6 +41,8 @@ class Proc<string Name, list<SubtargetFeature> Features>
  : Processor<Name, NoItineraries, Features>;
 
 def : Proc<"generic",         []>;
+def : Proc<"msp430",          []>;
+def : Proc<"msp430x",         [FeatureX]>;
 
 //===----------------------------------------------------------------------===//
 // Register File Description
@@ -50,9 +64,21 @@ include "MSP430InstrInfo.td"
 
 def MSP430InstrInfo : InstrInfo;
 
-def MSP430InstPrinter : AsmWriter {
-  string AsmWriterClassName  = "InstPrinter";
-  bit isMCAsmWriter = 1;
+//===---------------------------------------------------------------------===//
+// Assembly Printers
+//===---------------------------------------------------------------------===//
+
+def MSP430AsmWriter : AsmWriter {
+  string AsmWriterClassName = "InstPrinter";
+}
+
+//===---------------------------------------------------------------------===//
+// Assembly Parsers
+//===---------------------------------------------------------------------===//
+
+def MSP430AsmParser : AsmParser {
+  let AllowDuplicateRegisterNames = 1;
+  let ShouldEmitMatchRegisterAltName = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -61,6 +87,6 @@ def MSP430InstPrinter : AsmWriter {
 
 def MSP430 : Target {
   let InstructionSet = MSP430InstrInfo;
-  let AssemblyWriters = [MSP430InstPrinter];
+  let AssemblyParsers = [MSP430AsmParser];
 }
 

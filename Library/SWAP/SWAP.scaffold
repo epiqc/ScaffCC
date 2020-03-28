@@ -1,12 +1,12 @@
-module SWAP ( qbit a, qbit b ) {
+scaff_module SWAP ( qbit a, qbit b ) {
     CNOT ( b, a );
     CNOT ( a, b );
     CNOT ( b, a );
 }
 
-// Scaffold doesn't allow overloading module names based on module parameter signature
+// Scaffold doesn't allow overloading scaff_module names based on scaff_module parameter signature
 // SWAPs is vector of gates on vectors of qubits
-module SWAPs (
+scaff_module SWAPs (
   const unsigned int width,
 	qbit a[],
 	qbit b[]

@@ -84,7 +84,7 @@ struct g13_s0 g13[] = {
    { (long) &g12_tmp }
 };
 
-// CHECK: @g14 = global i8* inttoptr (i64 100 to i8*)
+// CHECK: @g14 = global i8* inttoptr (i32 100 to i8*)
 void *g14 = (void*) 100;
 
 // CHECK: @g15 = global i32 -1
@@ -102,7 +102,7 @@ void g18(void) {
   static int *p[] = { &g19 };
 }
 
-// CHECK: @g20.l0 = internal global %struct.g20_s1 { %struct.g20_s0* null, %struct.g20_s0** getelementptr inbounds (%struct.g20_s1* @g20.l0, i32 0, i32 0) }
+// CHECK: @g20.l0 = internal global %struct.g20_s1 { %struct.g20_s0* null, %struct.g20_s0** getelementptr inbounds (%struct.g20_s1, %struct.g20_s1* @g20.l0, i32 0, i32 0) }
 struct g20_s0;
 struct g20_s1 {
   struct g20_s0 *f0, **f1;
@@ -121,7 +121,7 @@ struct g22 {int x;} __attribute((packed));
 struct g23 {char a; short b; char c; struct g22 d;};
 struct g23 g24 = {1,2,3,4};
 
-// CHECK: @g25.g26 = internal global i8* getelementptr inbounds ([4 x i8]* @__func__.g25, i32 0, i32 0)
+// CHECK: @g25.g26 = internal global i8* getelementptr inbounds ([4 x i8], [4 x i8]* @__func__.g25, i32 0, i32 0)
 // CHECK: @__func__.g25 = private unnamed_addr constant [4 x i8] c"g25\00"
 int g25() {
   static const char *g26 = __func__;
@@ -143,4 +143,41 @@ void g28() {
   static v1i64 a = (v1i64)10LL;
   static v12i16 b = (v2f80){1,2};
   static v2f80 c = (v12i16){0,0,0,-32768,16383,0,0,0,0,-32768,16384,0};
+}
+
+// PR13643
+void g29() {
+  typedef char DCC_PASSWD[2];
+  typedef struct
+  {
+      DCC_PASSWD passwd;
+  } DCC_SRVR_NM;
+  // CHECK: @g29.a = internal global %struct.DCC_SRVR_NM { [2 x i8] c"@\00" }, align 1
+  // CHECK: @g29.b = internal global [1 x i32] [i32 ptrtoint ([5 x i8]* @.str to i32)], align 4
+  // CHECK: @g29.c = internal global [1 x i32] [i32 97], align 4
+  static DCC_SRVR_NM a = { {"@"} };
+  static int b[1] = { "asdf" }; // expected-warning {{incompatible pointer to integer conversion initializing 'int' with an expression of type 'char [5]'}}
+  static int c[1] = { L"a" };
+}
+
+// PR21300
+void g30() {
+#pragma pack(1)
+  static struct {
+    int : 1;
+    int x;
+  } a = {};
+  // CHECK: @g30.a = internal global %struct.anon.1 <{ i8 undef, i32 0 }>, align 1
+#pragma pack()
+}
+
+void g31() {
+#pragma pack(4)
+  static struct {
+    short a;
+    long x;
+    short z;
+  } a = {23122, -12312731, -312};
+#pragma pack()
+  // CHECK: @g31.a = internal global %struct.anon.2 { i16 23122, i32 -12312731, i16 -312 }, align 4
 }

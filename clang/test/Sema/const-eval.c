@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -fsyntax-only -verify -triple i686-linux %s
+// RUN: %clang_cc1 -fsyntax-only -verify -triple x86_64-linux %s -Wno-tautological-pointer-compare
 
 #define EVAL_EXPR(testno, expr) int test##testno = sizeof(struct{char qq[expr];});
 int x;
@@ -118,10 +118,6 @@ float varfloat;
 const float constfloat = 0;
 EVAL_EXPR(43, varfloat && constfloat) // expected-error {{must have a constant size}}
 
-// <rdar://problem/11205586>
-// (Make sure we continue to reject this.)
-EVAL_EXPR(44, "x"[0]); // expected-error {{variable length array}}
-
 // <rdar://problem/10962435>
 EVAL_EXPR(45, ((char*)-1) + 1 == 0 ? 1 : -1)
 EVAL_EXPR(46, ((char*)-1) + 1 < (char*) -1 ? 1 : -1)
@@ -130,4 +126,29 @@ EVAL_EXPR(48, &x != &x - 1 ? 1 : -1)
 EVAL_EXPR(49, &x < &x - 100 ? 1 : -1) // expected-error {{must have a constant size}}
 
 extern struct Test50S Test50;
-EVAL_EXPR(50, &Test50 < (struct Test50S*)((unsigned)&Test50 + 10)) // expected-error {{must have a constant size}}
+EVAL_EXPR(50, &Test50 < (struct Test50S*)((unsigned long)&Test50 + 10)) // expected-error {{must have a constant size}}
+
+// <rdar://problem/11874571>
+EVAL_EXPR(51, 0 != (float)1e99)
+
+// PR21945
+void PR21945() { int i = (({}), 0l); }
+
+void PR24622();
+struct PR24622 {} pr24622;
+EVAL_EXPR(52, &pr24622 == (void *)&PR24622); // expected-error {{must have a constant size}}
+
+// We evaluate these by providing 2s' complement semantics in constant
+// expressions, like we do for integers.
+void *PR28739a = (__int128)(unsigned long)-1 + &PR28739a;
+void *PR28739b = &PR28739b + (__int128)(unsigned long)-1;
+__int128 PR28739c = (&PR28739c + (__int128)(unsigned long)-1) - &PR28739c;
+void *PR28739d = &(&PR28739d)[(__int128)(unsigned long)-1];
+
+struct PR35214_X {
+  int k;
+  int arr[];
+};
+int PR35214_x;
+int PR35214_y = ((struct PR35214_X *)&PR35214_x)->arr[1]; // expected-error {{not a compile-time constant}}
+int *PR35214_z = &((struct PR35214_X *)&PR35214_x)->arr[1]; // ok, &PR35214_x + 2

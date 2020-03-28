@@ -1,4 +1,4 @@
-; RUN: llc < %s -march=x86-64 | grep mov | count 2
+; RUN: llc < %s | grep mov | count 2
 
 ; Fold an offset into an address even if it's not a 32-bit
 ; signed integer.
@@ -8,7 +8,7 @@ target triple = "x86_64-unknown-linux-gnu"
 @call_used_regs = external global [53 x i8], align 32
 
 define fastcc void @foo() nounwind {
-	%t = getelementptr [53 x i8]* @call_used_regs, i64 0, i64 4294967295
+	%t = getelementptr [53 x i8], [53 x i8]* @call_used_regs, i64 0, i64 4294967295
 	store i8 1, i8* %t, align 1
 	ret void
 }

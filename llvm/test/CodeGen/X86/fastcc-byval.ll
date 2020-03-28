@@ -1,4 +1,8 @@
-; RUN: llc < %s -tailcallopt=false | grep {movl\[\[:space:\]\]*8(%esp), %eax} | count 2
+; RUN: llc < %s -tailcallopt=false | FileCheck %s
+; CHECK: movl 8(%esp), %eax 
+; CHECK: movl 8(%esp), %eax 
+; CHECK-NOT: movl 8(%esp), %eax 
+
 ; PR3122
 ; rdar://6400815
 
@@ -10,10 +14,10 @@ target triple = "i386-apple-darwin9.5"
 
 define fastcc i32 @bar() nounwind {
 	%V = alloca %struct.MVT
-	%a = getelementptr %struct.MVT* %V, i32 0, i32 0
+	%a = getelementptr %struct.MVT, %struct.MVT* %V, i32 0, i32 0
 	store i32 1, i32* %a
 	call fastcc void @foo(%struct.MVT* byval %V) nounwind
-	%t = load i32* %a
+	%t = load i32, i32* %a
 	ret i32 %t
 }
 

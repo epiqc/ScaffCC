@@ -6,9 +6,10 @@
 // License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
-//
-//  This file defines the FileSystemOptions interface.
-//
+///
+/// \file
+/// Defines the clang::FileSystemOptions interface.
+///
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_CLANG_BASIC_FILESYSTEMOPTIONS_H
@@ -18,10 +19,10 @@
 
 namespace clang {
 
-/// \brief Keeps track of options that affect how file operations are performed.
+/// Keeps track of options that affect how file operations are performed.
 class FileSystemOptions {
 public:
-  /// \brief If set, paths are resolved as if the working directory was
+  /// If set, paths are resolved as if the working directory was
   /// set to the value of WorkingDir.
   std::string WorkingDir;
 };

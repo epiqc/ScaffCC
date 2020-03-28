@@ -6,7 +6,7 @@
 #include <../cMODADD/cMODADD.scaffold>
 
 // output (ax+b) mod N
-module cMODMUL (
+scaff_module cMODMUL (
 	qbit ctrl,
 	const unsigned int width,
 	const unsigned int a,
@@ -30,7 +30,7 @@ module cMODMUL (
 	iQFT(width, b);
 }
 
-module ciMODMUL (
+scaff_module ciMODMUL (
 	qbit ctrl,
 	const unsigned int width,
 	const unsigned int a,

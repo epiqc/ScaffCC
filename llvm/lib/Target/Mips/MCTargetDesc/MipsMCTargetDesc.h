@@ -11,43 +11,51 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef MIPSMCTARGETDESC_H
-#define MIPSMCTARGETDESC_H
+#ifndef LLVM_LIB_TARGET_MIPS_MCTARGETDESC_MIPSMCTARGETDESC_H
+#define LLVM_LIB_TARGET_MIPS_MCTARGETDESC_MIPSMCTARGETDESC_H
 
 #include "llvm/Support/DataTypes.h"
+
+#include <memory>
 
 namespace llvm {
 class MCAsmBackend;
 class MCCodeEmitter;
 class MCContext;
 class MCInstrInfo;
-class MCObjectWriter;
+class MCObjectTargetWriter;
+class MCRegisterInfo;
 class MCSubtargetInfo;
+class MCTargetOptions;
 class StringRef;
 class Target;
+class Triple;
 class raw_ostream;
+class raw_pwrite_stream;
 
-extern Target TheMipsTarget;
-extern Target TheMipselTarget;
-extern Target TheMips64Target;
-extern Target TheMips64elTarget;
+Target &getTheMipsTarget();
+Target &getTheMipselTarget();
+Target &getTheMips64Target();
+Target &getTheMips64elTarget();
 
 MCCodeEmitter *createMipsMCCodeEmitterEB(const MCInstrInfo &MCII,
-                                         const MCSubtargetInfo &STI,
+                                         const MCRegisterInfo &MRI,
                                          MCContext &Ctx);
 MCCodeEmitter *createMipsMCCodeEmitterEL(const MCInstrInfo &MCII,
-                                         const MCSubtargetInfo &STI,
+                                         const MCRegisterInfo &MRI,
                                          MCContext &Ctx);
 
-MCAsmBackend *createMipsAsmBackendEB32(const Target &T, StringRef TT);
-MCAsmBackend *createMipsAsmBackendEL32(const Target &T, StringRef TT);
-MCAsmBackend *createMipsAsmBackendEB64(const Target &T, StringRef TT);
-MCAsmBackend *createMipsAsmBackendEL64(const Target &T, StringRef TT);
+MCAsmBackend *createMipsAsmBackend(const Target &T, const MCSubtargetInfo &STI,
+                                   const MCRegisterInfo &MRI,
+                                   const MCTargetOptions &Options);
 
-MCObjectWriter *createMipsELFObjectWriter(raw_ostream &OS,
-                                          uint8_t OSABI,
-                                          bool IsLittleEndian,
-                                          bool Is64Bit);
+std::unique_ptr<MCObjectTargetWriter>
+createMipsELFObjectWriter(const Triple &TT, bool IsN32);
+
+namespace MIPS_MC {
+StringRef selectMipsCPU(const Triple &TT, StringRef CPU);
+}
+
 } // End llvm namespace
 
 // Defines symbolic names for Mips registers.  This defines a mapping from

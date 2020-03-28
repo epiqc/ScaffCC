@@ -1,4 +1,5 @@
 ; RUN: opt < %s -loop-rotate -S | FileCheck %s
+; RUN: opt < %s -loop-rotate -enable-mssa-loop-dependency=true -verify-memoryssa -S | FileCheck %s
 
 ; Test alloca in -loop-rotate.
 
@@ -14,7 +15,7 @@ declare void @use(i8*)
 
 define void @test() {
 entry:
-  %end = load i16* @e
+  %end = load i16, i16* @e
   br label %loop
 
 loop:

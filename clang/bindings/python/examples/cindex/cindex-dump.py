@@ -63,8 +63,8 @@ def main():
 
     parser = OptionParser("usage: %prog [options] {filename} [clang-args*]")
     parser.add_option("", "--show-ids", dest="showIDs",
-                      help="Don't compute cursor IDs (very slow)",
-                      default=False)
+                      help="Compute cursor IDs (very slow)",
+                      action="store_true", default=False)
     parser.add_option("", "--max-depth", dest="maxDepth",
                       help="Limit cursor expansion to depth N",
                       metavar="N", type=int, default=None)
@@ -79,7 +79,7 @@ def main():
     if not tu:
         parser.error("unable to load input")
 
-    pprint(('diags', map(get_diag_info, tu.diagnostics)))
+    pprint(('diags', [get_diag_info(d) for d in  tu.diagnostics]))
     pprint(('nodes', get_info(tu.cursor)))
 
 if __name__ == '__main__':

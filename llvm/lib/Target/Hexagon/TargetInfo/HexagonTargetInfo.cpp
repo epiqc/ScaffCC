@@ -8,12 +8,16 @@
 //===----------------------------------------------------------------------===//
 
 #include "Hexagon.h"
-#include "llvm/Module.h"
+#include "llvm/IR/Module.h"
 #include "llvm/Support/TargetRegistry.h"
 using namespace llvm;
 
-Target llvm::TheHexagonTarget;
+Target &llvm::getTheHexagonTarget() {
+  static Target TheHexagonTarget;
+  return TheHexagonTarget;
+}
 
 extern "C" void LLVMInitializeHexagonTargetInfo() {
-  RegisterTarget<Triple::hexagon, /*HasJIT=*/false>  X(TheHexagonTarget, "hexagon", "Hexagon");
+  RegisterTarget<Triple::hexagon, /*HasJIT=*/true> X(
+      getTheHexagonTarget(), "hexagon", "Hexagon", "Hexagon");
 }

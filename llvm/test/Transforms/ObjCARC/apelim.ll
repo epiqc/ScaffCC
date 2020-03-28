@@ -26,28 +26,30 @@ entry:
   ret void
 }
 
-; CHECK: define internal void @_GLOBAL__I_x()
+; CHECK: define internal void @_GLOBAL__I_x() {
 ; CHECK-NOT: @objc
 ; CHECK: }
 define internal void @_GLOBAL__I_x() {
 entry:
-  %0 = call i8* @objc_autoreleasePoolPush() nounwind
+  %0 = call i8* @llvm.objc.autoreleasePoolPush() nounwind
   call void @__cxx_global_var_init()
-  call void @objc_autoreleasePoolPop(i8* %0) nounwind
+  call void @llvm.objc.autoreleasePoolPop(i8* %0) nounwind
   ret void
 }
 
-; CHECK: define internal void @_GLOBAL__I_y()
-; CHECK: %0 = call i8* @objc_autoreleasePoolPush() nounwind
-; CHECK: call void @objc_autoreleasePoolPop(i8* %0) nounwind
+; CHECK: define internal void @_GLOBAL__I_y() {
+; CHECK: %0 = call i8* @llvm.objc.autoreleasePoolPush() [[NUW:#[0-9]+]]
+; CHECK: call void @llvm.objc.autoreleasePoolPop(i8* %0) [[NUW]]
 ; CHECK: }
 define internal void @_GLOBAL__I_y() {
 entry:
-  %0 = call i8* @objc_autoreleasePoolPush() nounwind
+  %0 = call i8* @llvm.objc.autoreleasePoolPush() nounwind
   call void @__dxx_global_var_init()
-  call void @objc_autoreleasePoolPop(i8* %0) nounwind
+  call void @llvm.objc.autoreleasePoolPop(i8* %0) nounwind
   ret void
 }
 
-declare i8* @objc_autoreleasePoolPush()
-declare void @objc_autoreleasePoolPop(i8*)
+declare i8* @llvm.objc.autoreleasePoolPush()
+declare void @llvm.objc.autoreleasePoolPop(i8*)
+
+; CHECK: attributes #0 = { nounwind }

@@ -26,7 +26,7 @@ struct Y {
 
 X getX();
 
-// CHECK: define void @_Z11if_destructi(
+// CHECK-LABEL: define void @_Z11if_destructi(
 void if_destruct(int z) {
   // Verify that the condition variable is destroyed at the end of the
   // "if" statement.
@@ -95,7 +95,7 @@ void switch_destruct(int z) {
 
 int foo();
 
-// CHECK: define void @_Z14while_destructi
+// CHECK-LABEL: define void @_Z14while_destructi
 void while_destruct(int z) {
   // CHECK: [[Z:%.*]] = alloca i32
   // CHECK: [[CLEANUPDEST:%.*]] = alloca i32
@@ -116,7 +116,7 @@ void while_destruct(int z) {
 
     // Cleanup.
     // CHECK: call void @_ZN1XD1Ev
-    // CHECK-NEXT: [[DEST:%.*]] = load i32* [[CLEANUPDEST]]
+    // CHECK-NEXT: [[DEST:%.*]] = load i32, i32* [[CLEANUPDEST]]
     // CHECK-NEXT: switch i32 [[DEST]]
   }
 
@@ -135,7 +135,7 @@ void while_destruct(int z) {
   // CHECK: ret
 }
 
-// CHECK: define void @_Z12for_destructi(
+// CHECK-LABEL: define void @_Z12for_destructi(
 void for_destruct(int z) {
   // CHECK: [[Z:%.*]] = alloca i32
   // CHECK: [[CLEANUPDEST:%.*]] = alloca i32
@@ -163,7 +163,7 @@ void for_destruct(int z) {
     z = 23;
 
     // %for.inc:
-    // CHECK: [[TMP:%.*]] = load i32* [[Z]]
+    // CHECK: [[TMP:%.*]] = load i32, i32* [[Z]]
     // CHECK-NEXT: [[INC:%.*]] = add nsw i32 [[TMP]], 1
     // CHECK-NEXT: store i32 [[INC]], i32* [[Z]]
     // CHECK-NEXT: store i32 0, i32* [[CLEANUPDEST]]
@@ -172,7 +172,7 @@ void for_destruct(int z) {
 
     // %cleanup:  Destroys X.
     // CHECK: call void @_ZN1XD1Ev
-    // CHECK-NEXT: [[YDESTTMP:%.*]] = load i32* [[CLEANUPDEST]]
+    // CHECK-NEXT: [[YDESTTMP:%.*]] = load i32, i32* [[CLEANUPDEST]]
     // CHECK-NEXT: switch i32 [[YDESTTMP]]
     // 0 -> %cleanup.cont, default -> %cleanup1
 
@@ -207,7 +207,7 @@ void for_destruct(int z) {
 
   // %for.inc11:
   // CHECK: call void @_Z4getXv
-  // CHECK-NEXT: load i32* [[I]]
+  // CHECK-NEXT: load i32, i32* [[I]]
   // CHECK-NEXT: add
   // CHECK-NEXT: store
   // CHECK-NEXT: call void @_ZN1XD1Ev
@@ -224,7 +224,7 @@ void for_destruct(int z) {
 }
 
 void do_destruct(int z) {
-  // CHECK: define void @_Z11do_destruct
+  // CHECK-LABEL: define void @_Z11do_destruct
   do {
     // CHECK: store i32 77
     z = 77;

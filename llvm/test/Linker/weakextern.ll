@@ -1,11 +1,12 @@
-; RUN: llvm-as < %s > %t.bc
-; RUN: llvm-as < %p/testlink1.ll > %t2.bc
-; RUN: llvm-link %t.bc %t.bc %t2.bc -o %t1.bc
-; RUN: llvm-dis < %t1.bc | grep {kallsyms_names = extern_weak}
-; RUN: llvm-dis < %t1.bc | grep {MyVar = external global i32}
-; RUN: llvm-dis < %t1.bc | grep {Inte = global i32}
+; RUN: llvm-link %s %s %p/testlink.ll -S | FileCheck %s
+; CHECK: kallsyms_names = extern_weak
+; CHECK: Inte = global i32
+; CHECK: MyVar = external global i32
 
-@kallsyms_names = extern_weak global [0 x i8]		; <[0 x i8]*> [#uses=0]
-@MyVar = extern_weak global i32		; <i32*> [#uses=0]
-@Inte = extern_weak global i32		; <i32*> [#uses=0]
+@kallsyms_names = extern_weak global [0 x i8]
+@MyVar = extern_weak global i32
+@Inte = extern_weak global i32
 
+define weak [0 x i8]* @use_kallsyms_names() {
+  ret [0 x i8]* @kallsyms_names
+}

@@ -15,18 +15,15 @@
 #ifndef LLVM_CLANG_GR_SUMMARY
 #define LLVM_CLANG_GR_SUMMARY
 
-#include "llvm/ADT/FoldingSet.h"
-#include "llvm/Support/Allocator.h"
-
 namespace clang {
 
 namespace ento {
 
 namespace summMgr {
 
-  
+
 /* Key kinds:
- 
+
  - C functions
  - C++ functions (name + parameter types)
  - ObjC methods:
@@ -37,21 +34,21 @@ namespace summMgr {
  - C++ methods
   - Class, function name + parameter types + const
  */
-  
+
 class SummaryKey {
-  
+
 };
 
 } // end namespace clang::summMgr
-  
+
 class SummaryManagerImpl {
-  
+
 };
 
-  
+
 template <typename T>
 class SummaryManager : SummaryManagerImpl {
-  
+
 };
 
 } // end GR namespace

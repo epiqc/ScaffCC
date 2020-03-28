@@ -1,10 +1,10 @@
-; RUN: llc < %s -march=x86
+; RUN: llc < %s -mtriple=i686--
 
 @data = external global [339 x i64]
 
 define void @foo(...) {
 bb1:
-	%t43 = load i64* getelementptr ([339 x i64]* @data, i32 0, i64 212), align 4
+	%t43 = load i64, i64* getelementptr ([339 x i64], [339 x i64]* @data, i32 0, i64 212), align 4
 	br i1 false, label %bb80, label %bb6
 bb6:
 	br i1 false, label %bb38, label %bb265

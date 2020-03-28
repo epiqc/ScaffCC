@@ -32,8 +32,7 @@ void test3() {
   double Gr = __real g1;
 
   cf += D;
-  // FIXME: Currently unsupported!
-  //D += cf;
+  D += cf;
   cf /= g1;
   g1 = g1 + D;
   g1 = D + g1;
@@ -51,8 +50,7 @@ void test3int() {
   i = __real ci1;
 
   cs += i;
-  // FIXME: Currently unsupported!
-  //D += cf;
+  D += cf;
   cs /= ci1;
   ci1 = ci1 + i;
   ci1 = i + ci1;
@@ -97,3 +95,22 @@ double t7(double _Complex c) {
 void t8() {
   __complex__ int *x = &(__complex__ int){1};
 }
+
+const _Complex double test9const = 0;
+_Complex double test9func() { return test9const; }
+
+// D6217
+void t91() {
+  // Check for proper type promotion of conditional expression
+  char c[(int)(sizeof(typeof((0 ? 2.0f : (_Complex double) 2.0f))) - sizeof(_Complex double))];
+  // Check for proper codegen
+  (0 ? 2.0f : (_Complex double) 2.0f);
+}
+
+void t92() {
+  // Check for proper type promotion of conditional expression
+  char c[(int)(sizeof(typeof((0 ? (_Complex double) 2.0f : 2.0f))) - sizeof(_Complex double))];
+  // Check for proper codegen
+  (0 ? (_Complex double) 2.0f : 2.0f);
+}
+

@@ -17,7 +17,7 @@
 #define _iteration 2 // current iteration index
 #define _estimate 0 // tally of less significant bits
 
-module cUa (
+scaff_module cUa (
 	qbit ctrl,
 	const unsigned int width,
 	const unsigned int a,

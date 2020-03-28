@@ -21,47 +21,13 @@
  *===-----------------------------------------------------------------------===
  */
 
-#ifndef _WMMINTRIN_H
-#define _WMMINTRIN_H
+#ifndef __WMMINTRIN_H
+#define __WMMINTRIN_H
 
-#if !defined (__AES__)
-# error "AES instructions not enabled"
-#else
+#include <emmintrin.h>
 
-#include <xmmintrin.h>
+#include <__wmmintrin_aes.h>
 
-static __inline__ __m128i __attribute__((__always_inline__, __nodebug__))
-_mm_aesenc_si128(__m128i __V, __m128i __R)
-{
-  return (__m128i)__builtin_ia32_aesenc128(__V, __R);
-}
+#include <__wmmintrin_pclmul.h>
 
-static __inline__ __m128i __attribute__((__always_inline__, __nodebug__))
-_mm_aesenclast_si128(__m128i __V, __m128i __R)
-{
-  return (__m128i)__builtin_ia32_aesenclast128(__V, __R);
-}
-
-static __inline__ __m128i __attribute__((__always_inline__, __nodebug__))
-_mm_aesdec_si128(__m128i __V, __m128i __R)
-{
-  return (__m128i)__builtin_ia32_aesdec128(__V, __R);
-}
-
-static __inline__ __m128i __attribute__((__always_inline__, __nodebug__))
-_mm_aesdeclast_si128(__m128i __V, __m128i __R)
-{
-  return (__m128i)__builtin_ia32_aesdeclast128(__V, __R);
-}
-
-static __inline__ __m128i __attribute__((__always_inline__, __nodebug__))
-_mm_aesimc_si128(__m128i __V)
-{
-  return (__m128i)__builtin_ia32_aesimc128(__V);
-}
-
-#define _mm_aeskeygenassist_si128(C, R) \
-  __builtin_ia32_aeskeygenassist128((C), (R))
-
-#endif /* __AES__ */
-#endif /* _WMMINTRIN_H */
+#endif /* __WMMINTRIN_H */

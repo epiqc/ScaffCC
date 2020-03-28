@@ -1,0 +1,31 @@
+int main() {
+
+qbit q[3];
+cbit c[3];
+X(q[0]);
+X(q[1]);
+CNOT(q[2], q[1]);
+CNOT(q[0], q[1]);
+H(q[2]);
+T(q[0]);
+Tdag(q[1]);
+T(q[2]);
+CNOT(q[2], q[1]);
+CNOT(q[0], q[2]);
+T(q[1]);
+CNOT(q[0], q[1]);
+Tdag(q[2]);
+Tdag(q[1]);
+CNOT(q[0], q[2]);
+CNOT(q[2], q[1]);
+T(q[1]);
+H(q[2]);
+CNOT(q[2], q[1]);
+c[0] = MeasZ(q[0]);
+c[1] = MeasZ(q[1]);
+c[2] = MeasZ(q[2]);
+
+}
+
+
+

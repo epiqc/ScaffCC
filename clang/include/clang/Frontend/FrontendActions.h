@@ -17,21 +17,34 @@
 namespace clang {
 
 class Module;
-  
+class FileEntry;
+
 //===----------------------------------------------------------------------===//
 // Custom Consumer Actions
 //===----------------------------------------------------------------------===//
 
 class InitOnlyAction : public FrontendAction {
-  virtual void ExecuteAction();
+  void ExecuteAction() override;
 
-  virtual ASTConsumer *CreateASTConsumer(CompilerInstance &CI,
-                                         StringRef InFile);
+  std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI,
+                                                 StringRef InFile) override;
 
 public:
   // Don't claim to only use the preprocessor, we want to follow the AST path,
   // but do nothing.
-  virtual bool usesPreprocessorOnly() const { return false; }
+  bool usesPreprocessorOnly() const override { return false; }
+};
+
+class DumpCompilerOptionsAction : public FrontendAction {
+  std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI,
+                                                 StringRef InFile) override {
+    return nullptr;
+  }
+
+  void ExecuteAction() override;
+
+public:
+  bool usesPreprocessorOnly() const override { return true; }
 };
 
 //===----------------------------------------------------------------------===//
@@ -40,95 +53,155 @@ public:
 
 class ASTPrintAction : public ASTFrontendAction {
 protected:
-  virtual ASTConsumer *CreateASTConsumer(CompilerInstance &CI,
-                                         StringRef InFile);
+  std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI,
+                                                 StringRef InFile) override;
 };
 
 class ASTDumpAction : public ASTFrontendAction {
 protected:
-  virtual ASTConsumer *CreateASTConsumer(CompilerInstance &CI,
-                                         StringRef InFile);
+  std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI,
+                                                 StringRef InFile) override;
 };
 
-class ASTDumpXMLAction : public ASTFrontendAction {
+class ASTDeclListAction : public ASTFrontendAction {
 protected:
-  virtual ASTConsumer *CreateASTConsumer(CompilerInstance &CI,
-                                         StringRef InFile);
+  std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI,
+                                                 StringRef InFile) override;
 };
 
 class ASTViewAction : public ASTFrontendAction {
 protected:
-  virtual ASTConsumer *CreateASTConsumer(CompilerInstance &CI,
-                                         StringRef InFile);
+  std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI,
+                                                 StringRef InFile) override;
 };
 
 class DeclContextPrintAction : public ASTFrontendAction {
 protected:
-  virtual ASTConsumer *CreateASTConsumer(CompilerInstance &CI,
-                                         StringRef InFile);
+  std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI,
+                                                 StringRef InFile) override;
 };
 
 class GeneratePCHAction : public ASTFrontendAction {
 protected:
-  virtual ASTConsumer *CreateASTConsumer(CompilerInstance &CI,
-                                         StringRef InFile);
+  std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI,
+                                                 StringRef InFile) override;
 
-  virtual TranslationUnitKind getTranslationUnitKind() {
+  TranslationUnitKind getTranslationUnitKind() override {
     return TU_Prefix;
   }
 
-  virtual bool hasASTFileSupport() const { return false; }
+  bool hasASTFileSupport() const override { return false; }
+
+  bool shouldEraseOutputFiles() override;
 
 public:
-  /// \brief Compute the AST consumer arguments that will be used to
+  /// Compute the AST consumer arguments that will be used to
   /// create the PCHGenerator instance returned by CreateASTConsumer.
   ///
-  /// \returns true if an error occurred, false otherwise.
+  /// \returns false if an error occurred, true otherwise.
   static bool ComputeASTConsumerArguments(CompilerInstance &CI,
-                                          StringRef InFile,
-                                          std::string &Sysroot,
-                                          std::string &OutputFile,
-                                          raw_ostream *&OS);
+                                          std::string &Sysroot);
+
+  /// Creates file to write the PCH into and returns a stream to write it
+  /// into. On error, returns null.
+  static std::unique_ptr<llvm::raw_pwrite_stream>
+  CreateOutputFile(CompilerInstance &CI, StringRef InFile,
+                   std::string &OutputFile);
+
+  bool BeginSourceFileAction(CompilerInstance &CI) override;
 };
 
 class GenerateModuleAction : public ASTFrontendAction {
-  clang::Module *Module;
-  
+  virtual std::unique_ptr<raw_pwrite_stream>
+  CreateOutputFile(CompilerInstance &CI, StringRef InFile) = 0;
+
 protected:
-  virtual ASTConsumer *CreateASTConsumer(CompilerInstance &CI,
-                                         StringRef InFile);
-  
-  virtual TranslationUnitKind getTranslationUnitKind() { 
+  std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI,
+                                                 StringRef InFile) override;
+
+  TranslationUnitKind getTranslationUnitKind() override {
     return TU_Module;
   }
-  
-  virtual bool hasASTFileSupport() const { return false; }
-  
-public:
-  virtual bool BeginSourceFileAction(CompilerInstance &CI, StringRef Filename);
-  
-  /// \brief Compute the AST consumer arguments that will be used to
-  /// create the PCHGenerator instance returned by CreateASTConsumer.
-  ///
-  /// \returns true if an error occurred, false otherwise.
-  static bool ComputeASTConsumerArguments(CompilerInstance &CI,
-                                          StringRef InFile,
-                                          std::string &Sysroot,
-                                          std::string &OutputFile,
-                                          raw_ostream *&OS);
+
+  bool hasASTFileSupport() const override { return false; }
 };
-  
+
+class GenerateModuleFromModuleMapAction : public GenerateModuleAction {
+private:
+  bool BeginSourceFileAction(CompilerInstance &CI) override;
+
+  std::unique_ptr<raw_pwrite_stream>
+  CreateOutputFile(CompilerInstance &CI, StringRef InFile) override;
+};
+
+class GenerateModuleInterfaceAction : public GenerateModuleAction {
+private:
+  bool BeginSourceFileAction(CompilerInstance &CI) override;
+
+  std::unique_ptr<raw_pwrite_stream>
+  CreateOutputFile(CompilerInstance &CI, StringRef InFile) override;
+};
+
+class GenerateHeaderModuleAction : public GenerateModuleAction {
+  /// The synthesized module input buffer for the current compilation.
+  std::unique_ptr<llvm::MemoryBuffer> Buffer;
+  std::vector<std::string> ModuleHeaders;
+
+private:
+  bool PrepareToExecuteAction(CompilerInstance &CI) override;
+  bool BeginSourceFileAction(CompilerInstance &CI) override;
+
+  std::unique_ptr<raw_pwrite_stream>
+  CreateOutputFile(CompilerInstance &CI, StringRef InFile) override;
+};
+
 class SyntaxOnlyAction : public ASTFrontendAction {
 protected:
-  virtual ASTConsumer *CreateASTConsumer(CompilerInstance &CI,
-                                         StringRef InFile);
+  std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI,
+                                                 StringRef InFile) override;
 
 public:
-  virtual bool hasCodeCompletionSupport() const { return true; }
+  ~SyntaxOnlyAction() override;
+  bool hasCodeCompletionSupport() const override { return true; }
+};
+
+/// Dump information about the given module file, to be used for
+/// basic debugging and discovery.
+class DumpModuleInfoAction : public ASTFrontendAction {
+protected:
+  std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI,
+                                                 StringRef InFile) override;
+  bool BeginInvocation(CompilerInstance &CI) override;
+  void ExecuteAction() override;
+
+public:
+  bool hasPCHSupport() const override { return false; }
+  bool hasASTFileSupport() const override { return true; }
+  bool hasIRSupport() const override { return false; }
+  bool hasCodeCompletionSupport() const override { return false; }
+};
+
+class VerifyPCHAction : public ASTFrontendAction {
+protected:
+  std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI,
+                                                 StringRef InFile) override;
+
+  void ExecuteAction() override;
+
+public:
+  bool hasCodeCompletionSupport() const override { return false; }
+};
+
+class TemplightDumpAction : public ASTFrontendAction {
+protected:
+  std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI,
+                                                 StringRef InFile) override;
+
+  void ExecuteAction() override;
 };
 
 /**
- * \brief Frontend action adaptor that merges ASTs together.
+ * Frontend action adaptor that merges ASTs together.
  *
  * This action takes an existing AST file and "merges" it into the AST
  * context, producing a merged context. This action is an action
@@ -136,74 +209,70 @@ public:
  * will consume the merged context.
  */
 class ASTMergeAction : public FrontendAction {
-  /// \brief The action that the merge action adapts.
-  FrontendAction *AdaptedAction;
-  
-  /// \brief The set of AST files to merge.
+  /// The action that the merge action adapts.
+  std::unique_ptr<FrontendAction> AdaptedAction;
+
+  /// The set of AST files to merge.
   std::vector<std::string> ASTFiles;
 
 protected:
-  virtual ASTConsumer *CreateASTConsumer(CompilerInstance &CI,
-                                         StringRef InFile);
+  std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI,
+                                                 StringRef InFile) override;
 
-  virtual bool BeginSourceFileAction(CompilerInstance &CI,
-                                     StringRef Filename);
+  bool BeginSourceFileAction(CompilerInstance &CI) override;
 
-  virtual void ExecuteAction();
-  virtual void EndSourceFileAction();
+  void ExecuteAction() override;
+  void EndSourceFileAction() override;
 
 public:
-  ASTMergeAction(FrontendAction *AdaptedAction, ArrayRef<std::string> ASTFiles);
-  virtual ~ASTMergeAction();
+  ASTMergeAction(std::unique_ptr<FrontendAction> AdaptedAction,
+                 ArrayRef<std::string> ASTFiles);
+  ~ASTMergeAction() override;
 
-  virtual bool usesPreprocessorOnly() const;
-  virtual TranslationUnitKind getTranslationUnitKind();
-  virtual bool hasPCHSupport() const;
-  virtual bool hasASTFileSupport() const;
-  virtual bool hasCodeCompletionSupport() const;
+  bool usesPreprocessorOnly() const override;
+  TranslationUnitKind getTranslationUnitKind() override;
+  bool hasPCHSupport() const override;
+  bool hasASTFileSupport() const override;
+  bool hasCodeCompletionSupport() const override;
 };
 
 class PrintPreambleAction : public FrontendAction {
 protected:
-  void ExecuteAction();
-  virtual ASTConsumer *CreateASTConsumer(CompilerInstance &, StringRef) { 
-    return 0; 
+  void ExecuteAction() override;
+  std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &,
+                                                 StringRef) override {
+    return nullptr;
   }
-  
-  virtual bool usesPreprocessorOnly() const { return true; }
+
+  bool usesPreprocessorOnly() const override { return true; }
 };
-  
+
 //===----------------------------------------------------------------------===//
 // Preprocessor Actions
 //===----------------------------------------------------------------------===//
 
 class DumpRawTokensAction : public PreprocessorFrontendAction {
 protected:
-  void ExecuteAction();
+  void ExecuteAction() override;
 };
 
 class DumpTokensAction : public PreprocessorFrontendAction {
 protected:
-  void ExecuteAction();
-};
-
-class GeneratePTHAction : public PreprocessorFrontendAction {
-protected:
-  void ExecuteAction();
+  void ExecuteAction() override;
 };
 
 class PreprocessOnlyAction : public PreprocessorFrontendAction {
 protected:
-  void ExecuteAction();
+  void ExecuteAction() override;
 };
 
 class PrintPreprocessedAction : public PreprocessorFrontendAction {
 protected:
-  void ExecuteAction();
+  void ExecuteAction() override;
 
-  virtual bool hasPCHSupport() const { return true; }
+  bool hasPCHSupport() const override { return true; }
 };
-  
+
 }  // end namespace clang
 
 #endif

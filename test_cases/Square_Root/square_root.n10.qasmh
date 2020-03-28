@@ -1,6 +1,6 @@
 -------QASM Generation Pass:
 
-module Sqr ( qbit* a , qbit* b ,  ) {
+module Sqr(qbit *a, qbit *b){
  	CNOT ( b[0] , a[0] );
  	CNOT ( b[2] , a[1] );
  	CNOT ( b[4] , a[2] );
@@ -18,7 +18,7 @@ module Sqr ( qbit* a , qbit* b ,  ) {
  	CNOT ( b[9] , a[9] );
  }
 
-module ToffoliImpl_Q_Q_Q ( qbit control1 , qbit control2 , qbit target ,  ) {
+module ToffoliImpl_Q_Q_Q(qbit control1, qbit control2, qbit target){
  	H ( target );
  	T ( control1 );
  	T ( control2 );
@@ -37,7 +37,7 @@ module ToffoliImpl_Q_Q_Q ( qbit control1 , qbit control2 , qbit target ,  ) {
  	H ( target );
  }
 
-module EQxMark_IP0_IPx_IPx_IPx_DPx_DPx_DPx_DPx ( qbit* b ,  ) {
+module EQxMark_IP0_IPx_IPx_IPx_DPx_DPx_DPx_DPx(qbit *b){
  	qbit x_[9];
 	X ( b[0] );
  	X ( b[2] );
@@ -87,7 +87,7 @@ module EQxMark_IP0_IPx_IPx_IPx_DPx_DPx_DPx_DPx ( qbit* b ,  ) {
  	X ( b[9] );
  }
 
-module diffuse ( qbit* q ,  ) {
+module diffuse(qbit *q){
  	qbit x[9];
 	H ( q[0] );
  	H ( q[1] );
@@ -159,7 +159,7 @@ module diffuse ( qbit* q ,  ) {
  	H ( q[9] );
  }
 
-module EQxMark_IP1_IPx_IPx_IPx_DPx_DPx_DPx_DPx ( qbit* b , qbit* t ,  ) {
+module EQxMark_IP1_IPx_IPx_IPx_DPx_DPx_DPx_DPx(qbit *b, qbit *t){
  	qbit x_[9];
 	X ( b[0] );
  	X ( b[2] );
@@ -209,7 +209,7 @@ module EQxMark_IP1_IPx_IPx_IPx_DPx_DPx_DPx_DPx ( qbit* b , qbit* t ,  ) {
  	X ( b[9] );
  }
 
-module main (  ) {
+module main(){
  	qbit a[10];
 	qbit b[10];
 	qbit t[1];

@@ -12,40 +12,64 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef TARGET_ARM_H
-#define TARGET_ARM_H
+#ifndef LLVM_LIB_TARGET_ARM_ARM_H
+#define LLVM_LIB_TARGET_ARM_ARM_H
 
-#include "MCTargetDesc/ARMBaseInfo.h"
-#include "MCTargetDesc/ARMMCTargetDesc.h"
-#include "llvm/Support/DataTypes.h"
-#include "llvm/Target/TargetMachine.h"
+#include "llvm/IR/LegacyPassManager.h"
+#include "llvm/Support/CodeGen.h"
+#include <functional>
+#include <vector>
 
 namespace llvm {
 
 class ARMAsmPrinter;
 class ARMBaseTargetMachine;
+class ARMRegisterBankInfo;
+class ARMSubtarget;
+struct BasicBlockInfo;
+class Function;
 class FunctionPass;
-class JITCodeEmitter;
+class InstructionSelector;
+class MachineBasicBlock;
+class MachineFunction;
 class MachineInstr;
 class MCInst;
+class PassRegistry;
 
+
+Pass *createARMParallelDSPPass();
 FunctionPass *createARMISelDag(ARMBaseTargetMachine &TM,
                                CodeGenOpt::Level OptLevel);
-
-FunctionPass *createARMJITCodeEmitterPass(ARMBaseTargetMachine &TM,
-                                          JITCodeEmitter &JCE);
-
+FunctionPass *createA15SDOptimizerPass();
 FunctionPass *createARMLoadStoreOptimizationPass(bool PreAlloc = false);
 FunctionPass *createARMExpandPseudoPass();
-FunctionPass *createARMGlobalMergePass(const TargetLowering* tli);
+FunctionPass *createARMCodeGenPreparePass();
 FunctionPass *createARMConstantIslandPass();
 FunctionPass *createMLxExpansionPass();
 FunctionPass *createThumb2ITBlockPass();
-FunctionPass *createThumb2SizeReductionPass();
+FunctionPass *createARMOptimizeBarriersPass();
+FunctionPass *createThumb2SizeReductionPass(
+    std::function<bool(const Function &)> Ftor = nullptr);
+InstructionSelector *
+createARMInstructionSelector(const ARMBaseTargetMachine &TM, const ARMSubtarget &STI,
+                             const ARMRegisterBankInfo &RBI);
 
 void LowerARMMachineInstrToMCInst(const MachineInstr *MI, MCInst &OutMI,
                                   ARMAsmPrinter &AP);
 
-} // end namespace llvm;
+void computeBlockSize(MachineFunction *MF, MachineBasicBlock *MBB,
+                      BasicBlockInfo &BBI);
+std::vector<BasicBlockInfo> computeAllBlockSizes(MachineFunction *MF);
 
-#endif
+
+void initializeARMParallelDSPPass(PassRegistry &);
+void initializeARMLoadStoreOptPass(PassRegistry &);
+void initializeARMPreAllocLoadStoreOptPass(PassRegistry &);
+void initializeARMCodeGenPreparePass(PassRegistry &);
+void initializeARMConstantIslandsPass(PassRegistry &);
+void initializeARMExpandPseudoPass(PassRegistry &);
+void initializeThumb2SizeReducePass(PassRegistry &);
+
+} // end namespace llvm
+
+#endif // LLVM_LIB_TARGET_ARM_ARM_H

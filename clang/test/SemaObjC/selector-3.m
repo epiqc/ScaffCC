@@ -14,7 +14,7 @@
 - (void) foo
 {
   SEL a,b,c;
-  a = @selector(b1ar);  // expected-warning {{unimplemented selector 'b1ar'}}
+  a = @selector(b1ar);
   b = @selector(bar);
 }
 @end
@@ -25,7 +25,7 @@
 
 SEL func()
 {
-    return  @selector(length);  // expected-warning {{unimplemented selector 'length'}}
+    return  @selector(length);  // expected-warning {{no method with selector 'length' is implemented in this translation unit}}
 }
 
 // rdar://9545564
@@ -49,6 +49,109 @@ SEL func()
   if ([_delegate respondsToSelector:@selector(pauseManagerDidPause:)])
     return 0;
   return 0;
+}
+@end
+
+// rdar://12938616
+@class NSXPCConnection;
+
+@interface NSObject
+@end
+
+@interface INTF : NSObject
+{
+  NSXPCConnection *cnx; // Comes in as a parameter.
+}
+- (void) Meth;
+@end
+
+extern SEL MySelector(SEL s);
+
+@implementation INTF
+- (void) Meth {
+  if( [cnx respondsToSelector:MySelector(@selector( _setQueue: ))] )
+  {
+  }
+
+  if( [cnx respondsToSelector:@selector( _setQueueXX: )] ) // No warning here.
+  {
+  }
+  if( [cnx respondsToSelector:(@selector( _setQueueXX: ))] ) // No warning here.
+  {
+  }
+}
+@end
+
+// rdar://14007194
+@interface UxTechTest : NSObject
+- (int) invalidate : (id)Arg;
++ (int) C_invalidate : (int)arg;
+@end
+
+@interface UxTechTest(CAT)
+- (char) invalidate : (int)arg;
++ (int) C_invalidate : (char)arg;
+@end
+
+@interface NSPort : NSObject
+- (double) invalidate : (void*)Arg1;
++ (int) C_invalidate : (id*)arg;
+@end
+
+
+@interface USEText : NSPort
+- (int) invalidate : (int)arg;
+@end
+
+@implementation USEText
+- (int) invalidate :(int) arg { return 0; }
+@end
+
+@interface USETextSub : USEText
+- (int) invalidate : (id)arg;
+@end
+
+// rdar://16428638
+@interface I16428638
+- (int) compare: (I16428638 *) arg1; // commenting out this line avoids the warning
+@end
+
+@interface J16428638
+- (int) compare: (J16428638 *) arg1;
+@end
+
+@implementation J16428638
+- (void)method {
+    SEL s = @selector(compare:); // spurious warning
+    (void)s;
+}
+- (int) compare: (J16428638 *) arg1 {
+    return 0;
+}
+@end
+
+void test16428638() {
+    SEL s = @selector(compare:);
+    (void)s;
+}
+
+// rdar://16607480
+@class NSString;
+@interface SELCanary : NSObject
+@property (readonly, nonatomic) NSString *name;
+@property (nonatomic, getter = isHidden) char hidden;
+@property (nonatomic, copy, getter = hasFish, setter = setFish:) NSString *ridiculousFish;
+@end
+
+@implementation SELCanary
+- (void) Meth {
+ SEL properties[] = {
+  @selector(name),
+  @selector(isHidden),
+  @selector(setHidden:),
+  @selector(hasFish),
+  @selector(setFish:)
+ };
 }
 @end
 

@@ -5,10 +5,10 @@ typedef __attribute__(( ext_vector_type(2) )) float float2;
 typedef __attribute__(( ext_vector_type(4) )) int int4;
 typedef __attribute__(( ext_vector_type(4) )) unsigned int uint4;
 
-// CHECK: @foo = global <4 x float> <float 1.000000e+00, float 2.000000e+00, float 3.000000e+00, float 4.000000e+00>
+// CHECK: @foo = {{(dso_local )?}}global <4 x float> <float 1.000000e+00, float 2.000000e+00, float 3.000000e+00, float 4.000000e+00>
 float4 foo = (float4){ 1.0, 2.0, 3.0, 4.0 };
 
-// CHECK: @bar = constant <4 x float> <float 1.000000e+00, float 2.000000e+00, float 3.000000e+00, float 0x7FF0000000000000>
+// CHECK: @bar = {{(dso_local )?}}constant <4 x float> <float 1.000000e+00, float 2.000000e+00, float 3.000000e+00, float 0x7FF0000000000000>
 const float4 bar = (float4){ 1.0, 2.0, 3.0, __builtin_inff() };
 
 // CHECK: @test1
@@ -285,4 +285,56 @@ int4 test15(uint4 V0) {
   V = V && V;
   V = V || V;
   return V;
+}
+
+// CHECK: @test16
+void test16(float2 a, float2 b) {
+  float2 t0 = (a + b) / 2;
+} 
+
+typedef char char16 __attribute__((ext_vector_type(16)));
+
+// CHECK: @test17
+void test17(void) {
+  char16 valA;
+  char valB;
+  char valC;
+  char16 destVal = valC ? valA : valB;
+}
+
+typedef __attribute__(( ext_vector_type(16) )) float float16;
+
+float16 vec16, vec16_2;
+
+// CHECK: @test_rgba
+void test_rgba() {
+  // CHECK: fadd <4 x float>
+  vec4_2 = vec4.abgr + vec4;
+
+  // CHECK: shufflevector {{.*}} <i32 0, i32 1>
+  vec2 = vec4.rg;
+  // CHECK: shufflevector {{.*}} <i32 2, i32 3>
+  vec2_2 = vec4.ba;
+  // CHECK: extractelement {{.*}} 2
+  f = vec4.b;
+  // CHECK: shufflevector {{.*}} <i32 2, i32 2, i32 2, i32 2>
+  vec4_2 = vec4_2.bbbb;
+
+  // CHECK: insertelement {{.*}} 0
+  vec2.r = f;
+  // CHECK: shufflevector {{.*}} <i32 1, i32 0>
+  vec2.gr = vec2;
+
+  // CHECK: extractelement {{.*}} 0
+  f = vec4_2.rg.r;
+  // CHECK: shufflevector {{.*}} <i32 2, i32 1, i32 0>
+  // CHECK: shufflevector {{.*}} <i32 0, i32 1, i32 2, i32 undef>
+  // CHECK: shufflevector {{.*}} <i32 4, i32 5, i32 6, i32 3>
+  vec4.rgb = vec4.bgr;
+
+  // CHECK: extractelement {{.*}} 11
+  // CHECK: insertelement {{.*}} 2
+  vec4.b = vec16.sb;
+  // CHECK: shufflevector {{.*}} <i32 10, i32 11, i32 12, i32 13>
+  vec4_2 = vec16.sabcd;
 }

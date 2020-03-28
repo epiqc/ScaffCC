@@ -1,4 +1,6 @@
 // RUN: %clang_cc1 %s -fsyntax-only -verify
+// RUN: %clang_cc1 %s -fsyntax-only -triple=x86_64-windows-coff -verify
+// RUN: %clang_cc1 %s -fsyntax-only -triple=x86_64-scei-ps4 -verify
 
 // Packed structs.
 struct s {
@@ -54,13 +56,16 @@ struct __attribute__((aligned(8))) as1 {
 extern int e1[sizeof(struct as1) == 8 ? 1 : -1];
 extern int e2[__alignof(struct as1) == 8 ? 1 : -1];
 
-// FIXME: Will need to force arch once max usable alignment isn't hard
-// coded.
 struct __attribute__((aligned)) as1_2 {
     char c;
 };
+#ifdef __s390x__
+extern int e1_2[sizeof(struct as1_2) == 8 ? 1 : -1];
+extern int e2_2[__alignof(struct as1_2) == 8 ? 1 : -1];
+#else
 extern int e1_2[sizeof(struct as1_2) == 16 ? 1 : -1];
 extern int e2_2[__alignof(struct as1_2) == 16 ? 1 : -1];
+#endif
 
 struct as2 {
     char c;
@@ -126,9 +131,43 @@ struct nS {
   nt start_lba;
 };
 
+#if defined(_WIN32) && !defined(__declspec) // _MSC_VER is unavailable in cc1.
+// Alignment doesn't affect packing in MS mode.
+extern int n1[sizeof(struct nS) == 16 ? 1 : -1];
+extern int n2[__alignof(struct nS) == 8 ? 1 : -1];
+#else
 extern int n1[sizeof(struct nS) == 9 ? 1 : -1];
 extern int n2[__alignof(struct nS) == 1 ? 1 : -1];
+#endif
 
+// Packed attribute shouldn't be ignored for bit-field of char types.
+// Note from GCC reference manual: The 4.1, 4.2 and 4.3 series of GCC ignore
+// the packed attribute on bit-fields of type char. This has been fixed in
+// GCC 4.4 but the change can lead to differences in the structure layout.
+// See the documentation of -Wpacked-bitfield-compat for more information.
+struct packed_chars {
+  char a:4;
+#ifdef __ORBIS__
+  // Test for pre-r254596 clang behavior on the PS4 target. PS4 must maintain
+  // ABI backwards compatibility.
+  char b:8 __attribute__ ((packed));
+  // expected-warning@-1 {{'packed' attribute ignored for field of type 'char'}}
+  char c:4;
+#else
+  char b:8 __attribute__ ((packed));
+  // expected-warning@-1 {{'packed' attribute was ignored on bit-fields with single-byte alignment in older versions of GCC and Clang}}
+  char c:4;
+#endif
+};
 
-
-
+#if (defined(_WIN32) || defined(__ORBIS__)) && !defined(__declspec) // _MSC_VER is unavailable in cc1.
+// On Windows clang uses MSVC compatible layout in this case.
+//
+// Additionally, test for pre-r254596 clang behavior on the PS4 target. PS4
+// must maintain ABI backwards compatibility.
+extern int o1[sizeof(struct packed_chars) == 3 ? 1 : -1];
+extern int o2[__alignof(struct packed_chars) == 1 ? 1 : -1];
+#else
+extern int o1[sizeof(struct packed_chars) == 2 ? 1 : -1];
+extern int o2[__alignof(struct packed_chars) == 1 ? 1 : -1];
+#endif

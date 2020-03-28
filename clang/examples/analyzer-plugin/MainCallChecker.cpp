@@ -1,14 +1,14 @@
 #include "clang/StaticAnalyzer/Core/Checker.h"
-#include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
-#include "clang/StaticAnalyzer/Core/CheckerRegistry.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
+#include "clang/StaticAnalyzer/Frontend/CheckerRegistry.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
 
 using namespace clang;
 using namespace ento;
 
 namespace {
 class MainCallChecker : public Checker < check::PreStmt<CallExpr> > {
-  mutable OwningPtr<BugType> BT;
+  mutable std::unique_ptr<BugType> BT;
 
 public:
   void checkPreStmt(const CallExpr *CE, CheckerContext &C) const;
@@ -16,10 +16,8 @@ public:
 } // end anonymous namespace
 
 void MainCallChecker::checkPreStmt(const CallExpr *CE, CheckerContext &C) const {
-  const ProgramStateRef state = C.getState();
-  const LocationContext *LC = C.getLocationContext();
   const Expr *Callee = CE->getCallee();
-  const FunctionDecl *FD = state->getSVal(Callee, LC).getAsFunctionDecl();
+  const FunctionDecl *FD = C.getSVal(Callee).getAsFunctionDecl();
 
   if (!FD)
     return;
@@ -30,23 +28,26 @@ void MainCallChecker::checkPreStmt(const CallExpr *CE, CheckerContext &C) const 
     return;
 
   if (II->isStr("main")) {
-    ExplodedNode *N = C.generateSink();
+    ExplodedNode *N = C.generateErrorNode();
     if (!N)
       return;
 
     if (!BT)
-      BT.reset(new BugType("call to main", "example analyzer plugin"));
+      BT.reset(new BugType(this, "call to main", "example analyzer plugin"));
 
-    BugReport *report = new BugReport(*BT, BT->getName(), N);
+    std::unique_ptr<BugReport> report =
+        llvm::make_unique<BugReport>(*BT, BT->getName(), N);
     report->addRange(Callee->getSourceRange());
-    C.EmitReport(report);    
+    C.emitReport(std::move(report));
   }
 }
 
 // Register plugin!
 extern "C"
 void clang_registerCheckers (CheckerRegistry &registry) {
-  registry.addChecker<MainCallChecker>("example.MainCallChecker", "Disallows calls to functions called main");
+  registry.addChecker<MainCallChecker>(
+      "example.MainCallChecker", "Disallows calls to functions called main",
+      "");
 }
 
 extern "C"

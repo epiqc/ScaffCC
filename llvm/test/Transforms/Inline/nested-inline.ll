@@ -1,4 +1,5 @@
 ; RUN: opt < %s -inline -S | FileCheck %s
+; RUN: opt < %s -passes='cgscc(inline)' -S | FileCheck %s
 ; Test that bar and bar2 are both inlined throughout and removed.
 @A = weak global i32 0		; <i32*> [#uses=1]
 @B = weak global i32 0		; <i32*> [#uses=1]
@@ -6,7 +7,7 @@
 
 define fastcc void @foo(i32 %X) {
 entry:
-; CHECK: @foo
+; CHECK-LABEL: @foo(
 	%ALL = alloca i32, align 4		; <i32*> [#uses=1]
 	%tmp1 = and i32 %X, 1		; <i32> [#uses=1]
 	%tmp1.upgrd.1 = icmp eq i32 %tmp1, 0		; <i1> [#uses=1]
@@ -47,7 +48,7 @@ UnifiedReturnBlock:		; preds = %cond_next13
 	ret void
 }
 
-; CHECK-NOT: @bar
+; CHECK-NOT: @bar(
 define internal fastcc void @bar(i32 %X) {
 entry:
 	%ALL = alloca i32, align 4		; <i32*> [#uses=1]
@@ -101,7 +102,7 @@ declare void @ext(i32*)
 define void @test(i32 %X) {
 entry:
 ; CHECK: test
-; CHECK-NOT: @bar
+; CHECK-NOT: @bar(
 	tail call fastcc void @bar( i32 %X )
 	tail call fastcc void @bar( i32 %X )
 	tail call fastcc void @bar2( i32 %X )

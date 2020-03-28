@@ -1,4 +1,4 @@
-; RUN: llc < %s -march=x86-64 -stress-sched | FileCheck %s
+; RUN: llc < %s -mtriple=x86_64-- -stress-sched | FileCheck %s
 ; REQUIRES: asserts
 ; Test interference between physreg aliases during preRAsched.
 ; mul wants an operand in AL, but call clobbers it.
@@ -6,7 +6,7 @@
 define i8 @f(i8 %v1, i8 %v2) nounwind {
 entry:
 ; CHECK: callq
-; CHECK: movb %{{.*}}, %al
+; CHECK: movl %{{.*}}, %eax
 ; CHECK: mulb
 ; CHECK: mulb
         %rval = tail call i8 @bar() nounwind

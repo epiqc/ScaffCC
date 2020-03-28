@@ -56,3 +56,30 @@ namespace test3 {
 
   template struct A2<int>;
 }
+
+namespace PR12629 {
+  struct S {
+    static int (f)() throw();
+    static int ((((((g))))() throw(U)));
+    int (*h)() noexcept(false);
+    static int (&i)() noexcept(true);
+    static int (*j)() throw(U); // expected-error {{unknown type name 'U'}}
+    static int (k)() throw(U);
+
+    struct U {};
+  };
+  static_assert(noexcept(S::f()), "");
+  static_assert(!noexcept(S::g()), "");
+  static_assert(!noexcept(S().h()), "");
+  static_assert(noexcept(S::i()), "");
+}
+
+namespace PR12688 {
+  struct S {
+    // FIXME: Maybe suppress the "constructor cannot have a return type" error
+    // if the return type is invalid.
+    nonsense S() throw (more_nonsense); // \
+    // expected-error {{'nonsense'}} \
+    // expected-error {{constructor cannot have a return type}}
+  };
+}

@@ -5,9 +5,8 @@ done!
 
 The list is sorted by surname and formatted to allow easy grepping and
 beautification by scripts.  The fields are: name (N), email (E), web-address
-(W), PGP key ID and fingerprint (P), description (D), and snail-mail address
-(S).
-
+(W), PGP key ID and fingerprint (P), description (D), snail-mail address
+(S), and (I) IRC handle.
 
 N: Vikram Adve
 E: vadve@cs.uiuc.edu
@@ -17,10 +16,15 @@ D: The Sparc64 backend, provider of much wisdom, and motivator for LLVM
 N: Owen Anderson
 E: resistor@mac.com
 D: LCSSA pass and related LoopUnswitch work
-D: GVNPRE pass, TargetData refactoring, random improvements
+D: GVNPRE pass, DataLayout refactoring, random improvements
 
 N: Henrik Bach
 D: MingW Win32 API portability layer
+
+N: Aaron Ballman
+E: aaron@aaronballman.com
+D: Clang frontend, frontend attributes, Windows support, general bug fixing
+I: AaronBallman
 
 N: Nate Begeman
 E: natebegeman@mac.com
@@ -32,6 +36,13 @@ E: dberlin@dberlin.org
 D: ET-Forest implementation.
 D: Sparse bitmap
 
+N: Geoff Berry
+E: gberry@codeaurora.org
+E: gcb@acm.org
+D: AArch64 backend improvements
+D: Added EarlyCSE MemorySSA support
+D: CodeGen improvements
+
 N: David Blaikie
 E: dblaikie@gmail.com
 D: General bug fixing/fit & finish, mostly in Clang
@@ -39,6 +50,10 @@ D: General bug fixing/fit & finish, mostly in Clang
 N: Neil Booth
 E: neil@daikokuya.co.uk
 D: APFloat implementation.
+
+N: Alex Bradbury
+E: asb@lowrisc.org
+D: RISC-V backend
 
 N: Misha Brukman
 E: brukman+llvm@uiuc.edu
@@ -56,9 +71,11 @@ D: Loop unrolling with run-time trip counts.
 
 N: Chandler Carruth
 E: chandlerc@gmail.com
+E: chandlerc@google.com
 D: Hashing algorithms and interfaces
 D: Inline cost analysis
 D: Machine block placement pass
+D: SROA
 
 N: Casey Carter
 E: ccarter@uiuc.edu
@@ -94,12 +111,16 @@ E: adasgupt@codeaurora.org
 D: Deterministic finite automaton based infrastructure for VLIW packetization
 
 N: Stefanus Du Toit
-E: stefanus.dutoit@rapidmind.com
+E: stefanus.du.toit@intel.com
 D: Bug fixes and minor improvements
 
 N: Rafael Avila de Espindola
-E: rafael.espindola@gmail.com
-D: The ARM backend
+E: rafael@espindo.la
+D: MC and LLD work
+
+N: Dave Estes
+E: cestes@codeaurora.org
+D: AArch64 machine description for Cortex-A53
 
 N: Alkis Evlogimenos
 E: alkis@evlogimenos.com
@@ -108,6 +129,10 @@ D: Linear scan register allocator, many codegen improvements, Java frontend
 N: Hal Finkel
 E: hfinkel@anl.gov
 D: Basic-block autovectorization, PowerPC backend improvements
+
+N: Eric Fiselier
+E: eric@efcs.ca
+D: LIT patches and documentation.
 
 N: Ryan Flynn
 E: pizza@parseerror.com
@@ -126,6 +151,7 @@ W: http://www-src.lip6.fr/homepages/Nicolas.Geoffray/
 D: PPC backend fixes for Linux
 
 N: Louis Gerbarg
+E: lgg@apple.com
 D: Portions of the PowerPC backend
 
 N: Saem Ghani
@@ -137,8 +163,9 @@ E: foldr@codedgers.com
 D: Author of llvmc2
 
 N: Dan Gohman
-E: gohman@apple.com
+E: sunfish@mozilla.com
 D: Miscellaneous bug fixes
+D: WebAssembly Backend
 
 N: David Goodwin
 E: david@goodwinz.net
@@ -155,10 +182,12 @@ D: Improvements for space efficiency
 
 N: James Grosbach
 E: grosbach@apple.com
+I: grosbach
 D: SjLj exception handling support
 D: General fixes and improvements for the ARM back-end
 D: MCJIT
 D: ARM integrated assembler and assembly parser
+D: Led effort for the backend formerly known as ARM64
 
 N: Lang Hames
 E: lhames@gmail.com
@@ -182,6 +211,11 @@ N: Patrick Jenkins
 E: patjenk@wam.umd.edu
 D: Nightly Tester
 
+N: Tony(Yanjun) Jiang
+E: jtony@ca.ibm.com
+D: PowerPC Backend Developer
+D: Improvements to the PPC backend and miscellaneous bug fixes
+
 N: Dale Johannesen
 E: dalej@apple.com
 D: ARM constant islands improvements
@@ -198,12 +232,17 @@ N: Rod Kay
 E: rkay@auroraux.org
 D: Author of LLVM Ada bindings
 
+N: Erich Keane
+E: erich.keane@intel.com
+D: A variety of Clang contributions including function multiversioning, regcall/vectorcall.
+I: ErichKeane
+
 N: Eric Kidd
 W: http://randomhacks.net/
 D: llvm-config script
 
 N: Anton Korobeynikov
-E: asl@math.spbu.ru
+E: anton at korobeynikov dot info
 D: Mingw32 fixes, cross-compiling support, stdcall/fastcall calling conv.
 D: x86/linux PIC codegen, aliases, regparm/visibility attributes
 D: Switch lowering refactoring
@@ -245,6 +284,13 @@ D: The initial llvm-ar tool, converted regression testsuite to dejagnu
 D: Modulo scheduling in the SparcV9 backend
 D: Release manager (1.7+)
 
+N: Sylvestre Ledru
+E: sylvestre@debian.org
+W: http://sylvestre.ledru.info/
+W: https://apt.llvm.org/
+D: Debian and Ubuntu packaging
+D: Continuous integration with jenkins
+
 N: Andrew Lenharth
 E: alenhar2@cs.uiuc.edu
 W: http://www.lenharth.org/~andrewl/
@@ -261,8 +307,11 @@ D: Backend for Qualcomm's Hexagon VLIW processor.
 
 N: Bruno Cardoso Lopes
 E: bruno.cardoso@gmail.com
-W: http://www.brunocardoso.org
-D: The Mips backend
+I: bruno
+W: http://brunocardoso.cc
+D: Mips backend
+D: Random ARM integrated assembler and assembly parser improvements
+D: General X86 AVX1 support
 
 N: Duraid Madina
 E: duraid@octopus.com.au
@@ -288,13 +337,15 @@ D: Added STI Cell SPU backend.
 N: Kai Nacke
 E: kai@redstar.de
 D: Support for implicit TLS model used with MS VC runtime
+D: Dumping of Win64 EH structures
 
 N: Takumi Nakamura
+I: chapuni
 E: geek4civic@gmail.com
 E: chapuni@hf.rim.or.jp
-D: Cygwin and MinGW support.
-D: Win32 tweaks.
-S: Yokohama, Japan
+D: Maintaining the Git monorepo
+W: https://github.com/llvm-project/
+S: Ebina, Japan
 
 N: Edward O'Callaghan
 E: eocallaghan@auroraux.org
@@ -318,15 +369,19 @@ N: Richard Osborne
 E: richard@xmos.com
 D: XCore backend
 
+N: Piotr Padlewski
+E: piotr.padlewski@gmail.com
+D: !invariant.group metadata and other intrinsics for devirtualization in clang
+
 N: Devang Patel
 E: dpatel@apple.com
 D: LTO tool, PassManager rewrite, Loop Pass Manager, Loop Rotate
 D: GCC PCH Integration (llvm-gcc), llvm-gcc improvements
 D: Optimizer improvements, Loop Index Split
 
-N: Sandeep Patel
-E: deeppatel1987@gmail.com
-D: ARM calling conventions rewrite, hard float support
+N: Ana Pazos
+E: apazos@codeaurora.org
+D: Fixes and improvements to the AArch64 backend
 
 N: Wesley Peck
 E: peckw@wesleypeck.com
@@ -337,23 +392,38 @@ N: Francois Pichet
 E: pichet2000@gmail.com
 D: MSVC support
 
+N: Adrian Prantl
+E: aprantl@apple.com
+D: Debug Information
+
 N: Vladimir Prus
 W: http://vladimir_prus.blogspot.com
 E: ghost@cs.msu.su
 D: Made inst_iterator behave like a proper iterator, LowerConstantExprs pass
 
+N: Kalle Raiskila
+E: kalle.rasikila@nokia.com
+D: Some bugfixes to CellSPU
+
 N: Xerxes Ranby
 E: xerxes@zafena.se
 D: Cmake dependency chain and various bug fixes
 
+N: Alex Rosenberg
+E: alexr@leftfield.org
+I: arosenberg
+D: ARM calling conventions rewrite, hard float support
+
 N: Chad Rosier
-E: mcrosier@apple.com
-D: ARM fast-isel improvements
-D: Performance monitoring
+E: mcrosier@codeaurora.org
+I: mcrosier
+D: AArch64 fast instruction selection pass
+D: Fixes and improvements to the ARM fast-isel pass
+D: Fixes and improvements to the AArch64 backend
 
 N: Nadav Rotem
-E: nadav.rotem@intel.com
-D: Vector code generation improvements.
+E: nadav.rotem@me.com
+D: X86 code generation improvements, Loop Vectorizer, SLP Vectorizer
 
 N: Roman Samoilov
 E: roman@codedgers.com
@@ -361,6 +431,7 @@ D: MSIL backend
 
 N: Duncan Sands
 E: baldrick@free.fr
+I: baldrick
 D: Ada support in llvm-gcc
 D: Dragonegg plugin
 D: Exception handling improvements
@@ -392,6 +463,15 @@ E: rspencer@reidspencer.com
 W: http://reidspencer.com/
 D: Lots of stuff, see: http://wiki.llvm.org/index.php/User:Reid
 
+N: Alp Toker
+E: alp@nuanti.com
+W: http://atoker.com/
+D: C++ frontend next generation standards implementation
+
+N: Craig Topper
+E: craig.topper@gmail.com
+D: X86 codegen and disassembler improvements. AVX2 support.
+
 N: Edwin Torok
 E: edwintorok@gmail.com
 D: Miscellaneous bug fixes
@@ -400,16 +480,37 @@ N: Adam Treat
 E: manyoso@yahoo.com
 D: C++ bugs filed, and C++ front-end bug fixes.
 
+N: Andrew Trick
+E: atrick@apple.com
+D: Instruction Scheduling, ...
+
 N: Lauro Ramos Venancio
 E: lauro.venancio@indt.org.br
 D: ARM backend improvements
 D: Thread Local Storage implementation
 
 N: Bill Wendling
-E: wendling@apple.com
-D: Exception handling
-D: Bunches of stuff
+I: wendling
+E: isanbard@gmail.com
+D: Release manager, IR Linker, LTO.
+D: Bunches of stuff.
 
 N: Bob Wilson
 E: bob.wilson@acm.org
-D: Advanced SIMD (NEON) support in the ARM backend
+D: Advanced SIMD (NEON) support in the ARM backend.
+
+N: QingShan Zhang
+E: qshanz@cn.ibm.com
+D: PowerPC Backend Developer
+
+N: Li Jia He
+E: hljhehlj@cn.ibm.com
+D: PowerPC Backend Developer
+
+N: Zixuan Wu
+E: wuzish@cn.ibm.com
+D: PowerPC Backend Developer
+
+N: Kang Zhang
+E: shkzhang@cn.ibm.com
+D: PowerPC Backend Developer

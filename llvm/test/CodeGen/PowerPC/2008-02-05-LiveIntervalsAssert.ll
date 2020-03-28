@@ -1,4 +1,4 @@
-; RUN: llc < %s -mtriple=powerpc-apple-darwin
+; RUN: llc -verify-machineinstrs < %s -mtriple=powerpc-unknown-linux-gnu | FileCheck %s
 
 	%struct.Handle = type { %struct.oopDesc** }
 	%struct.JNI_ArgumentPusher = type { %struct.SignatureIterator, %struct.JavaCallArguments* }
@@ -11,6 +11,8 @@
 	%struct.oopDesc = type { %struct.instanceOopDesc*, %struct.instanceOopDesc* }
 @.str = external constant [44 x i8]		; <[44 x i8]*> [#uses=1]
 
+; CHECK: _ZN23JNI_ArgumentPusherArray7iterateEy
+; CHECK: blr
 define void @_ZN23JNI_ArgumentPusherArray7iterateEy(%struct.JNI_ArgumentPusherArray* %this, i64 %fingerprint) nounwind  {
 entry:
 	br label %bb113
@@ -44,7 +46,7 @@ bb103.preheader:		; preds = %bb113
 
 bb113:		; preds = %bb113, %bb93, %bb82, %bb52, %entry
 	%fingerprint_addr.0.reg2mem.9 = phi i64 [ 0, %entry ], [ 0, %bb52 ], [ 0, %bb82 ], [ 0, %bb93 ], [ %tmp118, %bb113 ]		; <i64> [#uses=1]
-	tail call void @_Z28report_should_not_reach_herePKci( i8* getelementptr ([44 x i8]* @.str, i32 0, i32 0), i32 817 ) nounwind 
+	tail call void @_Z28report_should_not_reach_herePKci( i8* getelementptr ([44 x i8], [44 x i8]* @.str, i32 0, i32 0), i32 817 ) nounwind 
 	%tmp118 = lshr i64 %fingerprint_addr.0.reg2mem.9, 4		; <i64> [#uses=2]
 	%tmp21158 = and i64 %tmp118, 15		; <i64> [#uses=1]
 	switch i64 %tmp21158, label %bb113 [

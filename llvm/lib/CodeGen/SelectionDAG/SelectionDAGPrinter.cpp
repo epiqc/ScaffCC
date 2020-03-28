@@ -12,22 +12,20 @@
 //===----------------------------------------------------------------------===//
 
 #include "ScheduleDAGSDNodes.h"
-#include "llvm/Constants.h"
-#include "llvm/Function.h"
-#include "llvm/Assembly/Writer.h"
-#include "llvm/CodeGen/SelectionDAG.h"
+#include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/CodeGen/MachineConstantPool.h"
 #include "llvm/CodeGen/MachineFunction.h"
-#include "llvm/CodeGen/MachineModuleInfo.h"
-#include "llvm/Analysis/DebugInfo.h"
-#include "llvm/Target/TargetRegisterInfo.h"
-#include "llvm/Target/TargetMachine.h"
+#include "llvm/CodeGen/SelectionDAG.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
+#include "llvm/IR/Constants.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/GraphWriter.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/ADT/DenseSet.h"
-#include "llvm/ADT/StringExtras.h"
+#include "llvm/Target/TargetMachine.h"
 using namespace llvm;
+
+#define DEBUG_TYPE "dag-printer"
 
 namespace llvm {
   template<>
@@ -50,7 +48,7 @@ namespace llvm {
 
     template<typename EdgeIter>
     static std::string getEdgeSourceLabel(const void *Node, EdgeIter I) {
-      return itostr(I - SDNodeIterator::begin((SDNode *) Node));
+      return itostr(I - SDNodeIterator::begin((const SDNode *) Node));
     }
 
     /// edgeTargetsEdgeSource - This method returns true if this outgoing edge
@@ -73,16 +71,23 @@ namespace llvm {
     }
 
     static std::string getGraphName(const SelectionDAG *G) {
-      return G->getMachineFunction().getFunction()->getName();
+      return G->getMachineFunction().getName();
     }
 
     static bool renderGraphFromBottomUp() {
       return true;
     }
 
-    static bool hasNodeAddressLabel(const SDNode *Node,
-                                    const SelectionDAG *Graph) {
-      return true;
+    static std::string getNodeIdentifierLabel(const SDNode *Node,
+                                              const SelectionDAG *Graph) {
+      std::string R;
+      raw_string_ostream OS(R);
+#ifndef NDEBUG
+      OS << 't' << Node->PersistentId;
+#else
+      OS << static_cast<const void *>(Node);
+#endif
+      return R;
     }
 
     /// If you want to override the dot attributes printed for a particular
@@ -126,9 +131,9 @@ namespace llvm {
 
     static void addCustomGraphFeatures(SelectionDAG *G,
                                        GraphWriter<SelectionDAG*> &GW) {
-      GW.emitSimpleNode(0, "plaintext=circle", "GraphRoot");
+      GW.emitSimpleNode(nullptr, "plaintext=circle", "GraphRoot");
       if (G->getRoot().getNode())
-        GW.emitEdge(0, -1, G->getRoot().getNode(), G->getRoot().getResNo(),
+        GW.emitEdge(nullptr, -1, G->getRoot().getNode(), G->getRoot().getResNo(),
                     "color=blue,style=dashed");
     }
   };
@@ -146,7 +151,7 @@ std::string DOTGraphTraits<SelectionDAG*>::getNodeLabel(const SDNode *Node,
 void SelectionDAG::viewGraph(const std::string &Title) {
 // This code is only for debugging!
 #ifndef NDEBUG
-  ViewGraph(this, "dag." + getMachineFunction().getFunction()->getName(),
+  ViewGraph(this, "dag." + getMachineFunction().getName(),
             false, Title);
 #else
   errs() << "SelectionDAG::viewGraph is only available in debug builds on "
@@ -224,7 +229,7 @@ bool SelectionDAG::setSubgraphColorHelper(SDNode *N, const char *Color, DenseSet
   if (level >= 20) {
     if (!printed) {
       printed = true;
-      DEBUG(dbgs() << "setSubgraphColor hit max level\n");
+      LLVM_DEBUG(dbgs() << "setSubgraphColor hit max level\n");
     }
     return true;
   }
@@ -291,10 +296,10 @@ std::string ScheduleDAGSDNodes::getGraphNodeLabel(const SUnit *SU) const {
 void ScheduleDAGSDNodes::getCustomGraphFeatures(GraphWriter<ScheduleDAG*> &GW) const {
   if (DAG) {
     // Draw a special "GraphRoot" node to indicate the root of the graph.
-    GW.emitSimpleNode(0, "plaintext=circle", "GraphRoot");
+    GW.emitSimpleNode(nullptr, "plaintext=circle", "GraphRoot");
     const SDNode *N = DAG->getRoot().getNode();
     if (N && N->getNodeId() != -1)
-      GW.emitEdge(0, -1, &SUnits[N->getNodeId()], -1,
+      GW.emitEdge(nullptr, -1, &SUnits[N->getNodeId()], -1,
                   "color=blue,style=dashed");
   }
 }

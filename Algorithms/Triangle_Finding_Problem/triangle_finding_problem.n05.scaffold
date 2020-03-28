@@ -127,9 +127,9 @@ qstruct GCQWRegs
 
 
 /**************************************************************
-* External module : the Oracle
+* External scaff_module : the Oracle
 ***************************************************************/
-extern module EdgeORACLE(qbit node1[], int node1offset, qbit node2[], int node2offset, qbit result);
+extern scaff_module EdgeORACLE(qbit node1[], int node1offset, qbit node2[], int node2offset, qbit result);
 
 
 
@@ -138,7 +138,7 @@ extern module EdgeORACLE(qbit node1[], int node1offset, qbit node2[], int node2o
 * Inverse of it must be run (after getting the final evaluation)
 * to transform the input bits back
 *******************************************************************/
-module ZeroNodeTest(qbit w[n], qbit dum[n-1])
+scaff_module ZeroNodeTest(qbit w[n], qbit dum[n-1])
 {
 	int j = 0;
 	for(j = 0; j< n; j++)
@@ -155,7 +155,7 @@ module ZeroNodeTest(qbit w[n], qbit dum[n-1])
 	Toffoli( w[n-1], dum[n-3],dum[n-2]);
 }
 
-module InvZeroNodeTest(qbit w[n], qbit dum[n-1])
+scaff_module InvZeroNodeTest(qbit w[n], qbit dum[n-1])
 {
 	int j = 0;
 	Toffoli( w[n-1], dum[n-3],dum[n-2]);
@@ -180,7 +180,7 @@ module InvZeroNodeTest(qbit w[n], qbit dum[n-1])
 *  However, since we reuse ctrbit2 a lot as input, which is of size n-1, that
 *  is always greater than the value k (normally r or rbar).
 *******************************************************************************/
-module RegTest(qbit input[], qbit dum[], int k, int flg)
+scaff_module RegTest(qbit input[], qbit dum[], int k, int flg)
 {
 	int j = 0;
 
@@ -202,7 +202,7 @@ module RegTest(qbit input[], qbit dum[], int k, int flg)
 	  Toffoli( input[k-1], dum[k-3],dum[k-2]);
 }
 
-module InvRegTest(qbit input[], qbit dum[], int k, int flg)
+scaff_module InvRegTest(qbit input[], qbit dum[], int k, int flg)
 {
 	int j = 0;
 
@@ -234,7 +234,7 @@ module InvRegTest(qbit input[], qbit dum[], int k, int flg)
 *		dum is the global ctrbit2[14] we can reuse
 *		each bit comparison is written to dum array
 ***********************************************************/
-module CompareIndex(qbit ireg[], int iregOffset, qbit treg[], int tregOffset, qbit dum[], int j)
+scaff_module CompareIndex(qbit ireg[], int iregOffset, qbit treg[], int tregOffset, qbit dum[], int j)
 {
 	int i = 0;
 
@@ -253,7 +253,7 @@ module CompareIndex(qbit ireg[], int iregOffset, qbit treg[], int tregOffset, qb
 *		dum is the global ctrbit2[14] we can reuse and it
 *		records the bit-wise comparison
 ***********************************************************/
-module InvCompareIndex(qbit ireg[], int iregOffset, qbit treg[], int tregOffset, qbit dum[], int j)
+scaff_module InvCompareIndex(qbit ireg[], int iregOffset, qbit treg[], int tregOffset, qbit dum[], int j)
 {
 
 	int i = 0;
@@ -272,19 +272,19 @@ module InvCompareIndex(qbit ireg[], int iregOffset, qbit treg[], int tregOffset,
 * the idxIJ is an element of type quIntr, not an array of quIntr)
 * Calls CompareIndex to get the bitwise comparision of indices
 * Calls RegTest to see if the bitwise comparison is all 1
-* Because of this module is called by many elementary comparison
+* Because of this scaff_module is called by many elementary comparison
 * operations, such as FetchT, FetchE, and etc. Hence,
 * we need to pass those parameters (idxIJ, ctrbit2, ctrbit)
-* to many modules, even these parameters are not specified in the
+* to many scaff_modules, even these parameters are not specified in the
 * GFI document
 ***********************************************************/
-module CompareIJ(qbit ireg[], int iregOffset, qbit idxIJ[], int idxOffset, qbit ctrbit2[], qbit ctrbit[], int len)
+scaff_module CompareIJ(qbit ireg[], int iregOffset, qbit idxIJ[], int idxOffset, qbit ctrbit2[], qbit ctrbit[], int len)
 {
 	CompareIndex(ireg, iregOffset, idxIJ, idxOffset, ctrbit2, len);
 	RegTest(ctrbit2, ctrbit, len, 1);
 }
 
-module InvCompareIJ(qbit ireg[], int iregOffset, qbit idxIJ[r], int idxOffset, qbit ctrbit2[], qbit ctrbit[], int len)
+scaff_module InvCompareIJ(qbit ireg[], int iregOffset, qbit idxIJ[r], int idxOffset, qbit ctrbit2[], qbit ctrbit[], int len)
 {
  	InvRegTest(ctrbit2, ctrbit, len, 1);
  	InvCompareIndex(ireg, iregOffset, idxIJ, idxOffset, ctrbit2, len);
@@ -299,7 +299,7 @@ module InvCompareIJ(qbit ireg[], int iregOffset, qbit idxIJ[r], int idxOffset, q
 * this operation would be a decrement.
 * Assuming that overflow case will not occur
 ***********************************************************/
-module ctrCTRincr(qbit cTri[], qbit ctrQ, qbit ctrbit2[], int k)
+scaff_module ctrCTRincr(qbit cTri[], qbit ctrQ, qbit ctrbit2[], int k)
 {
 	int i = 0;
 	int j = 0;
@@ -336,7 +336,7 @@ module ctrCTRincr(qbit cTri[], qbit ctrQ, qbit ctrbit2[], int k)
 * we have to test the all 0s case, instead of all 1s case.
 * Assuming that overflow case will not occur
 ***********************************************************/
-module ctrCTRdecr(qbit cTri[], qbit ctrQ, qbit ctrbit2[], int k)
+scaff_module ctrCTRdecr(qbit cTri[], qbit ctrQ, qbit ctrbit2[], int k)
 {
 	int i = 0;
 	int j = 0;
@@ -386,7 +386,7 @@ module ctrCTRdecr(qbit cTri[], qbit ctrQ, qbit ctrbit2[], int k)
 /***********************************************************
 * Controlled Toffoli (for 4 control bits)
 ************************************************************/
-module ctrEvaluate16(qbit target, qbit ctr3, qbit ctr2, qbit ctr1)
+scaff_module ctrEvaluate16(qbit target, qbit ctr3, qbit ctr2, qbit ctr1)
 {
 	qbit tmp[1];
 	Toffoli( ctr1, ctr2,tmp[0]);
@@ -399,7 +399,7 @@ module ctrEvaluate16(qbit target, qbit ctr3, qbit ctr2, qbit ctr1)
 /***********************************************
 * Measure a node
 ************************************************/
-module nodeMeasure(qbit w[n], cbit ret[n])
+scaff_module nodeMeasure(qbit w[n], cbit ret[n])
 {
 	int i;
 
@@ -413,7 +413,7 @@ module nodeMeasure(qbit w[n], cbit ret[n])
 /***********************************************
 * Measure array of nodes and store the value
 ************************************************/
-module TMeasure(qbit T[R*n], cbit res[R*n])
+scaff_module TMeasure(qbit T[R*n], cbit res[R*n])
 {
 	int i;
 	int j;
@@ -431,7 +431,7 @@ module TMeasure(qbit T[R*n], cbit res[R*n])
 /*****************************************************
 * Measure array of edge connection and store the value
 ******************************************************/
-module EMeasure(qbit E[RR1], cbit fin[RR1])
+scaff_module EMeasure(qbit E[RR1], cbit fin[RR1])
 {
 	int i;
 
@@ -460,7 +460,7 @@ module EMeasure(qbit E[RR1], cbit fin[RR1])
 *	Initializes the qubits in a register to 0
 *	Para: qbit reg[] of size n
 ***************************************************************/
-module ZERO(qbit reg)
+scaff_module ZERO(qbit reg)
 {
 	PrepZ(reg,0);
 }
@@ -471,11 +471,11 @@ module ZERO(qbit reg)
 *	Sets each qubit in the n-qubit register reg to 0 and
 *	then calls the Hadamard gate to place reg into superpostion
 *	Para: qbit reg[] of size 1
-*	Comment: Along with a loop, we can use this module for
+*	Comment: Along with a loop, we can use this scaff_module for
 *	to perform INITIALIZE work on input register of size greater than 1.
 ***********************************************************************/
 
- module INITIALIZE(qbit reg)
+ scaff_module INITIALIZE(qbit reg)
 {
 	PrepZ(reg,0);
 	H(reg);
@@ -486,10 +486,10 @@ module ZERO(qbit reg)
 * 	Algorithm 4: HADAMARD
 *	Applies the Hadamard primitive to each qubit in the register
 *	Para: qbit reg[] of size n
-* 	Comment: This modules applies the Hadamard primitive to each
+* 	Comment: This scaff_modules applies the Hadamard primitive to each
 * 	qubit in the register, that is a combination of for loop
 *	of size n and n uses of Hadamard primitive. Whenever we
-*	encounter the invocation of this module, we directly
+*	encounter the invocation of this scaff_module, we directly
 *	use a combination of for loop along with the Hadamard
 * 	primitive (H) to perform such a task.
 ***************************************************************/
@@ -502,7 +502,7 @@ module ZERO(qbit reg)
 *         T a quNode[R]register:
 *	      T[j] a quNote for j = 0,1,..., R-1
 ***************************************************************/
-module SETUP(qbit E[RR1], qbit T[R*n])
+scaff_module SETUP(qbit E[RR1], qbit T[R*n])
 {
 	int j = 0;
 	int k = 0;
@@ -536,7 +536,7 @@ module SETUP(qbit E[RR1], qbit T[R*n])
 *	Para: w a quNode
 *		  qbit ctrbit
 ***************************************************************/
-module DIFFUSENode(qbit w[n], qbit ctrbit[])
+scaff_module DIFFUSENode(qbit w[n], qbit ctrbit[])
 {
 	int j = 0;
 	qbit tmpphase[1];
@@ -577,7 +577,7 @@ module DIFFUSENode(qbit w[n], qbit ctrbit[])
 *		  qbit ctrbit
 ***************************************************************/
 // perform Diffuse on two registers of size n (this is quNode) and r, respectively
-module DIFFUSEVI(qbit alpha[n], qbit beta[r], qbit ctrbit2[], qbit ctrbit[])
+scaff_module DIFFUSEVI(qbit alpha[n], qbit beta[r], qbit ctrbit2[], qbit ctrbit[])
 {
 	// a, b are always n - 1
 	int j = 0;
@@ -638,7 +638,7 @@ module DIFFUSEVI(qbit alpha[n], qbit beta[r], qbit ctrbit2[], qbit ctrbit[])
 *		  qbit ctrbit
 *********************************************************************/
 // perform Diffuse on two registers of size rbar and r, respectively
-module DIFFUSEGC(qbit ta[rbar], qbit ma[r],  qbit ctrbit2[], qbit ctrbit[])
+scaff_module DIFFUSEGC(qbit ta[rbar], qbit ma[r],  qbit ctrbit2[], qbit ctrbit[])
 {
 	int i  = 0;
 	int j = 0;
@@ -699,7 +699,7 @@ module DIFFUSEGC(qbit ta[rbar], qbit ma[r],  qbit ctrbit2[], qbit ctrbit[])
 *		  qbit ctrbit2[n-1]
 *		  qbit ctrbit[n-1]
 ***************************************************************/
-module FetchT(qbit I[], int Ioffset, qbit T[R*n], qbit Td[n], qbit idxIJ[R*r], qbit ctrbit2[n-1], qbit ctrbit[n-1])
+scaff_module FetchT(qbit I[], int Ioffset, qbit T[R*n], qbit Td[n], qbit idxIJ[R*r], qbit ctrbit2[n-1], qbit ctrbit[n-1])
 {
 	int j = 0;
 	int k = 0;
@@ -728,7 +728,7 @@ module FetchT(qbit I[], int Ioffset, qbit T[R*n], qbit Td[n], qbit idxIJ[R*r], q
 *		  qbit ctrbit2[n-1]
 *		  qbit ctrbit[n-1]
 ***************************************************************/
-module FetchTr1(qbit I[], int Ioffset, qbit T[R], qbit Td, int b, qbit idxIJ[R*r], qbit ctrbit2[n-1], qbit ctrbit[n-1])
+scaff_module FetchTr1(qbit I[], int Ioffset, qbit T[R], qbit Td, int b, qbit idxIJ[R*r], qbit ctrbit2[n-1], qbit ctrbit[n-1])
 {
 	int j = 0;
 	int k = 0;
@@ -756,7 +756,7 @@ module FetchTr1(qbit I[], int Ioffset, qbit T[R], qbit Td, int b, qbit idxIJ[R*r
 *		  qbit ctrbit2[n-1]
 *		  qbit ctrbit[n-1]
 ***************************************************************/
-module FetchTrbarr(qbit iota[rbar], qbit tau[Rbar*r], qbit Td[r], qbit idxIJ[R*r], qbit ctrbit2[n-1], qbit ctrbit[n-1])
+scaff_module FetchTrbarr(qbit iota[rbar], qbit tau[Rbar*r], qbit Td[r], qbit idxIJ[R*r], qbit ctrbit2[n-1], qbit ctrbit[n-1])
 {
 	int j = 0;
 	int k = 0;
@@ -783,7 +783,7 @@ module FetchTrbarr(qbit iota[rbar], qbit tau[Rbar*r], qbit Td[r], qbit idxIJ[R*r
 *		  qbit ctrbit2[n-1]
 *		  qbit ctrbit[n-1]
 ***************************************************************/
-module StoreT(qbit I[r], qbit T[R*n], qbit Td[n], qbit idxIJ[R*r],qbit ctrbit2[n-1], qbit ctrbit[n-1])
+scaff_module StoreT(qbit I[r], qbit T[R*n], qbit Td[n], qbit idxIJ[R*r],qbit ctrbit2[n-1], qbit ctrbit[n-1])
 {
 	int j = 0;
 	int k = 0;
@@ -809,7 +809,7 @@ module StoreT(qbit I[r], qbit T[R*n], qbit Td[n], qbit idxIJ[R*r],qbit ctrbit2[n
 *		  qbit ctrbit2[n-1]
 *		  qbit ctrbit[n-1]
 ***************************************************************/
-module StoreTrbarr(qbit I[rbar], qbit T[Rbar*r], qbit Td[r], qbit idxIJ[R*r],qbit ctrbit2[n-1], qbit ctrbit[n-1])
+scaff_module StoreTrbarr(qbit I[rbar], qbit T[Rbar*r], qbit Td[r], qbit idxIJ[R*r],qbit ctrbit2[n-1], qbit ctrbit[n-1])
 {
 	int j = 0;
 	int k = 0;
@@ -839,7 +839,7 @@ module StoreTrbarr(qbit I[rbar], qbit T[Rbar*r], qbit Td[r], qbit idxIJ[R*r],qbi
 *	Comment: As seen in later function calls, the parameter b
 *	could be of values other than n or r.
 ***************************************************************/
-module FetchStoreT(qbit I[rbar], qbit T[Rbar], qbit Td, int b,  qbit idxIJ[R*r],qbit ctrbit2[n-1], qbit ctrbit[n-1])
+scaff_module FetchStoreT(qbit I[rbar], qbit T[Rbar], qbit Td, int b,  qbit idxIJ[R*r],qbit ctrbit2[n-1], qbit ctrbit[n-1])
 {
 	int j = 0;
 	int k = 0;
@@ -851,7 +851,7 @@ module FetchStoreT(qbit I[rbar], qbit T[Rbar], qbit Td, int b,  qbit idxIJ[R*r],
 			for(k = 0; k < b; k++)
 			{
 				// Here it is only one bit, hence, do not use SWAP but Swap
-				// Throughout the whole program, when this module is summoned, the parameter b is always 1
+				// Throughout the whole program, when this scaff_module is summoned, the parameter b is always 1
 				// Since b is always 1, k is always 0
 				ctrSwap(T[j], Td, ctrbit[rbar-2]);
 			}
@@ -869,7 +869,7 @@ module FetchStoreT(qbit I[rbar], qbit T[Rbar], qbit Td, int b,  qbit idxIJ[R*r],
 *		  qbit ctrbit2[n-1]
 *		  qbit ctrbit[n-1]
 ***************************************************************/
-module FetchE(qbit I[], int Ioffset, qbit E[RR1], qbit Ed[R], qbit idxIJ[R*r], qbit ctrbit2[n-1], qbit ctrbit[n-1])
+scaff_module FetchE(qbit I[], int Ioffset, qbit E[RR1], qbit Ed[R], qbit idxIJ[R*r], qbit ctrbit2[n-1], qbit ctrbit[n-1])
 {
 	int j = 0;
 
@@ -906,7 +906,7 @@ module FetchE(qbit I[], int Ioffset, qbit E[RR1], qbit Ed[R], qbit idxIJ[R*r], q
 *		  qbit ctrbit2[n-1]
 *		  qbit ctrbit[n-1]
 ***************************************************************/
-module FetchStoreE(qbit I[], qbit E[RR1], qbit Ed[R], qbit idxIJ[R*r], qbit ctrbit2[n-1], qbit ctrbit[n-1])
+scaff_module FetchStoreE(qbit I[], qbit E[RR1], qbit Ed[R], qbit idxIJ[R*r], qbit ctrbit2[n-1], qbit ctrbit[n-1])
 {
 	int j = 0;
 	int k = 0;
@@ -944,7 +944,7 @@ module FetchStoreE(qbit I[], qbit E[RR1], qbit Ed[R], qbit idxIJ[R*r], qbit ctrb
 *	      Td a quNode: qbit[] of size n
 *	      Ed qbit[] of size R
 ***************************************************************/
-module UPDATE(qbit T[R*n], qbit Td[n], qbit Ed[R])
+scaff_module UPDATE(qbit T[R*n], qbit Td[n], qbit Ed[R])
 {
 	int j = 0;
 
@@ -960,7 +960,7 @@ module UPDATE(qbit T[R*n], qbit Td[n], qbit Ed[R])
 *	Para: Td a quNode: qbit[] of size n
 *	      v a quNode: qbit[] of size n
 ***************************************************************/
-module SWAP(qbit Td[n], qbit v[n] )
+scaff_module SWAP(qbit Td[n], qbit v[n] )
 {
 	int j = 0;
 	for(j = 0; j < n-1; j++)
@@ -982,7 +982,7 @@ module SWAP(qbit Td[n], qbit v[n] )
 *		  qbit ctrbit2[n-1]
 *		  qbit ctrbit[n-1]
 ***************************************************************/
-module QWSH(qbit T[R*n], qbit i[r], qbit v[n], qbit E[RR1], qbit idxIJ[R*r],qbit ctrbit2[n-1], qbit ctrbit[n-1])
+scaff_module QWSH(qbit T[R*n], qbit i[r], qbit v[n], qbit E[RR1], qbit idxIJ[R*r],qbit ctrbit2[n-1], qbit ctrbit[n-1])
 {
 	qbit Td[n];
 	qbit Ed[R];
@@ -1029,7 +1029,7 @@ module QWSH(qbit T[R*n], qbit i[r], qbit v[n], qbit E[RR1], qbit idxIJ[R*r],qbit
 *	Para: E: qbit[(R(R-1))/2]
 *		  test: qbit[1]
 ***************************************************************/
-module TriangleTestT(qbit E[RR1], qbit test)
+scaff_module TriangleTestT(qbit E[RR1], qbit test)
 {
 	int i = 0;
 	int j = 0;
@@ -1100,7 +1100,7 @@ module TriangleTestT(qbit E[RR1], qbit test)
 *		  w: a quNode: qbit[] of size n
 *		  test: qbit[1]
 ***************************************************************/
-module TriangleTestTw(qbit T[R*n], qbit E[RR1], qbit w[n], qbit test)
+scaff_module TriangleTestTw(qbit T[R*n], qbit E[RR1], qbit w[n], qbit test)
 {
 	qbit Ed[R];
 	int i = 0;
@@ -1179,7 +1179,7 @@ module TriangleTestTw(qbit T[R*n], qbit E[RR1], qbit w[n], qbit test)
 *		  qbit ctrbit[n-1]
 ***************************************************************/
 
-module GCQWalkStep(qbit T[R*n], qbit E[RR1], qbit w[n], /*GCQWRegs GC,*/ qbit Td[n], qbit Ed[R],
+scaff_module GCQWalkStep(qbit T[R*n], qbit E[RR1], qbit w[n], /*GCQWRegs GC,*/ qbit Td[n], qbit Ed[R],
 				  qbit taud[r], qbit Ewd, qbit Edd[Rbar], qbit idxIJ[R*r],qbit ctrbit2[n-1], qbit ctrbit[n-1],
                   qbit tau[Rbar*r], qbit sigma[r], qbit iota[rbar], qbit Ew[Rbar], qbit cTri[2*rbar-1], qbit triTestT,
                   qbit triTestTw)
@@ -1299,7 +1299,7 @@ module GCQWalkStep(qbit T[R*n], qbit E[RR1], qbit w[n], /*GCQWRegs GC,*/ qbit Td
 *		  qbit ctrbit2[n-1]
 *		  qbit ctrbit[n-1]
 ***************************************************************/
-module GCQWalk(qbit T[R*n], qbit E[RR1], qbit w[n], /*GCQWRegs GC,*/  qbit idxIJ[R*r],qbit ctrbit2[n-1], qbit ctrbit[n-1],
+scaff_module GCQWalk(qbit T[R*n], qbit E[RR1], qbit w[n], /*GCQWRegs GC,*/  qbit idxIJ[R*r],qbit ctrbit2[n-1], qbit ctrbit[n-1],
         qbit tau[Rbar*r], qbit sigma[r], qbit iota[rbar], qbit Ew[Rbar], qbit cTri[2*rbar-1], qbit triTestT, qbit triTestTw)
 {
 	qbit Td[n];
@@ -1437,7 +1437,7 @@ module GCQWalk(qbit T[R*n], qbit E[RR1], qbit w[n], /*GCQWRegs GC,*/  qbit idxIJ
 *		  qbit ctrbit2[n-1]
 *		  qbit ctrbit[n-1]
 ***************************************************************/
-module InvGCQWalk(qbit T[R*n], qbit E[RR1], qbit w[n], /*GCQWRegs GC,*/  qbit idxIJ[R*r],qbit ctrbit2[n-1], qbit ctrbit[n-1],
+scaff_module InvGCQWalk(qbit T[R*n], qbit E[RR1], qbit w[n], /*GCQWRegs GC,*/  qbit idxIJ[R*r],qbit ctrbit2[n-1], qbit ctrbit[n-1],
         qbit tau[Rbar*r], qbit sigma[r], qbit iota[rbar], qbit Ew[Rbar], qbit cTri[2*rbar-1], qbit triTestT, qbit
         triTestTw)
 {
@@ -1576,7 +1576,7 @@ module InvGCQWalk(qbit T[R*n], qbit E[RR1], qbit w[n], /*GCQWRegs GC,*/  qbit id
 *		  qbit ctrbit2[n-1]
 *		  qbit ctrbit[n-1]
 ***************************************************************/
-module TriangleEdgeSearch(qbit T[R*n], qbit E[RR1], qbit w[n], /*GCQWRegs GC,*/ qbit idxIJ[R*r],qbit ctrbit2[n-1], qbit ctrbit[n-1],
+scaff_module TriangleEdgeSearch(qbit T[R*n], qbit E[RR1], qbit w[n], /*GCQWRegs GC,*/ qbit idxIJ[R*r],qbit ctrbit2[n-1], qbit ctrbit[n-1],
         qbit tau[Rbar*r], qbit sigma[r], qbit iota[rbar], qbit Ew[Rbar], qbit cTri[2*rbar-1], qbit triTestT, qbit
         triTestTw)
 {
@@ -1635,7 +1635,7 @@ module TriangleEdgeSearch(qbit T[R*n], qbit E[RR1], qbit w[n], /*GCQWRegs GC,*/ 
 *	Comment: triTestT set to 1 is T contains the triangle from G
 *			 triTestTw set to 1 when w is a node of the triangle with the other edge in T
 *****************************************************************************************/
-module TestTriangleEdges(qbit T[R*n], qbit E[RR1], qbit w[n], /*GCQWRegs GC,*/ qbit idxIJ[R*r],qbit ctrbit2[n-1], qbit ctrbit[n-1],
+scaff_module TestTriangleEdges(qbit T[R*n], qbit E[RR1], qbit w[n], /*GCQWRegs GC,*/ qbit idxIJ[R*r],qbit ctrbit2[n-1], qbit ctrbit[n-1],
         qbit tau[Rbar*r], qbit sigma[r], qbit iota[rbar], qbit Ew[Rbar], qbit cTri[2*rbar-1], qbit triTestT, qbit
         triTestTw)
 {
@@ -1674,7 +1674,7 @@ module TestTriangleEdges(qbit T[R*n], qbit E[RR1], qbit w[n], /*GCQWRegs GC,*/ q
 *		  qbit ctrbit[n-1]
 *	Comment: Inverts the TestTriangleEdges function for additional processing
 *****************************************************************************************/
-module InvTestTriangleEdges(qbit T[R*n], qbit E[RR1], qbit w[n], /*GCQWRegs GC,*/ qbit idxIJ[R*r],qbit ctrbit2[n-1], qbit ctrbit[n-1],
+scaff_module InvTestTriangleEdges(qbit T[R*n], qbit E[RR1], qbit w[n], /*GCQWRegs GC,*/ qbit idxIJ[R*r],qbit ctrbit2[n-1], qbit ctrbit[n-1],
         qbit tau[Rbar*r], qbit sigma[r], qbit iota[rbar], qbit Ew[Rbar], qbit cTri[2*rbar-1], qbit triTestT, qbit triTestTw)
 {
  	TriangleTestTw(T,E,w, triTestTw);
@@ -1686,10 +1686,10 @@ module InvTestTriangleEdges(qbit T[R*n], qbit E[RR1], qbit w[n], /*GCQWRegs GC,*
 
 
 /********************************************************************
-*	Algorithm 1: QWTFP (the core module that summons other modules)
+*	Algorithm 1: QWTFP (the core scaff_module that summons other scaff_modules)
 *	Return:  Yes/No if the graph has a triangle
 ********************************************************************/
-//module QWTFP(int ret[n], int res[R][n], int fin[RR1], int *testTMeasure)
+//scaff_module QWTFP(int ret[n], int res[R][n], int fin[RR1], int *testTMeasure)
 int main ()
 {
 	cbit testTMeasure[1];

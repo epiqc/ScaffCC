@@ -1,7 +1,7 @@
-; RUN: llc < %s -march=thumb -mattr=+thumb2 | FileCheck %s
+; RUN: llc -mtriple=thumb-eabi -mcpu=arm1156t2-s -mattr=+thumb2 %s -o - | FileCheck %s
+; RUN: llc -mtriple=thumb-eabi %s -o - | FileCheck %s -check-prefix=THUMB1
 
-
-; CHECK: f1:
+; CHECK-LABEL: f1:
 ; CHECK: 	ror.w	r0, r0, #22
 define i32 @f1(i32 %a) {
     %l8 = shl i32 %a, 10
@@ -10,9 +10,11 @@ define i32 @f1(i32 %a) {
     ret i32 %tmp
 }
 
-; CHECK: f2:
+; CHECK-LABEL: f2:
 ; CHECK-NOT: and
 ; CHECK: ror
+; THUMB1: f2
+; THUMB1: and
 define i32 @f2(i32 %v, i32 %nbits) {
 entry:
   %and = and i32 %nbits, 31

@@ -9,11 +9,11 @@ target triple = "thumbv7-apple-ios"
 ;
 ; The caller-saved r4 is used as a scratch register for stack realignment.
 ; CHECK: push {r4, r7, lr}
-; CHECK: bic r4, r4, #7
+; CHECK: bfc r4, #0, #3
 ; CHECK: mov sp, r4
-define void @f(double* nocapture %p) nounwind ssp {
+define void @f(double* nocapture %p) nounwind ssp "no-frame-pointer-elim"="true" {
 entry:
-  %0 = load double* %p, align 4
+  %0 = load double, double* %p, align 4
   tail call void asm sideeffect "", "~{d8},~{d9},~{d10},~{d11},~{d12},~{d13},~{d14},~{d15}"() nounwind
   tail call void @g() nounwind
   store double %0, double* %p, align 4
@@ -23,11 +23,11 @@ entry:
 ; NEON: f
 ; NEON: push {r4, r7, lr}
 ; NEON: sub.w r4, sp, #64
-; NEON: bic r4, r4, #15
+; NEON: bfc r4, #0, #4
 ; Stack pointer must be updated before the spills.
 ; NEON: mov sp, r4
-; NEON: vst1.64 {d8, d9, d10, d11}, [r4, :128]!
-; NEON: vst1.64 {d12, d13, d14, d15}, [r4, :128]
+; NEON: vst1.64 {d8, d9, d10, d11}, [r4:128]!
+; NEON: vst1.64 {d12, d13, d14, d15}, [r4:128]
 ; Stack pointer adjustment for the stack frame contents.
 ; This could legally happen before the spills.
 ; Since the spill slot is only 8 bytes, technically it would be fine to only
@@ -36,8 +36,8 @@ entry:
 ; NEON: sub sp, #16
 ; The epilog is free to use another scratch register than r4.
 ; NEON: add r[[R4:[0-9]+]], sp, #16
-; NEON: vld1.64 {d8, d9, d10, d11}, [r[[R4]], :128]!
-; NEON: vld1.64 {d12, d13, d14, d15}, [r[[R4]], :128]
+; NEON: vld1.64 {d8, d9, d10, d11}, [r[[R4]]:128]!
+; NEON: vld1.64 {d12, d13, d14, d15}, [r[[R4]]:128]
 ; The stack pointer restore must happen after the reloads.
 ; NEON: mov sp,
 ; NEON: pop
@@ -45,7 +45,7 @@ entry:
 declare void @g()
 
 ; Spill 7 d-registers.
-define void @f7(double* nocapture %p) nounwind ssp {
+define void @f7(double* nocapture %p) nounwind ssp "no-frame-pointer-elim"="true" {
 entry:
   tail call void asm sideeffect "", "~{d8},~{d9},~{d10},~{d11},~{d12},~{d13},~{d14}"() nounwind
   ret void
@@ -54,11 +54,11 @@ entry:
 ; NEON: f7
 ; NEON: push {r4, r7, lr}
 ; NEON: sub.w r4, sp, #56
-; NEON: bic r4, r4, #15
+; NEON: bfc r4, #0, #4
 ; Stack pointer must be updated before the spills.
 ; NEON: mov sp, r4
-; NEON: vst1.64 {d8, d9, d10, d11}, [r4, :128]!
-; NEON: vst1.64 {d12, d13}, [r4, :128]
+; NEON: vst1.64 {d8, d9, d10, d11}, [r4:128]!
+; NEON: vst1.64 {d12, d13}, [r4:128]
 ; NEON: vstr d14, [r4, #16]
 ; Epilog
 ; NEON: vld1.64 {d8, d9, d10, d11},
@@ -69,7 +69,7 @@ entry:
 ; NEON: pop
 
 ; Spill 7 d-registers, leave a hole.
-define void @f3plus4(double* nocapture %p) nounwind ssp {
+define void @f3plus4(double* nocapture %p) nounwind ssp "no-frame-pointer-elim"="true" {
 entry:
   tail call void asm sideeffect "", "~{d8},~{d9},~{d10},~{d12},~{d13},~{d14},~{d15}"() nounwind
   ret void
@@ -81,10 +81,10 @@ entry:
 ; NEON: push {r4, r7, lr}
 ; NEON: vpush {d12, d13, d14, d15}
 ; NEON: sub.w r4, sp, #24
-; NEON: bic r4, r4, #15
+; NEON: bfc r4, #0, #4
 ; Stack pointer must be updated before the spills.
 ; NEON: mov sp, r4
-; NEON: vst1.64 {d8, d9}, [r4, :128]
+; NEON: vst1.64 {d8, d9}, [r4:128]
 ; NEON: vstr d10, [r4, #16]
 ; Epilog
 ; NEON: vld1.64 {d8, d9},

@@ -1,25 +1,29 @@
 ; RUN: llc -mtriple=x86_64-apple-macosx10.7 %s -o %t -filetype=obj
-; RUN: llvm-dwarfdump %t | FileCheck %s
+; RUN: llvm-dwarfdump -debug-info %t | FileCheck %s
 
 ; CHECK: ptr
 ; CHECK-NOT: AT_bit_size
 
+source_filename = "test/DebugInfo/X86/pointer-type-size.ll"
+
 %struct.crass = type { i8* }
 
-@crass = common global %struct.crass zeroinitializer, align 8
+@crass = common global %struct.crass zeroinitializer, align 8, !dbg !0
 
-!llvm.dbg.cu = !{!0}
+!llvm.dbg.cu = !{!9}
+!llvm.module.flags = !{!12}
 
-!0 = metadata !{i32 720913, i32 0, i32 12, metadata !"foo.c", metadata !"/Users/echristo/tmp", metadata !"clang version 3.1 (trunk 147882)", i1 true, i1 false, metadata !"", i32 0, metadata !1, metadata !1, metadata !1, metadata !3} ; [ DW_TAG_compile_unit ]
-!1 = metadata !{metadata !2}
-!2 = metadata !{i32 0}
-!3 = metadata !{metadata !4}
-!4 = metadata !{metadata !5}
-!5 = metadata !{i32 720948, i32 0, null, metadata !"crass", metadata !"crass", metadata !"", metadata !6, i32 1, metadata !7, i32 0, i32 1, %struct.crass* @crass} ; [ DW_TAG_variable ]
-!6 = metadata !{i32 720937, metadata !"foo.c", metadata !"/Users/echristo/tmp", null} ; [ DW_TAG_file_type ]
-!7 = metadata !{i32 720915, null, metadata !"crass", metadata !6, i32 1, i64 64, i64 64, i32 0, i32 0, null, metadata !8, i32 0, i32 0} ; [ DW_TAG_structure_type ]
-!8 = metadata !{metadata !9}
-!9 = metadata !{i32 720909, metadata !7, metadata !"ptr", metadata !6, i32 1, i64 64, i64 64, i64 0, i32 0, metadata !10} ; [ DW_TAG_member ]
-!10 = metadata !{i32 720934, null, metadata !"", null, i32 0, i64 0, i64 0, i64 0, i32 0, metadata !11} ; [ DW_TAG_const_type ]
-!11 = metadata !{i32 720911, null, metadata !"", null, i32 0, i64 64, i64 64, i64 0, i32 0, metadata !12} ; [ DW_TAG_pointer_type ]
-!12 = metadata !{i32 720932, null, metadata !"char", null, i32 0, i64 8, i64 8, i64 0, i32 0, i32 6} ; [ DW_TAG_base_type ]
+!0 = !DIGlobalVariableExpression(var: !1, expr: !DIExpression())
+!1 = !DIGlobalVariable(name: "crass", scope: null, file: !2, line: 1, type: !3, isLocal: false, isDefinition: true)
+!2 = !DIFile(filename: "foo.c", directory: "/Users/echristo/tmp")
+!3 = !DICompositeType(tag: DW_TAG_structure_type, name: "crass", file: !2, line: 1, size: 64, align: 64, elements: !4)
+!4 = !{!5}
+!5 = !DIDerivedType(tag: DW_TAG_member, name: "ptr", scope: !3, file: !2, line: 1, baseType: !6, size: 64, align: 64)
+!6 = !DIDerivedType(tag: DW_TAG_const_type, baseType: !7)
+!7 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !8, size: 64, align: 64)
+!8 = !DIBasicType(name: "char", size: 8, align: 8, encoding: DW_ATE_signed_char)
+!9 = distinct !DICompileUnit(language: DW_LANG_C99, file: !2, producer: "clang version 3.1 (trunk 147882)", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug, enums: !10, retainedTypes: !10, globals: !11, imports: !10)
+!10 = !{}
+!11 = !{!0}
+!12 = !{i32 1, !"Debug Info Version", i32 3}
+

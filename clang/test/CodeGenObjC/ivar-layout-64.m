@@ -1,15 +1,5 @@
-// RUNX: llvm-gcc -m64 -fobjc-gc -emit-llvm -S -o %t %s &&
-// RUN: %clang_cc1 -triple x86_64-apple-darwin10 -fobjc-gc -emit-llvm -o %t %s
-// RUN: grep '@"\\01L_OBJC_CLASS_NAME_.*" = internal global .* c"A\\00"' %t
-// RUN: grep '@"\\01L_OBJC_CLASS_NAME_.*" = internal global .* c"\\11q\\10\\00"' %t
-// RUN: grep '@"\\01L_OBJC_CLASS_NAME_.*" = internal global .* c"!q\\00"' %t
-// RUN: grep '@"\\01L_OBJC_CLASS_NAME_.*" = internal global .* c"\\01\\14\\00"' %t
-// RUNX: llvm-gcc -ObjC++ -m64 -fobjc-gc -emit-llvm -S -o %t %s &&
-// RUN: %clang_cc1 -x objective-c++ -triple x86_64-apple-darwin10 -fobjc-gc -emit-llvm -o %t %s
-// RUN: grep '@"\\01L_OBJC_CLASS_NAME_.*" = internal global .* c"A\\00"' %t
-// RUN: grep '@"\\01L_OBJC_CLASS_NAME_.*" = internal global .* c"\\11q\\10\\00"' %t
-// RUN: grep '@"\\01L_OBJC_CLASS_NAME_.*" = internal global .* c"!q\\00"' %t
-// RUN: grep '@"\\01L_OBJC_CLASS_NAME_.*" = internal global .* c"\\01\\14\\00"' %t
+// RUN: %clang_cc1 -triple x86_64-apple-darwin10 -fobjc-gc -emit-llvm -o - %s | FileCheck %s
+// RUN: %clang_cc1 -x objective-c++ -triple x86_64-apple-darwin10 -fobjc-gc -emit-llvm -o - %s | FileCheck %s
 
 /*
 
@@ -43,6 +33,11 @@ __weak B *f2;
 @property int p3;
 @end
 
+// CHECK: @OBJC_CLASS_NAME_{{.*}} = private unnamed_addr constant {{.*}} c"C\00"
+// CHECK: @OBJC_CLASS_NAME_{{.*}} = private unnamed_addr constant {{.*}} c"\11p\00"
+// CHECK: @OBJC_CLASS_NAME_{{.*}} = private unnamed_addr constant {{.*}} c"!`\00"
+
+
 @implementation C
 @synthesize p3 = _p3;
 @end
@@ -53,8 +48,10 @@ __weak B *f2;
 @property (assign) __weak id p2;
 @end
 
-// FIXME: Check layout for this class, once it is clear what the right
-// answer is.
+// CHECK: @OBJC_CLASS_NAME_{{.*}} = private unnamed_addr constant {{.*}} c"A\00"
+// CHECK: @OBJC_CLASS_NAME_{{.*}} = private unnamed_addr constant {{.*}} c"\11q\10\00"
+// CHECK: @OBJC_CLASS_NAME_{{.*}} = private unnamed_addr constant {{.*}} c"!q\00"
+
 @implementation A
 @synthesize p0 = _p0;
 @synthesize p1 = _p1;
@@ -65,8 +62,10 @@ __weak B *f2;
 @property int p3;
 @end
 
-// FIXME: Check layout for this class, once it is clear what the right
-// answer is.
+// CHECK: @OBJC_CLASS_NAME_{{.*}} = private unnamed_addr constant {{.*}} c"D\00"
+// CHECK: @OBJC_CLASS_NAME_{{.*}} = private unnamed_addr constant {{.*}} c"\11p\00"
+// CHECK: @OBJC_CLASS_NAME_{{.*}} = private unnamed_addr constant {{.*}} c"!`\00"
+
 @implementation D
 @synthesize p3 = _p3;
 @end
@@ -90,5 +89,73 @@ typedef unsigned int FSCatalogInfoBitmap;
 }
 @end
 
+// CHECK: @OBJC_CLASS_NAME_{{.*}} = private unnamed_addr constant {{.*}} c"NSFileLocationComponent\00"
+// CHECK: @OBJC_CLASS_NAME_{{.*}} = private unnamed_addr constant {{.*}} c"\01\14\00"
+
 @implementation NSFileLocationComponent @end
 
+@interface NSObject {
+  id isa;
+}
+@end
+
+@interface Foo : NSObject {
+    id ivar;
+
+    unsigned long bitfield  :31;
+    unsigned long bitfield2 :1;
+    unsigned long bitfield3 :32;
+}
+@end
+
+// CHECK: @OBJC_CLASS_NAME_{{.*}} = private unnamed_addr constant {{.*}} c"Foo\00"
+// CHECK: @OBJC_CLASS_NAME_{{.*}} = private unnamed_addr constant {{.*}} c"\02\10\00"
+
+@implementation Foo @end
+
+// GC layout strings aren't capable of expressing __strong ivars at
+// non-word alignments.
+struct __attribute__((packed)) PackedStruct {
+  char c;
+  __strong id x;
+};
+@interface Packed : NSObject {
+  struct PackedStruct _packed;
+}
+@end
+@implementation Packed @end
+// CHECK: @OBJC_CLASS_NAME_{{.*}} = private unnamed_addr constant {{.*}} c"Packed\00"
+// CHECK: @OBJC_CLASS_NAME_{{.*}} = private unnamed_addr constant {{.*}} c"\01 \00"
+//  ' ' == 0x20
+
+// Ensure that layout descends into anonymous unions and structs.
+// Hilariously, anonymous unions and structs that appear directly as ivars
+// are completely ignored by layout.
+
+@interface AnonymousUnion : NSObject {
+  struct {
+    union {
+      id _object;
+      void *_ptr;
+    };
+  } a;
+}
+@end
+@implementation AnonymousUnion @end
+// CHECK: @OBJC_CLASS_NAME_{{.*}} = private unnamed_addr constant {{.*}} c"AnonymousUnion\00"
+// CHECK: @OBJC_CLASS_NAME_{{.*}} = private unnamed_addr constant {{.*}} c"\02\00"
+
+@interface AnonymousStruct : NSObject {
+  struct {
+    struct {
+      id _object;
+      __weak id _weakref;
+    };
+  } a;
+}
+@end
+@implementation AnonymousStruct @end
+// CHECK: @OBJC_CLASS_NAME_{{.*}} = private unnamed_addr constant {{.*}} c"AnonymousStruct\00"
+// CHECK: @OBJC_CLASS_NAME_{{.*}} = private unnamed_addr constant {{.*}} c"\02\10\00"
+// CHECK: @OBJC_CLASS_NAME_{{.*}} = private unnamed_addr constant {{.*}} c"!\00"
+//  '!' == 0x21

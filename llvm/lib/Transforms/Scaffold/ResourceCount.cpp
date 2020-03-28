@@ -11,20 +11,20 @@
 #include <limits>
 #include <map>
 #include "llvm/Pass.h"
-#include "llvm/Function.h"
-#include "llvm/Module.h"
-#include "llvm/BasicBlock.h"
-#include "llvm/Instruction.h"
-#include "llvm/Instructions.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Instruction.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/ADT/Statistic.h"
-#include "llvm/Support/InstIterator.h"
+#include "llvm/IR/InstIterator.h"
 #include "llvm/PassAnalysisSupport.h"
 #include "llvm/Analysis/CallGraph.h"
-#include "llvm/Support/CFG.h"
+#include "llvm/IR/CFG.h"
 #include "llvm/ADT/SCCIterator.h"
 
-#include "llvm/Constants.h"
+#include "llvm/IR/Constants.h"
 
 #define NCOUNTS 14
 
@@ -41,10 +41,10 @@ namespace {
 
     virtual void getAnalysisUsage(AnalysisUsage &AU) const {
       AU.setPreservesAll();  
-      AU.addRequired<CallGraph>();    
+      AU.addRequired<CallGraphWrapperPass>();    
     }
     
-    void CountFunctionResources (Function *F, std::map <Function*, unsigned long long* > &FunctionResources) const {
+    void CountFunctionResources (Function *F, std::map <Function*, unsigned long long* > FunctionResources) const {
       // Traverse instruction by instruction
       for (inst_iterator I = inst_begin(*F), E = inst_end(*F); I != E; ++I) {
         Instruction *Inst = &*I;                            // Grab pointer to instruction reference
@@ -73,7 +73,9 @@ namespace {
               arraySize = 1;
             }
           }
+
           if(intType){
+
             if (intType->isIntegerTy(16)) {                           // Filter allocation Type (qbit=i16)
               FunctionResources[F][0] += arraySize;                
             }
@@ -91,7 +93,7 @@ namespace {
         else if (CallInst *CI = dyn_cast<CallInst>(Inst)) {      // Filter Call Instructions
           Function *callee = CI->getCalledFunction();
           if (callee->isIntrinsic()) {                      // Intrinsic (Gate) Functions calls
-            FunctionResources[F][14]++;
+			FunctionResources[F][14]++;
             if (callee->getName().startswith("llvm.X"))
               FunctionResources[F][4]++;
             else if (callee->getName().startswith("llvm.Z"))
@@ -139,7 +141,7 @@ namespace {
             // for this call. Look them up and add to this function's numbers.
             if (FunctionResources.find(callee) != FunctionResources.end()) {
               unsigned long long* callee_numbers = FunctionResources.find(callee)->second;
-              FunctionResources[F][14] += callee_numbers[14];
+			  FunctionResources[F][14] += callee_numbers[14];
               if(callee_numbers[3] > FunctionResources[F][3] - FunctionResources[F][2])
                 FunctionResources[F][3] = FunctionResources[F][2] + callee_numbers[3];
               for (int l=0; l<NCOUNTS; l++)
@@ -157,11 +159,21 @@ namespace {
       std::map <Function*, unsigned long long*> FunctionResources;
       std::map <Function*, unsigned long long> FunctionTotals;
   	  std::vector<Function*> callStack;
-	  app_total_gates = 0;
+	    app_total_gates = 0;
 
       // iterate over all functions, and over all instructions in those functions
       // find call sites that have constant integer values. In Post-Order.
-      CallGraphNode* rootNode = getAnalysis<CallGraph>().getRoot();
+      CallGraph cg = CallGraph(M);
+
+      CallGraphNode *rootNode = nullptr;
+
+      for(auto it = cg.begin();it != cg.end();it++){
+        if(!(it->second->getFunction())) continue;
+        if(it->second->getFunction()->getName() == "main"){
+          rootNode = &(*it->second);
+          break;
+        }
+      }
       
       //fill in the gate count bottom-up in the call graph
       for (scc_iterator<CallGraphNode*> sccIb = scc_begin(rootNode), E = scc_end(rootNode); sccIb != E; ++sccIb) {
@@ -174,7 +186,6 @@ namespace {
             for (int k=0; k<NCOUNTS+1; k++)
               ResourceNumbers[k] = 0;
             errs() <<F->getName()<<"\n";
-            std::make_pair(F, ResourceNumbers);
             FunctionResources.insert(std::make_pair(F, ResourceNumbers));
             // count the gates of this function 
             CountFunctionResources(F, FunctionResources);

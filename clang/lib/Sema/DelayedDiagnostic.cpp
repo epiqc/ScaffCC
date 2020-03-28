@@ -1,4 +1,4 @@
-//===--- DelayedDiagnostic.cpp - Delayed declarator diagnostics -*- C++ -*-===//
+//===- DelayedDiagnostic.cpp - Delayed declarator diagnostics -------------===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -14,40 +14,58 @@
 // This file also defines AccessedEntity.
 //
 //===----------------------------------------------------------------------===//
+
 #include "clang/Sema/DelayedDiagnostic.h"
-#include <string.h>
+#include <cstring>
+
 using namespace clang;
 using namespace sema;
 
-DelayedDiagnostic DelayedDiagnostic::makeDeprecation(SourceLocation Loc,
-                                    const NamedDecl *D,
+DelayedDiagnostic
+DelayedDiagnostic::makeAvailability(AvailabilityResult AR,
+                                    ArrayRef<SourceLocation> Locs,
+                                    const NamedDecl *ReferringDecl,
+                                    const NamedDecl *OffendingDecl,
                                     const ObjCInterfaceDecl *UnknownObjCClass,
-                                    StringRef Msg) {
+                                    const ObjCPropertyDecl  *ObjCProperty,
+                                    StringRef Msg,
+                                    bool ObjCPropertyAccess) {
+  assert(!Locs.empty());
   DelayedDiagnostic DD;
-  DD.Kind = Deprecation;
+  DD.Kind = Availability;
   DD.Triggered = false;
-  DD.Loc = Loc;
-  DD.DeprecationData.Decl = D;
-  DD.DeprecationData.UnknownObjCClass = UnknownObjCClass;
-  char *MessageData = 0;
-  if (Msg.size()) {
+  DD.Loc = Locs.front();
+  DD.AvailabilityData.ReferringDecl = ReferringDecl;
+  DD.AvailabilityData.OffendingDecl = OffendingDecl;
+  DD.AvailabilityData.UnknownObjCClass = UnknownObjCClass;
+  DD.AvailabilityData.ObjCProperty = ObjCProperty;
+  char *MessageData = nullptr;
+  if (!Msg.empty()) {
     MessageData = new char [Msg.size()];
     memcpy(MessageData, Msg.data(), Msg.size());
   }
+  DD.AvailabilityData.Message = MessageData;
+  DD.AvailabilityData.MessageLen = Msg.size();
 
-  DD.DeprecationData.Message = MessageData;
-  DD.DeprecationData.MessageLen = Msg.size();
+  DD.AvailabilityData.SelectorLocs = new SourceLocation[Locs.size()];
+  memcpy(DD.AvailabilityData.SelectorLocs, Locs.data(),
+         sizeof(SourceLocation) * Locs.size());
+  DD.AvailabilityData.NumSelectorLocs = Locs.size();
+
+  DD.AvailabilityData.AR = AR;
+  DD.AvailabilityData.ObjCPropertyAccess = ObjCPropertyAccess;
   return DD;
 }
 
 void DelayedDiagnostic::Destroy() {
   switch (Kind) {
-  case Access: 
-    getAccessData().~AccessedEntity(); 
+  case Access:
+    getAccessData().~AccessedEntity();
     break;
 
-  case Deprecation: 
-    delete [] DeprecationData.Message;
+  case Availability:
+    delete[] AvailabilityData.Message;
+    delete[] AvailabilityData.SelectorLocs;
     break;
 
   case ForbiddenType:

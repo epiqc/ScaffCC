@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 %s -emit-llvm -o - | FileCheck %s
+// RUN: %clang_cc1 %s -triple %itanium_abi_triple -emit-llvm -o - | FileCheck %s
 
 template<class T> class A {
 public:
@@ -16,7 +16,17 @@ extern template class A<short>;
 template class A<short>;
 
 
-// CHECK: @_ZTV1B = linkonce_odr unnamed_addr constant
-// CHECK: @_ZTV1AIlE = weak_odr unnamed_addr constant
-// CHECK: @_ZTV1AIsE = weak_odr unnamed_addr constant
-// CHECK: @_ZTV1AIiE = linkonce_odr unnamed_addr constant
+// CHECK: @_ZTV1B = linkonce_odr {{(dso_local )?}}unnamed_addr constant
+// CHECK: @_ZTV1AIlE = weak_odr {{(dso_local )?}}unnamed_addr constant
+// CHECK: @_ZTV1AIsE = weak_odr {{(dso_local )?}}unnamed_addr constant
+// CHECK: @_ZTV1AIiE = linkonce_odr {{(dso_local )?}}unnamed_addr constant
+
+template<class T> struct C {
+  virtual void c() {}
+};
+struct D : C<int> {
+  virtual void d();
+};
+void D::d() {}
+
+// CHECK: define {{.*}}@_ZN1CIiE1cEv(

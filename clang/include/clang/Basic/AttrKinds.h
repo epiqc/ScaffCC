@@ -6,25 +6,26 @@
 // License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
-//
-//  This file defines the attr::Kind enum
-//
+///
+/// \file
+/// Defines the clang::attr::Kind enum.
+///
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_CLANG_ATTRKINDS_H
-#define LLVM_CLANG_ATTRKINDS_H
+#ifndef LLVM_CLANG_BASIC_ATTRKINDS_H
+#define LLVM_CLANG_BASIC_ATTRKINDS_H
 
 namespace clang {
 
 namespace attr {
 
-// Kind - This is a list of all the recognized kinds of attributes.
+// A list of all the recognized kinds of attributes.
 enum Kind {
 #define ATTR(X) X,
-#define LAST_INHERITABLE_ATTR(X) X, LAST_INHERITABLE = X,
-#define LAST_INHERITABLE_PARAM_ATTR(X) X, LAST_INHERITABLE_PARAM = X,
+#define ATTR_RANGE(CLASS, FIRST_NAME, LAST_NAME) \
+  First##CLASS = FIRST_NAME,                    \
+  Last##CLASS = LAST_NAME,
 #include "clang/Basic/AttrList.inc"
-  NUM_ATTRS
 };
 
 } // end namespace attr

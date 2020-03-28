@@ -1,4 +1,4 @@
-//===--- FrontendOptions.cpp ----------------------------------------------===//
+//===- FrontendOptions.cpp ------------------------------------------------===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -9,24 +9,27 @@
 
 #include "clang/Frontend/FrontendOptions.h"
 #include "llvm/ADT/StringSwitch.h"
+
 using namespace clang;
 
 InputKind FrontendOptions::getInputKindForExtension(StringRef Extension) {
   return llvm::StringSwitch<InputKind>(Extension)
-    .Case("ast", IK_AST)
-    .Case("c", IK_C)
-    .Cases("S", "s", IK_Asm)
-    .Case("i", IK_PreprocessedC)
-    .Case("ii", IK_PreprocessedCXX)
-    .Case("m", IK_ObjC)
-    .Case("mi", IK_PreprocessedObjC)
-    .Cases("mm", "M", IK_ObjCXX)
-    .Case("mii", IK_PreprocessedObjCXX)
-    .Case("C", IK_CXX)
-    .Cases("C", "cc", "cp", IK_CXX)
-    .Cases("cpp", "CPP", "c++", "cxx", "hpp", IK_CXX)
-    .Case("cl", IK_OpenCL)
-    .Case("cu", IK_CUDA)
-    .Cases("ll", "bc", IK_LLVM_IR)
-    .Default(IK_C);
+    .Cases("ast", "pcm", InputKind(InputKind::Unknown, InputKind::Precompiled))
+    .Case("c", InputKind::C)
+    .Cases("S", "s", InputKind::Asm)
+    .Case("i", InputKind(InputKind::C).getPreprocessed())
+    .Case("ii", InputKind(InputKind::CXX).getPreprocessed())
+    .Case("cui", InputKind(InputKind::CUDA).getPreprocessed())
+    .Case("m", InputKind::ObjC)
+    .Case("mi", InputKind(InputKind::ObjC).getPreprocessed())
+    .Cases("mm", "M", InputKind::ObjCXX)
+    .Case("mii", InputKind(InputKind::ObjCXX).getPreprocessed())
+    .Cases("C", "cc", "cp", InputKind::CXX)
+    .Cases("cpp", "CPP", "c++", "cxx", "hpp", InputKind::CXX)
+    .Case("cppm", InputKind::CXX)
+    .Case("iim", InputKind(InputKind::CXX).getPreprocessed())
+    .Case("cl", InputKind::OpenCL)
+    .Case("cu", InputKind::CUDA)
+    .Cases("ll", "bc", InputKind::LLVM_IR)
+    .Default(InputKind::Unknown);
 }

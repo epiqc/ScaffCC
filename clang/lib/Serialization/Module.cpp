@@ -1,4 +1,4 @@
-//===--- Module.cpp - Module description ------------------------*- C++ -*-===//
+//===- Module.cpp - Module description ------------------------------------===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -11,64 +11,41 @@
 //  been loaded from an AST file.
 //
 //===----------------------------------------------------------------------===//
+
 #include "clang/Serialization/Module.h"
-#include "llvm/Support/raw_ostream.h"
-#include "llvm/Support/MemoryBuffer.h"
 #include "ASTReaderInternals.h"
+#include "clang/Serialization/ContinuousRangeMap.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/Support/Compiler.h"
+#include "llvm/Support/raw_ostream.h"
 
 using namespace clang;
 using namespace serialization;
 using namespace reader;
 
-ModuleFile::ModuleFile(ModuleKind Kind, unsigned Generation)
-  : Kind(Kind), DirectlyImported(false), Generation(Generation), SizeInBits(0), 
-    LocalNumSLocEntries(0), SLocEntryBaseID(0),
-    SLocEntryBaseOffset(0), SLocEntryOffsets(0),
-    SLocFileOffsets(0), LocalNumIdentifiers(0), 
-    IdentifierOffsets(0), BaseIdentifierID(0), IdentifierTableData(0),
-    IdentifierLookupTable(0), BasePreprocessedEntityID(0),
-    PreprocessedEntityOffsets(0), NumPreprocessedEntities(0),
-    LocalNumHeaderFileInfos(0), 
-    HeaderFileInfoTableData(0), HeaderFileInfoTable(0),
-    HeaderFileFrameworkStrings(0), LocalNumSubmodules(0), BaseSubmoduleID(0),
-    LocalNumSelectors(0), SelectorOffsets(0), BaseSelectorID(0),
-    SelectorLookupTableData(0), SelectorLookupTable(0), LocalNumDecls(0),
-    DeclOffsets(0), BaseDeclID(0),
-    LocalNumCXXBaseSpecifiers(0), CXXBaseSpecifiersOffsets(0),
-    FileSortedDecls(0), RedeclarationsMap(0), LocalNumRedeclarationsInMap(0),
-    ObjCCategoriesMap(0), LocalNumObjCCategoriesInMap(0),
-    LocalNumTypes(0), TypeOffsets(0), BaseTypeIndex(0), StatCache(0)
-{}
-
 ModuleFile::~ModuleFile() {
-  for (DeclContextInfosMap::iterator I = DeclContextInfos.begin(),
-       E = DeclContextInfos.end();
-       I != E; ++I) {
-    if (I->second.NameLookupTableData)
-      delete I->second.NameLookupTableData;
-  }
-  
   delete static_cast<ASTIdentifierLookupTable *>(IdentifierLookupTable);
   delete static_cast<HeaderFileInfoLookupTable *>(HeaderFileInfoTable);
   delete static_cast<ASTSelectorLookupTable *>(SelectorLookupTable);
 }
 
 template<typename Key, typename Offset, unsigned InitialCapacity>
-static void 
+static void
 dumpLocalRemap(StringRef Name,
                const ContinuousRangeMap<Key, Offset, InitialCapacity> &Map) {
   if (Map.begin() == Map.end())
     return;
-  
-  typedef ContinuousRangeMap<Key, Offset, InitialCapacity> MapType;
+
+  using MapType = ContinuousRangeMap<Key, Offset, InitialCapacity>;
+
   llvm::errs() << "  " << Name << ":\n";
-  for (typename MapType::const_iterator I = Map.begin(), IEnd = Map.end(); 
+  for (typename MapType::const_iterator I = Map.begin(), IEnd = Map.end();
        I != IEnd; ++I) {
     llvm::errs() << "    " << I->first << " -> " << I->second << "\n";
   }
 }
 
-void ModuleFile::dump() {
+LLVM_DUMP_METHOD void ModuleFile::dump() {
   llvm::errs() << "\nModule: " << FileName << "\n";
   if (!Imports.empty()) {
     llvm::errs() << "  Imports: ";
@@ -79,15 +56,19 @@ void ModuleFile::dump() {
     }
     llvm::errs() << "\n";
   }
-  
+
   // Remapping tables.
-  llvm::errs() << "  Base source location offset: " << SLocEntryBaseOffset 
+  llvm::errs() << "  Base source location offset: " << SLocEntryBaseOffset
                << '\n';
   dumpLocalRemap("Source location offset local -> global map", SLocRemap);
-  
+
   llvm::errs() << "  Base identifier ID: " << BaseIdentifierID << '\n'
                << "  Number of identifiers: " << LocalNumIdentifiers << '\n';
   dumpLocalRemap("Identifier ID local -> global map", IdentifierRemap);
+
+  llvm::errs() << "  Base macro ID: " << BaseMacroID << '\n'
+               << "  Number of macros: " << LocalNumMacros << '\n';
+  dumpLocalRemap("Macro ID local -> global map", MacroRemap);
 
   llvm::errs() << "  Base submodule ID: " << BaseSubmoduleID << '\n'
                << "  Number of submodules: " << LocalNumSubmodules << '\n';
@@ -96,18 +77,18 @@ void ModuleFile::dump() {
   llvm::errs() << "  Base selector ID: " << BaseSelectorID << '\n'
                << "  Number of selectors: " << LocalNumSelectors << '\n';
   dumpLocalRemap("Selector ID local -> global map", SelectorRemap);
-  
+
   llvm::errs() << "  Base preprocessed entity ID: " << BasePreprocessedEntityID
-               << '\n'  
-               << "  Number of preprocessed entities: " 
+               << '\n'
+               << "  Number of preprocessed entities: "
                << NumPreprocessedEntities << '\n';
-  dumpLocalRemap("Preprocessed entity ID local -> global map", 
+  dumpLocalRemap("Preprocessed entity ID local -> global map",
                  PreprocessedEntityRemap);
-  
+
   llvm::errs() << "  Base type index: " << BaseTypeIndex << '\n'
                << "  Number of types: " << LocalNumTypes << '\n';
   dumpLocalRemap("Type index local -> global map", TypeRemap);
-  
+
   llvm::errs() << "  Base decl ID: " << BaseDeclID << '\n'
                << "  Number of decls: " << LocalNumDecls << '\n';
   dumpLocalRemap("Decl ID local -> global map", DeclRemap);

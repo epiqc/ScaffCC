@@ -12,9 +12,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_CLANG_FRONTEND_AST_DESERIALIZATION_LISTENER_H
-#define LLVM_CLANG_FRONTEND_AST_DESERIALIZATION_LISTENER_H
+#ifndef LLVM_CLANG_SERIALIZATION_ASTDESERIALIZATIONLISTENER_H
+#define LLVM_CLANG_SERIALIZATION_ASTDESERIALIZATIONLISTENER_H
 
+#include "clang/Basic/IdentifierTable.h"
 #include "clang/Serialization/ASTBitCodes.h"
 
 namespace clang {
@@ -22,39 +23,40 @@ namespace clang {
 class Decl;
 class ASTReader;
 class QualType;
-class MacroDefinition;
+class MacroDefinitionRecord;
+class MacroInfo;
 class Module;
-  
+class SourceLocation;
+
 class ASTDeserializationListener {
-protected:
+public:
   virtual ~ASTDeserializationListener();
 
-public:
-
-  /// \brief The ASTReader was initialized.
+  /// The ASTReader was initialized.
   virtual void ReaderInitialized(ASTReader *Reader) { }
 
-  /// \brief An identifier was deserialized from the AST file.
+  /// An identifier was deserialized from the AST file.
   virtual void IdentifierRead(serialization::IdentID ID,
                               IdentifierInfo *II) { }
-  /// \brief A type was deserialized from the AST file. The ID here has the
+  /// A macro was read from the AST file.
+  virtual void MacroRead(serialization::MacroID ID, MacroInfo *MI) { }
+  /// A type was deserialized from the AST file. The ID here has the
   ///        qualifier bits already removed, and T is guaranteed to be locally
   ///        unqualified.
   virtual void TypeRead(serialization::TypeIdx Idx, QualType T) { }
-  /// \brief A decl was deserialized from the AST file.
+  /// A decl was deserialized from the AST file.
   virtual void DeclRead(serialization::DeclID ID, const Decl *D) { }
-  /// \brief A selector was read from the AST file.
-  virtual void SelectorRead(serialization::SelectorID iD, Selector Sel) { }
-  /// \brief A macro definition was read from the AST file.
-  virtual void MacroDefinitionRead(serialization::PreprocessedEntityID, 
-                                   MacroDefinition *MD) { }
-  /// \brief A macro definition that had previously been deserialized 
-  /// (and removed via IdentifierRead) has now been made visible.
-  virtual void MacroVisible(IdentifierInfo *II) { }
-  /// \brief A module definition was read from the AST file.
-  virtual void ModuleRead(serialization::SubmoduleID ID, Module *Mod) { }
+  /// A selector was read from the AST file.
+  virtual void SelectorRead(serialization::SelectorID iD, Selector Sel) {}
+  /// A macro definition was read from the AST file.
+  virtual void MacroDefinitionRead(serialization::PreprocessedEntityID,
+                                   MacroDefinitionRecord *MD) {}
+  /// A module definition was read from the AST file.
+  virtual void ModuleRead(serialization::SubmoduleID ID, Module *Mod) {}
+  /// A module import was read from the AST file.
+  virtual void ModuleImportRead(serialization::SubmoduleID ID,
+                                SourceLocation ImportLoc) {}
 };
-
 }
 
 #endif

@@ -1,9 +1,9 @@
-; RUN: llc < %s -march=x86 -tailcallopt | FileCheck %s
+; RUN: llc < %s -mtriple=i686-- -tailcallopt | FileCheck %s
 
 declare i32 @putchar(i32)
 
 define fastcc i32 @checktail(i32 %x, i32* %f, i32 %g) nounwind {
-; CHECK: checktail:
+; CHECK-LABEL: checktail:
         %tmp1 = icmp sgt i32 %x, 0
         br i1 %tmp1, label %if-then, label %if-else
 

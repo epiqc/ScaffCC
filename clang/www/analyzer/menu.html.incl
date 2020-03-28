@@ -16,9 +16,10 @@
   User Manual
   <ul>
     <li><a href="/installation.html">Obtaining the Analyzer</a></li>
-    <li><a href="/scan-build.html">Command line usage</a></li>
+    <li><a href="/scan-build.html">Command Line Usage</a></li>
     <li><a href="/xcode.html">Using within Xcode</a></li>
     <li><a href="/available_checks.html">Available Checks</a></li>
+    <li><a href="/faq.html">FAQ</a></li>
     <li><a href="/annotations.html">Source-level Annotations</a></li>
   </ul>
 </li>
@@ -26,14 +27,15 @@
   Development
   <ul>
     <li><a href="/checker_dev_manual.html">Checker Developer Manual</a></li>
-    <li><a href="/dev_cxx.html">Analysis support for C++</a></li>
+    <li><a href="/open_projects.html">Open Projects</a></li>
+    <li><a href="/potential_checkers.html">Potential Future Checkers</a></li>
   </ul>
 </li>
 <li>
   Mailing Lists
   <ul>
-    <li><a href="http://lists.cs.uiuc.edu/mailman/listinfo/cfe-dev">cfe-dev</a></li>
-    <li><a href="http://lists.cs.uiuc.edu/mailman/listinfo/cfe-commits">cfe-commits</a></li>
+    <li><a href="http://lists.llvm.org/mailman/listinfo/cfe-dev">cfe-dev</a></li>
+    <li><a href="http://lists.llvm.org/mailman/listinfo/cfe-commits">cfe-commits</a></li>
   </ul>
 </li>
 </ul>

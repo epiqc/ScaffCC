@@ -9,6 +9,7 @@
 ; around!
 ;
 ; RUN: llvm-as < %s | llvm-dis | llvm-as
+; RUN: verify-uselistorder %s
 
 @.LC0 = internal global [4 x i8] c"foo\00"		; <[4 x i8]*> [#uses=1]
 @X = global i8* null		; <i8**> [#uses=0]
@@ -17,6 +18,6 @@ declare i32 @puts(i8*)
 
 define void @main() {
 bb1:
-	%reg211 = call i32 @puts( i8* getelementptr ([4 x i8]* @.LC0, i64 0, i64 0) )		; <i32> [#uses=0]
+	%reg211 = call i32 @puts( i8* getelementptr ([4 x i8], [4 x i8]* @.LC0, i64 0, i64 0) )		; <i32> [#uses=0]
 	ret void
 }

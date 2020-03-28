@@ -10,16 +10,16 @@
 
 #include "llvm/ADT/ArrayRef.h"
 
-#include "llvm/Constants.h"
-#include "llvm/Function.h"
-#include "llvm/Instructions.h"
-#include "llvm/Intrinsics.h"
-#include "llvm/LLVMContext.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/LLVMContext.h"
 #include "llvm/Pass.h"
 
-#include "llvm/Support/CallSite.h"
+#include "llvm/IR/CallSite.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/InstVisitor.h"
+#include "llvm/IR/InstVisitor.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/CommandLine.h"
 
@@ -114,9 +114,10 @@ namespace {
 				}
 				// Create a FunctionType object with 'void' return type and one 'qbit'
 				// parameter
+				static LLVMContext MyGlobalContext;
 				FunctionType *FuncType = FunctionType::get(
-					Type::getVoidTy(getGlobalContext()),
-					ArrayRef<Type*>(Type::getInt16Ty(getGlobalContext())),
+					Type::getVoidTy(MyGlobalContext),
+					ArrayRef<Type*>(Type::getInt16Ty(MyGlobalContext)),
 					false);
 				// Lookup the Function in the module
 				Function *DR = M->getFunction(FuncName);
@@ -127,7 +128,7 @@ namespace {
 						FuncName, M);
 
 					Function::arg_iterator args = DR->arg_begin(); //set name of variable
-		  			BasicBlock *BB = BasicBlock::Create(getGlobalContext(), "", DR, 0);
+		  			BasicBlock *BB = BasicBlock::Create(MyGlobalContext, "", DR, 0);
 					Value* qArg = args;
 					qArg->setName("q");
 
@@ -200,7 +201,7 @@ namespace {
 								"", BB);
 						//newCallInst->setTailCall();
 					}
-					ReturnInst::Create(getGlobalContext(), 0, BB);
+					ReturnInst::Create(MyGlobalContext, 0, BB);
 				} // endif 'decomposition not found'
 				// Replace the old Rz call with the new call to Decomposed_Rotation
 				BasicBlock::iterator ii(&I);

@@ -1,4 +1,5 @@
 ; RUN: opt < %s -loop-unswitch -disable-output
+; RUN: opt < %s -loop-unswitch -enable-mssa-loop-dependency=true -verify-memoryssa -disable-output
 ; PR1559
 
 target triple = "i686-pc-linux-gnu"
@@ -52,7 +53,7 @@ cond_next1929:          ; preds = %cond_next1915
         br i1 false, label %cond_next1961, label %cond_next2009
 
 cond_next1961:          ; preds = %cond_next1929
-        %tmp1992 = getelementptr i8* %b.10.ph, i32 0            ; <i8*> [#uses=0]
+        %tmp1992 = getelementptr i8, i8* %b.10.ph, i32 0            ; <i8*> [#uses=0]
         br label %cond_next1915
 
 cond_next2009:          ; preds = %cond_next1929

@@ -67,7 +67,7 @@ L2:                                               ; preds = %indirectgoto
 ; Don't merge address-taken blocks.
 @.str = private unnamed_addr constant [4 x i8] c"%p\0A\00"
 
-; CHECK: @test3
+; CHECK-LABEL: @test3(
 ; CHECK: __here:
 ; CHECK: blockaddress(@test3, %__here)
 ; CHECK: __here1:
@@ -79,15 +79,15 @@ entry:
   br label %__here
 
 __here:                                           ; preds = %entry
-  %call = call i32 (...)* @printf(i8* getelementptr inbounds ([4 x i8]* @.str, i64 0, i64 0), i64 ptrtoint (i8* blockaddress(@test3, %__here) to i64)) nounwind noredzone
+  %call = call i32 (...) @printf(i8* getelementptr inbounds ([4 x i8], [4 x i8]* @.str, i64 0, i64 0), i64 ptrtoint (i8* blockaddress(@test3, %__here) to i64)) nounwind noredzone
   br label %__here1
 
 __here1:                                          ; preds = %__here
-  %call2 = call i32 (...)* @printf(i8* getelementptr inbounds ([4 x i8]* @.str, i64 0, i64 0), i64 ptrtoint (i8* blockaddress(@test3, %__here1) to i64)) nounwind noredzone
+  %call2 = call i32 (...) @printf(i8* getelementptr inbounds ([4 x i8], [4 x i8]* @.str, i64 0, i64 0), i64 ptrtoint (i8* blockaddress(@test3, %__here1) to i64)) nounwind noredzone
   br label %__here3
 
 __here3:                                          ; preds = %__here1
-  %call4 = call i32 (...)* @printf(i8* getelementptr inbounds ([4 x i8]* @.str, i64 0, i64 0), i64 ptrtoint (i8* blockaddress(@test3, %__here3) to i64)) nounwind noredzone
+  %call4 = call i32 (...) @printf(i8* getelementptr inbounds ([4 x i8], [4 x i8]* @.str, i64 0, i64 0), i64 ptrtoint (i8* blockaddress(@test3, %__here3) to i64)) nounwind noredzone
   ret void
 }
 

@@ -1,4 +1,5 @@
-; RUN: llc -march=x86-64 -mtriple=x86_64-unknown-linux-gnu -relocation-model=static -asm-verbose=false < %s | FileCheck %s
+; RUN: llc -mcpu=generic -mtriple=x86_64-unknown-linux-gnu -relocation-model=static -asm-verbose=false < %s | FileCheck %s
+; RUN: llc -mcpu=atom -mtriple=x86_64-unknown-linux-gnu -relocation-model=static -asm-verbose=false < %s | FileCheck %s
 
 ; CHECK: xorl  %eax, %eax
 ; CHECK: movsd .LCPI0_0(%rip), %xmm0
@@ -18,8 +19,8 @@ entry:
 
 for.body:
   %i.06 = phi i64 [ %inc, %for.body ], [ 0, %entry ]
-  %arrayidx = getelementptr [0 x double]* @A, i64 0, i64 %i.06
-  %tmp3 = load double* %arrayidx, align 8
+  %arrayidx = getelementptr [0 x double], [0 x double]* @A, i64 0, i64 %i.06
+  %tmp3 = load double, double* %arrayidx, align 8
   %mul = fmul double %tmp3, 2.300000e+00
   store double %mul, double* %arrayidx, align 8
   %inc = add nsw i64 %i.06, 1

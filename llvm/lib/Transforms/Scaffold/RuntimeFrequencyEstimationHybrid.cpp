@@ -9,15 +9,15 @@
 #include <sstream>
 #include <iomanip>
 #include "llvm/Pass.h"
-#include "llvm/Module.h"
-#include "llvm/Function.h"
-#include "llvm/BasicBlock.h"
-#include "llvm/Instruction.h"
-#include "llvm/Constants.h"
-#include "llvm/Intrinsics.h"
-#include "llvm/Support/InstVisitor.h" 
+#include "llvm/IR/Module.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Instruction.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/InstVisitor.h" 
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/LLVMContext.h"
+#include "llvm/IR/LLVMContext.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 
 using namespace llvm;
@@ -117,7 +117,7 @@ namespace {
         if (isIntrinsicQuantum) {
           vector <Value*> vectCallArgs;
 
-          Constant* gateID = ConstantInt::get(Type::getInt32Ty(getGlobalContext()), gateIndex, false);	
+          Constant* gateID = ConstantInt::get(Type::getInt32Ty(CI->getContext()), gateIndex, false);	
           //Constant* RepeatConstant = ConstantInt::get(Type::getInt32Ty(getGlobalContext()) , rep_val, false);
           
           vectCallArgs.push_back(gateID);
@@ -144,11 +144,11 @@ namespace {
         ss << std::left << std::setw (_MAX_FUNCTION_NAME-1) << std::setfill(' ') << CF->getName().str();
         Constant *StrConstant = ConstantDataArray::getString(CI->getContext(), ss.str());                   
         
-        new StoreInst(StrConstant,strAlloc,"",(Instruction*)CI);	  	  
+        new StoreInst(StrConstant,strAlloc,false,(Instruction*)CI);	  	  
         Value* Idx[2];	  
         Idx[0] = Constant::getNullValue(Type::getInt32Ty(CI->getContext()));  
         Idx[1] = ConstantInt::get(Type::getInt32Ty(CI->getContext()),0);
-        GetElementPtrInst* strPtr = GetElementPtrInst::Create(strAlloc, Idx, "", (Instruction*)CI);
+        GetElementPtrInst* strPtr = GetElementPtrInst::Create(strAlloc->getAllocatedType(), strAlloc, Idx, "", (Instruction*)CI);
         
         Value *intArgPtr;
         vector<Value*> vIntArgs;
@@ -188,7 +188,7 @@ namespace {
           Value *Int = vIntArgs[i];        
           Idx[1] = ConstantInt::get(Type::getInt32Ty(CI->getContext()),i);        
           Value *intPtr = GetElementPtrInst::CreateInBounds(intArrAlloc, Idx, "", (Instruction*)CI);        
-          new StoreInst(Int, intPtr, "", (Instruction*)CI);
+          new StoreInst(Int, intPtr, false, (Instruction*)CI);
         }
         Idx[1] = ConstantInt::get(Type::getInt32Ty(CI->getContext()),0);        
         GetElementPtrInst* intArrPtr = GetElementPtrInst::CreateInBounds(intArrAlloc, Idx, "", (Instruction*)CI);
@@ -197,12 +197,12 @@ namespace {
           Value *Double = vDoubleArgs[i];     
           Idx[1] = ConstantInt::get(Type::getInt32Ty(CI->getContext()),i);        
           Value *doublePtr = GetElementPtrInst::CreateInBounds(doubleArrAlloc, Idx, "", (Instruction*)CI);        
-          new StoreInst(Double, doublePtr, "", (Instruction*)CI);          
+          new StoreInst(Double, doublePtr, false, (Instruction*)CI);          
         }
         GetElementPtrInst* doubleArrPtr = GetElementPtrInst::CreateInBounds(doubleArrAlloc, Idx, "", (Instruction*)CI);
 
-        Constant *IntNumConstant = ConstantInt::get(Type::getInt32Ty(getGlobalContext()) , num_ints, false);       
-        Constant *DoubleNumConstant = ConstantInt::get(Type::getInt32Ty(getGlobalContext()) , num_doubles, false);          
+        Constant *IntNumConstant = ConstantInt::get(Type::getInt32Ty(CI->getContext()) , num_ints, false);       
+        Constant *DoubleNumConstant = ConstantInt::get(Type::getInt32Ty(CI->getContext()) , num_doubles, false);          
 
         //Constant *RepeatConstant = ConstantInt::get(Type::getInt32Ty(getGlobalContext()) , rep_val, false);
 
@@ -236,7 +236,7 @@ namespace {
       }
       
       else if (CF->getName().find("qasmRepLoopEnd") != string::npos) {
-        rep_val = ConstantInt::get(Type::getInt32Ty(getGlobalContext()), 1, false);
+        rep_val = ConstantInt::get(Type::getInt32Ty(CI->getContext()), 1, false);
         vInstRemove.push_back((Instruction*)CI);        
       }           
       
@@ -256,19 +256,19 @@ namespace {
           isQuantumModule = true;      
       if(!F.isDeclaration() && isQuantumModule){
         BasicBlock* BB_first = &(F.front());
-        BasicBlock::iterator BBiter = BB_first->getFirstNonPHI();
+       Instruction *BBiter = BB_first->getFirstNonPHI();
         while(isa<AllocaInst>(BBiter))
           ++BBiter;
         Instruction* pInst = &(*BBiter);
   
         ArrayType *strTy = ArrayType::get(Type::getInt8Ty(pInst->getContext()), _MAX_FUNCTION_NAME);
-        AllocaInst *strAlloc = new AllocaInst(strTy,"",pInst);
+        AllocaInst *strAlloc = new AllocaInst(strTy,0,"",pInst);
         
         ArrayType *intArrTy = ArrayType::get(Type::getInt32Ty(pInst->getContext()), _MAX_INT_PARAMS);
-        AllocaInst *intArrAlloc = new AllocaInst(intArrTy, "", pInst);
+        AllocaInst *intArrAlloc = new AllocaInst(intArrTy, 0, "", pInst);
 
         ArrayType *doubleArrTy = ArrayType::get(Type::getDoubleTy(pInst->getContext()), _MAX_DOUBLE_PARAMS);        
-        AllocaInst *doubleArrAlloc = new AllocaInst(doubleArrTy,"",pInst);
+        AllocaInst *doubleArrAlloc = new AllocaInst(doubleArrTy,0,"",pInst);
 
         if(debugRTFreqEstHyb)
           errs() << "Function: " << F.getName() << "\n";
@@ -283,7 +283,7 @@ namespace {
     
     bool runOnModule(Module &M) {
       //rep_val = 1;  
-      rep_val = ConstantInt::get(Type::getInt32Ty(getGlobalContext()), 1, false);
+      rep_val = ConstantInt::get(Type::getInt32Ty(M.getContext()), 1, false);
 
       // void exit_scope ()      
       exit_scope = cast<Function>(M.getOrInsertFunction("exit_scope", Type::getVoidTy(M.getContext()), (Type*)0));
@@ -328,11 +328,11 @@ namespace {
       Function* F = M.getFunction("main");
       if(F){
         BasicBlock* BB_last = &(F->back());
-        TerminatorInst *BBTerm = BB_last->getTerminator();
+        Instruction *BBTerm = BB_last->getTerminator();
         CallInst::Create(qasmResSum, "",(Instruction*)BBTerm);	
 
         BasicBlock* BB_first = &(F->front());
-        BasicBlock::iterator BBiter = BB_first->getFirstNonPHI();
+        Instruction *BBiter = BB_first->getFirstNonPHI();
         while(isa<AllocaInst>(BBiter))
           ++BBiter;
         CallInst::Create(qasmInitialize, "", (Instruction*)&(*BBiter));

@@ -1,4 +1,7 @@
-// RUN: %clang_cc1 -fsyntax-only -pedantic -verify %s
+// RUN: %clang_cc1 -triple %itanium_abi_triple -pedantic -verify %s
+// RUN: %clang_cc1 -triple %itanium_abi_triple -pedantic -verify -std=c++98 %s
+// RUN: %clang_cc1 -triple %itanium_abi_triple -pedantic -verify -std=c++11 %s
+
 int* f(int) { return 0; }
 float* f(float) { return 0; }
 void f();
@@ -53,8 +56,19 @@ int* k(char*);
 double* k(bool);
 
 void test_k() {
-  int* ip1 = k("foo"); // expected-warning{{conversion from string literal to 'char *' is deprecated}}
-  int* ip2 = k(("foo")); // expected-warning{{conversion from string literal to 'char *' is deprecated}}
+  int* ip1 = k("foo");
+#if __cplusplus <= 199711L
+  // expected-warning@-2 {{conversion from string literal to 'char *' is deprecated}}
+#else
+  // expected-error@-4 {{cannot initialize a variable of type 'int *' with an rvalue of type 'double *'}}
+#endif
+
+  int* ip2 = k(("foo"));
+#if __cplusplus <= 199711L
+  // expected-warning@-2 {{conversion from string literal to 'char *' is deprecated}}
+#else
+  // expected-error@-4 {{cannot initialize a variable of type 'int *' with an rvalue of type 'double *'}}
+#endif
   double* dp1 = k(L"foo");
 }
 
@@ -62,7 +76,12 @@ int* l(wchar_t*);
 double* l(bool);
 
 void test_l() {
-  int* ip1 = l(L"foo"); // expected-warning{{conversion from string literal to 'wchar_t *' is deprecated}}
+  int* ip1 = l(L"foo");
+#if __cplusplus <= 199711L
+  // expected-warning@-2 {{conversion from string literal to 'wchar_t *' is deprecated}}
+#else
+  // expected-error@-4 {{cannot initialize a variable of type 'int *' with an rvalue of type 'double *'}}
+#endif
   double* dp1 = l("foo");
 }
 
@@ -80,8 +99,12 @@ class E;
 void test_n(E* e) {
   char ca[7];
   int* ip1 = n(ca);
-  int* ip2 = n("foo"); // expected-warning{{conversion from string literal to 'char *' is deprecated}}
-
+  int* ip2 = n("foo");
+#if __cplusplus <= 199711L
+  // expected-warning@-2 {{conversion from string literal to 'char *' is deprecated}}
+#else
+  // expected-warning@-4 {{ISO C++11 does not allow conversion from string literal to 'char *'}}
+#endif
   float fa[7];
   double* dp1 = n(fa);
 
@@ -233,7 +256,7 @@ float* intref(const int&);
 
 void intref_test() {
   float* ir1 = intref(5);
-  float* ir2 = intref(5.5); // expected-warning{{implicit conversion turns literal floating-point number into integer}}
+  float* ir2 = intref(5.5); // expected-warning{{implicit conversion from 'double' to 'int' changes value from 5.5 to 5}}
 }
 
 void derived5(C&); // expected-note{{candidate function not viable: cannot bind base class object of type 'A' to derived class reference 'C &' for 1st argument}}
@@ -260,14 +283,12 @@ struct Z : X, Y { };
 int& cvqual_subsume(X&); // expected-note{{candidate function}}
 float& cvqual_subsume(const Y&); // expected-note{{candidate function}}
 
-int& cvqual_subsume2(const X&); // expected-note{{candidate function}}
-float& cvqual_subsume2(const volatile Y&); // expected-note{{candidate function}}
-
-Z get_Z();
+int& cvqual_subsume2(X&); // expected-note{{candidate function}}
+float& cvqual_subsume2(volatile Y&); // expected-note{{candidate function}}
 
 void cvqual_subsume_test(Z z) {
   cvqual_subsume(z); // expected-error{{call to 'cvqual_subsume' is ambiguous}}
-  int& x = cvqual_subsume2(get_Z()); // expected-error{{call to 'cvqual_subsume2' is ambiguous}}
+  cvqual_subsume2(z); // expected-error{{call to 'cvqual_subsume2' is ambiguous}}
 }
 
 // Test overloading with cv-qualification differences in reference
@@ -317,16 +338,23 @@ namespace PR5756 {
 
 // Tests the exact text used to note the candidates
 namespace test1 {
-  template <class T> void foo(T t, unsigned N); // expected-note {{candidate function [with T = int] not viable: no known conversion from 'const char [6]' to 'unsigned int' for 2nd argument}}
-  void foo(int n, char N); // expected-note {{candidate function not viable: no known conversion from 'const char [6]' to 'char' for 2nd argument}} 
-  void foo(int n); // expected-note {{candidate function not viable: requires 1 argument, but 2 were provided}}
-  void foo(unsigned n = 10); // expected-note {{candidate function not viable: requires at most 1 argument, but 2 were provided}}
-  void foo(int n, const char *s, int t); // expected-note {{candidate function not viable: requires 3 arguments, but 2 were provided}}
-  void foo(int n, const char *s, int t, ...); // expected-note {{candidate function not viable: requires at least 3 arguments, but 2 were provided}}
-  void foo(int n, const char *s, int t, int u = 0); // expected-note {{candidate function not viable: requires at least 3 arguments, but 2 were provided}}
+template <class T>
+void foo(T t, unsigned N);                        // expected-note {{candidate function template not viable: no known conversion from 'const char [6]' to 'unsigned int' for 2nd argument}}
+void foo(int n, char N);                          // expected-note {{candidate function not viable: no known conversion from 'const char [6]' to 'char' for 2nd argument}}
+void foo(int n, const char *s, int t);            // expected-note {{candidate function not viable: requires 3 arguments, but 2 were provided}}
+void foo(int n, const char *s, int t, ...);       // expected-note {{candidate function not viable: requires at least 3 arguments, but 2 were provided}}
+void foo(int n, const char *s, int t, int u = 0); // expected-note {{candidate function not viable: requires at least 3 arguments, but 2 were provided}}
 
-  void test() {
-    foo(4, "hello"); //expected-error {{no matching function for call to 'foo'}}
+// PR 11857
+void foo(int n);                // expected-note {{candidate function not viable: requires single argument 'n', but 2 arguments were provided}}
+void foo(unsigned n = 10);      // expected-note {{candidate function not viable: allows at most single argument 'n', but 2 arguments were provided}}
+void bar(int n, int u = 0);     // expected-note {{candidate function not viable: requires at least argument 'n', but no arguments were provided}}
+void baz(int n = 0, int u = 0); // expected-note {{candidate function not viable: requires at most 2 arguments, but 3 were provided}}
+
+void test() {
+  foo(4, "hello"); //expected-error {{no matching function for call to 'foo'}}
+  bar();           //expected-error {{no matching function for call to 'bar'}}
+  baz(3, 4, 5);    // expected-error {{no matching function for call to 'baz'}}
   }
 }
 
@@ -348,16 +376,24 @@ namespace test2 {
 }
 
 // PR 6117
-namespace test3 {
-  struct Base {};
+namespace IncompleteConversion {
+  struct Complete {};
   struct Incomplete;
 
-  void foo(Base *); // expected-note 2 {{cannot convert argument of incomplete type}}
-  void foo(Base &); // expected-note 2 {{cannot convert argument of incomplete type}}
-
-  void test(Incomplete *P) {
-    foo(P); // expected-error {{no matching function for call to 'foo'}}
-    foo(*P); // expected-error {{no matching function for call to 'foo'}}
+  void completeFunction(Complete *); // expected-note 2 {{cannot convert argument of incomplete type}}
+  void completeFunction(Complete &); // expected-note 2 {{cannot convert argument of incomplete type}}
+  
+  void testTypeConversion(Incomplete *P) {
+    completeFunction(P); // expected-error {{no matching function for call to 'completeFunction'}}
+    completeFunction(*P); // expected-error {{no matching function for call to 'completeFunction'}}
+  }
+  
+  void incompletePointerFunction(Incomplete *); // expected-note {{candidate function not viable: cannot convert argument of incomplete type 'IncompleteConversion::Incomplete' to 'IncompleteConversion::Incomplete *' for 1st argument; take the address of the argument with &}}
+  void incompleteReferenceFunction(Incomplete &); // expected-note {{candidate function not viable: cannot convert argument of incomplete type 'IncompleteConversion::Incomplete *' to 'IncompleteConversion::Incomplete &' for 1st argument; dereference the argument with *}}
+  
+  void testPointerReferenceConversion(Incomplete &reference, Incomplete *pointer) {
+    incompletePointerFunction(reference); // expected-error {{no matching function for call to 'incompletePointerFunction'}}
+    incompleteReferenceFunction(pointer); // expected-error {{no matching function for call to 'incompleteReferenceFunction'}}
   }
 }
 
@@ -438,10 +474,10 @@ namespace PR6078 {
 namespace PR6177 {
   struct String { String(char const*); };
 
-  void f(bool const volatile&); // expected-note{{passing argument to parameter here}}
-  void f(String);
+  void f(bool const volatile&);
+  int &f(String);
 
-  void g() { f(""); } // expected-error{{volatile lvalue reference to type 'const volatile bool' cannot bind to a value of unrelated type 'const char [1]'}}
+  void g() { int &r = f(""); }
 }
 
 namespace PR7095 {
@@ -567,4 +603,88 @@ namespace IncompleteArg {
 namespace PR12142 {
   void fun(int (*x)[10]); // expected-note{{candidate function not viable: 1st argument ('const int (*)[10]') would lose const qualifier}}
   void g() { fun((const int(*)[10])0); } // expected-error{{no matching function for call to 'fun'}}
+}
+
+// DR1152: Take 'volatile' into account when handling reference bindings in
+//         overload resolution.
+namespace PR12931 {
+  void f(const int &, ...);
+  void f(const volatile int &, int);
+  void g() { f(0, 0); }
+}
+
+void test5() {
+  struct {
+    typedef void F1(int);
+    typedef void F2(double);
+    operator F1*();  // expected-note{{conversion candidate}}
+    operator F2*();  // expected-note{{conversion candidate}}
+  } callable;
+  callable();  // expected-error{{no matching function for call}}
+}
+
+namespace PR20218 {
+  void f(void (*const &)()); // expected-note 2{{candidate}}
+  void f(void (&&)()) = delete; // expected-note 2{{candidate}}
+#if __cplusplus <= 199711L
+  // expected-warning@-2 {{rvalue references are a C++11 extension}}
+  // expected-warning@-3 {{deleted function definitions are a C++11 extension}}
+#endif
+  void g(void (&&)()) = delete; // expected-note 2{{candidate}}
+#if __cplusplus <= 199711L
+  // expected-warning@-2 {{rvalue references are a C++11 extension}}
+  // expected-warning@-3 {{deleted function definitions are a C++11 extension}}
+#endif
+  void g(void (*const &)()); // expected-note 2{{candidate}}
+
+  void x();
+  typedef void (&fr)();
+  struct Y { operator fr(); } y;
+
+  void h() {
+    f(x); // expected-error {{ambiguous}}
+    g(x); // expected-error {{ambiguous}}
+    f(y); // expected-error {{ambiguous}}
+    g(y); // expected-error {{ambiguous}}
+  }
+}
+
+namespace StringLiteralToCharAmbiguity {
+  void f(char *, int);
+  void f(const char *, unsigned);
+  void g() { f("foo", 0); }
+#if __cplusplus <= 199711L
+  // expected-error@-2 {{call to 'f' is ambiguous}}
+  // expected-note@-5 {{candidate function}}
+  // expected-note@-5 {{candidate function}}
+#endif
+}
+
+namespace ProduceNotesAfterSFINAEFailure {
+  struct A {
+    template<typename T, typename U = typename T::x> A(T); // expected-warning 0-1{{extension}}
+  };
+  void f(void*, A); // expected-note {{candidate function not viable}}
+  void g() { f(1, 2); } // expected-error {{no matching function}}
+}
+
+namespace PR19808 {
+  struct B {
+    int i;
+    void bar();
+  };
+  struct D : public B{};
+
+  void f(bool);
+  void f(int D::*);
+  void f(void (D::*)());
+
+  void Usage() {
+    int B::*pmem;
+    void (B::*pmf)();
+
+    // These should not be ambiguous.
+    f(pmem);
+    f(pmf);
+  }
 }

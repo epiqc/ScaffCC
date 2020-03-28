@@ -2,11 +2,14 @@
 Descriptor objects for entities that are part of the LLVM project.
 """
 
-import ConfigParser
-import StringIO
+from __future__ import absolute_import, print_function
+try:
+    import configparser
+except:
+    import ConfigParser as configparser
 import sys
 
-from util import *
+from llvmbuild.util import fatal, warning
 
 class ParseError(Exception):
     pass
@@ -29,7 +32,7 @@ class ComponentInfo(object):
 
     def __init__(self, subpath, name, dependencies, parent):
         if not subpath.startswith('/'):
-            raise ValueError,"invalid subpath: %r" % subpath
+            raise ValueError("invalid subpath: %r" % subpath)
         self.subpath = subpath
         self.name = name
         self.dependencies = list(dependencies)
@@ -68,6 +71,21 @@ class ComponentInfo(object):
     def get_llvmbuild_fragment(self):
         abstract
 
+    def get_parent_target_group(self):
+        """get_parent_target_group() -> ComponentInfo or None
+
+        Return the nearest parent target group (if any), or None if the
+        component is not part of any target group.
+        """
+
+        # If this is a target group, return it.
+        if self.type_name == 'TargetGroup':
+            return self
+
+        # Otherwise recurse on the parent, if any.
+        if self.parent_instance:
+            return self.parent_instance.get_parent_target_group()
+
 class GroupComponentInfo(ComponentInfo):
     """
     Group components have no semantics as far as the build system are concerned,
@@ -85,26 +103,32 @@ class GroupComponentInfo(ComponentInfo):
         ComponentInfo.__init__(self, subpath, name, [], parent)
 
     def get_llvmbuild_fragment(self):
-        result = StringIO.StringIO()
-        print >>result, 'type = %s' % self.type_name
-        print >>result, 'name = %s' % self.name
-        print >>result, 'parent = %s' % self.parent
-        return result.getvalue()
+        return """\
+type = %s
+name = %s
+parent = %s
+""" % (self.type_name, self.name, self.parent)
 
 class LibraryComponentInfo(ComponentInfo):
     type_name = 'Library'
 
     @staticmethod
-    def parse(subpath, items):
+    def parse_items(items):
         kwargs = ComponentInfo.parse_items(items)
         kwargs['library_name'] = items.get_optional_string('library_name')
         kwargs['required_libraries'] = items.get_list('required_libraries')
         kwargs['add_to_library_groups'] = items.get_list(
             'add_to_library_groups')
+        kwargs['installed'] = items.get_optional_bool('installed', True)
+        return kwargs
+
+    @staticmethod
+    def parse(subpath, items):
+        kwargs = LibraryComponentInfo.parse_items(items)
         return LibraryComponentInfo(subpath, **kwargs)
 
     def __init__(self, subpath, name, dependencies, parent, library_name,
-                 required_libraries, add_to_library_groups):
+                 required_libraries, add_to_library_groups, installed):
         ComponentInfo.__init__(self, subpath, name, dependencies, parent)
 
         # If given, the name to use for the library instead of deriving it from
@@ -119,6 +143,9 @@ class LibraryComponentInfo(ComponentInfo):
         # considered part of.
         self.add_to_library_groups = list(add_to_library_groups)
 
+        # Whether or not this library is installed.
+        self.installed = installed
+
     def get_component_references(self):
         for r in ComponentInfo.get_component_references(self):
             yield r
@@ -128,19 +155,22 @@ class LibraryComponentInfo(ComponentInfo):
             yield ('library group', r)
 
     def get_llvmbuild_fragment(self):
-        result = StringIO.StringIO()
-        print >>result, 'type = %s' % self.type_name
-        print >>result, 'name = %s' % self.name
-        print >>result, 'parent = %s' % self.parent
+        result = """\
+type = %s
+name = %s
+parent = %s
+""" % (self.type_name, self.name, self.parent)
         if self.library_name is not None:
-            print >>result, 'library_name = %s' % self.library_name
+            result += 'library_name = %s\n' % self.library_name
         if self.required_libraries:
-            print >>result, 'required_libraries = %s' % ' '.join(
+            result += 'required_libraries = %s\n' % ' '.join(
                 self.required_libraries)
         if self.add_to_library_groups:
-            print >>result, 'add_to_library_groups = %s' % ' '.join(
+            result += 'add_to_library_groups = %s\n' % ' '.join(
                 self.add_to_library_groups)
-        return result.getvalue()
+        if not self.installed:
+            result += 'installed = 0\n'
+        return result
 
     def get_library_name(self):
         return self.library_name or self.name
@@ -164,6 +194,20 @@ class LibraryComponentInfo(ComponentInfo):
 
     def get_llvmconfig_component_name(self):
         return self.get_library_name().lower()
+
+class OptionalLibraryComponentInfo(LibraryComponentInfo):
+    type_name = "OptionalLibrary"
+
+    @staticmethod
+    def parse(subpath, items):
+      kwargs = LibraryComponentInfo.parse_items(items)
+      return OptionalLibraryComponentInfo(subpath, **kwargs)
+
+    def __init__(self, subpath, name, dependencies, parent, library_name,
+                 required_libraries, add_to_library_groups, installed):
+      LibraryComponentInfo.__init__(self, subpath, name, dependencies, parent,
+                                    library_name, required_libraries,
+                                    add_to_library_groups, installed)
 
 class LibraryGroupComponentInfo(ComponentInfo):
     type_name = 'LibraryGroup'
@@ -197,17 +241,18 @@ class LibraryGroupComponentInfo(ComponentInfo):
             yield ('library group', r)
 
     def get_llvmbuild_fragment(self):
-        result = StringIO.StringIO()
-        print >>result, 'type = %s' % self.type_name
-        print >>result, 'name = %s' % self.name
-        print >>result, 'parent = %s' % self.parent
+        result = """\
+type = %s
+name = %s
+parent = %s
+""" % (self.type_name, self.name, self.parent)
         if self.required_libraries and not self._is_special_group:
-            print >>result, 'required_libraries = %s' % ' '.join(
+            result += 'required_libraries = %s\n' % ' '.join(
                 self.required_libraries)
         if self.add_to_library_groups:
-            print >>result, 'add_to_library_groups = %s' % ' '.join(
+            result += 'add_to_library_groups = %s\n' % ' '.join(
                 self.add_to_library_groups)
-        return result.getvalue()
+        return result
 
     def get_llvmconfig_component_name(self):
         return self.name.lower()
@@ -269,21 +314,22 @@ class TargetGroupComponentInfo(ComponentInfo):
             yield ('library group', r)
 
     def get_llvmbuild_fragment(self):
-        result = StringIO.StringIO()
-        print >>result, 'type = %s' % self.type_name
-        print >>result, 'name = %s' % self.name
-        print >>result, 'parent = %s' % self.parent
+        result = """\
+type = %s
+name = %s
+parent = %s
+""" % (self.type_name, self.name, self.parent)
         if self.required_libraries:
-            print >>result, 'required_libraries = %s' % ' '.join(
+            result += 'required_libraries = %s\n' % ' '.join(
                 self.required_libraries)
         if self.add_to_library_groups:
-            print >>result, 'add_to_library_groups = %s' % ' '.join(
+            result += 'add_to_library_groups = %s\n' % ' '.join(
                 self.add_to_library_groups)
         for bool_key in ('has_asmparser', 'has_asmprinter', 'has_disassembler',
                          'has_jit'):
             if getattr(self, bool_key):
-                print >>result, '%s = 1' % (bool_key,)
-        return result.getvalue()
+                result += '%s = 1\n' % (bool_key,)
+        return result
 
     def get_llvmconfig_component_name(self):
         return self.name.lower()
@@ -312,13 +358,13 @@ class ToolComponentInfo(ComponentInfo):
             yield ('required library', r)
 
     def get_llvmbuild_fragment(self):
-        result = StringIO.StringIO()
-        print >>result, 'type = %s' % self.type_name
-        print >>result, 'name = %s' % self.name
-        print >>result, 'parent = %s' % self.parent
-        print >>result, 'required_libraries = %s' % ' '.join(
-            self.required_libraries)
-        return result.getvalue()
+        return """\
+type = %s
+name = %s
+parent = %s
+required_libraries = %s
+""" % (self.type_name, self.name, self.parent,
+       ' '.join(self.required_libraries))
 
 class BuildToolComponentInfo(ToolComponentInfo):
     type_name = 'BuildTool'
@@ -375,10 +421,10 @@ _component_type_map = dict(
     for t in (GroupComponentInfo,
               LibraryComponentInfo, LibraryGroupComponentInfo,
               ToolComponentInfo, BuildToolComponentInfo,
-              TargetGroupComponentInfo))
+              TargetGroupComponentInfo, OptionalLibraryComponentInfo))
 def load_from_path(path, subpath):
     # Load the LLVMBuild.txt file as an .ini format file.
-    parser = ConfigParser.RawConfigParser()
+    parser = configparser.RawConfigParser()
     parser.read(path)
 
     # Extract the common section.
@@ -415,12 +461,13 @@ def _read_components_from_parser(parser, path, subpath):
             info = type_class.parse(subpath,
                                     IniFormatParser(parser.items(section)))
         except TypeError:
-            print >>sys.stderr, "error: invalid component %r in %r: %s" % (
-                section, path, "unable to instantiate: %r" % type_name)
+            print("error: invalid component %r in %r: %s" % (
+                section, path, "unable to instantiate: %r" % type_name), file=sys.stderr)
             import traceback
             traceback.print_exc()
-            raise SystemExit, 1
-        except ParseError,e:
+            raise SystemExit(1)
+        except ParseError:
+            e = sys.exc_info()[1]
             fatal("unable to load component %r in %r: %s" % (
                     section, path, e.message))
 

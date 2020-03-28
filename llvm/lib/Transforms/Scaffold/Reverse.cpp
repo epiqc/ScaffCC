@@ -21,16 +21,16 @@
 //
 #include <map>
 
-#include "llvm/ADT/ValueMap.h" 
+#include "llvm/IR/ValueMap.h" 
 
-#include "llvm/Function.h"
-#include "llvm/Instructions.h"
-#include "llvm/Intrinsics.h"
-#include "llvm/LLVMContext.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/LLVMContext.h"
 #include "llvm/Pass.h"
 
-#include "llvm/Support/InstIterator.h"
-#include "llvm/Support/InstVisitor.h"
+#include "llvm/IR/InstIterator.h"
+#include "llvm/IR/InstVisitor.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
@@ -263,9 +263,9 @@ namespace {
                 Function *ReverseFunc = M->getFunction(ReverseFuncName);
                 // If it doesn't exist yet, create it
                 if (!ReverseFunc) {
-                    ValueMap<const Value*, WeakVH> VMap;
+                    ValueMap<const Value*, WeakTrackingVH> VMap;
                     ReverseFunc = CloneFunction
-                       (Func, VMap, false /* ModuleLevelChanges */);
+                       (Func, VMap/*, false  ModuleLevelChanges */);
                     ReverseFunc->setName(ReverseFuncName);
                     BasicBlock &BB = ReverseFunc->front();
                     // Finds all of the call instructions 
@@ -292,7 +292,7 @@ namespace {
                             ((*I)->getCalledFunction());
                         (*I)->setCalledFunction(Inverse);
                         (*I)->removeFromParent();
-                        BB.getInstList().insert(&BB.back(), *I);
+                        BB.getInstList().insert(BB.end(), *I);
                     }
                     M->getFunctionList().push_back(ReverseFunc);
                 }

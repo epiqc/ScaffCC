@@ -1,10 +1,11 @@
-; RUN: llc < %s -mtriple=thumbv7-apple-darwin -mcpu=cortex-a8 | FileCheck %s
+; RUN: llc < %s -mtriple=thumbv7-apple-darwin -mcpu=cortex-a8 -arm-atomic-cfg-tidy=0 | FileCheck %s
 ; rdar://7354379
 
 declare double @foo(double) nounwind readnone
 
 define void @t(i32 %c, double %b) {
 entry:
+; CHECK:      cmp	r0, #0
   %cmp1 = icmp ne i32 %c, 0
   br i1 %cmp1, label %bb3, label %bb1
 
@@ -23,13 +24,12 @@ bb7:                                              ; preds = %bb3
   br i1 %cmp3, label %bb11, label %bb9
 
 bb9:                                              ; preds = %bb7
-; CHECK:      cmp	r0, #0
-; CHECK-NEXT:      cbnz
+; CHECK:      cbnz
   %0 = tail call  double @foo(double %b) nounwind readnone ; <double> [#uses=0]
   br label %bb11
 
 bb11:                                             ; preds = %bb9, %bb7
-  %1 = getelementptr i32* undef, i32 0
+  %1 = getelementptr i32, i32* undef, i32 0
   store i32 0, i32* %1
   ret void
 }

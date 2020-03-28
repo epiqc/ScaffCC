@@ -1,4 +1,6 @@
 // RUN: %clang_cc1 -fsyntax-only -verify %s 
+// RUN: %clang_cc1 -fsyntax-only -verify -std=c++98 %s 
+// RUN: %clang_cc1 -fsyntax-only -verify -std=c++11 %s 
 int f(double); // expected-note{{candidate function}}
 int f(int); // expected-note{{candidate function}}
 
@@ -57,17 +59,47 @@ struct B
 
 struct C {
   C &getC() {
-    return makeAC; // expected-error{{reference to non-static member function must be called}}
+    return makeAC; // expected-error{{reference to non-static member function must be called; did you mean to call it with no arguments?}}
   }
 
-  C &makeAC();
-  const C &makeAC() const;
+  // FIXME: filter by const so we can unambiguously suggest '()' & point to just the one candidate, probably
+  C &makeAC(); // expected-note{{possible target for call}}
+  const C &makeAC() const; // expected-note{{possible target for call}}
 
   static void f(); // expected-note{{candidate function}}
   static void f(int); // expected-note{{candidate function}}
 
   void g() {
     int (&fp)() = f; // expected-error{{address of overloaded function 'f' does not match required type 'int ()'}}
+  }
+
+  template<typename T>
+  void q1(int); // expected-note{{possible target for call}}
+  template<typename T>
+  void q2(T t = T()); // expected-note{{possible target for call}}
+  template<typename T>
+  void q3(); // expected-note{{possible target for call}}
+  template<typename T1, typename T2>
+  void q4(); // expected-note{{possible target for call}}
+  template<typename T1 = int>
+#if __cplusplus <= 199711L // C++03 or earlier modes
+  // expected-warning@-2{{default template arguments for a function template are a C++11 extension}}
+#endif
+  void q5(); // expected-note{{possible target for call}}
+
+  void h() {
+    // Do not suggest '()' since an int argument is required
+    q1<int>; // expected-error-re{{reference to non-static member function must be called{{$}}}}
+    // Suggest '()' since there's a default value for the only argument & the
+    // type argument is already provided
+    q2<int>; // expected-error{{reference to non-static member function must be called; did you mean to call it with no arguments?}}
+    // Suggest '()' since no arguments are required & the type argument is
+    // already provided
+    q3<int>; // expected-error{{reference to non-static member function must be called; did you mean to call it with no arguments?}}
+    // Do not suggest '()' since another type argument is required
+    q4<int>; // expected-error-re{{reference to non-static member function must be called{{$}}}}
+    // Suggest '()' since the type parameter has a default value
+    q5; // expected-error{{reference to non-static member function must be called; did you mean to call it with no arguments?}}
   }
 };
 
@@ -98,13 +130,9 @@ namespace PR7971 {
 }
 
 namespace PR8033 {
-  template <typename T1, typename T2> int f(T1 *, const T2 *); // expected-note {{candidate function [with T1 = const int, T2 = int]}} \
-  // expected-note{{candidate function}}
-  template <typename T1, typename T2> int f(const T1 *, T2 *); // expected-note {{candidate function [with T1 = int, T2 = const int]}} \
-  // expected-note{{candidate function}}
-  int (*p)(const int *, const int *) = f; // expected-error{{address of overloaded function 'f' is ambiguous}} \
-  // expected-error{{address of overloaded function 'f' is ambiguous}}
-
+  template <typename T1, typename T2> int f(T1 *, const T2 *); // expected-note {{candidate function [with T1 = const int, T2 = int]}}
+  template <typename T1, typename T2> int f(const T1 *, T2 *); // expected-note {{candidate function [with T1 = int, T2 = const int]}}
+  int (*p)(const int *, const int *) = f; // expected-error{{address of overloaded function 'f' is ambiguous}}
 }
 
 namespace PR8196 {
@@ -193,18 +221,22 @@ namespace test1 {
 
   void QualifierTest() {
     void (Qualifiers::*X)();
-    X = &Qualifiers::C; // expected-error {{assigning to 'void (test1::Qualifiers::*)()' from incompatible type 'void (test1::Qualifiers::*)() const': different qualifiers (none vs const)}}
-    X = &Qualifiers::V; // expected-error{{assigning to 'void (test1::Qualifiers::*)()' from incompatible type 'void (test1::Qualifiers::*)() volatile': different qualifiers (none vs volatile)}}
-    X = &Qualifiers::R; // expected-error{{assigning to 'void (test1::Qualifiers::*)()' from incompatible type 'void (test1::Qualifiers::*)() restrict': different qualifiers (none vs restrict)}}
-    X = &Qualifiers::CV; // expected-error{{assigning to 'void (test1::Qualifiers::*)()' from incompatible type 'void (test1::Qualifiers::*)() const volatile': different qualifiers (none vs const and volatile)}}
-    X = &Qualifiers::CR; // expected-error{{assigning to 'void (test1::Qualifiers::*)()' from incompatible type 'void (test1::Qualifiers::*)() const restrict': different qualifiers (none vs const and restrict)}}
-    X = &Qualifiers::VR; // expected-error{{assigning to 'void (test1::Qualifiers::*)()' from incompatible type 'void (test1::Qualifiers::*)() volatile restrict': different qualifiers (none vs volatile and restrict)}}
-    X = &Qualifiers::CVR; // expected-error{{assigning to 'void (test1::Qualifiers::*)()' from incompatible type 'void (test1::Qualifiers::*)() const volatile restrict': different qualifiers (none vs const, volatile, and restrict)}}
+    X = &Qualifiers::C; // expected-error-re {{assigning to 'void (test1::Qualifiers::*)(){{( __attribute__\(\(thiscall\)\))?}}' from incompatible type 'void (test1::Qualifiers::*)(){{( __attribute__\(\(thiscall\)\))?}} const': different qualifiers (unqualified vs 'const')}}
+    X = &Qualifiers::V; // expected-error-re{{assigning to 'void (test1::Qualifiers::*)(){{( __attribute__\(\(thiscall\)\))?}}' from incompatible type 'void (test1::Qualifiers::*)(){{( __attribute__\(\(thiscall\)\))?}} volatile': different qualifiers (unqualified vs 'volatile')}}
+    X = &Qualifiers::R; // expected-error-re{{assigning to 'void (test1::Qualifiers::*)(){{( __attribute__\(\(thiscall\)\))?}}' from incompatible type 'void (test1::Qualifiers::*)(){{( __attribute__\(\(thiscall\)\))?}} __restrict': different qualifiers (unqualified vs '__restrict')}}
+    X = &Qualifiers::CV; // expected-error-re{{assigning to 'void (test1::Qualifiers::*)(){{( __attribute__\(\(thiscall\)\))?}}' from incompatible type 'void (test1::Qualifiers::*)(){{( __attribute__\(\(thiscall\)\))?}} const volatile': different qualifiers (unqualified vs 'const volatile')}}
+    X = &Qualifiers::CR; // expected-error-re{{assigning to 'void (test1::Qualifiers::*)(){{( __attribute__\(\(thiscall\)\))?}}' from incompatible type 'void (test1::Qualifiers::*)(){{( __attribute__\(\(thiscall\)\))?}} const __restrict': different qualifiers (unqualified vs 'const __restrict')}}
+    X = &Qualifiers::VR; // expected-error-re{{assigning to 'void (test1::Qualifiers::*)(){{( __attribute__\(\(thiscall\)\))?}}' from incompatible type 'void (test1::Qualifiers::*)(){{( __attribute__\(\(thiscall\)\))?}} volatile __restrict': different qualifiers (unqualified vs 'volatile __restrict')}}
+    X = &Qualifiers::CVR; // expected-error-re{{assigning to 'void (test1::Qualifiers::*)(){{( __attribute__\(\(thiscall\)\))?}}' from incompatible type 'void (test1::Qualifiers::*)(){{( __attribute__\(\(thiscall\)\))?}} const volatile __restrict': different qualifiers (unqualified vs 'const volatile __restrict')}}
   }
 
   struct Dummy {
     void N() {};
   };
 
-  void (Qualifiers::*X)() = &Dummy::N; // expected-error{{cannot initialize a variable of type 'void (test1::Qualifiers::*)()' with an rvalue of type 'void (test1::Dummy::*)()': different classes ('test1::Qualifiers' vs 'test1::Dummy')}}
+  void (Qualifiers::*X)() = &Dummy::N; // expected-error-re{{cannot initialize a variable of type 'void (test1::Qualifiers::*)(){{( __attribute__\(\(thiscall\)\))?}}' with an rvalue of type 'void (test1::Dummy::*)(){{( __attribute__\(\(thiscall\)\))?}}': different classes ('test1::Qualifiers' vs 'test1::Dummy')}}
 }
+
+template <typename T> class PR16561 {
+  virtual bool f() { if (f) {} return false; } // expected-error {{reference to non-static member function must be called}}
+};

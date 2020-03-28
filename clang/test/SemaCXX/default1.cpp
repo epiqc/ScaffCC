@@ -1,4 +1,7 @@
 // RUN: %clang_cc1 -fsyntax-only -verify %s
+// RUN: %clang_cc1 -fsyntax-only -verify -std=c++98 %s
+// RUN: %clang_cc1 -fsyntax-only -verify -std=c++11 %s
+
 void f(int i);
 void f(int i = 0); // expected-note {{previous definition is here}}
 void f(int i = 17); // expected-error {{redefinition of default argument}}
@@ -21,9 +24,13 @@ struct X {
   X(int);
 };
 
-void j(X x = 17);
+void j(X x = 17); // expected-note{{'::j' declared here}}
 
-struct Y { // expected-note 2{{candidate}}
+struct Y { // expected-note 2{{candidate constructor (the implicit copy constructor) not viable}}
+#if __cplusplus >= 201103L // C++11 or later
+// expected-note@-2 2 {{candidate constructor (the implicit move constructor) not viable}}
+#endif
+
   explicit Y(int);
 };
 
@@ -46,7 +53,28 @@ int l () {
 int i () {
   void j (int f = 4);
   {
-    void j (int f); // expected-note{{'j' declared here}}
-    j(); // expected-error{{too few arguments to function call, expected 1, have 0}}
+    void j (int f);
+    j(); // expected-error{{too few arguments to function call, expected 1, have 0; did you mean '::j'?}}
+  }
+  void jj (int f = 4);
+  {
+    void jj (int f); // expected-note{{'jj' declared here}}
+    jj(); // expected-error{{too few arguments to function call, single argument 'f' was not specified}}
   }
 }
+
+int i2() {
+  void j(int f = 4); // expected-note{{'j' declared here}}
+  {
+    j(2, 3); // expected-error{{too many arguments to function call, expected at most single argument 'f', have 2}}
+  }
+}
+
+int pr20055_f(int x = 0, int y = UNDEFINED); // expected-error{{use of undeclared identifier}}
+int pr20055_v = pr20055_f(0);
+
+void PR20769() { void PR20769(int = 1); }
+void PR20769(int = 2);
+
+void PR20769_b(int = 1);
+void PR20769_b() { void PR20769_b(int = 2); }

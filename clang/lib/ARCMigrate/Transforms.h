@@ -1,4 +1,4 @@
-//===-- Transforms.h - Tranformations to ARC mode ---------------*- C++ -*-===//
+//===-- Transforms.h - Transformations to ARC mode --------------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -10,9 +10,10 @@
 #ifndef LLVM_CLANG_LIB_ARCMIGRATE_TRANSFORMS_H
 #define LLVM_CLANG_LIB_ARCMIGRATE_TRANSFORMS_H
 
-#include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/AST/ParentMap.h"
+#include "clang/AST/RecursiveASTVisitor.h"
 #include "llvm/ADT/DenseSet.h"
+#include "llvm/Support/SaveAndRestore.h"
 
 namespace clang {
   class Decl;
@@ -88,7 +89,7 @@ public:
     SourceLocation Loc;
     QualType ModifiedType;
     Decl *Dcl;
-    /// \brief true if the attribute is owned, e.g. it is in a body and not just
+    /// true if the attribute is owned, e.g. it is in a body and not just
     /// in an interface.
     bool FullyMigratable;
   };
@@ -96,13 +97,13 @@ public:
   llvm::DenseSet<unsigned> AttrSet;
   llvm::DenseSet<unsigned> RemovedAttrSet;
 
-  /// \brief Set of raw '@' locations for 'assign' properties group that contain
+  /// Set of raw '@' locations for 'assign' properties group that contain
   /// GC __weak.
   llvm::DenseSet<unsigned> AtPropsWeak;
 
   explicit MigrationContext(MigrationPass &pass) : Pass(pass) {}
   ~MigrationContext();
-  
+
   typedef std::vector<ASTTraverser *>::iterator traverser_iterator;
   traverser_iterator traversers_begin() { return Traversers.begin(); }
   traverser_iterator traversers_end() { return Traversers.end(); }
@@ -126,62 +127,79 @@ public:
 
 class PropertyRewriteTraverser : public ASTTraverser {
 public:
-  virtual void traverseObjCImplementation(ObjCImplementationContext &ImplCtx);
+  void traverseObjCImplementation(ObjCImplementationContext &ImplCtx) override;
 };
 
 class BlockObjCVariableTraverser : public ASTTraverser {
 public:
-  virtual void traverseBody(BodyContext &BodyCtx);
+  void traverseBody(BodyContext &BodyCtx) override;
+};
+
+class ProtectedScopeTraverser : public ASTTraverser {
+public:
+  void traverseBody(BodyContext &BodyCtx) override;
 };
 
 // GC transformations
 
 class GCAttrsTraverser : public ASTTraverser {
 public:
-  virtual void traverseTU(MigrationContext &MigrateCtx);
+  void traverseTU(MigrationContext &MigrateCtx) override;
 };
 
 class GCCollectableCallsTraverser : public ASTTraverser {
 public:
-  virtual void traverseBody(BodyContext &BodyCtx);
+  void traverseBody(BodyContext &BodyCtx) override;
 };
 
 //===----------------------------------------------------------------------===//
 // Helpers.
 //===----------------------------------------------------------------------===//
 
-/// \brief Determine whether we can add weak to the given type.
+/// Determine whether we can add weak to the given type.
 bool canApplyWeak(ASTContext &Ctx, QualType type,
                   bool AllowOnUnknownClass = false);
 
-/// \brief 'Loc' is the end of a statement range. This returns the location
+bool isPlusOneAssign(const BinaryOperator *E);
+bool isPlusOne(const Expr *E);
+
+/// 'Loc' is the end of a statement range. This returns the location
 /// immediately after the semicolon following the statement.
 /// If no semicolon is found or the location is inside a macro, the returned
 /// source location will be invalid.
-SourceLocation findLocationAfterSemi(SourceLocation loc, ASTContext &Ctx);
+SourceLocation findLocationAfterSemi(SourceLocation loc, ASTContext &Ctx,
+                                     bool IsDecl = false);
 
-/// \brief \arg Loc is the end of a statement range. This returns the location
+/// 'Loc' is the end of a statement range. This returns the location
 /// of the semicolon following the statement.
 /// If no semicolon is found or the location is inside a macro, the returned
 /// source location will be invalid.
-SourceLocation findSemiAfterLocation(SourceLocation loc, ASTContext &Ctx);
+SourceLocation findSemiAfterLocation(SourceLocation loc, ASTContext &Ctx,
+                                     bool IsDecl = false);
 
 bool hasSideEffects(Expr *E, ASTContext &Ctx);
 bool isGlobalVar(Expr *E);
-/// \brief Returns "nil" or "0" if 'nil' macro is not actually defined.
-StringRef getNilString(ASTContext &Ctx);
+/// Returns "nil" or "0" if 'nil' macro is not actually defined.
+StringRef getNilString(MigrationPass &Pass);
 
 template <typename BODY_TRANS>
 class BodyTransform : public RecursiveASTVisitor<BodyTransform<BODY_TRANS> > {
   MigrationPass &Pass;
+  Decl *ParentD;
 
+  typedef RecursiveASTVisitor<BodyTransform<BODY_TRANS> > base;
 public:
-  BodyTransform(MigrationPass &pass) : Pass(pass) { }
+  BodyTransform(MigrationPass &pass) : Pass(pass), ParentD(nullptr) { }
 
   bool TraverseStmt(Stmt *rootS) {
     if (rootS)
-      BODY_TRANS(Pass).transformBody(rootS);
+      BODY_TRANS(Pass).transformBody(rootS, ParentD);
     return true;
+  }
+
+  bool TraverseObjCMethodDecl(ObjCMethodDecl *D) {
+    SaveAndRestore<Decl *> SetParent(ParentD, D);
+    return base::TraverseObjCMethodDecl(D);
   }
 };
 

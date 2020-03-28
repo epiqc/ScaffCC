@@ -58,7 +58,7 @@ namespace test4 {
 
   extern C *c_ptr;
 
-  // CHECK: define i32 @_ZN5test44testEv()
+  // CHECK-LABEL: define i32 @_ZN5test44testEv()
   int test() {
     // CHECK: load {{.*}} @_ZN5test45c_ptrE
     // CHECK-NEXT: bitcast
@@ -80,7 +80,7 @@ namespace test4 {
     // CHECK-NEXT: getelementptr
     // CHECK-NEXT: bitcast
     // CHECK-NEXT: getelementptr
-    // CHECK-NEXT: load i32*
+    // CHECK-NEXT: load i32, i32*
     return c_ptr->B::x;
   }
 }

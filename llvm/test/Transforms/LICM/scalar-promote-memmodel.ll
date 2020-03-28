@@ -1,4 +1,5 @@
 ; RUN: opt < %s -basicaa -licm -S | FileCheck %s
+; RUN: opt -aa-pipeline=type-based-aa,basic-aa -passes='require<aa>,require<targetir>,require<scalar-evolution>,require<opt-remark-emit>,loop(licm)' -S %s | FileCheck %s
 
 ; Make sure we don't hoist a conditionally-executed store out of the loop;
 ; it would violate the concurrency memory model
@@ -19,12 +20,12 @@ for.body:                                         ; preds = %for.cond
   br i1 %tobool, label %for.inc, label %if.then
 
 if.then:                                          ; preds = %for.body
-  %tmp3 = load i32* @g, align 4
+  %tmp3 = load i32, i32* @g, align 4
   %inc = add nsw i32 %tmp3, 1
   store i32 %inc, i32* @g, align 4
   br label %for.inc
 
-; CHECK: load i32*
+; CHECK: load i32, i32*
 ; CHECK-NEXT: add
 ; CHECK-NEXT: store i32
 

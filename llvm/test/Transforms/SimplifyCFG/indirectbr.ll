@@ -17,7 +17,7 @@ entry:
   store i8* blockaddress(@indbrtest0, %BB1), i8** %P
   store i8* blockaddress(@indbrtest0, %BB2), i8** %P
   call void @foo()
-  %t = load i8** %Q
+  %t = load i8*, i8** %Q
   indirectbr i8* %t, [label %BB0, label %BB1, label %BB2, label %BB0, label %BB1, label %BB2]
 BB0:
   call void @A()
@@ -42,7 +42,7 @@ define void @indbrtest1(i8** %P, i8** %Q) {
 entry:
   store i8* blockaddress(@indbrtest1, %BB0), i8** %P
   call void @foo()
-  %t = load i8** %Q
+  %t = load i8*, i8** %Q
   indirectbr i8* %t, [label %BB0, label %BB0]
 BB0:
   call void @A()
@@ -77,7 +77,7 @@ BB0:
 ; SimplifyCFG should turn the indirectbr into a conditional branch on the
 ; condition of the select.
 
-; CHECK: @indbrtest3
+; CHECK-LABEL: @indbrtest3(
 ; CHECK-NEXT: entry:
 ; CHECK-NEXT: br i1 %cond, label %L1, label %L2
 ; CHECK-NOT: indirectbr
@@ -104,7 +104,7 @@ L3:
 ; As in @indbrtest1, it should really remove the branch entirely, but it doesn't
 ; because it's in the entry block.
 
-; CHECK: @indbrtest4
+; CHECK-LABEL: @indbrtest4(
 ; CHECK-NEXT: entry:
 ; CHECK-NEXT: br label %L1
 define void @indbrtest4(i1 %cond) nounwind {
@@ -126,7 +126,7 @@ L3:
 ; SimplifyCFG should turn the indirectbr into an unreachable because neither
 ; destination is listed as a successor.
 
-; CHECK: @indbrtest5
+; CHECK-LABEL: @indbrtest5(
 ; CHECK-NEXT: entry:
 ; CHECK-NEXT: unreachable
 ; CHECK-NEXT: }
@@ -156,7 +156,7 @@ L4:
 
 ; The same as above, except the selected addresses are equal.
 
-; CHECK: @indbrtest6
+; CHECK-LABEL: @indbrtest6(
 ; CHECK-NEXT: entry:
 ; CHECK-NEXT: unreachable
 ; CHECK-NEXT: }
@@ -192,8 +192,8 @@ escape-string.top:
 
 xlab8x:                                           ; preds = %xlab5x
   %xvaluex = call i32 @xselectorx()
-  %xblkx.x = getelementptr [9 x i8*]* @xblkx.bbs, i32 0, i32 %xvaluex
-  %xblkx.load = load i8** %xblkx.x
+  %xblkx.x = getelementptr [9 x i8*], [9 x i8*]* @xblkx.bbs, i32 0, i32 %xvaluex
+  %xblkx.load = load i8*, i8** %xblkx.x
   indirectbr i8* %xblkx.load, [label %xblkx.begin, label %xblkx.begin3, label %xblkx.begin4, label %xblkx.begin5, label %xblkx.begin6, label %xblkx.begin7, label %xblkx.begin8, label %xblkx.begin9, label %xblkx.end]
 
 xblkx.begin:

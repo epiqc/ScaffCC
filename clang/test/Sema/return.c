@@ -1,4 +1,4 @@
-// RUN: %clang %s -fsyntax-only -Wignored-qualifiers -Wno-error=return-type -Xclang -verify -fblocks -Wno-unreachable-code -Wno-unused-value
+// RUN: %clang_cc1 -triple x86_64-apple-darwin9 %s -fsyntax-only -Wignored-qualifiers -Wno-error=return-type -verify -fblocks -Wno-unreachable-code -Wno-unused-value
 
 // clang emits the following warning by default.
 // With GCC, -pedantic, -Wreturn-type or -Wall are required to produce the 
@@ -197,8 +197,14 @@ int test29() {
   exit(1);
 }
 
-#include <setjmp.h>
+// Include these declarations here explicitly so we don't depend on system headers.
+typedef struct __jmp_buf_tag{} jmp_buf[1];
+
+extern void longjmp (struct __jmp_buf_tag __env[1], int __val) __attribute__ ((noreturn));
+extern void _longjmp (struct __jmp_buf_tag __env[1], int __val) __attribute__ ((noreturn));
+
 jmp_buf test30_j;
+
 int test30() {
   if (j)
     longjmp(test30_j, 1);
@@ -244,6 +250,11 @@ const int ignored_c_quals(); // expected-warning{{'const' type qualifier on retu
 const volatile int ignored_cv_quals(); // expected-warning{{'const volatile' type qualifiers on return type have no effect}}
 char* const volatile restrict ignored_cvr_quals(); // expected-warning{{'const volatile restrict' type qualifiers on return type have no effect}}
 
+typedef const int CI;
+CI ignored_quals_typedef();
+
+const CI ignored_quals_typedef_2(); // expected-warning{{'const' type qualifier}}
+
 // Test that for switch(enum) that if the switch statement covers all the cases
 // that we don't consider that for -Wreturn-type.
 enum Cases { C1, C2, C3, C4 };
@@ -264,3 +275,56 @@ int test34(int x) {
     return 5;
   }
 }
+
+// PR18999
+int test35() {
+lbl:
+  if (1)
+    goto lbl;
+}
+
+int test36a(int b) {
+  if (b)
+    return 43;
+  __builtin_unreachable();
+}
+
+int test36b(int b) {
+  if (b)
+    return 43;
+  __builtin_assume(0);
+}
+
+// PR19074.
+void abort(void) __attribute__((noreturn));
+#define av_assert0(cond) do {\
+    if (!(cond)) {\
+      abort();\
+    }\
+  } while (0)
+
+int PR19074(int x) {
+  switch(x) {
+  case 0:
+    return 0;
+  default:
+    av_assert0(0);
+  } // no-warning
+}
+
+int PR19074_positive(int x) {
+  switch(x) {
+  case 0:
+    return 0;
+  default:
+    break;
+  }
+} // expected-warning {{control may reach end of non-void function}}
+
+// sizeof(long) test.
+int sizeof_long() {
+  if (sizeof(long) == 4)
+    return 1;
+  if (sizeof(long) == 8)
+    return 2;
+} // no-warning

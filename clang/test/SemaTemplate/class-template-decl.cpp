@@ -10,8 +10,15 @@ namespace N {
   template<typename T> class C;
 }
 
-extern "C" {
+extern "C" { // expected-note {{extern "C" language linkage specification begins here}}
   template<typename T> class D; // expected-error{{templates must have C++ linkage}}
+}
+
+extern "C" { // expected-note 2 {{extern "C" language linkage specification begins here}}
+  class PR17968 {
+    template<typename T> class D; // expected-error{{templates must have C++ linkage}}
+    template<typename T> void f(); // expected-error{{templates must have C++ linkage}}
+  };
 }
 
 template<class U> class A; // expected-note{{previous template declaration is here}}
@@ -50,7 +57,8 @@ void f() {
   template<typename T> class X; // expected-error{{expression}}
 }
 
-template<typename T> class X1 var; // expected-error{{declared as a template}}
+template<typename T> class X1 var; // expected-error {{variable has incomplete type 'class X1'}} \
+                                   // expected-note {{forward declaration of 'X1'}}
 
 namespace M {
 }
@@ -95,3 +103,58 @@ namespace rdar9676205 {
   };
 }
 
+namespace redecl {
+  int A; // expected-note {{here}}
+  template<typename T> struct A; // expected-error {{different kind of symbol}}
+
+  int B; // expected-note {{here}}
+  template<typename T> struct B { // expected-error {{different kind of symbol}}
+  };
+
+  template<typename T> struct F;
+  template<typename T> struct K;
+
+  int G, H; // expected-note {{here}}
+
+  struct S {
+    int C; // expected-note {{here}}
+    template<typename T> struct C; // expected-error {{different kind of symbol}}
+
+    int D; // expected-note {{here}}
+    template<typename T> struct D { // expected-error {{different kind of symbol}}
+    };
+
+    int E;
+    template<typename T> friend struct E { // expected-error {{cannot define a type in a friend}}
+    };
+
+    int F;
+    template<typename T> friend struct F; // ok, redecl::F
+
+    template<typename T> struct G; // ok
+
+    template<typename T> friend struct H; // expected-error {{different kind of symbol}}
+
+    int I, J, K;
+
+    struct U {
+      template<typename T> struct I; // ok
+      template<typename T> struct J { // ok
+      };
+      template<typename T> friend struct K; // ok, redecl::K
+    };
+  };
+}
+
+extern "C" template <typename T> // expected-error{{templates must have C++ linkage}}
+void DontCrashOnThis() { // expected-note@-1 {{extern "C" language linkage specification begins here}}
+  T &pT = T();
+  pT;
+}
+
+namespace abstract_dependent_class {
+  template<typename T> struct A {
+    virtual A<T> *clone() = 0; // expected-note {{pure virtual}}
+  };
+  template<typename T> A<T> *A<T>::clone() { return new A<T>; } // expected-error {{abstract class type 'A<T>'}}
+}

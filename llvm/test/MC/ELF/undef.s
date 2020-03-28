@@ -1,8 +1,7 @@
-// RUN: llvm-mc -filetype=obj -triple x86_64-pc-linux-gnu %s -o - | elf-dump  | FileCheck %s
+// RUN: llvm-mc -filetype=obj -triple x86_64-pc-linux-gnu %s -o - | llvm-readobj -t | FileCheck %s
 
 // Test which symbols should be in the symbol table
 
-        .long	.Lsym1
 .Lsym2:
 .Lsym3:
 .Lsym4 = .Lsym2 - .Lsym3
@@ -19,28 +18,35 @@
         .text
         movsd   .Lsym8(%rip), %xmm1
 
-// CHECK:      ('_symbols', [
-// CHECK-NEXT:  # Symbol 0
-// CHECK-NEXT:  (('st_name', 0x00000000) # ''
-// CHECK:       # Symbol 1
-// CHECK-NEXT:  (('st_name', 0x0000000d) # '.Lsym8'
-// CHECK:       # Symbol 2
-// CHECK-NEXT:  (('st_name', 0x00000000) # ''
-// CHECK:       # Symbol 3
-// CHECK-NEXT:  (('st_name', 0x00000000) # ''
-// CHECK:       # Symbol 4
-// CHECK-NEXT:  (('st_name', 0x00000000) # ''
-// CHECK:       # Symbol 5
-// CHECK-NEXT:  (('st_name', 0x00000000) # ''
-// CHECK:       # Symbol 6
-// CHECK-NEXT:  (('st_name', 0x00000001) # '.Lsym1'
-// CHECK:       # Symbol 7
-// CHECK-NEXT:  (('st_name', 0x00000008) # 'sym6'
-// CHECK-NEXT:   ('st_bind', 0x1)
-// CHECK-NEXT:   ('st_type', 0x1)
-// CHECK-NEXT:   ('st_other', 0x00)
-// CHECK-NEXT:   ('st_shndx', 0x0000)
-// CHECK-NEXT:   ('st_value', 0x0000000000000000)
-// CHECK-NEXT:   ('st_size', 0x0000000000000000)
-// CHECK-NEXT:   ),
-// CHECK-NEXT:  ])
+test2_a = undef
+test2_b = undef + 1
+
+// CHECK:      Symbols [
+// CHECK-NEXT:   Symbol {
+// CHECK-NEXT:     Name:  (0)
+// CHECK-NEXT:     Value: 0x0
+// CHECK-NEXT:     Size: 0
+// CHECK-NEXT:     Binding: Local
+// CHECK-NEXT:     Type: None
+// CHECK-NEXT:     Other: 0
+// CHECK-NEXT:     Section: Undefined
+// CHECK-NEXT:   }
+// CHECK-NEXT:   Symbol {
+// CHECK-NEXT:     Name: .Lsym8
+// CHECK-NEXT:     Value: 0x0
+// CHECK-NEXT:     Size: 0
+// CHECK-NEXT:     Binding: Local
+// CHECK-NEXT:     Type: None
+// CHECK-NEXT:     Other: 0
+// CHECK-NEXT:     Section: .rodata.str1.1
+// CHECK-NEXT:   }
+// CHECK-NEXT:   Symbol {
+// CHECK-NEXT:     Name: sym6
+// CHECK-NEXT:     Value: 0x0
+// CHECK-NEXT:     Size: 0
+// CHECK-NEXT:     Binding: Global
+// CHECK-NEXT:     Type: Object
+// CHECK-NEXT:     Other: 0
+// CHECK-NEXT:     Section: Undefined
+// CHECK-NEXT:   }
+// CHECK-NEXT: ]

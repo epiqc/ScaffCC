@@ -11,16 +11,18 @@
 #define LLVM_CLANG_ARCMIGRATE_ARCMT_H
 
 #include "clang/ARCMigrate/FileRemapper.h"
+#include "clang/Basic/SourceLocation.h"
 #include "clang/Frontend/CompilerInvocation.h"
 
 namespace clang {
   class ASTContext;
   class DiagnosticConsumer;
+  class PCHContainerOperations;
 
 namespace arcmt {
   class MigrationPass;
 
-/// \brief Creates an AST with the provided CompilerInvocation but with these
+/// Creates an AST with the provided CompilerInvocation but with these
 /// changes:
 ///   -if a PCH/PTH is set, the original header is used instead
 ///   -Automatic Reference Counting mode is enabled
@@ -36,22 +38,25 @@ namespace arcmt {
 /// the pre-migration ARC diagnostics.
 ///
 /// \returns false if no error is produced, true otherwise.
-bool checkForManualIssues(CompilerInvocation &CI,
-                          const FrontendInputFile &Input,
-                          DiagnosticConsumer *DiagClient,
-                          bool emitPremigrationARCErrors = false,
-                          StringRef plistOut = StringRef());
+bool
+checkForManualIssues(CompilerInvocation &CI, const FrontendInputFile &Input,
+                     std::shared_ptr<PCHContainerOperations> PCHContainerOps,
+                     DiagnosticConsumer *DiagClient,
+                     bool emitPremigrationARCErrors = false,
+                     StringRef plistOut = StringRef());
 
-/// \brief Works similar to checkForManualIssues but instead of checking, it
+/// Works similar to checkForManualIssues but instead of checking, it
 /// applies automatic modifications to source files to conform to ARC.
 ///
 /// \returns false if no error is produced, true otherwise.
-bool applyTransformations(CompilerInvocation &origCI,
-                          const FrontendInputFile &Input,
-                          DiagnosticConsumer *DiagClient);
+bool
+applyTransformations(CompilerInvocation &origCI,
+                     const FrontendInputFile &Input,
+                     std::shared_ptr<PCHContainerOperations> PCHContainerOps,
+                     DiagnosticConsumer *DiagClient);
 
-/// \brief Applies automatic modifications and produces temporary files
-/// and metadata into the \arg outputDir path.
+/// Applies automatic modifications and produces temporary files
+/// and metadata into the \p outputDir path.
 ///
 /// \param emitPremigrationARCErrors if true all ARC errors will get emitted
 /// even if the migrator can fix them, but the function will still return false
@@ -61,14 +66,13 @@ bool applyTransformations(CompilerInvocation &origCI,
 /// the pre-migration ARC diagnostics.
 ///
 /// \returns false if no error is produced, true otherwise.
-bool migrateWithTemporaryFiles(CompilerInvocation &origCI,
-                               const FrontendInputFile &Input,
-                               DiagnosticConsumer *DiagClient,
-                               StringRef outputDir,
-                               bool emitPremigrationARCErrors,
-                               StringRef plistOut);
+bool migrateWithTemporaryFiles(
+    CompilerInvocation &origCI, const FrontendInputFile &Input,
+    std::shared_ptr<PCHContainerOperations> PCHContainerOps,
+    DiagnosticConsumer *DiagClient, StringRef outputDir,
+    bool emitPremigrationARCErrors, StringRef plistOut);
 
-/// \brief Get the set of file remappings from the \arg outputDir path that
+/// Get the set of file remappings from the \p outputDir path that
 /// migrateWithTemporaryFiles produced.
 ///
 /// \returns false if no error is produced, true otherwise.
@@ -76,7 +80,7 @@ bool getFileRemappings(std::vector<std::pair<std::string,std::string> > &remap,
                        StringRef outputDir,
                        DiagnosticConsumer *DiagClient);
 
-/// \brief Get the set of file remappings from a list of files with remapping
+/// Get the set of file remappings from a list of files with remapping
 /// info.
 ///
 /// \returns false if no error is produced, true otherwise.
@@ -92,11 +96,16 @@ std::vector<TransformFn> getAllTransformations(LangOptions::GCMode OrigGCMode,
 
 class MigrationProcess {
   CompilerInvocation OrigCI;
+  std::shared_ptr<PCHContainerOperations> PCHContainerOps;
   DiagnosticConsumer *DiagClient;
   FileRemapper Remapper;
 
 public:
-  MigrationProcess(const CompilerInvocation &CI, DiagnosticConsumer *diagClient,
+  bool HadARCErrors;
+
+  MigrationProcess(const CompilerInvocation &CI,
+                   std::shared_ptr<PCHContainerOperations> PCHContainerOps,
+                   DiagnosticConsumer *diagClient,
                    StringRef outputDir = StringRef());
 
   class RewriteListener {
@@ -110,7 +119,7 @@ public:
     virtual void remove(CharSourceRange range) { }
   };
 
-  bool applyTransform(TransformFn trans, RewriteListener *listener = 0);
+  bool applyTransform(TransformFn trans, RewriteListener *listener = nullptr);
 
   FileRemapper &getRemapper() { return Remapper; }
 };

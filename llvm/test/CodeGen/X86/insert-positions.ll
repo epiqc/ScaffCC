@@ -1,4 +1,4 @@
-; RUN: llc < %s -march=x86-64 >/dev/null
+; RUN: llc < %s -mtriple=x86_64-- >/dev/null
 
 target datalayout = "e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64"
 
@@ -41,7 +41,7 @@ for.end.i.i.i:                                    ; preds = %land.rhs.i.i.i, %fo
   %idx.ext.i.i.i = sext i32 %i.0.i.i.i to i64     ; <i64> [#uses=1]
   %sub.ptr72.sum.i.i.i = xor i64 %idx.ext.i.i.i, -1 ; <i64> [#uses=1]
   %pos.addr.1.sum155.i.i.i = add i64 %tmp154.i.i.i, %sub.ptr72.sum.i.i.i ; <i64> [#uses=1]
-  %arrayidx76.i.i.i = getelementptr inbounds i8* undef, i64 %pos.addr.1.sum155.i.i.i ; <i8*> [#uses=0]
+  %arrayidx76.i.i.i = getelementptr inbounds i8, i8* undef, i64 %pos.addr.1.sum155.i.i.i ; <i8*> [#uses=0]
   br label %while.cond.backedge.i.i.i
 }
 

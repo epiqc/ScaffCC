@@ -11,8 +11,8 @@ TOFF=0
 CTQG=0
 ROTATIONS=0
 
-BUILD=$(ROOT)/build/Release+Asserts
-#BUILD=$(ROOT)/build
+#BUILD=ROOT
+BUILD=$(ROOT)/build
 
 SQCTPATH=$(ROOT)/Rotations/sqct/rotZ
 GRIDSYNTHPATH=$(ROOT)/Rotations/gridsynth/gridsynth
@@ -24,16 +24,16 @@ OPTIMIZE=0
 CC=$(BUILD)/bin/clang
 OPT=$(BUILD)/bin/opt
 
-CC_FLAGS=-c -emit-llvm -I/usr/include -I/usr/include/x86_64-linux-gnu -I/usr/lib/gcc/x86_64-linux-gnu/4.8/include -I$(DIRNAME)
+CC_FLAGS=-c -emit-llvm -Xclang -disable-O0-optnone -I/usr/include -I/usr/include/x86_64-linux-gnu -I/usr/lib/gcc/x86_64-linux-gnu/4.8/include -I$(DIRNAME)
 
 OSX_FLAGS=""
 
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Linux)
-SCAFFOLD_LIB=$(ROOT)/build/Release+Asserts/lib/Scaffold.so
+SCAFFOLD_LIB=$(ROOT)/build/lib/LLVMScaffold.so
 endif
 ifeq ($(UNAME_S),Darwin)
-SCAFFOLD_LIB=$(ROOT)/build/Release+Asserts/lib/Scaffold.dylib
+SCAFFOLD_LIB=$(ROOT)/build/lib/LLVMScaffold.dylib
 OSX_FLAGS=-isysroot $(shell xcrun --sdk macosx --show-sdk-path)
 endif
 
@@ -100,12 +100,16 @@ $(FILE)1.ll: $(FILE).ll
 
 # Perform normal C++ optimization routines
 $(FILE)4.ll: $(FILE)1.ll
-	@echo "[Scaffold.makefile] O1 optimizations ..."
-	@$(OPT) -S $(FILE)1.ll -no-aa -tbaa -targetlibinfo -basicaa -o $(FILE)1a.ll > /dev/null
-	@$(OPT) -S $(FILE)1a.ll -simplifycfg -domtree -o $(FILE)1b.ll > /dev/null
-	@$(OPT) -S $(FILE)1b.ll -early-cse -lower-expect -o $(FILE)2.ll > /dev/null
-	@$(OPT) -S $(FILE)2.ll -targetlibinfo -no-aa -tbaa -basicaa -globalopt -ipsccp -o $(FILE)3.ll > /dev/null
-	@$(OPT) -S $(FILE)3.ll -instcombine -simplifycfg -basiccg -prune-eh -always-inline -functionattrs -domtree -early-cse -lazy-value-info -jump-threading -correlated-propagation -simplifycfg -instcombine -tailcallelim -simplifycfg -reassociate -domtree -loops -loop-simplify -lcssa -loop-rotate -licm -lcssa -loop-unswitch -instcombine -scalar-evolution -loop-simplify -lcssa -iv-users -indvars -loop-idiom -loop-deletion -loop-unroll -memdep -memcpyopt -sccp -instcombine -lazy-value-info -jump-threading -correlated-propagation -domtree -memdep -dse -adce -simplifycfg -instcombine -strip-dead-prototypes -preverify -domtree -verify -o $(FILE)4.ll > /dev/null
+	@if [ $(COPTIMIZATION) -eq 1 ]; then \
+		echo "[Scaffold.makefile] O1 optimizations ..."; \
+		$(OPT) -S $(FILE)1.ll -tbaa -targetlibinfo -basicaa -o $(FILE)1a.ll > /dev/null; \
+		$(OPT) -S $(FILE)1a.ll -simplifycfg -domtree -o $(FILE)1b.ll > /dev/null; \
+		$(OPT) -S $(FILE)1b.ll -early-cse -lower-expect -o $(FILE)2.ll > /dev/null; \
+		$(OPT) -S $(FILE)2.ll -targetlibinfo -tbaa -basicaa -globalopt -ipsccp -o $(FILE)3.ll > /dev/null; \
+		$(OPT) -S $(FILE)3.ll -instcombine -simplifycfg -basiccg -prune-eh -always-inline -functionattrs -domtree -early-cse -lazy-value-info -jump-threading -correlated-propagation -simplifycfg -instcombine -tailcallelim -simplifycfg -reassociate -domtree -loops -loop-simplify -lcssa -loop-rotate -licm -lcssa -loop-unswitch -instcombine -scalar-evolution -loop-simplify -lcssa -iv-users -indvars -loop-idiom -loop-deletion -loop-unroll -unroll-threshold=100000000 -memdep -memcpyopt -sccp -instcombine -lazy-value-info -jump-threading -correlated-propagation -domtree -memdep -dse -adce -simplifycfg -instcombine -strip-dead-prototypes -verify-each -domtree -verify -o $(FILE)4.ll > /dev/null; \
+	else \
+		cp $(FILE)1.ll $(FILE)4.ll; \
+	fi
 
 # Perform loop unrolling until completely unrolled, then remove dead code
 #
@@ -128,7 +132,7 @@ $(FILE)6.ll: $(FILE)4.ll
 		echo "[Scaffold.makefile] Dead Argument Elimination ($$UCNT) ..." && \
 		$(OPT) -S -deadargelim $(FILE)5a.ll -o $(FILE)6tmp.ll > /dev/null; \
 	done && \
-	$(OPT) -S $(FILE)6tmp.ll -internalize -globaldce -adce -o $(FILE)6.ll > /dev/null  
+	$(OPT) -S $(FILE)6tmp.ll -internalize-public-api-list=main -internalize -globaldce -adce -o $(FILE)6.ll > /dev/null  
 	
 
 # Perform Rotation decomposition if requested and rotation decomp tool is built
@@ -148,7 +152,7 @@ $(FILE)7.ll: $(FILE)6.ll
 # Remove any code that is useless after optimizations
 $(FILE)8.ll: $(FILE)7.ll
 	@echo "[Scaffold.makefile] Internalizing and Removing Unused Functions ..."
-	@$(OPT) -S $(FILE)7.ll -internalize -globaldce -deadargelim -o $(FILE)8.ll > /dev/null
+	@$(OPT) -S $(FILE)7.ll -internalize-public-api-list=main -internalize -globaldce -deadargelim -o $(FILE)8.ll > /dev/null
 
 # Compile RKQC 
 $(FILE)9.ll: $(FILE)8.ll
@@ -230,7 +234,7 @@ $(FILE).qc: $(FILE).qasmf
 
 # purge cleans temp files
 purge:
-	@rm -f $(FILE)_merged.scaffold $(FILE)_no.scaffold $(FILE).ll $(FILE)1.ll $(FILE)1a.ll $(FILE)1b.ll $(FILE)2.ll $(FILE)3.ll $(FILE)4.ll $(FILE)5.ll $(FILE)5a.ll $(FILE)6.ll $(FILE)6tmp.ll $(FILE)7.ll $(FILE)8.ll $(FILE)9.ll $(FILE)10.ll $(FILE)11.ll $(FILE)12.ll $(FILE)12.inlined.ll $(FILE)tmp.ll $(FILE)_qasm $(FILE)_qasm.scaffold fdecl.out $(CFILE).ctqg $(CFILE).c $(CFILE).signals $(FILE).tmp sim_$(CFILE) $(FILE).*.qasm
+	@rm -f $(FILE)_merged.scaffold $(FILE)_no.scaffold $(FILE).ll $(FILE)1.ll $(FILE)1a.ll $(FILE)1b.ll $(FILE)2.ll $(FILE)3.ll $(FILE)4.ll $(FILE)5.ll $(FILE)5a.ll $(FILE)6.ll $(FILE)6tmp.ll $(FILE)7.ll $(FILE)8.ll $(FILE)9.ll $(FILE)10.ll $(FILE)11.ll $(FILE)12.ll $(FILE)12.inlined.ll $(FILE)tmp.ll $(FILE)_qasm $(FILE)_qasm.scaffold fdecl.out $(CFILE).ctqg $(CFILE).c $(CFILE).signals $(FILE).tmp sim_$(CFILE) $(FILE).*.qasm $(FILE)_args.scaffold
 
 # clean removes all completed files
 clean: purge

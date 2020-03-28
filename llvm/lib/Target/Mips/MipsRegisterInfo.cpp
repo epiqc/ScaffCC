@@ -1,4 +1,4 @@
-//===-- MipsRegisterInfo.cpp - MIPS Register Information -== --------------===//
+//===- MipsRegisterInfo.cpp - MIPS Register Information -------------------===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -11,123 +11,247 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "mips-reg-info"
-
 #include "MipsRegisterInfo.h"
+#include "MCTargetDesc/MipsABIInfo.h"
 #include "Mips.h"
-#include "MipsAnalyzeImmediate.h"
-#include "MipsSubtarget.h"
 #include "MipsMachineFunction.h"
-#include "llvm/Constants.h"
-#include "llvm/Type.h"
-#include "llvm/Function.h"
-#include "llvm/CodeGen/ValueTypes.h"
-#include "llvm/CodeGen/MachineInstrBuilder.h"
-#include "llvm/CodeGen/MachineFunction.h"
+#include "MipsSubtarget.h"
+#include "MipsTargetMachine.h"
+#include "llvm/ADT/BitVector.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
-#include "llvm/Target/TargetFrameLowering.h"
-#include "llvm/Target/TargetMachine.h"
-#include "llvm/Target/TargetOptions.h"
-#include "llvm/Target/TargetInstrInfo.h"
-#include "llvm/Support/CommandLine.h"
+#include "llvm/CodeGen/MachineFunction.h"
+#include "llvm/CodeGen/MachineInstr.h"
+#include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/CodeGen/TargetFrameLowering.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
+#include "llvm/CodeGen/TargetSubtargetInfo.h"
+#include "llvm/IR/Function.h"
+#include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/ADT/BitVector.h"
-#include "llvm/ADT/STLExtras.h"
-#include "llvm/Analysis/DebugInfo.h"
+#include <cstdint>
+
+using namespace llvm;
+
+#define DEBUG_TYPE "mips-reg-info"
 
 #define GET_REGINFO_TARGET_DESC
 #include "MipsGenRegisterInfo.inc"
 
-using namespace llvm;
-
-MipsRegisterInfo::MipsRegisterInfo(const MipsSubtarget &ST,
-                                   const TargetInstrInfo &tii)
-  : MipsGenRegisterInfo(Mips::RA), Subtarget(ST), TII(tii) {}
+MipsRegisterInfo::MipsRegisterInfo() : MipsGenRegisterInfo(Mips::RA) {}
 
 unsigned MipsRegisterInfo::getPICCallReg() { return Mips::T9; }
+
+const TargetRegisterClass *
+MipsRegisterInfo::getPointerRegClass(const MachineFunction &MF,
+                                     unsigned Kind) const {
+  MipsABIInfo ABI = MF.getSubtarget<MipsSubtarget>().getABI();
+  MipsPtrClass PtrClassKind = static_cast<MipsPtrClass>(Kind);
+
+  switch (PtrClassKind) {
+  case MipsPtrClass::Default:
+    return ABI.ArePtrs64bit() ? &Mips::GPR64RegClass : &Mips::GPR32RegClass;
+  case MipsPtrClass::GPR16MM:
+    return &Mips::GPRMM16RegClass;
+  case MipsPtrClass::StackPointer:
+    return ABI.ArePtrs64bit() ? &Mips::SP64RegClass : &Mips::SP32RegClass;
+  case MipsPtrClass::GlobalPointer:
+    return ABI.ArePtrs64bit() ? &Mips::GP64RegClass : &Mips::GP32RegClass;
+  }
+
+  llvm_unreachable("Unknown pointer kind");
+}
+
+unsigned
+MipsRegisterInfo::getRegPressureLimit(const TargetRegisterClass *RC,
+                                      MachineFunction &MF) const {
+  switch (RC->getID()) {
+  default:
+    return 0;
+  case Mips::GPR32RegClassID:
+  case Mips::GPR64RegClassID:
+  case Mips::DSPRRegClassID: {
+    const TargetFrameLowering *TFI = MF.getSubtarget().getFrameLowering();
+    return 28 - TFI->hasFP(MF);
+  }
+  case Mips::FGR32RegClassID:
+    return 32;
+  case Mips::AFGR64RegClassID:
+    return 16;
+  case Mips::FGR64RegClassID:
+    return 32;
+  }
+}
 
 //===----------------------------------------------------------------------===//
 // Callee Saved Registers methods
 //===----------------------------------------------------------------------===//
 
 /// Mips Callee Saved Registers
-const uint16_t* MipsRegisterInfo::
-getCalleeSavedRegs(const MachineFunction *MF) const
-{
+const MCPhysReg *
+MipsRegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
+  const MipsSubtarget &Subtarget = MF->getSubtarget<MipsSubtarget>();
+  const Function &F = MF->getFunction();
+  if (F.hasFnAttribute("interrupt")) {
+    if (Subtarget.hasMips64())
+      return Subtarget.hasMips64r6() ? CSR_Interrupt_64R6_SaveList
+                                     : CSR_Interrupt_64_SaveList;
+    else
+      return Subtarget.hasMips32r6() ? CSR_Interrupt_32R6_SaveList
+                                     : CSR_Interrupt_32_SaveList;
+  }
+
   if (Subtarget.isSingleFloat())
     return CSR_SingleFloatOnly_SaveList;
-  else if (!Subtarget.hasMips64())
-    return CSR_O32_SaveList;
-  else if (Subtarget.isABI_N32())
+
+  if (Subtarget.isABI_N64())
+    return CSR_N64_SaveList;
+
+  if (Subtarget.isABI_N32())
     return CSR_N32_SaveList;
 
-  assert(Subtarget.isABI_N64());
-  return CSR_N64_SaveList;  
+  if (Subtarget.isFP64bit())
+    return CSR_O32_FP64_SaveList;
+
+  if (Subtarget.isFPXX())
+    return CSR_O32_FPXX_SaveList;
+
+  return CSR_O32_SaveList;
 }
 
-const uint32_t*
-MipsRegisterInfo::getCallPreservedMask(CallingConv::ID) const
-{  
+const uint32_t *
+MipsRegisterInfo::getCallPreservedMask(const MachineFunction &MF,
+                                       CallingConv::ID) const {
+  const MipsSubtarget &Subtarget = MF.getSubtarget<MipsSubtarget>();
   if (Subtarget.isSingleFloat())
     return CSR_SingleFloatOnly_RegMask;
-  else if (!Subtarget.hasMips64())
-    return CSR_O32_RegMask;
-  else if (Subtarget.isABI_N32())
+
+  if (Subtarget.isABI_N64())
+    return CSR_N64_RegMask;
+
+  if (Subtarget.isABI_N32())
     return CSR_N32_RegMask;
 
-  assert(Subtarget.isABI_N64());
-  return CSR_N64_RegMask;  
+  if (Subtarget.isFP64bit())
+    return CSR_O32_FP64_RegMask;
+
+  if (Subtarget.isFPXX())
+    return CSR_O32_FPXX_RegMask;
+
+  return CSR_O32_RegMask;
+}
+
+const uint32_t *MipsRegisterInfo::getMips16RetHelperMask() {
+  return CSR_Mips16RetHelper_RegMask;
 }
 
 BitVector MipsRegisterInfo::
 getReservedRegs(const MachineFunction &MF) const {
-  static const uint16_t ReservedCPURegs[] = {
-    Mips::ZERO, Mips::AT, Mips::K0, Mips::K1,
-    Mips::SP, Mips::FP, Mips::RA
+  static const MCPhysReg ReservedGPR32[] = {
+    Mips::ZERO, Mips::K0, Mips::K1, Mips::SP
   };
 
-  static const uint16_t ReservedCPU64Regs[] = {
-    Mips::ZERO_64, Mips::AT_64, Mips::K0_64, Mips::K1_64,
-    Mips::SP_64, Mips::FP_64, Mips::RA_64
+  static const MCPhysReg ReservedGPR64[] = {
+    Mips::ZERO_64, Mips::K0_64, Mips::K1_64, Mips::SP_64
   };
 
   BitVector Reserved(getNumRegs());
-  typedef TargetRegisterClass::iterator RegIter;
+  const MipsSubtarget &Subtarget = MF.getSubtarget<MipsSubtarget>();
 
-  for (unsigned I = 0; I < array_lengthof(ReservedCPURegs); ++I)
-    Reserved.set(ReservedCPURegs[I]);
+  using RegIter = TargetRegisterClass::const_iterator;
 
-  if (Subtarget.hasMips64()) {
-    for (unsigned I = 0; I < array_lengthof(ReservedCPU64Regs); ++I)
-      Reserved.set(ReservedCPU64Regs[I]);
+  for (unsigned I = 0; I < array_lengthof(ReservedGPR32); ++I)
+    Reserved.set(ReservedGPR32[I]);
 
-    // Reserve all registers in AFGR64.
-    for (RegIter Reg = Mips::AFGR64RegisterClass->begin();
-         Reg != Mips::AFGR64RegisterClass->end(); ++Reg)
-      Reserved.set(*Reg);
-  }
-  else {
-    // Reserve all registers in CPU64Regs & FGR64.
-    for (RegIter Reg = Mips::CPU64RegsRegisterClass->begin();
-         Reg != Mips::CPU64RegsRegisterClass->end(); ++Reg)
-      Reserved.set(*Reg);
-
-    for (RegIter Reg = Mips::FGR64RegisterClass->begin();
-         Reg != Mips::FGR64RegisterClass->end(); ++Reg)
-      Reserved.set(*Reg);
+  // Reserve registers for the NaCl sandbox.
+  if (Subtarget.isTargetNaCl()) {
+    Reserved.set(Mips::T6);   // Reserved for control flow mask.
+    Reserved.set(Mips::T7);   // Reserved for memory access mask.
+    Reserved.set(Mips::T8);   // Reserved for thread pointer.
   }
 
-  // If GP is dedicated as a global base register, reserve it.
-  if (MF.getInfo<MipsFunctionInfo>()->globalBaseRegFixed()) {
+  for (unsigned I = 0; I < array_lengthof(ReservedGPR64); ++I)
+    Reserved.set(ReservedGPR64[I]);
+
+  // For mno-abicalls, GP is a program invariant!
+  if (!Subtarget.isABICalls()) {
     Reserved.set(Mips::GP);
     Reserved.set(Mips::GP_64);
   }
 
+  if (Subtarget.isFP64bit()) {
+    // Reserve all registers in AFGR64.
+    for (RegIter Reg = Mips::AFGR64RegClass.begin(),
+         EReg = Mips::AFGR64RegClass.end(); Reg != EReg; ++Reg)
+      Reserved.set(*Reg);
+  } else {
+    // Reserve all registers in FGR64.
+    for (RegIter Reg = Mips::FGR64RegClass.begin(),
+         EReg = Mips::FGR64RegClass.end(); Reg != EReg; ++Reg)
+      Reserved.set(*Reg);
+  }
+  // Reserve FP if this function should have a dedicated frame pointer register.
+  if (Subtarget.getFrameLowering()->hasFP(MF)) {
+    if (Subtarget.inMips16Mode())
+      Reserved.set(Mips::S0);
+    else {
+      Reserved.set(Mips::FP);
+      Reserved.set(Mips::FP_64);
+
+      // Reserve the base register if we need to both realign the stack and
+      // allocate variable-sized objects at runtime. This should test the
+      // same conditions as MipsFrameLowering::hasBP().
+      if (needsStackRealignment(MF) &&
+          MF.getFrameInfo().hasVarSizedObjects()) {
+        Reserved.set(Mips::S7);
+        Reserved.set(Mips::S7_64);
+      }
+    }
+  }
+
   // Reserve hardware registers.
   Reserved.set(Mips::HWR29);
-  Reserved.set(Mips::HWR29_64);
+
+  // Reserve DSP control register.
+  Reserved.set(Mips::DSPPos);
+  Reserved.set(Mips::DSPSCount);
+  Reserved.set(Mips::DSPCarry);
+  Reserved.set(Mips::DSPEFI);
+  Reserved.set(Mips::DSPOutFlag);
+
+  // Reserve MSA control registers.
+  Reserved.set(Mips::MSAIR);
+  Reserved.set(Mips::MSACSR);
+  Reserved.set(Mips::MSAAccess);
+  Reserved.set(Mips::MSASave);
+  Reserved.set(Mips::MSAModify);
+  Reserved.set(Mips::MSARequest);
+  Reserved.set(Mips::MSAMap);
+  Reserved.set(Mips::MSAUnmap);
+
+  // Reserve RA if in mips16 mode.
+  if (Subtarget.inMips16Mode()) {
+    const MipsFunctionInfo *MipsFI = MF.getInfo<MipsFunctionInfo>();
+    Reserved.set(Mips::RA);
+    Reserved.set(Mips::RA_64);
+    Reserved.set(Mips::T0);
+    Reserved.set(Mips::T1);
+    if (MF.getFunction().hasFnAttribute("saveS2") || MipsFI->hasSaveS2())
+      Reserved.set(Mips::S2);
+  }
+
+  // Reserve GP if small section is used.
+  if (Subtarget.useSmallSection()) {
+    Reserved.set(Mips::GP);
+    Reserved.set(Mips::GP_64);
+  }
+
+  if (Subtarget.isABI_O32() && !Subtarget.useOddSPReg()) {
+    for (const auto &Reg : Mips::OddSPRegClass)
+      Reserved.set(Reg);
+  }
 
   return Reserved;
 }
@@ -137,13 +261,9 @@ MipsRegisterInfo::requiresRegisterScavenging(const MachineFunction &MF) const {
   return true;
 }
 
-// This function eliminate ADJCALLSTACKDOWN,
-// ADJCALLSTACKUP pseudo instructions
-void MipsRegisterInfo::
-eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
-                              MachineBasicBlock::iterator I) const {
-  // Simply discard ADJCALLSTACKDOWN, ADJCALLSTACKUP instructions.
-  MBB.erase(I);
+bool
+MipsRegisterInfo::trackLivenessAfterRegAlloc(const MachineFunction &MF) const {
+  return true;
 }
 
 // FrameIndex represent objects inside a abstract stack.
@@ -151,129 +271,72 @@ eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
 // direct reference.
 void MipsRegisterInfo::
 eliminateFrameIndex(MachineBasicBlock::iterator II, int SPAdj,
-                    RegScavenger *RS) const {
+                    unsigned FIOperandNum, RegScavenger *RS) const {
   MachineInstr &MI = *II;
   MachineFunction &MF = *MI.getParent()->getParent();
-  MachineFrameInfo *MFI = MF.getFrameInfo();
-  MipsFunctionInfo *MipsFI = MF.getInfo<MipsFunctionInfo>();
 
-  unsigned i = 0;
-  while (!MI.getOperand(i).isFI()) {
-    ++i;
-    assert(i < MI.getNumOperands() &&
-           "Instr doesn't have FrameIndex operand!");
-  }
+  LLVM_DEBUG(errs() << "\nFunction : " << MF.getName() << "\n";
+             errs() << "<--------->\n"
+                    << MI);
 
-  DEBUG(errs() << "\nFunction : " << MF.getFunction()->getName() << "\n";
-        errs() << "<--------->\n" << MI);
+  int FrameIndex = MI.getOperand(FIOperandNum).getIndex();
+  uint64_t stackSize = MF.getFrameInfo().getStackSize();
+  int64_t spOffset = MF.getFrameInfo().getObjectOffset(FrameIndex);
 
-  int FrameIndex = MI.getOperand(i).getIndex();
-  uint64_t stackSize = MF.getFrameInfo()->getStackSize();
-  int64_t spOffset = MF.getFrameInfo()->getObjectOffset(FrameIndex);
+  LLVM_DEBUG(errs() << "FrameIndex : " << FrameIndex << "\n"
+                    << "spOffset   : " << spOffset << "\n"
+                    << "stackSize  : " << stackSize << "\n"
+                    << "alignment  : "
+                    << MF.getFrameInfo().getObjectAlignment(FrameIndex)
+                    << "\n");
 
-  DEBUG(errs() << "FrameIndex : " << FrameIndex << "\n"
-               << "spOffset   : " << spOffset << "\n"
-               << "stackSize  : " << stackSize << "\n");
-
-  const std::vector<CalleeSavedInfo> &CSI = MFI->getCalleeSavedInfo();
-  int MinCSFI = 0;
-  int MaxCSFI = -1;
-
-  if (CSI.size()) {
-    MinCSFI = CSI[0].getFrameIdx();
-    MaxCSFI = CSI[CSI.size() - 1].getFrameIdx();
-  }
-
-  // The following stack frame objects are always referenced relative to $sp:
-  //  1. Outgoing arguments.
-  //  2. Pointer to dynamically allocated stack space.
-  //  3. Locations for callee-saved registers.
-  // Everything else is referenced relative to whatever register
-  // getFrameRegister() returns.
-  unsigned FrameReg;
-
-  if (MipsFI->isOutArgFI(FrameIndex) || MipsFI->isDynAllocFI(FrameIndex) ||
-      (FrameIndex >= MinCSFI && FrameIndex <= MaxCSFI))
-    FrameReg = Subtarget.isABI_N64() ? Mips::SP_64 : Mips::SP;
-  else
-    FrameReg = getFrameRegister(MF);
-
-  // Calculate final offset.
-  // - There is no need to change the offset if the frame object is one of the
-  //   following: an outgoing argument, pointer to a dynamically allocated
-  //   stack space or a $gp restore location,
-  // - If the frame object is any of the following, its offset must be adjusted
-  //   by adding the size of the stack:
-  //   incoming argument, callee-saved register location or local variable.
-  int64_t Offset;
-
-  if (MipsFI->isOutArgFI(FrameIndex) || MipsFI->isGPFI(FrameIndex) ||
-      MipsFI->isDynAllocFI(FrameIndex))
-    Offset = spOffset;
-  else
-    Offset = spOffset + (int64_t)stackSize;
-
-  Offset    += MI.getOperand(i+1).getImm();
-
-  DEBUG(errs() << "Offset     : " << Offset << "\n" << "<--------->\n");
-
-  // If MI is not a debug value, make sure Offset fits in the 16-bit immediate
-  // field.
-  if (!MI.isDebugValue() && !isInt<16>(Offset)) {
-    MachineBasicBlock &MBB = *MI.getParent();
-    DebugLoc DL = II->getDebugLoc();
-    MipsAnalyzeImmediate AnalyzeImm;
-    unsigned Size = Subtarget.isABI_N64() ? 64 : 32;
-    unsigned LUi = Subtarget.isABI_N64() ? Mips::LUi64 : Mips::LUi;
-    unsigned ADDu = Subtarget.isABI_N64() ? Mips::DADDu : Mips::ADDu;
-    unsigned ZEROReg = Subtarget.isABI_N64() ? Mips::ZERO_64 : Mips::ZERO;
-    unsigned ATReg = Subtarget.isABI_N64() ? Mips::AT_64 : Mips::AT;
-    const MipsAnalyzeImmediate::InstSeq &Seq =
-      AnalyzeImm.Analyze(Offset, Size, true /* LastInstrIsADDiu */);
-    MipsAnalyzeImmediate::InstSeq::const_iterator Inst = Seq.begin();
-
-    MipsFI->setEmitNOAT();
-
-    // The first instruction can be a LUi, which is different from other
-    // instructions (ADDiu, ORI and SLL) in that it does not have a register
-    // operand.
-    if (Inst->Opc == LUi)
-      BuildMI(MBB, II, DL, TII.get(LUi), ATReg)
-        .addImm(SignExtend64<16>(Inst->ImmOpnd));
-    else
-      BuildMI(MBB, II, DL, TII.get(Inst->Opc), ATReg).addReg(ZEROReg)
-        .addImm(SignExtend64<16>(Inst->ImmOpnd));
-
-    // Build the remaining instructions in Seq except for the last one.
-    for (++Inst; Inst != Seq.end() - 1; ++Inst)
-      BuildMI(MBB, II, DL, TII.get(Inst->Opc), ATReg).addReg(ATReg)
-        .addImm(SignExtend64<16>(Inst->ImmOpnd));
-
-    BuildMI(MBB, II, DL, TII.get(ADDu), ATReg).addReg(FrameReg).addReg(ATReg);
-
-    FrameReg = ATReg;
-    Offset = SignExtend64<16>(Inst->ImmOpnd);
-  }
-
-  MI.getOperand(i).ChangeToRegister(FrameReg, false);
-  MI.getOperand(i+1).ChangeToImmediate(Offset);
+  eliminateFI(MI, FIOperandNum, FrameIndex, stackSize, spOffset);
 }
 
 unsigned MipsRegisterInfo::
 getFrameRegister(const MachineFunction &MF) const {
-  const TargetFrameLowering *TFI = MF.getTarget().getFrameLowering();
-  bool IsN64 = Subtarget.isABI_N64();
+  const MipsSubtarget &Subtarget = MF.getSubtarget<MipsSubtarget>();
+  const TargetFrameLowering *TFI = Subtarget.getFrameLowering();
+  bool IsN64 =
+      static_cast<const MipsTargetMachine &>(MF.getTarget()).getABI().IsN64();
 
-  return TFI->hasFP(MF) ? (IsN64 ? Mips::FP_64 : Mips::FP) :
-                          (IsN64 ? Mips::SP_64 : Mips::SP);
+  if (Subtarget.inMips16Mode())
+    return TFI->hasFP(MF) ? Mips::S0 : Mips::SP;
+  else
+    return TFI->hasFP(MF) ? (IsN64 ? Mips::FP_64 : Mips::FP) :
+                            (IsN64 ? Mips::SP_64 : Mips::SP);
 }
 
-unsigned MipsRegisterInfo::
-getEHExceptionRegister() const {
-  llvm_unreachable("What is the exception register");
-}
+bool MipsRegisterInfo::canRealignStack(const MachineFunction &MF) const {
+  // Avoid realigning functions that explicitly do not want to be realigned.
+  // Normally, we should report an error when a function should be dynamically
+  // realigned but also has the attribute no-realign-stack. Unfortunately,
+  // with this attribute, MachineFrameInfo clamps each new object's alignment
+  // to that of the stack's alignment as specified by the ABI. As a result,
+  // the information of whether we have objects with larger alignment
+  // requirement than the stack's alignment is already lost at this point.
+  if (!TargetRegisterInfo::canRealignStack(MF))
+    return false;
 
-unsigned MipsRegisterInfo::
-getEHHandlerRegister() const {
-  llvm_unreachable("What is the exception handler register");
+  const MipsSubtarget &Subtarget = MF.getSubtarget<MipsSubtarget>();
+  unsigned FP = Subtarget.isGP32bit() ? Mips::FP : Mips::FP_64;
+  unsigned BP = Subtarget.isGP32bit() ? Mips::S7 : Mips::S7_64;
+
+  // Support dynamic stack realignment only for targets with standard encoding.
+  if (!Subtarget.hasStandardEncoding())
+    return false;
+
+  // We can't perform dynamic stack realignment if we can't reserve the
+  // frame pointer register.
+  if (!MF.getRegInfo().canReserveReg(FP))
+    return false;
+
+  // We can realign the stack if we know the maximum call frame size and we
+  // don't have variable sized objects.
+  if (Subtarget.getFrameLowering()->hasReservedCallFrame(MF))
+    return true;
+
+  // We have to reserve the base pointer register in the presence of variable
+  // sized objects.
+  return MF.getRegInfo().canReserveReg(BP);
 }

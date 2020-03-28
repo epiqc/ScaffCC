@@ -19,7 +19,7 @@ int x = sizeof(struct{char qq[x];}); // expected-error {{fields must have a cons
 // PR2352
 void f2(unsigned int m)
 {
-  extern int e1[2][m]; // expected-error {{variable length array declaration can not have 'extern' linkage}}
+  extern int e1[2][m]; // expected-error {{variable length array declaration cannot have 'extern' linkage}}
 
   e1[0][0] = 0;
   
@@ -34,10 +34,10 @@ int (*e)[i]; // expected-error {{variably modified type declaration not allowed 
 
 void f3()
 {
-  static int a[i]; // expected-error {{variable length array declaration can not have 'static' storage duration}}
-  extern int b[i]; // expected-error {{variable length array declaration can not have 'extern' linkage}}
+  static int a[i]; // expected-error {{variable length array declaration cannot have 'static' storage duration}}
+  extern int b[i]; // expected-error {{variable length array declaration cannot have 'extern' linkage}}
 
-  extern int (*c1)[i]; // expected-error {{variably modified type declaration can not have 'extern' linkage}}
+  extern int (*c1)[i]; // expected-error {{variably modified type declaration cannot have 'extern' linkage}}
   static int (*d)[i];
 }
 
@@ -61,7 +61,31 @@ void pr5185(int a[*]) // expected-error {{variable length array must be bound in
 {
 }
 
+void pr23151(int (*p1)[*]) // expected-error {{variable length array must be bound in function definition}}
+{}
+
 // Make sure this isn't treated as an error
 int TransformBug(int a) {
  return sizeof(*(int(*)[({ goto v; v: a;})]) 0); // expected-warning {{use of GNU statement expression extension}}
+}
+
+// PR36157
+struct {
+  int a[ // expected-error {{variable length array in struct}}
+    implicitly_declared() // expected-warning {{implicit declaration}}
+  ];
+};
+int (*use_implicitly_declared)() = implicitly_declared; // ok, was implicitly declared at file scope
+
+void VLAPtrAssign(int size) {
+  int array[1][2][3][size][4][5];
+  // This is well formed
+  int (*p)[2][3][size][4][5] = array;
+  // Last array dimension too large
+  int (*p2)[2][3][size][4][6] = array; // expected-warning {{incompatible pointer types}}
+  // Second array dimension too large
+  int (*p3)[20][3][size][4][5] = array; // expected-warning {{incompatible pointer types}}
+
+  // Not illegal in C, program _might_ be well formed if size == 3.
+  int (*p4)[2][size][3][4][5] = array;
 }

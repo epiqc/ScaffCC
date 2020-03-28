@@ -7,7 +7,7 @@ template<typename T>
 void b(const T *x, const A *y) {
   x->~decltype(T())();
   x->~decltype(*x)(); // expected-error{{the type of object expression ('const int') does not match the type being destroyed ('decltype(*x)' (aka 'const int &')) in pseudo-destructor expression}} \
-                         expected-error{{no member named '~const struct A &' in 'A'}}
+                         expected-error{{no member named '~const A &' in 'A'}}
   x->~decltype(int())(); // expected-error{{no member named '~int' in 'A'}}
 
   y->~decltype(*y)(); // expected-error{{destructor type 'decltype(*y)' (aka 'const A &') in object destruction expression does not match the type 'const A' of the object being destroyed}}
@@ -27,13 +27,13 @@ void a(const A *x, int i, int *pi) {
   y->~decltype(A())(); // expected-error{{use of undeclared identifier 'y'}}
 
   typedef int *intp;
-  i->~decltype(int())(); // expected-error{{member reference type 'int' is not a pointer; maybe you meant to use '.'?}}
+  i->~decltype(int())(); // expected-error{{member reference type 'int' is not a pointer; did you mean to use '.'?}}
   i.~decltype(int())();
-  i->~decltype(intp())(); // expected-error{{member reference type 'int' is not a pointer; maybe you meant to use '.'?}} \
+  i->~decltype(intp())(); // expected-error{{member reference type 'int' is not a pointer; did you mean to use '.'?}} \
                              expected-error{{the type of object expression ('int') does not match the type being destroyed ('decltype(intp())' (aka 'int *')) in pseudo-destructor expression}}
   i.~decltype(intp())(); // expected-error{{the type of object expression ('int') does not match the type being destroyed ('decltype(intp())' (aka 'int *')) in pseudo-destructor expression}}
   pi->~decltype(int())();
-  pi.~decltype(int())(); // expected-error{{the type of object expression ('int *') does not match the type being destroyed ('decltype(int())' (aka 'int')) in pseudo-destructor expression}}
+  pi.~decltype(int())(); // expected-error{{member reference type 'int *' is a pointer; did you mean to use '->'?}}
   pi.~decltype(intp())();
   pi->~decltype(intp())(); // expected-error{{the type of object expression ('int') does not match the type being destroyed ('decltype(intp())' (aka 'int *')) in pseudo-destructor expression}}
 }

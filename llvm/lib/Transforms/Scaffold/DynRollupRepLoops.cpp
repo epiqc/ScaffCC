@@ -6,21 +6,21 @@
 //===----------------------------------------------------------------------===//
 
 #define DEBUG_TYPE "DynRollupRepLoops"
-#include "llvm/Module.h"
+#include "llvm/IR/Module.h"
 #include "llvm/Pass.h"
-#include "llvm/Function.h"
-#include "llvm/BasicBlock.h"
-#include "llvm/Instruction.h"
-#include "llvm/Instructions.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Instruction.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/ADT/Statistic.h"
-#include "llvm/Support/InstIterator.h"
+#include "llvm/IR/InstIterator.h"
 #include "llvm/PassAnalysisSupport.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
 #include "llvm/Transforms/Utils/Local.h"
-#include "llvm/Intrinsics.h"
+#include "llvm/IR/Intrinsics.h"
 #include <sstream>
 #include <climits>
 
@@ -64,10 +64,10 @@ namespace {
     //AnalysisUsage AU;
     
     virtual void getAnalysisUsage(AnalysisUsage &AU) const {
-      AU.addRequired<LoopInfo>();
-      AU.addPreserved<LoopInfo>();
-      AU.addRequired<ScalarEvolution>();
-      AU.addPreserved<ScalarEvolution>();            
+      AU.addRequired<LoopInfoWrapperPass>();
+      AU.addPreserved<LoopInfoWrapperPass>();
+      AU.addRequired<ScalarEvolutionWrapperPass>();
+      AU.addPreserved<ScalarEvolutionWrapperPass>();            
     }
     
 
@@ -813,8 +813,8 @@ namespace {
     }
     
     void getLoopInfo(Function& F) {
-      LoopInfo *LI = &getAnalysis<LoopInfo> ( F );
-      ScalarEvolution *SE = &getAnalysis<ScalarEvolution>( F );
+      LoopInfo *LI = &getAnalysis<LoopInfoWrapperPass> ( F ).getLoopInfo();
+      ScalarEvolution *SE = &getAnalysis<ScalarEvolutionWrapperPass>( F ).getSE();
 
       for (Function::iterator BB = F.begin(), E = F.end(); BB != E; ++BB)
 	{           
@@ -838,7 +838,7 @@ namespace {
 		  int tripCount = SE->getSmallConstantTripCount(L, Latch);
 
 		  if(tripCount > 1)
-		    bbTripCount[BB] = tripCount;
+		    bbTripCount[&*BB] = tripCount;
 
 
 		  if(Latch!=&*BB){
@@ -925,7 +925,7 @@ namespace {
 
     void addDummyEnd(BasicBlock* BB){
 
-     TerminatorInst *BBTerm = BB->getTerminator();
+     Instruction *BBTerm = BB->getTerminator();
 
      //while(isa<AllocaInst>(BBiter))
      //++BBiter;
@@ -1070,7 +1070,7 @@ namespace {
 	      if(currPred == CmpInst::ICMP_NE)
 		NewPred = CmpInst::ICMP_NE;
 
-	      BranchInst *Br = cast<BranchInst>(IC->use_back());
+	      BranchInst *Br = cast<BranchInst>(IC);//->use_back());
 	      assert(Br->isConditional() && "Did not find a branch");
 
 	      /*
@@ -1113,7 +1113,7 @@ namespace {
 
 
     //errs() << "BB = " << thisBB->getName() << " Func=" << F->getName() <<"\n";                   
-              LoopInfo *LI = &getAnalysis<LoopInfo> ( F );                                                                Loop* L1 = LI->getLoopFor(&*thisBB);                                                           
+              LoopInfo *LI = &getAnalysis<LoopInfoWrapperPass> ( F ).getLoopInfo();                                                                Loop* L1 = LI->getLoopFor(&*thisBB);                                                           
               //assert(L1 != NULL); //must be a loop by this point                                           
               modifyIndVars(L1, thisBB);                                                                                                                                                                                
               Loop* L2 = LI->getLoopFor(&*thisInc);                                                          

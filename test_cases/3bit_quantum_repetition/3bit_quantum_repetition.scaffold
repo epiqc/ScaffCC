@@ -1,0 +1,21 @@
+int main() {
+    qbit q[3];
+    qbit a[2];
+    cbit c[3];
+    cbit syn[2];
+
+    X(q[0]);
+
+    CNOT(q[0], a[0]);
+    CNOT(q[1], a[0]);
+    CNOT(q[1], a[1]);
+    CNOT(q[2], a[1]);
+
+    *syn = MeasZ(*q);
+
+    if(*syn == 1) X(q[0]);
+    if(*syn == 2) X(q[2]);
+    if(*syn == 3) X(q[1]);
+
+    *c = MeasZ(*q);
+}

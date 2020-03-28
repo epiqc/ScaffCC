@@ -1,4 +1,7 @@
 // RUN: %clang_cc1 -Wreorder -fsyntax-only -verify %s
+// RUN: %clang_cc1 -Wreorder -fsyntax-only -verify -std=c++98 %s
+// RUN: %clang_cc1 -Wreorder -fsyntax-only -verify -std=c++11 %s
+
 class A { 
   int m;
 public:
@@ -26,7 +29,7 @@ public:
   D() : B(), C() { }
 };
 
-class E : public D, public B { 
+class E : public D, public B {  // expected-warning{{direct base 'B' is inaccessible due to ambiguity:\n    class E -> class D -> class C -> class B\n    class E -> class B}}
 public:
   E() : B(), D() { } // expected-error{{base class initializer 'B' names both a direct base class and an inherited virtual base class}}
 };
@@ -94,13 +97,15 @@ struct Current : Derived {
                            Derived::Base1(), // expected-error {{type 'Derived::Base1' is not a direct or virtual base of 'Current'}}
                            Derived::V(),
                            ::NonExisting(), // expected-error {{member initializer 'NonExisting' does not name a non-static data member or}}
-                           INT::NonExisting()  {} // expected-error {{expected a class or namespace}} \
+                           INT::NonExisting()  {} // expected-error {{'INT' (aka 'int') is not a class, namespace, or enumeration}} \
                                                   // expected-error {{member initializer 'NonExisting' does not name a non-static data member or}}
 };
 
-struct M {              // expected-note 2 {{candidate constructor (the implicit copy constructor)}} \
-                        // expected-note {{declared here}} \
-                        // expected-note {{declared here}}
+struct M {              // expected-note 2 {{candidate constructor (the implicit copy constructor)}}
+#if __cplusplus >= 201103L // C++11 or later
+// expected-note@-2 2 {{candidate constructor (the implicit move constructor) not viable}}
+#endif
+// expected-note@-4 2 {{'M' declared here}}
   M(int i, int j);      // expected-note 2 {{candidate constructor}}
 };
 
@@ -126,21 +131,24 @@ struct Q {
 
 // A silly class used to demonstrate field-is-uninitialized in constructors with
 // multiple params.
+int IntParam(int i) { return 0; };
 class TwoInOne { public: TwoInOne(TwoInOne a, TwoInOne b) {} };
 class InitializeUsingSelfTest {
   bool A;
   char* B;
   int C;
   TwoInOne D;
-  InitializeUsingSelfTest(int E)
-      : A(A),  // expected-warning {{field is uninitialized when used here}}
-        B((((B)))),  // expected-warning {{field is uninitialized when used here}}
-        C(A && InitializeUsingSelfTest::C),  // expected-warning {{field is uninitialized when used here}}
-        D(D,  // expected-warning {{field is uninitialized when used here}}
-          D) {}  // expected-warning {{field is uninitialized when used here}}
+  int E;
+  InitializeUsingSelfTest(int F)
+      : A(A),  // expected-warning {{field 'A' is uninitialized when used here}}
+        B((((B)))),  // expected-warning {{field 'B' is uninitialized when used here}}
+        C(A && InitializeUsingSelfTest::C),  // expected-warning {{field 'C' is uninitialized when used here}}
+        D(D,  // expected-warning {{field 'D' is uninitialized when used here}}
+          D), // expected-warning {{field 'D' is uninitialized when used here}}
+        E(IntParam(E)) {} // expected-warning {{field 'E' is uninitialized when used here}}
 };
 
-int IntWrapper(int i) { return 0; };
+int IntWrapper(int &i) { return 0; };
 class InitializeUsingSelfExceptions {
   int A;
   int B;
@@ -157,8 +165,8 @@ class CopyConstructorTest {
   bool A, B, C;
   CopyConstructorTest(const CopyConstructorTest& rhs)
       : A(rhs.A),
-        B(B),  // expected-warning {{field is uninitialized when used here}}
-        C(rhs.C || C) { }  // expected-warning {{field is uninitialized when used here}}
+        B(B),  // expected-warning {{field 'B' is uninitialized when used here}}
+        C(rhs.C || C) { }  // expected-warning {{field 'C' is uninitialized when used here}}
 };
 
 // Make sure we aren't marking default constructors when we shouldn't be.
@@ -201,7 +209,8 @@ struct A {
 };
 
 struct B : virtual A { };
-struct C : A, B { };
+
+  struct C : A, B { }; // expected-warning{{direct base 'Test2::A' is inaccessible due to ambiguity:\n    struct Test2::C -> struct Test2::A\n    struct Test2::C -> struct Test2::B -> struct Test2::A}}
 
 C f(C c) {
   return c;
@@ -229,13 +238,20 @@ namespace PR7402 {
 // <rdar://problem/8308215>: don't crash.
 // Lots of questionable recovery here;  errors can change.
 namespace test3 {
-  class A : public std::exception {}; // expected-error {{undeclared identifier}} expected-error {{expected class name}} expected-note 3 {{candidate}} expected-note {{passing argument}}
+  class A : public std::exception {}; // expected-error {{undeclared identifier}} expected-error {{expected class name}}
+  // expected-note@-1 {{candidate constructor (the implicit copy constructor) not viable}}
+#if __cplusplus >= 201103L // C++11 or later
+  // expected-note@-3 {{candidate constructor (the implicit move constructor) not viable}}
+#endif
+  // expected-note@-5 {{candidate constructor (the implicit default constructor) not viable}}
+
   class B : public A {
   public:
     B(const String& s, int e=0) // expected-error {{unknown type name}} 
       : A(e), m_String(s) , m_ErrorStr(__null) {} // expected-error {{no matching constructor}} expected-error {{does not name}}
     B(const B& e)
-      : A(e), m_String(e.m_String), m_ErrorStr(__null) { // expected-error {{no viable conversion}} expected-error {{does not name}}
+      : A(e), m_String(e.m_String), m_ErrorStr(__null) { // expected-error {{does not name}} \
+      // expected-error {{no member named 'm_String' in 'test3::B'}}
     }
   };
 }
@@ -279,4 +295,29 @@ namespace PR12049 {
 
       int member; // expected-error {{expected ')'}}
   };
+}
+
+namespace PR14073 {
+  struct S1 { union { int n; }; S1() : n(n) {} };  // expected-warning {{field 'n' is uninitialized when used here}}
+  struct S2 { union { union { int n; }; char c; }; S2() : n(n) {} };  // expected-warning {{field 'n' is uninitialized when used here}}
+  struct S3 { struct { int n; }; S3() : n(n) {} };  // expected-warning {{field 'n' is uninitialized when used here}}
+}
+
+namespace PR10758 {
+struct A;
+struct B {
+  B (A const &); // expected-note 2 {{candidate constructor not viable: no known conversion from 'const PR10758::B' to 'const PR10758::A &' for 1st argument}}
+  B (B &); // expected-note 2 {{candidate constructor not viable: 1st argument ('const PR10758::B') would lose const qualifier}}
+};
+struct A {
+  A (B); // expected-note 2 {{passing argument to parameter here}}
+};
+
+B f(B const &b) {
+  return b; // expected-error {{no matching constructor for initialization of 'PR10758::B'}}
+}
+
+A f2(const B &b) {
+  return b; // expected-error {{no matching constructor for initialization of 'PR10758::B'}}
+}
 }

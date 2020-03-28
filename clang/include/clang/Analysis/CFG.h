@@ -1,4 +1,4 @@
-//===--- CFG.h - Classes for representing and building CFGs------*- C++ -*-===//
+//===- CFG.h - Classes for representing and building CFGs -------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -12,47 +12,66 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_CLANG_CFG_H
-#define LLVM_CLANG_CFG_H
+#ifndef LLVM_CLANG_ANALYSIS_CFG_H
+#define LLVM_CLANG_ANALYSIS_CFG_H
 
-#include "llvm/ADT/PointerIntPair.h"
-#include "llvm/ADT/GraphTraits.h"
-#include "llvm/Support/Allocator.h"
-#include "llvm/Support/Casting.h"
-#include "llvm/ADT/OwningPtr.h"
-#include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/BitVector.h"
-#include "clang/AST/Stmt.h"
 #include "clang/Analysis/Support/BumpVector.h"
-#include "clang/Basic/SourceLocation.h"
+#include "clang/Analysis/ConstructionContext.h"
+#include "clang/AST/ExprCXX.h"
+#include "clang/AST/ExprObjC.h"
+#include "clang/Basic/LLVM.h"
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/GraphTraits.h"
+#include "llvm/ADT/None.h"
+#include "llvm/ADT/Optional.h"
+#include "llvm/ADT/PointerIntPair.h"
+#include "llvm/ADT/iterator_range.h"
+#include "llvm/Support/Allocator.h"
+#include "llvm/Support/raw_ostream.h"
+#include <bitset>
 #include <cassert>
+#include <cstddef>
 #include <iterator>
+#include <memory>
+#include <vector>
 
 namespace clang {
-  class CXXDestructorDecl;
-  class Decl;
-  class Stmt;
-  class Expr;
-  class FieldDecl;
-  class VarDecl;
-  class CXXCtorInitializer;
-  class CXXBaseSpecifier;
-  class CXXBindTemporaryExpr;
-  class CFG;
-  class PrinterHelper;
-  class LangOptions;
-  class ASTContext;
 
-/// CFGElement - Represents a top-level expression in a basic block.
+class ASTContext;
+class BinaryOperator;
+class CFG;
+class CXXBaseSpecifier;
+class CXXBindTemporaryExpr;
+class CXXCtorInitializer;
+class CXXDeleteExpr;
+class CXXDestructorDecl;
+class CXXNewExpr;
+class CXXRecordDecl;
+class Decl;
+class FieldDecl;
+class LangOptions;
+class VarDecl;
+
+/// Represents a top-level expression in a basic block.
 class CFGElement {
 public:
   enum Kind {
     // main kind
-    Invalid,
-    Statement,
     Initializer,
+    ScopeBegin,
+    ScopeEnd,
+    NewAllocator,
+    LifetimeEnds,
+    LoopExit,
+    // stmt kind
+    Statement,
+    Constructor,
+    CXXRecordTypedCall,
+    STMT_BEGIN = Statement,
+    STMT_END = CXXRecordTypedCall,
     // dtor kind
     AutomaticObjectDtor,
+    DeleteDtor,
     BaseDtor,
     MemberDtor,
     TemporaryDtor,
@@ -65,12 +84,37 @@ protected:
   llvm::PointerIntPair<void *, 2> Data1;
   llvm::PointerIntPair<void *, 2> Data2;
 
-  CFGElement(Kind kind, const void *Ptr1, const void *Ptr2 = 0)
-    : Data1(const_cast<void*>(Ptr1), ((unsigned) kind) & 0x3),
-      Data2(const_cast<void*>(Ptr2), (((unsigned) kind) >> 2) & 0x3) {}
+  CFGElement(Kind kind, const void *Ptr1, const void *Ptr2 = nullptr)
+      : Data1(const_cast<void*>(Ptr1), ((unsigned) kind) & 0x3),
+        Data2(const_cast<void*>(Ptr2), (((unsigned) kind) >> 2) & 0x3) {
+    assert(getKind() == kind);
+  }
+
+  CFGElement() = default;
 
 public:
-  CFGElement() {}
+  /// Convert to the specified CFGElement type, asserting that this
+  /// CFGElement is of the desired type.
+  template<typename T>
+  T castAs() const {
+    assert(T::isKind(*this));
+    T t;
+    CFGElement& e = t;
+    e = *this;
+    return t;
+  }
+
+  /// Convert to the specified CFGElement type, returning None if this
+  /// CFGElement is not of the desired type.
+  template<typename T>
+  Optional<T> getAs() const {
+    if (!T::isKind(*this))
+      return None;
+    T t;
+    CFGElement& e = t;
+    e = *this;
+    return t;
+  }
 
   Kind getKind() const {
     unsigned x = Data2.getInt();
@@ -78,54 +122,245 @@ public:
     x |= Data1.getInt();
     return (Kind) x;
   }
-
-  bool isValid() const { return getKind() != Invalid; }
-
-  operator bool() const { return isValid(); }
-
-  template<class ElemTy> const ElemTy *getAs() const {
-    if (llvm::isa<ElemTy>(this))
-      return static_cast<const ElemTy*>(this);
-    return 0;
-  }
-
-  static bool classof(const CFGElement *E) { return true; }
 };
 
 class CFGStmt : public CFGElement {
 public:
-  CFGStmt(Stmt *S) : CFGElement(Statement, S) {}
+  explicit CFGStmt(Stmt *S, Kind K = Statement) : CFGElement(K, S) {
+    assert(isKind(*this));
+  }
 
   const Stmt *getStmt() const {
     return static_cast<const Stmt *>(Data1.getPointer());
   }
 
-  static bool classof(const CFGElement *E) {
-    return E->getKind() == Statement;
+private:
+  friend class CFGElement;
+
+  static bool isKind(const CFGElement &E) {
+    return E.getKind() >= STMT_BEGIN && E.getKind() <= STMT_END;
+  }
+
+protected:
+  CFGStmt() = default;
+};
+
+/// Represents C++ constructor call. Maintains information necessary to figure
+/// out what memory is being initialized by the constructor expression. For now
+/// this is only used by the analyzer's CFG.
+class CFGConstructor : public CFGStmt {
+public:
+  explicit CFGConstructor(CXXConstructExpr *CE, const ConstructionContext *C)
+      : CFGStmt(CE, Constructor) {
+    assert(C);
+    Data2.setPointer(const_cast<ConstructionContext *>(C));
+  }
+
+  const ConstructionContext *getConstructionContext() const {
+    return static_cast<ConstructionContext *>(Data2.getPointer());
+  }
+
+private:
+  friend class CFGElement;
+
+  CFGConstructor() = default;
+
+  static bool isKind(const CFGElement &E) {
+    return E.getKind() == Constructor;
   }
 };
 
-/// CFGInitializer - Represents C++ base or member initializer from
-/// constructor's initialization list.
+/// Represents a function call that returns a C++ object by value. This, like
+/// constructor, requires a construction context in order to understand the
+/// storage of the returned object . In C such tracking is not necessary because
+/// no additional effort is required for destroying the object or modeling copy
+/// elision. Like CFGConstructor, this element is for now only used by the
+/// analyzer's CFG.
+class CFGCXXRecordTypedCall : public CFGStmt {
+public:
+  /// Returns true when call expression \p CE needs to be represented
+  /// by CFGCXXRecordTypedCall, as opposed to a regular CFGStmt.
+  static bool isCXXRecordTypedCall(Expr *E) {
+    assert(isa<CallExpr>(E) || isa<ObjCMessageExpr>(E));
+    // There is no such thing as reference-type expression. If the function
+    // returns a reference, it'll return the respective lvalue or xvalue
+    // instead, and we're only interested in objects.
+    return !E->isGLValue() &&
+           E->getType().getCanonicalType()->getAsCXXRecordDecl();
+  }
+
+  explicit CFGCXXRecordTypedCall(Expr *E, const ConstructionContext *C)
+      : CFGStmt(E, CXXRecordTypedCall) {
+    assert(isCXXRecordTypedCall(E));
+    assert(C && (isa<TemporaryObjectConstructionContext>(C) ||
+                 // These are possible in C++17 due to mandatory copy elision.
+                 isa<ReturnedValueConstructionContext>(C) ||
+                 isa<VariableConstructionContext>(C) ||
+                 isa<ConstructorInitializerConstructionContext>(C) ||
+                 isa<ArgumentConstructionContext>(C)));
+    Data2.setPointer(const_cast<ConstructionContext *>(C));
+  }
+
+  const ConstructionContext *getConstructionContext() const {
+    return static_cast<ConstructionContext *>(Data2.getPointer());
+  }
+
+private:
+  friend class CFGElement;
+
+  CFGCXXRecordTypedCall() = default;
+
+  static bool isKind(const CFGElement &E) {
+    return E.getKind() == CXXRecordTypedCall;
+  }
+};
+
+/// Represents C++ base or member initializer from constructor's initialization
+/// list.
 class CFGInitializer : public CFGElement {
 public:
-  CFGInitializer(CXXCtorInitializer *initializer)
+  explicit CFGInitializer(CXXCtorInitializer *initializer)
       : CFGElement(Initializer, initializer) {}
 
   CXXCtorInitializer* getInitializer() const {
     return static_cast<CXXCtorInitializer*>(Data1.getPointer());
   }
 
-  static bool classof(const CFGElement *E) {
-    return E->getKind() == Initializer;
+private:
+  friend class CFGElement;
+
+  CFGInitializer() = default;
+
+  static bool isKind(const CFGElement &E) {
+    return E.getKind() == Initializer;
   }
 };
 
-/// CFGImplicitDtor - Represents C++ object destructor implicitly generated
-/// by compiler on various occasions.
+/// Represents C++ allocator call.
+class CFGNewAllocator : public CFGElement {
+public:
+  explicit CFGNewAllocator(const CXXNewExpr *S)
+    : CFGElement(NewAllocator, S) {}
+
+  // Get the new expression.
+  const CXXNewExpr *getAllocatorExpr() const {
+    return static_cast<CXXNewExpr *>(Data1.getPointer());
+  }
+
+private:
+  friend class CFGElement;
+
+  CFGNewAllocator() = default;
+
+  static bool isKind(const CFGElement &elem) {
+    return elem.getKind() == NewAllocator;
+  }
+};
+
+/// Represents the point where a loop ends.
+/// This element is is only produced when building the CFG for the static
+/// analyzer and hidden behind the 'cfg-loopexit' analyzer config flag.
+///
+/// Note: a loop exit element can be reached even when the loop body was never
+/// entered.
+class CFGLoopExit : public CFGElement {
+public:
+  explicit CFGLoopExit(const Stmt *stmt) : CFGElement(LoopExit, stmt) {}
+
+  const Stmt *getLoopStmt() const {
+    return static_cast<Stmt *>(Data1.getPointer());
+  }
+
+private:
+  friend class CFGElement;
+
+  CFGLoopExit() = default;
+
+  static bool isKind(const CFGElement &elem) {
+    return elem.getKind() == LoopExit;
+  }
+};
+
+/// Represents the point where the lifetime of an automatic object ends
+class CFGLifetimeEnds : public CFGElement {
+public:
+  explicit CFGLifetimeEnds(const VarDecl *var, const Stmt *stmt)
+      : CFGElement(LifetimeEnds, var, stmt) {}
+
+  const VarDecl *getVarDecl() const {
+    return static_cast<VarDecl *>(Data1.getPointer());
+  }
+
+  const Stmt *getTriggerStmt() const {
+    return static_cast<Stmt *>(Data2.getPointer());
+  }
+
+private:
+  friend class CFGElement;
+
+  CFGLifetimeEnds() = default;
+
+  static bool isKind(const CFGElement &elem) {
+    return elem.getKind() == LifetimeEnds;
+  }
+};
+
+/// Represents beginning of a scope implicitly generated
+/// by the compiler on encountering a CompoundStmt
+class CFGScopeBegin : public CFGElement {
+public:
+  CFGScopeBegin() {}
+  CFGScopeBegin(const VarDecl *VD, const Stmt *S)
+      : CFGElement(ScopeBegin, VD, S) {}
+
+  // Get statement that triggered a new scope.
+  const Stmt *getTriggerStmt() const {
+    return static_cast<Stmt*>(Data2.getPointer());
+  }
+
+  // Get VD that triggered a new scope.
+  const VarDecl *getVarDecl() const {
+    return static_cast<VarDecl *>(Data1.getPointer());
+  }
+
+private:
+  friend class CFGElement;
+  static bool isKind(const CFGElement &E) {
+    Kind kind = E.getKind();
+    return kind == ScopeBegin;
+  }
+};
+
+/// Represents end of a scope implicitly generated by
+/// the compiler after the last Stmt in a CompoundStmt's body
+class CFGScopeEnd : public CFGElement {
+public:
+  CFGScopeEnd() {}
+  CFGScopeEnd(const VarDecl *VD, const Stmt *S) : CFGElement(ScopeEnd, VD, S) {}
+
+  const VarDecl *getVarDecl() const {
+    return static_cast<VarDecl *>(Data1.getPointer());
+  }
+
+  const Stmt *getTriggerStmt() const {
+    return static_cast<Stmt *>(Data2.getPointer());
+  }
+
+private:
+  friend class CFGElement;
+  static bool isKind(const CFGElement &E) {
+    Kind kind = E.getKind();
+    return kind == ScopeEnd;
+  }
+};
+
+/// Represents C++ object destructor implicitly generated by compiler on various
+/// occasions.
 class CFGImplicitDtor : public CFGElement {
 protected:
-  CFGImplicitDtor(Kind kind, const void *data1, const void *data2 = 0)
+  CFGImplicitDtor() = default;
+
+  CFGImplicitDtor(Kind kind, const void *data1, const void *data2 = nullptr)
     : CFGElement(kind, data1, data2) {
     assert(kind >= DTOR_BEGIN && kind <= DTOR_END);
   }
@@ -134,15 +369,18 @@ public:
   const CXXDestructorDecl *getDestructorDecl(ASTContext &astContext) const;
   bool isNoReturn(ASTContext &astContext) const;
 
-  static bool classof(const CFGElement *E) {
-    Kind kind = E->getKind();
+private:
+  friend class CFGElement;
+
+  static bool isKind(const CFGElement &E) {
+    Kind kind = E.getKind();
     return kind >= DTOR_BEGIN && kind <= DTOR_END;
   }
 };
 
-/// CFGAutomaticObjDtor - Represents C++ object destructor implicitly generated
-/// for automatic object or temporary bound to const reference at the point
-/// of leaving its local scope.
+/// Represents C++ object destructor implicitly generated for automatic object
+/// or temporary bound to const reference at the point of leaving its local
+/// scope.
 class CFGAutomaticObjDtor: public CFGImplicitDtor {
 public:
   CFGAutomaticObjDtor(const VarDecl *var, const Stmt *stmt)
@@ -157,13 +395,43 @@ public:
     return static_cast<Stmt*>(Data2.getPointer());
   }
 
-  static bool classof(const CFGElement *elem) {
-    return elem->getKind() == AutomaticObjectDtor;
+private:
+  friend class CFGElement;
+
+  CFGAutomaticObjDtor() = default;
+
+  static bool isKind(const CFGElement &elem) {
+    return elem.getKind() == AutomaticObjectDtor;
   }
 };
 
-/// CFGBaseDtor - Represents C++ object destructor implicitly generated for
-/// base object in destructor.
+/// Represents C++ object destructor generated from a call to delete.
+class CFGDeleteDtor : public CFGImplicitDtor {
+public:
+  CFGDeleteDtor(const CXXRecordDecl *RD, const CXXDeleteExpr *DE)
+      : CFGImplicitDtor(DeleteDtor, RD, DE) {}
+
+  const CXXRecordDecl *getCXXRecordDecl() const {
+    return static_cast<CXXRecordDecl*>(Data1.getPointer());
+  }
+
+  // Get Delete expression which triggered the destructor call.
+  const CXXDeleteExpr *getDeleteExpr() const {
+    return static_cast<CXXDeleteExpr *>(Data2.getPointer());
+  }
+
+private:
+  friend class CFGElement;
+
+  CFGDeleteDtor() = default;
+
+  static bool isKind(const CFGElement &elem) {
+    return elem.getKind() == DeleteDtor;
+  }
+};
+
+/// Represents C++ object destructor implicitly generated for base object in
+/// destructor.
 class CFGBaseDtor : public CFGImplicitDtor {
 public:
   CFGBaseDtor(const CXXBaseSpecifier *base)
@@ -173,44 +441,59 @@ public:
     return static_cast<const CXXBaseSpecifier*>(Data1.getPointer());
   }
 
-  static bool classof(const CFGElement *E) {
-    return E->getKind() == BaseDtor;
+private:
+  friend class CFGElement;
+
+  CFGBaseDtor() = default;
+
+  static bool isKind(const CFGElement &E) {
+    return E.getKind() == BaseDtor;
   }
 };
 
-/// CFGMemberDtor - Represents C++ object destructor implicitly generated for
-/// member object in destructor.
+/// Represents C++ object destructor implicitly generated for member object in
+/// destructor.
 class CFGMemberDtor : public CFGImplicitDtor {
 public:
   CFGMemberDtor(const FieldDecl *field)
-      : CFGImplicitDtor(MemberDtor, field, 0) {}
+      : CFGImplicitDtor(MemberDtor, field, nullptr) {}
 
   const FieldDecl *getFieldDecl() const {
     return static_cast<const FieldDecl*>(Data1.getPointer());
   }
 
-  static bool classof(const CFGElement *E) {
-    return E->getKind() == MemberDtor;
+private:
+  friend class CFGElement;
+
+  CFGMemberDtor() = default;
+
+  static bool isKind(const CFGElement &E) {
+    return E.getKind() == MemberDtor;
   }
 };
 
-/// CFGTemporaryDtor - Represents C++ object destructor implicitly generated
-/// at the end of full expression for temporary object.
+/// Represents C++ object destructor implicitly generated at the end of full
+/// expression for temporary object.
 class CFGTemporaryDtor : public CFGImplicitDtor {
 public:
   CFGTemporaryDtor(CXXBindTemporaryExpr *expr)
-      : CFGImplicitDtor(TemporaryDtor, expr, 0) {}
+      : CFGImplicitDtor(TemporaryDtor, expr, nullptr) {}
 
   const CXXBindTemporaryExpr *getBindTemporaryExpr() const {
     return static_cast<const CXXBindTemporaryExpr *>(Data1.getPointer());
   }
 
-  static bool classof(const CFGElement *E) {
-    return E->getKind() == TemporaryDtor;
+private:
+  friend class CFGElement;
+
+  CFGTemporaryDtor() = default;
+
+  static bool isKind(const CFGElement &E) {
+    return E.getKind() == TemporaryDtor;
   }
 };
 
-/// CFGTerminator - Represents CFGBlock terminator statement.
+/// Represents CFGBlock terminator statement.
 ///
 /// TemporaryDtorsBranch bit is set to true if the terminator marks a branch
 /// in control flow of destructors of temporaries. In this case terminator
@@ -218,8 +501,9 @@ public:
 /// of matching full expression.
 class CFGTerminator {
   llvm::PointerIntPair<Stmt *, 1> Data;
+
 public:
-  CFGTerminator() {}
+  CFGTerminator() = default;
   CFGTerminator(Stmt *S, bool TemporaryDtorsBranch = false)
       : Data(S, TemporaryDtorsBranch) {}
 
@@ -237,10 +521,10 @@ public:
   Stmt &operator*() { return *getStmt(); }
   const Stmt &operator*() const { return *getStmt(); }
 
-  operator bool() const { return getStmt(); }
+  explicit operator bool() const { return getStmt(); }
 };
 
-/// CFGBlock - Represents a single basic block in a source-level CFG.
+/// Represents a single basic block in a source-level CFG.
 ///  It consists of:
 ///
 ///  (1) A set of statements/expressions (which may contain subexpressions).
@@ -265,27 +549,30 @@ public:
 ///     &&, ||          expression that uses result of && or ||, RHS
 ///
 /// But note that any of that may be NULL in case of optimized-out edges.
-///
 class CFGBlock {
   class ElementList {
-    typedef BumpVector<CFGElement> ImplTy;
+    using ImplTy = BumpVector<CFGElement>;
+
     ImplTy Impl;
+
   public:
     ElementList(BumpVectorContext &C) : Impl(C, 4) {}
 
-    typedef std::reverse_iterator<ImplTy::iterator>       iterator;
-    typedef std::reverse_iterator<ImplTy::const_iterator> const_iterator;
-    typedef ImplTy::iterator                              reverse_iterator;
-    typedef ImplTy::const_iterator                       const_reverse_iterator;
+    using iterator = std::reverse_iterator<ImplTy::iterator>;
+    using const_iterator = std::reverse_iterator<ImplTy::const_iterator>;
+    using reverse_iterator = ImplTy::iterator;
+    using const_reverse_iterator = ImplTy::const_iterator;
+    using const_reference = ImplTy::const_reference;
 
     void push_back(CFGElement e, BumpVectorContext &C) { Impl.push_back(e, C); }
+
     reverse_iterator insert(reverse_iterator I, size_t Cnt, CFGElement E,
         BumpVectorContext &C) {
       return Impl.insert(I, Cnt, E, C);
     }
 
-    CFGElement front() const { return Impl.back(); }
-    CFGElement back() const { return Impl.front(); }
+    const_reference front() const { return Impl.back(); }
+    const_reference back() const { return Impl.front(); }
 
     iterator begin() { return Impl.rbegin(); }
     iterator end() { return Impl.rend(); }
@@ -296,44 +583,96 @@ class CFGBlock {
     const_reverse_iterator rbegin() const { return Impl.begin(); }
     const_reverse_iterator rend() const { return Impl.end(); }
 
-   CFGElement operator[](size_t i) const  {
-     assert(i < Impl.size());
-     return Impl[Impl.size() - 1 - i];
-   }
+    CFGElement operator[](size_t i) const  {
+      assert(i < Impl.size());
+      return Impl[Impl.size() - 1 - i];
+    }
 
     size_t size() const { return Impl.size(); }
     bool empty() const { return Impl.empty(); }
   };
 
-  /// Stmts - The set of statements in the basic block.
+  /// The set of statements in the basic block.
   ElementList Elements;
 
-  /// Label - An (optional) label that prefixes the executable
-  ///  statements in the block.  When this variable is non-NULL, it is
-  ///  either an instance of LabelStmt, SwitchCase or CXXCatchStmt.
-  Stmt *Label;
+  /// An (optional) label that prefixes the executable statements in the block.
+  /// When this variable is non-NULL, it is either an instance of LabelStmt,
+  /// SwitchCase or CXXCatchStmt.
+  Stmt *Label = nullptr;
 
-  /// Terminator - The terminator for a basic block that
-  ///  indicates the type of control-flow that occurs between a block
-  ///  and its successors.
+  /// The terminator for a basic block that indicates the type of control-flow
+  /// that occurs between a block and its successors.
   CFGTerminator Terminator;
 
-  /// LoopTarget - Some blocks are used to represent the "loop edge" to
-  ///  the start of a loop from within the loop body.  This Stmt* will be
-  ///  refer to the loop statement for such blocks (and be null otherwise).
-  const Stmt *LoopTarget;
+  /// Some blocks are used to represent the "loop edge" to the start of a loop
+  /// from within the loop body. This Stmt* will be refer to the loop statement
+  /// for such blocks (and be null otherwise).
+  const Stmt *LoopTarget = nullptr;
 
-  /// BlockID - A numerical ID assigned to a CFGBlock during construction
-  ///   of the CFG.
+  /// A numerical ID assigned to a CFGBlock during construction of the CFG.
   unsigned BlockID;
 
-  /// Predecessors/Successors - Keep track of the predecessor / successor
-  /// CFG blocks.
-  typedef BumpVector<CFGBlock*> AdjacentBlocks;
+public:
+  /// This class represents a potential adjacent block in the CFG.  It encodes
+  /// whether or not the block is actually reachable, or can be proved to be
+  /// trivially unreachable.  For some cases it allows one to encode scenarios
+  /// where a block was substituted because the original (now alternate) block
+  /// is unreachable.
+  class AdjacentBlock {
+    enum Kind {
+      AB_Normal,
+      AB_Unreachable,
+      AB_Alternate
+    };
+
+    CFGBlock *ReachableBlock;
+    llvm::PointerIntPair<CFGBlock *, 2> UnreachableBlock;
+
+  public:
+    /// Construct an AdjacentBlock with a possibly unreachable block.
+    AdjacentBlock(CFGBlock *B, bool IsReachable);
+
+    /// Construct an AdjacentBlock with a reachable block and an alternate
+    /// unreachable block.
+    AdjacentBlock(CFGBlock *B, CFGBlock *AlternateBlock);
+
+    /// Get the reachable block, if one exists.
+    CFGBlock *getReachableBlock() const {
+      return ReachableBlock;
+    }
+
+    /// Get the potentially unreachable block.
+    CFGBlock *getPossiblyUnreachableBlock() const {
+      return UnreachableBlock.getPointer();
+    }
+
+    /// Provide an implicit conversion to CFGBlock* so that
+    /// AdjacentBlock can be substituted for CFGBlock*.
+    operator CFGBlock*() const {
+      return getReachableBlock();
+    }
+
+    CFGBlock& operator *() const {
+      return *getReachableBlock();
+    }
+
+    CFGBlock* operator ->() const {
+      return getReachableBlock();
+    }
+
+    bool isReachable() const {
+      Kind K = (Kind) UnreachableBlock.getInt();
+      return K == AB_Normal || K == AB_Alternate;
+    }
+  };
+
+private:
+  /// Keep track of the predecessor / successor CFG blocks.
+  using AdjacentBlocks = BumpVector<AdjacentBlock>;
   AdjacentBlocks Preds;
   AdjacentBlocks Succs;
 
-  /// NoReturn - This bit is set when the basic block contains a function call
+  /// This bit is set when the basic block contains a function call
   /// or implicit destructor that is attributed as 'noreturn'. In that case,
   /// control cannot technically ever proceed past this block. All such blocks
   /// will have a single immediate successor: the exit block. This allows them
@@ -344,21 +683,19 @@ class CFGBlock {
   /// storage if the memory usage of CFGBlock becomes an issue.
   unsigned HasNoReturnElement : 1;
 
-  /// Parent - The parent CFG that owns this CFGBlock.
+  /// The parent CFG that owns this CFGBlock.
   CFG *Parent;
 
 public:
   explicit CFGBlock(unsigned blockid, BumpVectorContext &C, CFG *parent)
-    : Elements(C), Label(NULL), Terminator(NULL), LoopTarget(NULL), 
-      BlockID(blockid), Preds(C, 1), Succs(C, 1), HasNoReturnElement(false),
-      Parent(parent) {}
-  ~CFGBlock() {}
+      : Elements(C), Terminator(nullptr), BlockID(blockid), Preds(C, 1),
+        Succs(C, 1), HasNoReturnElement(false), Parent(parent) {}
 
   // Statement iterators
-  typedef ElementList::iterator                      iterator;
-  typedef ElementList::const_iterator                const_iterator;
-  typedef ElementList::reverse_iterator              reverse_iterator;
-  typedef ElementList::const_reverse_iterator        const_reverse_iterator;
+  using iterator = ElementList::iterator;
+  using const_iterator = ElementList::const_iterator;
+  using reverse_iterator = ElementList::reverse_iterator;
+  using const_reverse_iterator = ElementList::const_reverse_iterator;
 
   CFGElement                 front()       const { return Elements.front();   }
   CFGElement                 back()        const { return Elements.back();    }
@@ -379,15 +716,19 @@ public:
   CFGElement operator[](size_t i) const  { return Elements[i]; }
 
   // CFG iterators
-  typedef AdjacentBlocks::iterator                              pred_iterator;
-  typedef AdjacentBlocks::const_iterator                  const_pred_iterator;
-  typedef AdjacentBlocks::reverse_iterator              pred_reverse_iterator;
-  typedef AdjacentBlocks::const_reverse_iterator  const_pred_reverse_iterator;
+  using pred_iterator = AdjacentBlocks::iterator;
+  using const_pred_iterator = AdjacentBlocks::const_iterator;
+  using pred_reverse_iterator = AdjacentBlocks::reverse_iterator;
+  using const_pred_reverse_iterator = AdjacentBlocks::const_reverse_iterator;
+  using pred_range = llvm::iterator_range<pred_iterator>;
+  using pred_const_range = llvm::iterator_range<const_pred_iterator>;
 
-  typedef AdjacentBlocks::iterator                              succ_iterator;
-  typedef AdjacentBlocks::const_iterator                  const_succ_iterator;
-  typedef AdjacentBlocks::reverse_iterator              succ_reverse_iterator;
-  typedef AdjacentBlocks::const_reverse_iterator  const_succ_reverse_iterator;
+  using succ_iterator = AdjacentBlocks::iterator;
+  using const_succ_iterator = AdjacentBlocks::const_iterator;
+  using succ_reverse_iterator = AdjacentBlocks::reverse_iterator;
+  using const_succ_reverse_iterator = AdjacentBlocks::const_reverse_iterator;
+  using succ_range = llvm::iterator_range<succ_iterator>;
+  using succ_const_range = llvm::iterator_range<const_succ_iterator>;
 
   pred_iterator                pred_begin()        { return Preds.begin();   }
   pred_iterator                pred_end()          { return Preds.end();     }
@@ -399,6 +740,14 @@ public:
   const_pred_reverse_iterator  pred_rbegin() const { return Preds.rbegin();  }
   const_pred_reverse_iterator  pred_rend()   const { return Preds.rend();    }
 
+  pred_range preds() {
+    return pred_range(pred_begin(), pred_end());
+  }
+
+  pred_const_range preds() const {
+    return pred_const_range(pred_begin(), pred_end());
+  }
+
   succ_iterator                succ_begin()        { return Succs.begin();   }
   succ_iterator                succ_end()          { return Succs.end();     }
   const_succ_iterator          succ_begin()  const { return Succs.begin();   }
@@ -409,6 +758,14 @@ public:
   const_succ_reverse_iterator  succ_rbegin() const { return Succs.rbegin();  }
   const_succ_reverse_iterator  succ_rend()   const { return Succs.rend();    }
 
+  succ_range succs() {
+    return succ_range(succ_begin(), succ_end());
+  }
+
+  succ_const_range succs() const {
+    return succ_const_range(succ_begin(), succ_end());
+  }
+
   unsigned                     succ_size()   const { return Succs.size();    }
   bool                         succ_empty()  const { return Succs.empty();   }
 
@@ -418,11 +775,11 @@ public:
 
   class FilterOptions {
   public:
-    FilterOptions() {
-      IgnoreDefaultsWithCoveredEnums = 0;
-    }
-
+    unsigned IgnoreNullPredecessors : 1;
     unsigned IgnoreDefaultsWithCoveredEnums : 1;
+
+    FilterOptions()
+        : IgnoreNullPredecessors(1), IgnoreDefaultsWithCoveredEnums(0) {}
   };
 
   static bool FilterEdge(const FilterOptions &F, const CFGBlock *Src,
@@ -434,11 +791,15 @@ public:
     IMPL I, E;
     const FilterOptions F;
     const CFGBlock *From;
-   public:
+
+  public:
     explicit FilteredCFGBlockIterator(const IMPL &i, const IMPL &e,
-              const CFGBlock *from,
-              const FilterOptions &f)
-      : I(i), E(e), F(f), From(from) {}
+                                      const CFGBlock *from,
+                                      const FilterOptions &f)
+        : I(i), E(e), F(f), From(from) {
+      while (hasMore() && Filter(*I))
+        ++I;
+    }
 
     bool hasMore() const { return I != E; }
 
@@ -448,17 +809,18 @@ public:
     }
 
     const CFGBlock *operator*() const { return *I; }
+
   private:
     bool Filter(const CFGBlock *To) {
       return IsPred ? FilterEdge(F, To, From) : FilterEdge(F, From, To);
     }
   };
 
-  typedef FilteredCFGBlockIterator<const_pred_iterator, true>
-          filtered_pred_iterator;
+  using filtered_pred_iterator =
+      FilteredCFGBlockIterator<const_pred_iterator, true>;
 
-  typedef FilteredCFGBlockIterator<const_succ_iterator, false>
-          filtered_succ_iterator;
+  using filtered_succ_iterator =
+      FilteredCFGBlockIterator<const_succ_iterator, false>;
 
   filtered_pred_iterator filtered_pred_start_end(const FilterOptions &f) const {
     return filtered_pred_iterator(pred_begin(), pred_end(), this, f);
@@ -470,7 +832,7 @@ public:
 
   // Manipulation of block contents
 
-  void setTerminator(Stmt *Statement) { Terminator = Statement; }
+  void setTerminator(CFGTerminator Term) { Terminator = Term; }
   void setLabel(Stmt *Statement) { Label = Statement; }
   void setLoopTarget(const Stmt *loopTarget) { LoopTarget = loopTarget; }
   void setHasNoReturnElement() { HasNoReturnElement = true; }
@@ -478,10 +840,10 @@ public:
   CFGTerminator getTerminator() { return Terminator; }
   const CFGTerminator getTerminator() const { return Terminator; }
 
-  Stmt *getTerminatorCondition();
+  Stmt *getTerminatorCondition(bool StripParens = true);
 
-  const Stmt *getTerminatorCondition() const {
-    return const_cast<CFGBlock*>(this)->getTerminatorCondition();
+  const Stmt *getTerminatorCondition(bool StripParens = true) const {
+    return const_cast<CFGBlock*>(this)->getTerminatorCondition(StripParens);
   }
 
   const Stmt *getLoopTarget() const { return LoopTarget; }
@@ -495,24 +857,60 @@ public:
 
   CFG *getParent() const { return Parent; }
 
+  void dump() const;
+
   void dump(const CFG *cfg, const LangOptions &LO, bool ShowColors = false) const;
   void print(raw_ostream &OS, const CFG* cfg, const LangOptions &LO,
              bool ShowColors) const;
   void printTerminator(raw_ostream &OS, const LangOptions &LO) const;
-
-  void addSuccessor(CFGBlock *Block, BumpVectorContext &C) {
-    if (Block)
-      Block->Preds.push_back(this, C);
-    Succs.push_back(Block, C);
+  void printAsOperand(raw_ostream &OS, bool /*PrintType*/) {
+    OS << "BB#" << getBlockID();
   }
+
+  /// Adds a (potentially unreachable) successor block to the current block.
+  void addSuccessor(AdjacentBlock Succ, BumpVectorContext &C);
 
   void appendStmt(Stmt *statement, BumpVectorContext &C) {
     Elements.push_back(CFGStmt(statement), C);
   }
 
+  void appendConstructor(CXXConstructExpr *CE, const ConstructionContext *CC,
+                         BumpVectorContext &C) {
+    Elements.push_back(CFGConstructor(CE, CC), C);
+  }
+
+  void appendCXXRecordTypedCall(Expr *E,
+                                const ConstructionContext *CC,
+                                BumpVectorContext &C) {
+    Elements.push_back(CFGCXXRecordTypedCall(E, CC), C);
+  }
+
   void appendInitializer(CXXCtorInitializer *initializer,
                         BumpVectorContext &C) {
     Elements.push_back(CFGInitializer(initializer), C);
+  }
+
+  void appendNewAllocator(CXXNewExpr *NE,
+                          BumpVectorContext &C) {
+    Elements.push_back(CFGNewAllocator(NE), C);
+  }
+
+  void appendScopeBegin(const VarDecl *VD, const Stmt *S,
+                        BumpVectorContext &C) {
+    Elements.push_back(CFGScopeBegin(VD, S), C);
+  }
+
+  void prependScopeBegin(const VarDecl *VD, const Stmt *S,
+                         BumpVectorContext &C) {
+    Elements.insert(Elements.rbegin(), 1, CFGScopeBegin(VD, S), C);
+  }
+
+  void appendScopeEnd(const VarDecl *VD, const Stmt *S, BumpVectorContext &C) {
+    Elements.push_back(CFGScopeEnd(VD, S), C);
+  }
+
+  void prependScopeEnd(const VarDecl *VD, const Stmt *S, BumpVectorContext &C) {
+    Elements.insert(Elements.rbegin(), 1, CFGScopeEnd(VD, S), C);
   }
 
   void appendBaseDtor(const CXXBaseSpecifier *BS, BumpVectorContext &C) {
@@ -531,20 +929,71 @@ public:
     Elements.push_back(CFGAutomaticObjDtor(VD, S), C);
   }
 
+  void appendLifetimeEnds(VarDecl *VD, Stmt *S, BumpVectorContext &C) {
+    Elements.push_back(CFGLifetimeEnds(VD, S), C);
+  }
+
+  void appendLoopExit(const Stmt *LoopStmt, BumpVectorContext &C) {
+    Elements.push_back(CFGLoopExit(LoopStmt), C);
+  }
+
+  void appendDeleteDtor(CXXRecordDecl *RD, CXXDeleteExpr *DE, BumpVectorContext &C) {
+    Elements.push_back(CFGDeleteDtor(RD, DE), C);
+  }
+
   // Destructors must be inserted in reversed order. So insertion is in two
   // steps. First we prepare space for some number of elements, then we insert
   // the elements beginning at the last position in prepared space.
   iterator beginAutomaticObjDtorsInsert(iterator I, size_t Cnt,
       BumpVectorContext &C) {
-    return iterator(Elements.insert(I.base(), Cnt, CFGElement(), C));
+    return iterator(Elements.insert(I.base(), Cnt,
+                                    CFGAutomaticObjDtor(nullptr, nullptr), C));
   }
   iterator insertAutomaticObjDtor(iterator I, VarDecl *VD, Stmt *S) {
     *I = CFGAutomaticObjDtor(VD, S);
     return ++I;
   }
+
+  // Scope leaving must be performed in reversed order. So insertion is in two
+  // steps. First we prepare space for some number of elements, then we insert
+  // the elements beginning at the last position in prepared space.
+  iterator beginLifetimeEndsInsert(iterator I, size_t Cnt,
+                                   BumpVectorContext &C) {
+    return iterator(
+        Elements.insert(I.base(), Cnt, CFGLifetimeEnds(nullptr, nullptr), C));
+  }
+  iterator insertLifetimeEnds(iterator I, VarDecl *VD, Stmt *S) {
+    *I = CFGLifetimeEnds(VD, S);
+    return ++I;
+  }
+
+  // Scope leaving must be performed in reversed order. So insertion is in two
+  // steps. First we prepare space for some number of elements, then we insert
+  // the elements beginning at the last position in prepared space.
+  iterator beginScopeEndInsert(iterator I, size_t Cnt, BumpVectorContext &C) {
+    return iterator(
+        Elements.insert(I.base(), Cnt, CFGScopeEnd(nullptr, nullptr), C));
+  }
+  iterator insertScopeEnd(iterator I, VarDecl *VD, Stmt *S) {
+    *I = CFGScopeEnd(VD, S);
+    return ++I;
+  }
+
 };
 
-/// CFG - Represents a source-level, intra-procedural CFG that represents the
+/// CFGCallback defines methods that should be called when a logical
+/// operator error is found when building the CFG.
+class CFGCallback {
+public:
+  CFGCallback() = default;
+  virtual ~CFGCallback() = default;
+
+  virtual void compareAlwaysTrue(const BinaryOperator *B, bool isAlwaysTrue) {}
+  virtual void compareBitwiseEquality(const BinaryOperator *B,
+                                      bool isAlwaysTrue) {}
+};
+
+/// Represents a source-level, intra-procedural CFG that represents the
 ///  control-flow of a Stmt.  The Stmt can represent an entire function body,
 ///  or a single expression.  A CFG will always contain one empty block that
 ///  represents the Exit point of the CFG.  A CFG will also contain a designated
@@ -558,15 +1007,28 @@ public:
   //===--------------------------------------------------------------------===//
 
   class BuildOptions {
-    llvm::BitVector alwaysAddMask;
-  public:
-    typedef llvm::DenseMap<const Stmt *, const CFGBlock*> ForcedBlkExprs;
-    ForcedBlkExprs **forcedBlkExprs;
+    std::bitset<Stmt::lastStmtConstant> alwaysAddMask;
 
-    bool PruneTriviallyFalseEdges;
-    bool AddEHEdges;
-    bool AddInitializers;
-    bool AddImplicitDtors;
+  public:
+    using ForcedBlkExprs = llvm::DenseMap<const Stmt *, const CFGBlock *>;
+
+    ForcedBlkExprs **forcedBlkExprs = nullptr;
+    CFGCallback *Observer = nullptr;
+    bool PruneTriviallyFalseEdges = true;
+    bool AddEHEdges = false;
+    bool AddInitializers = false;
+    bool AddImplicitDtors = false;
+    bool AddLifetime = false;
+    bool AddLoopExit = false;
+    bool AddTemporaryDtors = false;
+    bool AddScopes = false;
+    bool AddStaticInitBranches = false;
+    bool AddCXXNewAllocator = false;
+    bool AddCXXDefaultInitExprInCtors = false;
+    bool AddRichCXXConstructors = false;
+    bool MarkElidedCXXConstructors = false;
+
+    BuildOptions() = default;
 
     bool alwaysAdd(const Stmt *stmt) const {
       return alwaysAddMask[stmt->getStmtClass()];
@@ -581,91 +1043,34 @@ public:
       alwaysAddMask.set();
       return *this;
     }
-
-    BuildOptions()
-    : alwaysAddMask(Stmt::lastStmtConstant, false)
-      ,forcedBlkExprs(0), PruneTriviallyFalseEdges(true)
-      ,AddEHEdges(false)
-      ,AddInitializers(false)
-      ,AddImplicitDtors(false) {}
   };
 
-  /// \brief Provides a custom implementation of the iterator class to have the
-  /// same interface as Function::iterator - iterator returns CFGBlock
-  /// (not a pointer to CFGBlock).
-  class graph_iterator {
-  public:
-    typedef const CFGBlock                  value_type;
-    typedef value_type&                     reference;
-    typedef value_type*                     pointer;
-    typedef BumpVector<CFGBlock*>::iterator ImplTy;
+  /// Builds a CFG from an AST.
+  static std::unique_ptr<CFG> buildCFG(const Decl *D, Stmt *AST, ASTContext *C,
+                                       const BuildOptions &BO);
 
-    graph_iterator(const ImplTy &i) : I(i) {}
-
-    bool operator==(const graph_iterator &X) const { return I == X.I; }
-    bool operator!=(const graph_iterator &X) const { return I != X.I; }
-
-    reference operator*()    const { return **I; }
-    pointer operator->()     const { return  *I; }
-    operator CFGBlock* ()          { return  *I; }
-
-    graph_iterator &operator++() { ++I; return *this; }
-    graph_iterator &operator--() { --I; return *this; }
-
-  private:
-    ImplTy I;
-  };
-
-  class const_graph_iterator {
-  public:
-    typedef const CFGBlock                  value_type;
-    typedef value_type&                     reference;
-    typedef value_type*                     pointer;
-    typedef BumpVector<CFGBlock*>::const_iterator ImplTy;
-
-    const_graph_iterator(const ImplTy &i) : I(i) {}
-
-    bool operator==(const const_graph_iterator &X) const { return I == X.I; }
-    bool operator!=(const const_graph_iterator &X) const { return I != X.I; }
-
-    reference operator*() const { return **I; }
-    pointer operator->()  const { return  *I; }
-    operator CFGBlock* () const { return  *I; }
-
-    const_graph_iterator &operator++() { ++I; return *this; }
-    const_graph_iterator &operator--() { --I; return *this; }
-
-  private:
-    ImplTy I;
-  };
-
-  /// buildCFG - Builds a CFG from an AST.  The responsibility to free the
-  ///   constructed CFG belongs to the caller.
-  static CFG* buildCFG(const Decl *D, Stmt *AST, ASTContext *C,
-                       const BuildOptions &BO);
-
-  /// createBlock - Create a new block in the CFG.  The CFG owns the block;
-  ///  the caller should not directly free it.
+  /// Create a new block in the CFG. The CFG owns the block; the caller should
+  /// not directly free it.
   CFGBlock *createBlock();
 
-  /// setEntry - Set the entry block of the CFG.  This is typically used
-  ///  only during CFG construction.  Most CFG clients expect that the
-  ///  entry block has no predecessors and contains no statements.
+  /// Set the entry block of the CFG. This is typically used only during CFG
+  /// construction. Most CFG clients expect that the entry block has no
+  /// predecessors and contains no statements.
   void setEntry(CFGBlock *B) { Entry = B; }
 
-  /// setIndirectGotoBlock - Set the block used for indirect goto jumps.
-  ///  This is typically used only during CFG construction.
+  /// Set the block used for indirect goto jumps. This is typically used only
+  /// during CFG construction.
   void setIndirectGotoBlock(CFGBlock *B) { IndirectGotoBlock = B; }
 
   //===--------------------------------------------------------------------===//
   // Block Iterators
   //===--------------------------------------------------------------------===//
 
-  typedef BumpVector<CFGBlock*>                    CFGBlockListTy;
-  typedef CFGBlockListTy::iterator                 iterator;
-  typedef CFGBlockListTy::const_iterator           const_iterator;
-  typedef std::reverse_iterator<iterator>          reverse_iterator;
-  typedef std::reverse_iterator<const_iterator>    const_reverse_iterator;
+  using CFGBlockListTy = BumpVector<CFGBlock *>;
+  using iterator = CFGBlockListTy::iterator;
+  using const_iterator = CFGBlockListTy::const_iterator;
+  using reverse_iterator = std::reverse_iterator<iterator>;
+  using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
   CFGBlock &                front()                { return *Blocks.front(); }
   CFGBlock &                back()                 { return *Blocks.back(); }
@@ -675,14 +1080,10 @@ public:
   const_iterator            begin()       const    { return Blocks.begin(); }
   const_iterator            end()         const    { return Blocks.end(); }
 
-  graph_iterator nodes_begin() { return graph_iterator(Blocks.begin()); }
-  graph_iterator nodes_end() { return graph_iterator(Blocks.end()); }
-  const_graph_iterator nodes_begin() const {
-    return const_graph_iterator(Blocks.begin());
-  }
-  const_graph_iterator nodes_end() const {
-    return const_graph_iterator(Blocks.end());
-  }
+  iterator nodes_begin() { return iterator(Blocks.begin()); }
+  iterator nodes_end() { return iterator(Blocks.end()); }
+  const_iterator nodes_begin() const { return const_iterator(Blocks.begin()); }
+  const_iterator nodes_end() const { return const_iterator(Blocks.end()); }
 
   reverse_iterator          rbegin()               { return Blocks.rbegin(); }
   reverse_iterator          rend()                 { return Blocks.rend(); }
@@ -697,10 +1098,12 @@ public:
   CFGBlock *       getIndirectGotoBlock() { return IndirectGotoBlock; }
   const CFGBlock * getIndirectGotoBlock() const { return IndirectGotoBlock; }
 
-  typedef std::vector<const CFGBlock*>::const_iterator try_block_iterator;
+  using try_block_iterator = std::vector<const CFGBlock *>::const_iterator;
+
   try_block_iterator try_blocks_begin() const {
     return TryDispatchBlocks.begin();
   }
+
   try_block_iterator try_blocks_end() const {
     return TryDispatchBlocks.end();
   }
@@ -709,16 +1112,51 @@ public:
     TryDispatchBlocks.push_back(block);
   }
 
+  /// Records a synthetic DeclStmt and the DeclStmt it was constructed from.
+  ///
+  /// The CFG uses synthetic DeclStmts when a single AST DeclStmt contains
+  /// multiple decls.
+  void addSyntheticDeclStmt(const DeclStmt *Synthetic,
+                            const DeclStmt *Source) {
+    assert(Synthetic->isSingleDecl() && "Can handle single declarations only");
+    assert(Synthetic != Source && "Don't include original DeclStmts in map");
+    assert(!SyntheticDeclStmts.count(Synthetic) && "Already in map");
+    SyntheticDeclStmts[Synthetic] = Source;
+  }
+
+  using synthetic_stmt_iterator =
+      llvm::DenseMap<const DeclStmt *, const DeclStmt *>::const_iterator;
+  using synthetic_stmt_range = llvm::iterator_range<synthetic_stmt_iterator>;
+
+  /// Iterates over synthetic DeclStmts in the CFG.
+  ///
+  /// Each element is a (synthetic statement, source statement) pair.
+  ///
+  /// \sa addSyntheticDeclStmt
+  synthetic_stmt_iterator synthetic_stmt_begin() const {
+    return SyntheticDeclStmts.begin();
+  }
+
+  /// \sa synthetic_stmt_begin
+  synthetic_stmt_iterator synthetic_stmt_end() const {
+    return SyntheticDeclStmts.end();
+  }
+
+  /// \sa synthetic_stmt_begin
+  synthetic_stmt_range synthetic_stmts() const {
+    return synthetic_stmt_range(synthetic_stmt_begin(), synthetic_stmt_end());
+  }
+
   //===--------------------------------------------------------------------===//
   // Member templates useful for various batch operations over CFGs.
   //===--------------------------------------------------------------------===//
 
   template <typename CALLBACK>
   void VisitBlockStmts(CALLBACK& O) const {
-    for (const_iterator I=begin(), E=end(); I != E; ++I)
-      for (CFGBlock::const_iterator BI=(*I)->begin(), BE=(*I)->end();
+    for (const_iterator I = begin(), E = end(); I != E; ++I)
+      for (CFGBlock::const_iterator BI = (*I)->begin(), BE = (*I)->end();
            BI != BE; ++BI) {
-        if (const CFGStmt *stmt = BI->getAs<CFGStmt>())
+        if (Optional<CFGStmt> stmt = BI->getAs<CFGStmt>())
           O(const_cast<Stmt*>(stmt->getStmt()));
       }
   }
@@ -727,28 +1165,12 @@ public:
   // CFG Introspection.
   //===--------------------------------------------------------------------===//
 
-  struct   BlkExprNumTy {
-    const signed Idx;
-    explicit BlkExprNumTy(signed idx) : Idx(idx) {}
-    explicit BlkExprNumTy() : Idx(-1) {}
-    operator bool() const { return Idx >= 0; }
-    operator unsigned() const { assert(Idx >=0); return (unsigned) Idx; }
-  };
-
-  bool isBlkExpr(const Stmt *S) { return getBlkExprNum(S); }
-  bool isBlkExpr(const Stmt *S) const {
-    return const_cast<CFG*>(this)->isBlkExpr(S);
-  }
-  BlkExprNumTy  getBlkExprNum(const Stmt *S);
-  unsigned      getNumBlkExprs();
-
-  /// getNumBlockIDs - Returns the total number of BlockIDs allocated (which
-  /// start at 0).
+  /// Returns the total number of BlockIDs allocated (which start at 0).
   unsigned getNumBlockIDs() const { return NumBlockIDs; }
 
-  /// size - Return the total number of CFGBlocks within the CFG
-  /// This is simply a renaming of the getNumBlockIDs(). This is necessary 
-  /// because the dominator implementation needs such an interface.
+  /// Return the total number of CFGBlocks within the CFG This is simply a
+  /// renaming of the getNumBlockIDs(). This is necessary because the dominator
+  /// implementation needs such an interface.
   unsigned size() const { return NumBlockIDs; }
 
   //===--------------------------------------------------------------------===//
@@ -763,10 +1185,7 @@ public:
   // Internal: constructors and data.
   //===--------------------------------------------------------------------===//
 
-  CFG() : Entry(NULL), Exit(NULL), IndirectGotoBlock(NULL), NumBlockIDs(0),
-          BlkExprMap(NULL), Blocks(BlkBVC, 10) {}
-
-  ~CFG();
+  CFG() : Blocks(BlkBVC, 10) {}
 
   llvm::BumpPtrAllocator& getAllocator() {
     return BlkBVC.getAllocator();
@@ -777,16 +1196,13 @@ public:
   }
 
 private:
-  CFGBlock *Entry;
-  CFGBlock *Exit;
-  CFGBlock* IndirectGotoBlock;  // Special block to contain collective dispatch
-                                // for indirect gotos
-  unsigned  NumBlockIDs;
+  CFGBlock *Entry = nullptr;
+  CFGBlock *Exit = nullptr;
 
-  // BlkExprMap - An opaque pointer to prevent inclusion of DenseMap.h.
-  //  It represents a map from Expr* to integers to record the set of
-  //  block-level expressions and their "statement number" in the CFG.
-  void *    BlkExprMap;
+  // Special block to contain collective dispatch for indirect gotos
+  CFGBlock* IndirectGotoBlock = nullptr;
+
+  unsigned  NumBlockIDs = 0;
 
   BumpVectorContext BlkBVC;
 
@@ -796,8 +1212,12 @@ private:
   /// This is the collection of such blocks present in the CFG.
   std::vector<const CFGBlock *> TryDispatchBlocks;
 
+  /// Collects DeclStmts synthesized for this CFG and maps each one back to its
+  /// source DeclStmt.
+  llvm::DenseMap<const DeclStmt *, const DeclStmt *> SyntheticDeclStmts;
 };
-} // end namespace clang
+
+} // namespace clang
 
 //===----------------------------------------------------------------------===//
 // GraphTraits specializations for CFG basic block graphs (source-level CFGs)
@@ -807,86 +1227,65 @@ namespace llvm {
 
 /// Implement simplify_type for CFGTerminator, so that we can dyn_cast from
 /// CFGTerminator to a specific Stmt class.
-template <> struct simplify_type<const ::clang::CFGTerminator> {
-  typedef const ::clang::Stmt *SimpleType;
-  static SimpleType getSimplifiedValue(const ::clang::CFGTerminator &Val) {
-    return Val.getStmt();
-  }
-};
-
 template <> struct simplify_type< ::clang::CFGTerminator> {
-  typedef ::clang::Stmt *SimpleType;
-  static SimpleType getSimplifiedValue(const ::clang::CFGTerminator &Val) {
-    return const_cast<SimpleType>(Val.getStmt());
+  using SimpleType = ::clang::Stmt *;
+
+  static SimpleType getSimplifiedValue(::clang::CFGTerminator Val) {
+    return Val.getStmt();
   }
 };
 
 // Traits for: CFGBlock
 
 template <> struct GraphTraits< ::clang::CFGBlock *> {
-  typedef ::clang::CFGBlock NodeType;
-  typedef ::clang::CFGBlock::succ_iterator ChildIteratorType;
+  using NodeRef = ::clang::CFGBlock *;
+  using ChildIteratorType = ::clang::CFGBlock::succ_iterator;
 
-  static NodeType* getEntryNode(::clang::CFGBlock *BB)
-  { return BB; }
-
-  static inline ChildIteratorType child_begin(NodeType* N)
-  { return N->succ_begin(); }
-
-  static inline ChildIteratorType child_end(NodeType* N)
-  { return N->succ_end(); }
+  static NodeRef getEntryNode(::clang::CFGBlock *BB) { return BB; }
+  static ChildIteratorType child_begin(NodeRef N) { return N->succ_begin(); }
+  static ChildIteratorType child_end(NodeRef N) { return N->succ_end(); }
 };
 
 template <> struct GraphTraits< const ::clang::CFGBlock *> {
-  typedef const ::clang::CFGBlock NodeType;
-  typedef ::clang::CFGBlock::const_succ_iterator ChildIteratorType;
+  using NodeRef = const ::clang::CFGBlock *;
+  using ChildIteratorType = ::clang::CFGBlock::const_succ_iterator;
 
-  static NodeType* getEntryNode(const clang::CFGBlock *BB)
-  { return BB; }
-
-  static inline ChildIteratorType child_begin(NodeType* N)
-  { return N->succ_begin(); }
-
-  static inline ChildIteratorType child_end(NodeType* N)
-  { return N->succ_end(); }
+  static NodeRef getEntryNode(const clang::CFGBlock *BB) { return BB; }
+  static ChildIteratorType child_begin(NodeRef N) { return N->succ_begin(); }
+  static ChildIteratorType child_end(NodeRef N) { return N->succ_end(); }
 };
 
-template <> struct GraphTraits<Inverse< ::clang::CFGBlock*> > {
-  typedef ::clang::CFGBlock NodeType;
-  typedef ::clang::CFGBlock::const_pred_iterator ChildIteratorType;
+template <> struct GraphTraits<Inverse< ::clang::CFGBlock *>> {
+  using NodeRef = ::clang::CFGBlock *;
+  using ChildIteratorType = ::clang::CFGBlock::const_pred_iterator;
 
-  static NodeType *getEntryNode(Inverse< ::clang::CFGBlock*> G)
-  { return G.Graph; }
+  static NodeRef getEntryNode(Inverse<::clang::CFGBlock *> G) {
+    return G.Graph;
+  }
 
-  static inline ChildIteratorType child_begin(NodeType* N)
-  { return N->pred_begin(); }
-
-  static inline ChildIteratorType child_end(NodeType* N)
-  { return N->pred_end(); }
+  static ChildIteratorType child_begin(NodeRef N) { return N->pred_begin(); }
+  static ChildIteratorType child_end(NodeRef N) { return N->pred_end(); }
 };
 
-template <> struct GraphTraits<Inverse<const ::clang::CFGBlock*> > {
-  typedef const ::clang::CFGBlock NodeType;
-  typedef ::clang::CFGBlock::const_pred_iterator ChildIteratorType;
+template <> struct GraphTraits<Inverse<const ::clang::CFGBlock *>> {
+  using NodeRef = const ::clang::CFGBlock *;
+  using ChildIteratorType = ::clang::CFGBlock::const_pred_iterator;
 
-  static NodeType *getEntryNode(Inverse<const ::clang::CFGBlock*> G)
-  { return G.Graph; }
+  static NodeRef getEntryNode(Inverse<const ::clang::CFGBlock *> G) {
+    return G.Graph;
+  }
 
-  static inline ChildIteratorType child_begin(NodeType* N)
-  { return N->pred_begin(); }
-
-  static inline ChildIteratorType child_end(NodeType* N)
-  { return N->pred_end(); }
+  static ChildIteratorType child_begin(NodeRef N) { return N->pred_begin(); }
+  static ChildIteratorType child_end(NodeRef N) { return N->pred_end(); }
 };
 
 // Traits for: CFG
 
 template <> struct GraphTraits< ::clang::CFG* >
     : public GraphTraits< ::clang::CFGBlock *>  {
+  using nodes_iterator = ::clang::CFG::iterator;
 
-  typedef ::clang::CFG::graph_iterator nodes_iterator;
-
-  static NodeType     *getEntryNode(::clang::CFG* F) { return &F->getEntry(); }
+  static NodeRef getEntryNode(::clang::CFG *F) { return &F->getEntry(); }
   static nodes_iterator nodes_begin(::clang::CFG* F) { return F->nodes_begin();}
   static nodes_iterator   nodes_end(::clang::CFG* F) { return F->nodes_end(); }
   static unsigned              size(::clang::CFG* F) { return F->size(); }
@@ -894,45 +1293,47 @@ template <> struct GraphTraits< ::clang::CFG* >
 
 template <> struct GraphTraits<const ::clang::CFG* >
     : public GraphTraits<const ::clang::CFGBlock *>  {
+  using nodes_iterator = ::clang::CFG::const_iterator;
 
-  typedef ::clang::CFG::const_graph_iterator nodes_iterator;
+  static NodeRef getEntryNode(const ::clang::CFG *F) { return &F->getEntry(); }
 
-  static NodeType *getEntryNode( const ::clang::CFG* F) {
-    return &F->getEntry();
-  }
   static nodes_iterator nodes_begin( const ::clang::CFG* F) {
     return F->nodes_begin();
   }
+
   static nodes_iterator nodes_end( const ::clang::CFG* F) {
     return F->nodes_end();
   }
+
   static unsigned size(const ::clang::CFG* F) {
     return F->size();
   }
 };
 
-template <> struct GraphTraits<Inverse< ::clang::CFG*> >
-  : public GraphTraits<Inverse< ::clang::CFGBlock*> > {
+template <> struct GraphTraits<Inverse< ::clang::CFG *>>
+  : public GraphTraits<Inverse< ::clang::CFGBlock *>> {
+  using nodes_iterator = ::clang::CFG::iterator;
 
-  typedef ::clang::CFG::graph_iterator nodes_iterator;
-
-  static NodeType *getEntryNode( ::clang::CFG* F) { return &F->getExit(); }
+  static NodeRef getEntryNode(::clang::CFG *F) { return &F->getExit(); }
   static nodes_iterator nodes_begin( ::clang::CFG* F) {return F->nodes_begin();}
   static nodes_iterator nodes_end( ::clang::CFG* F) { return F->nodes_end(); }
 };
 
-template <> struct GraphTraits<Inverse<const ::clang::CFG*> >
-  : public GraphTraits<Inverse<const ::clang::CFGBlock*> > {
+template <> struct GraphTraits<Inverse<const ::clang::CFG *>>
+  : public GraphTraits<Inverse<const ::clang::CFGBlock *>> {
+  using nodes_iterator = ::clang::CFG::const_iterator;
 
-  typedef ::clang::CFG::const_graph_iterator nodes_iterator;
+  static NodeRef getEntryNode(const ::clang::CFG *F) { return &F->getExit(); }
 
-  static NodeType *getEntryNode(const ::clang::CFG* F) { return &F->getExit(); }
   static nodes_iterator nodes_begin(const ::clang::CFG* F) {
     return F->nodes_begin();
   }
+
   static nodes_iterator nodes_end(const ::clang::CFG* F) {
     return F->nodes_end();
   }
 };
-} // end llvm namespace
-#endif
+
+} // namespace llvm
+
+#endif // LLVM_CLANG_ANALYSIS_CFG_H

@@ -90,3 +90,21 @@ namespace test5 {
     }
   };
 }
+
+namespace rdar13185264 {
+  class X {
+    X() : a(), // expected-note{{previous initialization is here}}
+          a()  { } // expected-error{{multiple initializations given for non-static member 'a'}}
+    union { void *a; };
+  };
+}
+
+namespace PR16596 {
+  class A { public: virtual ~A(); };
+  typedef const A Foo;
+  void Apply(Foo processor);
+  struct Bar : public Foo {};
+  void Fetch() {
+    Apply(Bar());
+  }
+}

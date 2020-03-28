@@ -5,15 +5,15 @@
   id _object;
   id _object1;
 }
-@property(readonly) id object;	// expected-note {{property declared here}}
+@property(readonly) id object;
 @property(readwrite, assign) id object1; // expected-note {{property declared here}}
 @property (readonly) int indentLevel;
 @end
 
 @interface ReadOnly ()
-@property(readwrite, copy) id object;	// expected-warning {{property attribute in continuation class does not match the primary class}}
-@property(readonly) id object1; // expected-error {{illegal redeclaration of property in continuation class 'ReadOnly' (attribute must be 'readwrite', while its primary must be 'readonly')}}
-@property (readwrite, assign) int indentLevel; // OK. assign the the default in any case.
+@property(readwrite, copy) id object; // Ok. declaring memory model in class extension - primary has none.
+@property(readonly) id object1; // expected-error {{illegal redeclaration of property in class extension 'ReadOnly' (attribute must be 'readwrite', while its primary must be 'readonly')}}
+@property (readwrite, assign) int indentLevel; // OK. assign the default in any case.
 @end
 
 @protocol Proto
@@ -31,8 +31,8 @@
 @end
 
 @interface Bar ()
-@property (copy) id foo; // expected-error {{illegal redeclaration of property in continuation class 'Bar' (attribute must be 'readwrite', while its primary must be 'readonly')}}
-@property (copy) id fee; // expected-error {{illegal redeclaration of property in continuation class 'Bar' (attribute must be 'readwrite', while its primary must be 'readonly')}}
+@property (copy) id foo; // expected-error {{illegal redeclaration of property in class extension 'Bar' (attribute must be 'readwrite', while its primary must be 'readonly')}}
+@property (copy) id fee; // expected-error {{illegal redeclaration of property in class extension 'Bar' (attribute must be 'readwrite', while its primary must be 'readonly')}}
 @end
 
 @implementation Bar

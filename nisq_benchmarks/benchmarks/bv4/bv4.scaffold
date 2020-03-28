@@ -1,0 +1,26 @@
+int main() {
+
+    qbit q[4];
+    cbit c[4];
+
+    X(q[3]);
+
+    for (int i=0; i < 4; i++) {
+    	H(q[i]);
+	}
+
+    for ( int i=0; i < 3; i++ ) {
+    	 CNOT(q[i], q[3]);
+	}
+
+    for ( int i=0; i < 4; i++ ) {
+           H(q[i]);
+	}
+
+     c[0] = MeasZ(q[0]);
+     c[1] = MeasZ(q[1]);
+     c[2] = MeasZ(q[2]);
+     c[3] = MeasZ(q[3]);
+
+
+}

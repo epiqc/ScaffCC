@@ -36,10 +36,10 @@ namespace reference {
   };
 
   void call() {
-    void f(const int&);
+    one f(const int&);
     f({1});
 
-    void g(int&); // expected-note {{passing argument}}
+    one g(int&); // expected-note {{passing argument}}
     g({1}); // expected-error {{cannot bind to an initializer list temporary}}
     int i = 0;
     g({i});
@@ -71,11 +71,22 @@ namespace reference {
     static_assert(sizeof(h({1, 2})) == sizeof(two), "bad overload resolution");
   }
 
+  struct X {};
+
   void edge_cases() {
-    // FIXME: very poor error message
-    int const &b({0}); // expected-error {{could not bind}}
+    int const &b({0}); // expected-error {{cannot initialize reference type 'const int &' with a parenthesized initializer list}}
+    const int (&arr)[3] ({1, 2, 3}); // expected-error {{cannot initialize reference type 'const int (&)[3]' with a parenthesized initializer list}}
+    const X &x({}); // expected-error {{cannot initialize reference type 'const reference::X &' with a parenthesized initializer list}}
   }
 
+  template<typename T> void dependent_edge_cases() {
+    T b({}); // expected-error-re 3{{cannot initialize reference type {{.*}} with a parenthesized init}}
+    T({}); // expected-error-re 3{{cannot initialize reference type {{.*}} with a parenthesized init}}
+  }
+  template void dependent_edge_cases<X>(); // ok
+  template void dependent_edge_cases<const int&>(); // expected-note {{instantiation of}}
+  template void dependent_edge_cases<const int(&)[1]>(); // expected-note {{instantiation of}}
+  template void dependent_edge_cases<const X&>(); // expected-note {{instantiation of}}
 }
 
 namespace PR12182 {
@@ -89,4 +100,43 @@ namespace PR12182 {
 namespace PR12660 {
   const int &i { 1 };
   struct S { S(int); } const &s { 2 };
+}
+
+namespace b7891773 {
+  typedef void (*ptr)();
+  template <class T> void f();
+  int g(const ptr &);
+  int k = g({ f<int> });
+}
+
+namespace inner_init {
+  struct A { int n; };
+  struct B { A &&r; };
+  B b1 { 0 }; // expected-error {{reference to type 'inner_init::A' could not bind to an rvalue of type 'int'}}
+  B b2 { { 0 } };
+  B b3 { { { 0 } } }; // expected-warning {{braces around scalar init}}
+
+  struct C { C(int); };   // expected-note 2{{candidate constructor (the implicit}} \
+                          // expected-note {{candidate constructor not viable: cannot convert initializer list argument to 'int'}}
+  struct D { C &&r; };
+  D d1 { 0 }; // ok, 0 implicitly converts to C
+  D d2 { { 0 } }; // ok, { 0 } calls C(0)
+  D d3 { { { 0 } } }; // ok, { { 0 } } calls C({ 0 }), expected-warning {{braces around scalar init}}
+  D d4 { { { { 0 } } } }; // expected-error {{no matching constructor for initialization of 'inner_init::C &&'}}
+
+  struct E { explicit E(int); }; // expected-note 2{{here}}
+  struct F { E &&r; };
+  F f1 { 0 }; // expected-error {{could not bind to an rvalue of type 'int'}}
+  F f2 { { 0 } }; // expected-error {{chosen constructor is explicit}}
+  F f3 { { { 0 } } }; // expected-error {{chosen constructor is explicit}}
+}
+
+namespace PR20844 {
+  struct A {};
+  struct B { operator A&(); } b;
+  A &a{b}; // expected-error {{excess elements}} expected-note {{in initialization of temporary of type 'PR20844::A'}}
+}
+
+namespace PR21834 {
+const int &a = (const int &){0}; // expected-error {{cannot bind to an initializer list}}
 }

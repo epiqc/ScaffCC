@@ -7,16 +7,16 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Pass.h"
-#include "llvm/Module.h"
-#include "llvm/Function.h"
-#include "llvm/BasicBlock.h"
-#include "llvm/Instruction.h"
-#include "llvm/Constants.h"
-#include "llvm/Intrinsics.h"
-#include "llvm/Support/InstVisitor.h" 
-#include "llvm/Support/InstIterator.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Instruction.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/InstVisitor.h" 
+#include "llvm/IR/InstIterator.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Instructions.h"
+#include "llvm/IR/Instructions.h"
 #include <map>
 
 using namespace llvm;
@@ -131,7 +131,7 @@ namespace {
 	SmallVector<Value*,16> idxVect;
 	idxVect.push_back(ConstantInt::get(Type::getInt32Ty(CI->getContext()),0));
 	idxVect.push_back(ConstantInt::get(Type::getInt32Ty(CI->getContext()),0));
-	GetElementPtrInst *arrPtr = GetElementPtrInst::Create((Value*)(*mit).first, idxVect, "", (Instruction*) CI);
+	GetElementPtrInst *arrPtr = GetElementPtrInst::Create((*mit).first->getAllocatedType(), (Value*)(*mit).first, idxVect, "", (Instruction*) CI);
 
 	//generate call inst to external store function
 	SmallVector<Value*,16> call_args;
@@ -145,7 +145,7 @@ namespace {
 
     void resetAncillaData(Function* F){
       BasicBlock* myBB = &(F->back());
-      TerminatorInst *BBTerm = myBB->getTerminator();
+      Instruction *BBTerm = myBB->getTerminator();
 
       for(map<AllocaInst*, int>::iterator mit = mapAllocaInst.begin(); mit!=mapAllocaInst.end(); ++mit){
 	int arrSize = (*mit).second;
@@ -154,7 +154,7 @@ namespace {
 	SmallVector<Value*,16> idxVect;
 	idxVect.push_back(ConstantInt::get(Type::getInt32Ty(BBTerm->getContext()),0));
 	idxVect.push_back(ConstantInt::get(Type::getInt32Ty(BBTerm->getContext()),0));
-	GetElementPtrInst *arrPtr = GetElementPtrInst::Create((Value*)(*mit).first, idxVect, "", (Instruction*)BBTerm);
+	GetElementPtrInst *arrPtr = GetElementPtrInst::Create((*mit).first->getAllocatedType(), (Value*)(*mit).first, idxVect, "", (Instruction*)BBTerm);
 
 	//generate call inst to external store function
 	SmallVector<Value*,16> call_args;
@@ -224,11 +224,11 @@ namespace {
       dcpInitAlgo = cast<Function>(M.getOrInsertFunction("dcp_init_algo", Type::getVoidTy(M.getContext()), (Type*)0));
         
       for(Module::iterator F = M.begin(); F!=M.end(); ++F){
-	if(F && !F->isDeclaration()){
+	if(!F->isDeclaration()){
 	  //errs() << "Func : " << F->getName() << "\n";	  	  
 
 	  //analyze Alloc Insts first
-	  for(inst_iterator instIb = inst_begin(F); instIb!=inst_end(F); ++instIb){
+	  for(inst_iterator instIb = inst_begin(&(*F)); instIb!=inst_end(&(*F)); ++instIb){
 	    Instruction* pInst = &*instIb;
 	    bool isAlloc = analyzeAllocInst(pInst);
 	    if(!isAlloc){
@@ -246,14 +246,14 @@ namespace {
 	  }
 
 	  //analyze Call insts now
-	  visit(F);
+	  visit(&(*F));
 	  
 	  //reset data for ancilla qubits to save qubits
-	  resetAncillaData(F);
+	  resetAncillaData(&(*F));
 
 	  if(F->getName() == "main"){
 	    BasicBlock* myBB = &(F->back());
-	    TerminatorInst *BBTerm = myBB->getTerminator();
+	    Instruction *BBTerm = myBB->getTerminator();
 	    
 	    CallInst::Create(dcpSumm,"",(Instruction*)BBTerm);
 	  }   	

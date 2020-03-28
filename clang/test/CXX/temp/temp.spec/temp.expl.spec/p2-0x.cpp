@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -fsyntax-only -verify -std=c++11 %s
+// RUN: %clang_cc1 -fsyntax-only -verify -std=c++11 %s -Wno-c++1y-extensions
 
 // This test creates cases where implicit instantiations of various entities
 // would cause a diagnostic, but provides expliict specializations for those
@@ -9,7 +9,6 @@
 struct NonDefaultConstructible {
   NonDefaultConstructible(int);
 };
-
 
 // C++ [temp.expl.spec]p1:
 //   An explicit specialization of any of the following:
@@ -41,7 +40,7 @@ template<> void N0::f0(double) { }
 struct X1 {
   template<typename T> void f(T);
   
-  template<> void f(int); // expected-error{{in class scope}}
+  template<> void f(int); // OK (DR727)
 };
 
 //     -- class template
@@ -79,7 +78,7 @@ template<> struct N0::X0<void> { };
 N0::X0<void> test_X0;
 
 namespace N1 {
-  template<> struct N0::X0<const void> { }; // expected-error{{class template specialization of 'X0' must originally be declared in namespace 'N0'}}
+  template<> struct N0::X0<const void> { }; // expected-error{{class template specialization of 'X0' not in a namespace enclosing 'N0'}}
 }
 
 namespace N0 {
@@ -89,6 +88,44 @@ namespace N0 {
 template<> struct N0::X0<volatile void> { 
   void f1(void *);
 };
+
+//     -- variable template [C++1y]
+namespace N0 {
+template<typename T> int v0; // expected-note 4{{explicitly specialized declaration is here}}
+template<> extern int v0<char[1]>;
+template<> extern int v0<char[2]>;
+template<> extern int v0<char[5]>;
+template<> extern int v0<char[6]>;
+}
+using N0::v0;
+
+template<typename T> int v1; // expected-note 4{{explicitly specialized declaration is here}}
+template<> extern int v1<char[3]>;
+template<> extern int v1<char[4]>;
+template<> extern int v1<char[7]>;
+template<> extern int v1<char[8]>;
+
+template<> int N0::v0<int[1]>;
+template<> int v0<int[2]>;
+template<> int ::v1<int[3]>; // expected-warning {{extra qualification}}
+template<> int v1<int[4]>;
+
+template<> int N0::v0<char[1]>;
+template<> int v0<char[2]>;
+template<> int ::v1<char[3]>; // expected-warning {{extra qualification}}
+template<> int v1<char[4]>;
+
+namespace N1 {
+template<> int N0::v0<int[5]>; // expected-error {{not in a namespace enclosing 'N0'}}
+template<> int v0<int[6]>; // expected-error {{not in a namespace enclosing 'N0'}}
+template<> int ::v1<int[7]>; // expected-error {{must occur at global scope}}
+template<> int v1<int[8]>; // expected-error {{must occur at global scope}}
+
+template<> int N0::v0<char[5]>; // expected-error {{not in a namespace enclosing 'N0'}}
+template<> int v0<char[6]>; // expected-error {{not in a namespace enclosing 'N0'}}
+template<> int ::v1<char[7]>; // expected-error {{must occur at global scope}}
+template<> int v1<char[8]>; // expected-error {{must occur at global scope}}
+}
 
 //     -- member function of a class template
 template<> void N0::X0<void*>::f1(void *) { }
@@ -300,3 +337,8 @@ template<> template<typename T>
 void has_inline_namespaces::X0<X4>::mem_func_template(T&) { }
 
 template<> int has_inline_namespaces::X0<X4>::value = 13;
+
+namespace PR12938 {
+  template<typename> [[noreturn]] void func();
+  template<> void func<int>();
+}

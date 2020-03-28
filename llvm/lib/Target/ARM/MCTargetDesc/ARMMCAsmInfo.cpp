@@ -12,76 +12,114 @@
 //===----------------------------------------------------------------------===//
 
 #include "ARMMCAsmInfo.h"
-#include "llvm/Support/CommandLine.h"
+#include "llvm/ADT/Triple.h"
 
 using namespace llvm;
 
-cl::opt<bool>
-EnableARMEHABI("arm-enable-ehabi", cl::Hidden,
-  cl::desc("Generate ARM EHABI tables"),
-  cl::init(false));
-
-
-static const char *const arm_asm_table[] = {
-  "{r0}", "r0",
-  "{r1}", "r1",
-  "{r2}", "r2",
-  "{r3}", "r3",
-  "{r4}", "r4",
-  "{r5}", "r5",
-  "{r6}", "r6",
-  "{r7}", "r7",
-  "{r8}", "r8",
-  "{r9}", "r9",
-  "{r10}", "r10",
-  "{r11}", "r11",
-  "{r12}", "r12",
-  "{r13}", "r13",
-  "{r14}", "r14",
-  "{lr}", "lr",
-  "{sp}", "sp",
-  "{ip}", "ip",
-  "{fp}", "fp",
-  "{sl}", "sl",
-  "{memory}", "memory",
-  "{cc}", "cc",
-  0,0
-};
-
 void ARMMCAsmInfoDarwin::anchor() { }
 
-ARMMCAsmInfoDarwin::ARMMCAsmInfoDarwin() {
-  AsmTransCBE = arm_asm_table;
-  Data64bitsDirective = 0;
+ARMMCAsmInfoDarwin::ARMMCAsmInfoDarwin(const Triple &TheTriple) {
+  if ((TheTriple.getArch() == Triple::armeb) ||
+      (TheTriple.getArch() == Triple::thumbeb))
+    IsLittleEndian = false;
+
+  Data64bitsDirective = nullptr;
   CommentString = "@";
   Code16Directive = ".code\t16";
   Code32Directive = ".code\t32";
+  UseDataRegionDirectives = true;
 
   SupportsDebugInformation = true;
 
+  // Conditional Thumb 4-byte instructions can have an implicit IT.
+  MaxInstLength = 6;
+
   // Exceptions handling
-  ExceptionsType = ExceptionHandling::SjLj;
+  ExceptionsType = (TheTriple.isOSDarwin() && !TheTriple.isWatchABI())
+                       ? ExceptionHandling::SjLj
+                       : ExceptionHandling::DwarfCFI;
+
+  UseIntegratedAssembler = true;
 }
 
 void ARMELFMCAsmInfo::anchor() { }
 
-ARMELFMCAsmInfo::ARMELFMCAsmInfo() {
+ARMELFMCAsmInfo::ARMELFMCAsmInfo(const Triple &TheTriple) {
+  if ((TheTriple.getArch() == Triple::armeb) ||
+      (TheTriple.getArch() == Triple::thumbeb))
+    IsLittleEndian = false;
+
   // ".comm align is in bytes but .align is pow-2."
   AlignmentIsInBytes = false;
 
-  Data64bitsDirective = 0;
+  Data64bitsDirective = nullptr;
   CommentString = "@";
-  PrivateGlobalPrefix = ".L";
   Code16Directive = ".code\t16";
   Code32Directive = ".code\t32";
 
-  WeakRefDirective = "\t.weak\t";
-  LCOMMDirectiveType = LCOMM::NoAlignment;
-
-  HasLEB128 = true;
   SupportsDebugInformation = true;
 
+  // Conditional Thumb 4-byte instructions can have an implicit IT.
+  MaxInstLength = 6;
+
   // Exceptions handling
-  if (EnableARMEHABI)
+  switch (TheTriple.getOS()) {
+  case Triple::NetBSD:
+    ExceptionsType = ExceptionHandling::DwarfCFI;
+    break;
+  default:
     ExceptionsType = ExceptionHandling::ARM;
+    break;
+  }
+
+  // foo(plt) instead of foo@plt
+  UseParensForSymbolVariant = true;
+
+  UseIntegratedAssembler = true;
+}
+
+void ARMELFMCAsmInfo::setUseIntegratedAssembler(bool Value) {
+  UseIntegratedAssembler = Value;
+  if (!UseIntegratedAssembler) {
+    // gas doesn't handle VFP register names in cfi directives,
+    // so don't use register names with external assembler.
+    // See https://sourceware.org/bugzilla/show_bug.cgi?id=16694
+    DwarfRegNumForCFI = true;
+  }
+}
+
+void ARMCOFFMCAsmInfoMicrosoft::anchor() { }
+
+ARMCOFFMCAsmInfoMicrosoft::ARMCOFFMCAsmInfoMicrosoft() {
+  AlignmentIsInBytes = false;
+  ExceptionsType = ExceptionHandling::WinEH;
+  PrivateGlobalPrefix = "$M";
+  PrivateLabelPrefix = "$M";
+  CommentString = ";";
+
+  // Conditional Thumb 4-byte instructions can have an implicit IT.
+  MaxInstLength = 6;
+}
+
+void ARMCOFFMCAsmInfoGNU::anchor() { }
+
+ARMCOFFMCAsmInfoGNU::ARMCOFFMCAsmInfoGNU() {
+  AlignmentIsInBytes = false;
+  HasSingleParameterDotFile = true;
+
+  CommentString = "@";
+  Code16Directive = ".code\t16";
+  Code32Directive = ".code\t32";
+  PrivateGlobalPrefix = ".L";
+  PrivateLabelPrefix = ".L";
+
+  SupportsDebugInformation = true;
+  ExceptionsType = ExceptionHandling::DwarfCFI;
+  UseParensForSymbolVariant = true;
+
+  UseIntegratedAssembler = true;
+  DwarfRegNumForCFI = false;
+
+  // Conditional Thumb 4-byte instructions can have an implicit IT.
+  MaxInstLength = 6;
 }

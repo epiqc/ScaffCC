@@ -1,14 +1,14 @@
-; RUN: llc < %s -march=ppc32 -mtriple=powerpc-apple-darwin -mattr=+altivec  | FileCheck %s
+; RUN: llc -verify-machineinstrs < %s -mtriple=powerpc-unknown-linux-gnu -mattr=+altivec -disable-ppc-ilp-pref  | FileCheck %s
 ; Formerly this did byte loads and word stores.
 @a = external global <16 x i8>
 @b = external global <16 x i8>
 @c = external global <16 x i8>
 
 define void @foo() nounwind ssp {
-; CHECK: _foo:
+; CHECK: foo:
 ; CHECK-NOT: stw
 entry:
-    %tmp0 = load <16 x i8>* @a, align 16
+    %tmp0 = load <16 x i8>, <16 x i8>* @a, align 16
   %tmp180.i = extractelement <16 x i8> %tmp0, i32 0 ; <i8> [#uses=1]
   %tmp181.i = insertelement <16 x i8> <i8 0, i8 0, i8 undef, i8 undef, i8 undef, i8 undef, i8 undef, i8 undef, i8 undef, i8 undef, i8 undef, i8 undef, i8 undef, i8 undef, i8 undef, i8 undef>, i8 %tmp180.i, i32 2 ; <<16 x i8>> [#uses=1]
   %tmp182.i = extractelement <16 x i8> %tmp0, i32 1 ; <i8> [#uses=1]

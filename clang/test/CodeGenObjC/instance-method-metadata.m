@@ -1,4 +1,4 @@
-// REQUIRES: x86-64-registered-target
+// REQUIRES: x86-registered-target
 // RUN: %clang_cc1 -triple x86_64-apple-darwin10 -S -o %t %s 
 // RUN: FileCheck < %t %s
 
@@ -28,8 +28,8 @@
 @end
 
 // CHECK: l_OBJC_$_INSTANCE_METHODS_Bar:
-// CHECK-NEXT        .long   24
-// CHECK-NEXT        .long   2
-// CHECK-NEXT        .quad   L_OBJC_METH_VAR_NAME_
-// CHECK-NEXT        .quad   L_OBJC_METH_VAR_TYPE_
-// CHECK-NEXT        .quad   "-[Bar prop]"
+// CHECK-NEXT:        .long   24
+// CHECK-NEXT:        .long   2
+// CHECK-NEXT:        .quad   L_OBJC_METH_VAR_NAME_
+// CHECK-NEXT:        .quad   L_OBJC_METH_VAR_TYPE_
+// CHECK-NEXT:        .quad   "-[Bar prop]"

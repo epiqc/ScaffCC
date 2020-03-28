@@ -1,19 +1,35 @@
-// RUN: %clang_cc1 -Werror -triple i386-unknown-unknown -emit-llvm -o %t %s
-// RUN: FileCheck < %t %s
-//
-// FIXME: Note that we don't currently get the ABI right here. f0() should be
-// f0(i8*).
+// RUN: %clang_cc1 -Werror -triple x86_64-linux -emit-llvm -o - %s | FileCheck %s
+// RUN: %clang_cc1 -Werror -triple i386-linux -emit-llvm -o - %s | FileCheck %s
+// RUN: %clang_cc1 -Werror -triple armv7-linux -emit-llvm -o - %s | FileCheck %s --check-prefix=ARM
+// RUN: %clang_cc1 -Werror -triple powerpc64le-linux -emit-llvm -o - %s | FileCheck %s
+// RUN: %clang_cc1 -Werror -triple aarch64-linux -emit-llvm -o - %s | FileCheck %s
+// RUN: %clang_cc1 -DINFRONT -Werror -triple x86_64-linux -emit-llvm -o - %s | FileCheck %s
+// RUN: %clang_cc1 -DINFRONT -Werror -triple i386-linux -emit-llvm -o - %s | FileCheck %s
+// RUN: %clang_cc1 -DINFRONT -Werror -triple armv7-linux -emit-llvm -o - %s | FileCheck %s --check-prefix=ARM
+// RUN: %clang_cc1 -DINFRONT -Werror -triple powerpc64le-linux -emit-llvm -o - %s | FileCheck %s
+// RUN: %clang_cc1 -DINFRONT -Werror -triple aarch64-linux -emit-llvm -o - %s | FileCheck %s
 
+#ifdef INFRONT
+typedef union __attribute__((transparent_union)) {
+  void *f0;
+} transp_t0;
+#else
 typedef union {
   void *f0;
 } transp_t0 __attribute__((transparent_union));
+#endif
 
 void f0(transp_t0 obj);
 
-// CHECK: define void @f1_0(i32* %a0) 
-// CHECK:  call void @f0(%union.transp_t0* byval align 4 %{{.*}})
+// CHECK-LABEL: define void @f1_0(i32* %a0)
+// CHECK:  call void @f0(i8* %{{.*}})
 // CHECK:  call void %{{.*}}(i8* %{{[a-z0-9]*}})
 // CHECK: }
+
+// ARM-LABEL: define arm_aapcscc void @f1_0(i32* %a0)
+// ARM:  call arm_aapcscc void @f0(i8* %{{.*}})
+// ARM:  call arm_aapcscc void %{{.*}}(i8* %{{[a-z0-9]*}})
+// ARM: }
 void f1_0(int *a0) {
   void (*f0p)(void *) = f0;
   f0(a0);

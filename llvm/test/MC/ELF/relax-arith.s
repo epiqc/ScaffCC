@@ -1,12 +1,18 @@
-// RUN: llvm-mc -filetype=obj -triple x86_64-pc-linux-gnu %s -o - | elf-dump  --dump-section-data | FileCheck  %s
+// RUN: llvm-mc -filetype=obj -triple x86_64-pc-linux-gnu %s -o - | llvm-objdump -d - | FileCheck  %s
 
 // Test that we correctly relax these instructions into versions that use
 // 16 or 32 bit immediate values.
 
 bar:
-// CHECK: 'imul'
-// CHECK: ('_section_data', '6669db00 0066691c 25000000 00000069 db000000 00691c25 00000000 00000000 4869db00 00000048 691c2500 00000000 000000')
-        .section imul
+// CHECK:      Disassembly of section imul:
+// CHECK-NEXT: imul:
+// CHECK-NEXT:   0: 66 69 db 00 00                       imulw $0, %bx, %bx
+// CHECK-NEXT:   5: 66 69 1c 25 00 00 00 00 00 00        imulw $0, 0, %bx
+// CHECK-NEXT:   f: 69 db 00 00 00 00                    imull $0, %ebx, %ebx
+// CHECK-NEXT:  15: 69 1c 25 00 00 00 00 00 00 00 00     imull $0, 0, %ebx
+// CHECK-NEXT:  20: 48 69 db 00 00 00 00                 imulq $0, %rbx, %rbx
+// CHECK-NEXT:  27: 48 69 1c 25 00 00 00 00 00 00 00 00  imulq $0, 0, %rbx
+        .section imul,"x"
         imul $foo, %bx,  %bx
         imul $foo, bar,  %bx
         imul $foo, %ebx, %ebx
@@ -14,9 +20,15 @@ bar:
         imul $foo, %rbx, %rbx
         imul $foo, bar,  %rbx
 
-// CHECK: and'
-// CHECK:('_section_data', '6681e300 00668124 25000000 00000081 e3000000 00812425 00000000 00000000 4881e300 00000048 81242500 00000000 000000')
-        .section and
+// CHECK:      Disassembly of section and:
+// CHECK-NEXT: and:
+// CHECK-NEXT:   0: 66 81 e3 00 00                       andw $0, %bx
+// CHECK-NEXT:   5: 66 81 24 25 00 00 00 00 00 00        andw $0, 0
+// CHECK-NEXT:   f: 81 e3 00 00 00 00                    andl $0, %ebx
+// CHECK-NEXT:  15: 81 24 25 00 00 00 00 00 00 00 00     andl $0, 0
+// CHECK-NEXT:  20: 48 81 e3 00 00 00 00                 andq $0, %rbx
+// CHECK-NEXT:  27: 48 81 24 25 00 00 00 00 00 00 00 00  andq $0, 0
+        .section and,"x"
         and  $foo, %bx
         andw $foo, bar
         and  $foo, %ebx
@@ -24,9 +36,15 @@ bar:
         and  $foo, %rbx
         andq $foo, bar
 
-// CHECK: 'or'
-// CHECK: ('_section_data', '6681cb00 0066810c 25000000 00000081 cb000000 00810c25 00000000 00000000 4881cb00 00000048 810c2500 00000000 000000')
-        .section or
+// CHECK:      Disassembly of section or:
+// CHECK-NEXT: or:
+// CHECK-NEXT:   0: 66 81 cb 00 00                       orw $0, %bx
+// CHECK-NEXT:   5: 66 81 0c 25 00 00 00 00 00 00        orw $0, 0
+// CHECK-NEXT:   f: 81 cb 00 00 00 00                    orl $0, %ebx
+// CHECK-NEXT:  15: 81 0c 25 00 00 00 00 00 00 00 00     orl $0, 0
+// CHECK-NEXT:  20: 48 81 cb 00 00 00 00                 orq $0, %rbx
+// CHECK-NEXT:  27: 48 81 0c 25 00 00 00 00 00 00 00 00  orq $0, 0
+        .section or,"x"
         or  $foo, %bx
         orw $foo, bar
         or  $foo, %ebx
@@ -34,9 +52,15 @@ bar:
         or  $foo, %rbx
         orq $foo, bar
 
-// CHECK: 'xor'
-// CHECK: ('_section_data', '6681f300 00668134 25000000 00000081 f3000000 00813425 00000000 00000000 4881f300 00000048 81342500 00000000 000000')
-        .section xor
+// CHECK:      Disassembly of section xor:
+// CHECK-NEXT: xor:
+// CHECK-NEXT:   0: 66 81 f3 00 00                       xorw $0, %bx
+// CHECK-NEXT:   5: 66 81 34 25 00 00 00 00 00 00        xorw $0, 0
+// CHECK-NEXT:   f: 81 f3 00 00 00 00                    xorl $0, %ebx
+// CHECK-NEXT:  15: 81 34 25 00 00 00 00 00 00 00 00     xorl $0, 0
+// CHECK-NEXT:  20: 48 81 f3 00 00 00 00                 xorq $0, %rbx
+// CHECK-NEXT:  27: 48 81 34 25 00 00 00 00 00 00 00 00  xorq $0, 0
+        .section xor,"x"
         xor  $foo, %bx
         xorw $foo, bar
         xor  $foo, %ebx
@@ -44,9 +68,15 @@ bar:
         xor  $foo, %rbx
         xorq $foo, bar
 
-// CHECK: 'add'
-// CHECK: ('_section_data', '6681c300 00668104 25000000 00000081 c3000000 00810425 00000000 00000000 4881c300 00000048 81042500 00000000 000000')
-        .section add
+// CHECK:      Disassembly of section add:
+// CHECK-NEXT: add:
+// CHECK-NEXT:   0: 66 81 c3 00 00                       addw $0, %bx
+// CHECK-NEXT:   5: 66 81 04 25 00 00 00 00 00 00        addw $0, 0
+// CHECK-NEXT:   f: 81 c3 00 00 00 00                    addl $0, %ebx
+// CHECK-NEXT:  15: 81 04 25 00 00 00 00 00 00 00 00     addl $0, 0
+// CHECK-NEXT:  20: 48 81 c3 00 00 00 00                 addq $0, %rbx
+// CHECK-NEXT:  27: 48 81 04 25 00 00 00 00 00 00 00 00  addq $0, 0
+        .section add,"x"
         add  $foo, %bx
         addw $foo, bar
         add  $foo, %ebx
@@ -54,9 +84,15 @@ bar:
         add  $foo, %rbx
         addq $foo, bar
 
-// CHECK: 'sub'
-// CHECK: ('_section_data', '6681eb00 0066812c 25000000 00000081 eb000000 00812c25 00000000 00000000 4881eb00 00000048 812c2500 00000000 000000')
-        .section sub
+// CHECK:      Disassembly of section sub:
+// CHECK-NEXT: sub:
+// CHECK-NEXT:   0: 66 81 eb 00 00                       subw $0, %bx
+// CHECK-NEXT:   5: 66 81 2c 25 00 00 00 00 00 00        subw $0, 0
+// CHECK-NEXT:   f: 81 eb 00 00 00 00                    subl $0, %ebx
+// CHECK-NEXT:  15: 81 2c 25 00 00 00 00 00 00 00 00     subl $0, 0
+// CHECK-NEXT:  20: 48 81 eb 00 00 00 00                 subq $0, %rbx
+// CHECK-NEXT:  27: 48 81 2c 25 00 00 00 00 00 00 00 00  subq $0, 0
+        .section sub,"x"
         sub  $foo, %bx
         subw $foo, bar
         sub  $foo, %ebx
@@ -64,12 +100,58 @@ bar:
         sub  $foo, %rbx
         subq $foo, bar
 
-// CHECK: 'cmp'
-// CHECK: ('_section_data', '6681fb00 0066813c 25000000 00000081 fb000000 00813c25 00000000 00000000 4881fb00 00000048 813c2500 00000000 000000')
-        .section cmp
+// CHECK:      Disassembly of section cmp:
+// CHECK-NEXT: cmp:
+// CHECK-NEXT:   0: 66 81 fb 00 00                       cmpw $0, %bx
+// CHECK-NEXT:   5: 66 81 3c 25 00 00 00 00 00 00        cmpw $0, 0
+// CHECK-NEXT:   f: 81 fb 00 00 00 00                    cmpl $0, %ebx
+// CHECK-NEXT:  15: 81 3c 25 00 00 00 00 00 00 00 00     cmpl $0, 0
+// CHECK-NEXT:  20: 48 81 fb 00 00 00 00                 cmpq $0, %rbx
+// CHECK-NEXT:  27: 48 81 3c 25 00 00 00 00 00 00 00 00  cmpq $0, 0
+        .section cmp,"x"
         cmp  $foo, %bx
         cmpw $foo, bar
         cmp  $foo, %ebx
         cmpl $foo, bar
         cmp  $foo, %rbx
         cmpq $foo, bar
+
+// CHECK:      Disassembly of section push:
+// CHECK-NEXT: push:
+// CHECK-NEXT:   0: 66 68 00 00                          pushw $0
+// CHECK-NEXT:   4: 68 00 00 00 00                       pushq $0
+        .section push,"x"
+        pushw $foo
+        push  $foo
+
+// CHECK:      Disassembly of section adc:
+// CHECK-NEXT: adc:
+// CHECK-NEXT:   0: 66 81 d3 00 00                       adcw $0, %bx
+// CHECK-NEXT:   5: 66 81 14 25 00 00 00 00 00 00        adcw $0, 0
+// CHECK-NEXT:   f: 81 d3 00 00 00 00                    adcl $0, %ebx
+// CHECK-NEXT:  15: 81 14 25 00 00 00 00 00 00 00 00     adcl $0, 0
+// CHECK-NEXT:  20: 48 81 d3 00 00 00 00                 adcq $0, %rbx
+// CHECK-NEXT:  27: 48 81 14 25 00 00 00 00 00 00 00 00  adcq $0, 0
+        .section adc,"x"
+        adc  $foo, %bx
+        adcw $foo, bar
+        adc  $foo, %ebx
+        adcl $foo, bar
+        adc  $foo, %rbx
+        adcq $foo, bar
+
+// CHECK:      Disassembly of section sbb:
+// CHECK-NEXT: sbb:
+// CHECK-NEXT:   0: 66 81 db 00 00                       sbbw $0, %bx
+// CHECK-NEXT:   5: 66 81 1c 25 00 00 00 00 00 00        sbbw $0, 0
+// CHECK-NEXT:   f: 81 db 00 00 00 00                    sbbl $0, %ebx
+// CHECK-NEXT:  15: 81 1c 25 00 00 00 00 00 00 00 00     sbbl $0, 0
+// CHECK-NEXT:  20: 48 81 db 00 00 00 00                 sbbq $0, %rbx
+// CHECK-NEXT:  27: 48 81 1c 25 00 00 00 00 00 00 00 00  sbbq $0, 0
+        .section sbb,"x"
+        sbb  $foo, %bx
+        sbbw $foo, bar
+        sbb  $foo, %ebx
+        sbbl $foo, bar
+        sbb  $foo, %rbx
+        sbbq $foo, bar

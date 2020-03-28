@@ -1,4 +1,4 @@
-@__experimental_modules_import redecl_merge_top;
+@import redecl_merge_top;
 
 @class A;
 
@@ -60,7 +60,7 @@ typedef int T1;
 typedef float T2;
 
 int func0(int);
-int func1(int);
+int func1(int x) { return x; }
 int func2(int);
 
 
@@ -78,13 +78,16 @@ extern float var2;
 
 extern double var3;
 
-#ifdef __cplusplus
-template<typename T> class Vector;
-
-template<typename T> class Vector;
-#endif
-
 // Make sure this doesn't introduce an ambiguity-creating 'id' at the
 // top level.
 typedef void funcptr_with_id(int id);
 
+// A class that is declared in the 'bottom' module, then loaded from
+// one of the modules it depends on.
+@interface DeclaredThenLoaded
+- declaredThenLoadedMethod;
+@end
+
+@class DeclaredThenLoaded;
+
+void eventually_noreturn2(void);

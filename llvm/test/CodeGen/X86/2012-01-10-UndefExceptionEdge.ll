@@ -1,4 +1,4 @@
-; RUN: llc < %s -disable-fp-elim
+; RUN: llc < %s -frame-pointer=all
 target datalayout = "e-p:32:32:32-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:32:64-f32:32:32-f64:32:64-v64:64:64-v128:128:128-a0:0:64-f80:128:128-n8:16:32-S128"
 target triple = "i386-apple-macosx10.7"
 
@@ -14,9 +14,9 @@ target triple = "i386-apple-macosx10.7"
 
 @Exception = external unnamed_addr constant { i8*, i8* }
 
-declare void @llvm.memset.p0i8.i32(i8* nocapture, i8, i32, i32, i1) nounwind
+declare void @llvm.memset.p0i8.i32(i8* nocapture, i8, i32, i1) nounwind
 
-define void @f(i32* nocapture %arg, i32* nocapture %arg1, i32* nocapture %arg2, i32* nocapture %arg3, i32 %arg4, i32 %arg5) optsize ssp {
+define void @f(i32* nocapture %arg, i32* nocapture %arg1, i32* nocapture %arg2, i32* nocapture %arg3, i32 %arg4, i32 %arg5) optsize ssp personality i8* bitcast (i32 (...)* @__gxx_personality_v0 to i8*) {
 bb:
   br i1 undef, label %bb6, label %bb7
 
@@ -34,8 +34,8 @@ bb11:                                             ; preds = %bb7
   %tmp12 = ptrtoint i8* %tmp10 to i32
   %tmp13 = bitcast i8* %tmp10 to i32*
   %tmp14 = shl i32 %tmp8, 2
-  %tmp15 = getelementptr i32* %tmp13, i32 undef
-  %tmp16 = getelementptr i32* %tmp13, i32 undef
+  %tmp15 = getelementptr i32, i32* %tmp13, i32 undef
+  %tmp16 = getelementptr i32, i32* %tmp13, i32 undef
   %tmp17 = zext i32 %tmp9 to i64
   %tmp18 = add i64 %tmp17, -1
   %tmp19 = icmp ugt i64 %tmp18, 4294967295
@@ -43,7 +43,7 @@ bb11:                                             ; preds = %bb7
 
 bb20:                                             ; preds = %bb43, %bb41, %bb29, %bb7
   %tmp21 = phi i32 [ undef, %bb7 ], [ %tmp12, %bb43 ], [ %tmp12, %bb29 ], [ %tmp12, %bb41 ]
-  %tmp22 = landingpad { i8*, i32 } personality i8* bitcast (i32 (...)* @__gxx_personality_v0 to i8*)
+  %tmp22 = landingpad { i8*, i32 }
           catch i8* bitcast ({ i8*, i8* }* @Exception to i8*)
   br i1 undef, label %bb23, label %bb69
 
@@ -85,7 +85,7 @@ bb41:                                             ; preds = %bb38
           to label %bb42 unwind label %bb20
 
 bb42:                                             ; preds = %bb41
-  tail call void @llvm.memset.p0i8.i32(i8* %tmp32, i8 0, i32 %tmp9, i32 1, i1 false) nounwind
+  tail call void @llvm.memset.p0i8.i32(i8* %tmp32, i8 0, i32 %tmp9, i1 false) nounwind
   br i1 %tmp35, label %bb43, label %bb45
 
 bb43:                                             ; preds = %bb42
@@ -101,15 +101,15 @@ bb45:                                             ; preds = %bb57, %bb42
   br i1 %tmp47, label %bb48, label %bb59
 
 bb48:                                             ; preds = %bb45
-  tail call void @llvm.memset.p0i8.i32(i8* %tmp32, i8 0, i32 %tmp9, i32 1, i1 false) nounwind
+  tail call void @llvm.memset.p0i8.i32(i8* %tmp32, i8 0, i32 %tmp9, i1 false) nounwind
   br i1 %tmp36, label %bb49, label %bb57
 
 bb49:                                             ; preds = %bb49, %bb48
   %tmp50 = phi i32 [ %tmp55, %bb49 ], [ 0, %bb48 ]
   %tmp51 = add i32 %tmp50, undef
   %tmp52 = add i32 %tmp50, undef
-  %tmp53 = getelementptr i32* %tmp13, i32 %tmp52
-  %tmp54 = load i32* %tmp53, align 4, !tbaa !0
+  %tmp53 = getelementptr i32, i32* %tmp13, i32 %tmp52
+  %tmp54 = load i32, i32* %tmp53, align 4
   %tmp55 = add i32 %tmp50, 1
   %tmp56 = icmp eq i32 %tmp55, %tmp8
   br i1 %tmp56, label %bb57, label %bb49
@@ -120,14 +120,14 @@ bb57:                                             ; preds = %bb49, %bb48
 
 bb59:                                             ; preds = %bb45
   %tmp60 = ashr i32 %tmp46, 31
-  tail call void @llvm.memset.p0i8.i32(i8* null, i8 0, i32 %tmp37, i32 1, i1 false) nounwind
+  tail call void @llvm.memset.p0i8.i32(i8* null, i8 0, i32 %tmp37, i1 false) nounwind
   br i1 %tmp36, label %bb61, label %bb67
 
 bb61:                                             ; preds = %bb61, %bb59
   %tmp62 = phi i32 [ %tmp65, %bb61 ], [ 0, %bb59 ]
   %tmp63 = add i32 %tmp62, %tmp14
-  %tmp64 = getelementptr i32* %tmp13, i32 %tmp63
-  store i32 0, i32* %tmp64, align 4, !tbaa !0
+  %tmp64 = getelementptr i32, i32* %tmp13, i32 %tmp63
+  store i32 0, i32* %tmp64, align 4
   %tmp65 = add i32 %tmp62, 1
   %tmp66 = icmp eq i32 %tmp65, %tmp8
   br i1 %tmp66, label %bb67, label %bb61
@@ -149,7 +149,3 @@ declare void @Pjii(i32*, i32, i32) optsize
 declare i32 @llvm.eh.typeid.for(i8*) nounwind readnone
 
 declare void @OnOverFlow() noreturn optsize ssp align 2
-
-!0 = metadata !{metadata !"int", metadata !1}
-!1 = metadata !{metadata !"omnipotent char", metadata !2}
-!2 = metadata !{metadata !"Simple C/C++ TBAA", null}

@@ -1,4 +1,4 @@
-module cRz ( qbit ctrl, qbit target, const double angle ) {
+scaff_module cRz ( qbit ctrl, qbit target, const double angle ) {
 	/* cRz identity matrix:
 		[ [ 1 0 0 0 ]
 			[ 0 1 0 0 ]

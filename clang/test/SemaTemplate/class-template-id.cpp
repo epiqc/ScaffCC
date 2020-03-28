@@ -9,9 +9,9 @@ A<int, FLOAT> *foo(A<int> *ptr, A<int> const *ptr2, A<int, double> *ptr3) {
   if (ptr)
     return ptr; // okay
   else if (ptr2)
-    return ptr2; // expected-error{{cannot initialize return object of type 'A<int, FLOAT> *' with an lvalue of type 'const A<int> *'}}
+    return ptr2; // expected-error{{cannot initialize return object of type 'A<int, FLOAT> *' (aka 'A<int, float> *') with an lvalue of type 'const A<int> *'}}
   else {
-    return ptr3; // expected-error{{cannot initialize return object of type 'A<int, FLOAT> *' with an lvalue of type 'A<int, double> *'}}
+    return ptr3; // expected-error{{cannot initialize return object of type 'A<int, FLOAT> *' (aka 'A<int, float> *') with an lvalue of type 'A<int, double> *'}}
   }
 }
 
@@ -40,7 +40,7 @@ typedef N::C<float> c2;
 // PR5655
 template<typename T> struct Foo { }; // expected-note{{template is declared here}}
 
-void f(void) { Foo bar; } // expected-error{{without a template argument list}}
+void f(void) { Foo bar; } // expected-error{{use of class template 'Foo' requires template arguments}}
 
 // rdar://problem/8254267
 template <typename T> class Party;

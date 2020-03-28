@@ -37,11 +37,11 @@ void FUNC () {
 
 @interface rdar8747333 ()
 - (NSObject *)bam;
-- (NSObject *)warn;	// expected-note {{method definition for 'warn' not found}}
-- (void)setWarn : (NSObject *)val; // expected-note {{method definition for 'setWarn:' not found}}
+- (NSObject *)warn;
+- (void)setWarn : (NSObject *)val;
 @end
 
-@implementation rdar8747333 // expected-warning {{incomplete implementation}}
+@implementation rdar8747333
 @synthesize bar = _bar;
 @synthesize baz = _baz;
 @synthesize bam = _bam;

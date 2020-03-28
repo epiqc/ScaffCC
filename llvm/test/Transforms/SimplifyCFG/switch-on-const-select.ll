@@ -1,8 +1,8 @@
-; RUN: opt < %s -simplifycfg -S | FileCheck %s
+; RUN: opt < %s -simplifycfg -S | FileCheck -enable-var-scope %s
 
 ; Test basic folding to a conditional branch.
 define i32 @foo(i64 %x, i64 %y) nounwind {
-; CHECK: @foo
+; CHECK-LABEL: @foo(
 entry:
     %eq = icmp eq i64 %x, %y
     br i1 %eq, label %b, label %switch
@@ -32,10 +32,10 @@ bees:
 
 ; Test basic folding to an unconditional branch.
 define i32 @bar(i64 %x, i64 %y) nounwind {
-; CHECK: @bar
+; CHECK-LABEL: @bar(
 entry:
 ; CHECK-NEXT: entry:
-; CHECK-NEXT: tail call void @bees.a() nounwind
+; CHECK-NEXT: tail call void @bees.a() [[$NUW:#[0-9]+]]
 ; CHECK-NEXT: ret i32 0
     %lt = icmp slt i64 %x, %y
     %qux = select i1 %lt, i32 0, i32 2
@@ -58,10 +58,10 @@ bees:
 
 ; Test the edge case where both values from the select are the default case.
 define void @bazz(i64 %x, i64 %y) nounwind {
-; CHECK: @bazz
+; CHECK-LABEL: @bazz(
 entry:
 ; CHECK-NEXT: entry:
-; CHECK-NEXT: tail call void @bees.b() nounwind
+; CHECK-NEXT: tail call void @bees.b() [[$NUW]]
 ; CHECK-NEXT: ret void
     %lt = icmp slt i64 %x, %y
     %qux = select i1 %lt, i32 10, i32 12
@@ -83,10 +83,10 @@ bees:
 
 ; Test the edge case where both values from the select are equal.
 define void @quux(i64 %x, i64 %y) nounwind {
-; CHECK: @quux
+; CHECK-LABEL: @quux(
 entry:
 ; CHECK-NEXT: entry:
-; CHECK-NEXT: tail call void @bees.a() nounwind
+; CHECK-NEXT: tail call void @bees.a() [[$NUW]]
 ; CHECK-NEXT: ret void
     %lt = icmp slt i64 %x, %y
     %qux = select i1 %lt, i32 0, i32 0
@@ -108,7 +108,7 @@ bees:
 
 ; A final test, for phi node munging.
 define i32 @xyzzy(i64 %x, i64 %y) {
-; CHECK: @xyzzy
+; CHECK-LABEL: @xyzzy(
 entry:
     %eq = icmp eq i64 %x, %y
     br i1 %eq, label %r, label %cont
@@ -136,3 +136,6 @@ bees:
 declare void @llvm.trap() nounwind noreturn
 declare void @bees.a() nounwind
 declare void @bees.b() nounwind
+
+; CHECK: attributes [[$NUW]] = { nounwind }
+; CHECK: attributes #1 = { cold noreturn nounwind }

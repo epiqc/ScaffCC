@@ -1,6 +1,6 @@
 -------QASM Generation Pass:
 
-module main (  ) {
+module main(){
  	qbit qb[4];
 	cbit cb[2];
 	PrepZ ( qb[0] , 0 );

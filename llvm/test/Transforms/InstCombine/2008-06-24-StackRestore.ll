@@ -1,4 +1,4 @@
-; RUN: opt < %s -instcombine -S | grep {call.*llvm.stackrestore}
+; RUN: opt < %s -instcombine -S | grep "call.*llvm.stackrestore"
 ; PR2488
 target datalayout = "e-p:32:32:32-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:32:64-f32:32:32-f64:32:64-v64:64:64-v128:128:128-a0:0:64-f80:32:32"
 target triple = "i386-pc-linux-gnu"
@@ -27,7 +27,7 @@ bb44:		; preds = %bb44, %entry
 	%tmp27 = alloca i32, i32 %tmp5		; <i32*> [#uses=3]
 	%tmpcast = bitcast i32* %tmp27 to i8*		; <i8*> [#uses=1]
 	store i32 1, i32* %tmp27, align 4
-	%tmp34 = getelementptr i32* %tmp27, i32 %tmp4		; <i32*> [#uses=1]
+	%tmp34 = getelementptr i32, i32* %tmp27, i32 %tmp4		; <i32*> [#uses=1]
 	store i32 2, i32* %tmp34, align 4
 	store volatile i8* %tmpcast, i8** @p, align 4
 	%exitcond = icmp eq i32 %tmp3857, 999999		; <i1> [#uses=1]

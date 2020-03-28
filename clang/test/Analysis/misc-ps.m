@@ -1,8 +1,6 @@
 // NOTE: Use '-fobjc-gc' to test the analysis being run twice, and multiple reports are not issued.
-// RUN: %clang_cc1 -triple i386-apple-darwin10 -analyze -analyzer-checker=core,experimental.deadcode.IdempotentOperations,experimental.core,osx.cocoa.AtSync -analyzer-store=region -analyzer-constraints=basic -verify -fblocks -Wno-unreachable-code -Wno-null-dereference -Wno-objc-root-class %s
-// RUN: %clang_cc1 -triple i386-apple-darwin10 -analyze -analyzer-checker=core,experimental.deadcode.IdempotentOperations,experimental.core,osx.cocoa.AtSync -analyzer-store=region -analyzer-constraints=range -verify -fblocks -Wno-unreachable-code -Wno-null-dereference -Wno-objc-root-class %s
-// RUN: %clang_cc1 -triple x86_64-apple-darwin10 -analyze -analyzer-checker=core,experimental.deadcode.IdempotentOperations,experimental.core,osx.cocoa.AtSync -analyzer-store=region -analyzer-constraints=basic -verify -fblocks -Wno-unreachable-code -Wno-null-dereference -Wno-objc-root-class %s
-// RUN: %clang_cc1 -triple x86_64-apple-darwin10 -analyze -analyzer-checker=core,experimental.deadcode.IdempotentOperations,experimental.core,osx.cocoa.AtSync -analyzer-store=region -analyzer-constraints=range -verify -fblocks -Wno-unreachable-code -Wno-null-dereference -Wno-objc-root-class %s
+// RUN: %clang_analyze_cc1 -triple i386-apple-darwin10 -analyzer-checker=core,alpha.core,osx.cocoa.AtSync -analyzer-store=region -verify -fblocks -Wno-unreachable-code -Wno-null-dereference -Wno-objc-root-class %s
+// RUN: %clang_analyze_cc1 -triple x86_64-apple-darwin10 -analyzer-checker=core,alpha.core,osx.cocoa.AtSync -analyzer-store=region -verify -fblocks -Wno-unreachable-code -Wno-null-dereference -Wno-objc-root-class %s
 
 #ifndef __clang_analyzer__
 #error __clang_analyzer__ not defined
@@ -82,11 +80,11 @@ unsigned r6268365Aux();
 
 void r6268365() {
   unsigned x = 0;
-  x &= r6268365Aux(); // expected-warning{{The left operand to '&=' is always 0}}
+  x &= r6268365Aux();
   unsigned j = 0;
     
   if (x == 0) ++j;
-  if (x == 0) x = x / j; // expected-warning{{Assigned value is always the same as the existing value}} expected-warning{{The right operand to '/' is always 1}}
+  if (x == 0) x = x / j;
 }
 
 void divzeroassume(unsigned x, unsigned j) {  
@@ -118,19 +116,6 @@ __m128i vec128i(long long __q1, long long __q0) {
   // This compound literal returns true for both isVectorType() and 
   // isIntegerType().
   return __extension__ (__m128i)(__v2di){ __q0, __q1 };
-}
-
-// Zero-sized VLAs.
-void check_zero_sized_VLA(int x) {
-  if (x)
-    return;
-
-  int vla[x]; // expected-warning{{Declared variable-length array (VLA) has zero size}}
-}
-
-void check_uninit_sized_VLA() {
-  int x;
-  int vla[x]; // expected-warning{{Declared variable-length array (VLA) uses a garbage value as its size}}
 }
 
 // sizeof(void)
@@ -414,14 +399,14 @@ void test_trivial_symbolic_comparison(int *x) {
   int test_trivial_symbolic_comparison_aux();
   int a = test_trivial_symbolic_comparison_aux();
   int b = a;
-  if (a != b) { // expected-warning{{Both operands to '!=' always have the same value}}
+  if (a != b) {
     int *p = 0;
     *p = 0xDEADBEEF;     // no-warning
   }
   
   a = a == 1;
   b = b == 1;
-  if (a != b) { // expected-warning{{Both operands to '!=' always have the same value}}
+  if (a != b) {
     int *p = 0;
     *p = 0xDEADBEEF;     // no-warning
   }
@@ -493,6 +478,17 @@ int OSAtomicCompareAndSwap32Barrier();
   return 1;
 }
 @end
+
+// Do not crash when performing compare and swap on symbolic values.
+typedef int int32_t;
+typedef int int32;
+typedef int32 Atomic32;
+int OSAtomicCompareAndSwap32( int32_t __oldValue, int32_t __newValue, volatile int32_t *__theValue);
+void radar11390991_NoBarrier_CompareAndSwap(volatile Atomic32 *ptr,
+                              Atomic32 old_value,
+                              Atomic32 new_value) {
+  OSAtomicCompareAndSwap32(old_value, new_value, ptr);
+}
 
 // PR 4594 - This was a crash when handling casts in SimpleSValuator.
 void PR4594() {
@@ -800,7 +796,7 @@ int test_uninit_branch_c(void) {
 void test_bad_call_aux(int x);
 void test_bad_call(void) {
   int y;
-  test_bad_call_aux(y); // expected-warning{{Function call argument is an uninitialized value}}
+  test_bad_call_aux(y); // expected-warning{{1st function call argument is an uninitialized value}}
 }
 
 @interface TestBadArg {}
@@ -809,7 +805,7 @@ void test_bad_call(void) {
 
 void test_bad_msg(TestBadArg *p) {
   int y;
-  [p testBadArg:y]; // expected-warning{{Argument in message expression is an uninitialized value}}
+  [p testBadArg:y]; // expected-warning{{1st argument in message expression is an uninitialized value}}
 }
 
 //===----------------------------------------------------------------------===//
@@ -1141,11 +1137,11 @@ void rdar8578650(id x) {
 @implementation RDar6352035
 - (void)foo {
   RDar6352035 *friend = 0;
-  friend->c = 7; // expected-warning{{Instance variable access (via 'friend') results in a null pointer dereference}}
+  friend->c = 7; // expected-warning{{Access to instance variable 'c' results in a dereference of a null pointer (loaded from variable 'friend')}}
 }
 - (void)bar {
   self = 0;
-  c = 7; // expected-warning{{Instance variable access (via 'self') results in a null pointer dereference}}
+  c = 7; // expected-warning{{Access to instance variable 'c' results in a dereference of a null pointer (loaded from variable 'self')}}
 }
 @end
 
@@ -1344,4 +1340,21 @@ void radar9414427() {
   }();
 }
 @end
+
+// Don't crash when a ?: is only preceded by a statement (not an expression)
+// in the CFG.
+void __assert_fail();
+
+enum rdar1196620_e { E_A, E_B, E_C, E_D };
+struct rdar1196620_s { int ints[E_D+1]; };
+
+static void rdar1196620_call_assert(struct rdar1196620_s* s) {
+  int i = 0;
+  s?(void)0:__assert_fail();
+}
+
+static void rdar1196620(struct rdar1196620_s* s) {
+  rdar1196620_call_assert(s);
+}
+
 

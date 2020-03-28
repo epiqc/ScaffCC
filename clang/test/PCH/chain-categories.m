@@ -4,6 +4,8 @@
 // With PCH
 // RUN: %clang_cc1 -fsyntax-only -verify %s -chain-include %s -chain-include %s
 
+// expected-no-diagnostics
+
 #ifndef HEADER1
 #define HEADER1
 //===----------------------------------------------------------------------===//
@@ -12,6 +14,10 @@
 @interface NSObject
 - (id)init;
 - (void)finalize;
+@end
+
+@interface NSObject (Properties)
+@property (readonly,nonatomic) int intProp;
 @end
 
 //===----------------------------------------------------------------------===//
@@ -32,6 +38,12 @@
 -(void)extMeth;
 @end
 
+@interface NSObject ()
+@property (readwrite,nonatomic) int intProp;
+@end
+
+@class NSObject;
+
 //===----------------------------------------------------------------------===//
 #else
 //===----------------------------------------------------------------------===//
@@ -45,6 +57,9 @@
 
 void test(NSObject *o) {
   [o extMeth];
+
+  // Make sure the property is treated as read-write.
+  o.intProp = 17;
 }
 
 //===----------------------------------------------------------------------===//

@@ -12,42 +12,43 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "pre-RA-sched"
-#include "SDNodeDbgValue.h"
 #include "ScheduleDAGSDNodes.h"
 #include "InstrEmitter.h"
-#include "llvm/CodeGen/SelectionDAG.h"
-#include "llvm/CodeGen/MachineInstrBuilder.h"
-#include "llvm/CodeGen/MachineRegisterInfo.h"
-#include "llvm/MC/MCInstrItineraries.h"
-#include "llvm/Target/TargetMachine.h"
-#include "llvm/Target/TargetInstrInfo.h"
-#include "llvm/Target/TargetLowering.h"
-#include "llvm/Target/TargetRegisterInfo.h"
-#include "llvm/Target/TargetSubtargetInfo.h"
+#include "SDNodeDbgValue.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
+#include "llvm/CodeGen/MachineInstrBuilder.h"
+#include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/CodeGen/SelectionDAG.h"
+#include "llvm/CodeGen/TargetInstrInfo.h"
+#include "llvm/CodeGen/TargetLowering.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
+#include "llvm/CodeGen/TargetSubtargetInfo.h"
+#include "llvm/Config/llvm-config.h"
+#include "llvm/MC/MCInstrItineraries.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 using namespace llvm;
 
+#define DEBUG_TYPE "pre-RA-sched"
+
 STATISTIC(LoadsClustered, "Number of loads clustered together");
 
-// This allows latency based scheduler to notice high latency instructions
-// without a target itinerary. The choise if number here has more to do with
-// balancing scheduler heursitics than with the actual machine latency.
+// This allows the latency-based scheduler to notice high latency instructions
+// without a target itinerary. The choice of number here has more to do with
+// balancing scheduler heuristics than with the actual machine latency.
 static cl::opt<int> HighLatencyCycles(
   "sched-high-latency-cycles", cl::Hidden, cl::init(10),
   cl::desc("Roughly estimate the number of cycles that 'long latency'"
            "instructions take for targets with no itinerary"));
 
 ScheduleDAGSDNodes::ScheduleDAGSDNodes(MachineFunction &mf)
-  : ScheduleDAG(mf), BB(0), DAG(0),
-    InstrItins(mf.getTarget().getInstrItineraryData()) {}
+    : ScheduleDAG(mf), BB(nullptr), DAG(nullptr),
+      InstrItins(mf.getSubtarget().getInstrItineraryData()) {}
 
 /// Run - perform scheduling.
 ///
@@ -67,12 +68,12 @@ void ScheduleDAGSDNodes::Run(SelectionDAG *dag, MachineBasicBlock *bb) {
 ///
 SUnit *ScheduleDAGSDNodes::newSUnit(SDNode *N) {
 #ifndef NDEBUG
-  const SUnit *Addr = 0;
+  const SUnit *Addr = nullptr;
   if (!SUnits.empty())
     Addr = &SUnits[0];
 #endif
-  SUnits.push_back(SUnit(N, (unsigned)SUnits.size()));
-  assert((Addr == 0 || Addr == &SUnits[0]) &&
+  SUnits.emplace_back(N, (unsigned)SUnits.size());
+  assert((Addr == nullptr || Addr == &SUnits[0]) &&
          "SUnits std::vector reallocated on the fly!");
   SUnits.back().OrigNode = &SUnits.back();
   SUnit *SU = &SUnits.back();
@@ -119,48 +120,46 @@ static void CheckForPhysRegDependency(SDNode *Def, SDNode *User, unsigned Op,
     return;
 
   unsigned ResNo = User->getOperand(2).getResNo();
-  if (Def->isMachineOpcode()) {
+  if (Def->getOpcode() == ISD::CopyFromReg &&
+      cast<RegisterSDNode>(Def->getOperand(1))->getReg() == Reg) {
+    PhysReg = Reg;
+  } else if (Def->isMachineOpcode()) {
     const MCInstrDesc &II = TII->get(Def->getMachineOpcode());
     if (ResNo >= II.getNumDefs() &&
-        II.ImplicitDefs[ResNo - II.getNumDefs()] == Reg) {
+        II.ImplicitDefs[ResNo - II.getNumDefs()] == Reg)
       PhysReg = Reg;
-      const TargetRegisterClass *RC =
-        TRI->getMinimalPhysRegClass(Reg, Def->getValueType(ResNo));
-      Cost = RC->getCopyCost();
-    }
+  }
+
+  if (PhysReg != 0) {
+    const TargetRegisterClass *RC =
+        TRI->getMinimalPhysRegClass(Reg, Def->getSimpleValueType(ResNo));
+    Cost = RC->getCopyCost();
   }
 }
 
 // Helper for AddGlue to clone node operands.
-static void CloneNodeWithValues(SDNode *N, SelectionDAG *DAG,
-                                SmallVectorImpl<EVT> &VTs,
+static void CloneNodeWithValues(SDNode *N, SelectionDAG *DAG, ArrayRef<EVT> VTs,
                                 SDValue ExtraOper = SDValue()) {
-  SmallVector<SDValue, 4> Ops;
-  for (unsigned I = 0, E = N->getNumOperands(); I != E; ++I)
-    Ops.push_back(N->getOperand(I));
-
+  SmallVector<SDValue, 8> Ops(N->op_begin(), N->op_end());
   if (ExtraOper.getNode())
     Ops.push_back(ExtraOper);
 
-  SDVTList VTList = DAG->getVTList(&VTs[0], VTs.size());
-  MachineSDNode::mmo_iterator Begin = 0, End = 0;
+  SDVTList VTList = DAG->getVTList(VTs);
   MachineSDNode *MN = dyn_cast<MachineSDNode>(N);
 
   // Store memory references.
-  if (MN) {
-    Begin = MN->memoperands_begin();
-    End = MN->memoperands_end();
-  }
+  SmallVector<MachineMemOperand *, 2> MMOs;
+  if (MN)
+    MMOs.assign(MN->memoperands_begin(), MN->memoperands_end());
 
-  DAG->MorphNodeTo(N, N->getOpcode(), VTList, &Ops[0], Ops.size());
+  DAG->MorphNodeTo(N, N->getOpcode(), VTList, Ops);
 
   // Reset the memory references
   if (MN)
-    MN->setMemRefs(Begin, End);
+    DAG->setNodeMemRefs(MN, MMOs);
 }
 
 static bool AddGlue(SDNode *N, SDValue Glue, bool AddGlue, SelectionDAG *DAG) {
-  SmallVector<EVT, 4> VTs;
   SDNode *GlueDestNode = Glue.getNode();
 
   // Don't add glue from a node to itself.
@@ -174,9 +173,7 @@ static bool AddGlue(SDNode *N, SDValue Glue, bool AddGlue, SelectionDAG *DAG) {
   // Don't add glue to something that already has a glue value.
   if (N->getValueType(N->getNumValues() - 1) == MVT::Glue) return false;
 
-  for (unsigned I = 0, E = N->getNumValues(); I != E; ++I)
-    VTs.push_back(N->getValueType(I));
-
+  SmallVector<EVT, 4> VTs(N->value_begin(), N->value_end());
   if (AddGlue)
     VTs.push_back(MVT::Glue);
 
@@ -192,11 +189,8 @@ static void RemoveUnusedGlue(SDNode *N, SelectionDAG *DAG) {
           !N->hasAnyUseOfValue(N->getNumValues() - 1)) &&
          "expected an unused glue value");
 
-  SmallVector<EVT, 4> VTs;
-  for (unsigned I = 0, E = N->getNumValues()-1; I != E; ++I)
-    VTs.push_back(N->getValueType(I));
-
-  CloneNodeWithValues(N, DAG, VTs);
+  CloneNodeWithValues(N, DAG,
+                      makeArrayRef(N->value_begin(), N->getNumValues() - 1));
 }
 
 /// ClusterNeighboringLoads - Force nearby loads together by "gluing" them.
@@ -205,7 +199,7 @@ static void RemoveUnusedGlue(SDNode *N, SelectionDAG *DAG) {
 /// outputs to ensure they are scheduled together and in order. This
 /// optimization may benefit some targets by improving cache locality.
 void ScheduleDAGSDNodes::ClusterNeighboringLoads(SDNode *Node) {
-  SDNode *Chain = 0;
+  SDNode *Chain = nullptr;
   unsigned NumOps = Node->getNumOperands();
   if (Node->getOperand(NumOps-1).getValueType() == MVT::Other)
     Chain = Node->getOperand(NumOps-1).getNode();
@@ -219,10 +213,13 @@ void ScheduleDAGSDNodes::ClusterNeighboringLoads(SDNode *Node) {
   DenseMap<long long, SDNode*> O2SMap;  // Map from offset to SDNode.
   bool Cluster = false;
   SDNode *Base = Node;
+  // This algorithm requires a reasonably low use count before finding a match
+  // to avoid uselessly blowing up compile time in large blocks.
+  unsigned UseCount = 0;
   for (SDNode::use_iterator I = Chain->use_begin(), E = Chain->use_end();
-       I != E; ++I) {
+       I != E && UseCount < 100; ++I, ++UseCount) {
     SDNode *User = *I;
-    if (User == Node || !Visited.insert(User))
+    if (User == Node || !Visited.insert(User).second)
       continue;
     int64_t Offset1, Offset2;
     if (!TII->areLoadsFromSameBasePtr(Base, User, Offset1, Offset2) ||
@@ -237,13 +234,15 @@ void ScheduleDAGSDNodes::ClusterNeighboringLoads(SDNode *Node) {
     if (Offset2 < Offset1)
       Base = User;
     Cluster = true;
+    // Reset UseCount to allow more matches.
+    UseCount = 0;
   }
 
   if (!Cluster)
     return;
 
   // Sort them in increasing order.
-  std::sort(Offsets.begin(), Offsets.end());
+  llvm::sort(Offsets);
 
   // Check if the loads are close enough.
   SmallVector<SDNode*, 4> Loads;
@@ -266,7 +265,7 @@ void ScheduleDAGSDNodes::ClusterNeighboringLoads(SDNode *Node) {
   // Cluster loads by adding MVT::Glue outputs and inputs. This also
   // ensure they are scheduled in order of increasing addresses.
   SDNode *Lead = Loads[0];
-  SDValue InGlue = SDValue(0, 0);
+  SDValue InGlue = SDValue(nullptr, 0);
   if (AddGlue(Lead, InGlue, true, DAG))
     InGlue = SDValue(Lead, Lead->getNumValues() - 1);
   for (unsigned I = 1, E = Loads.size(); I != E; ++I) {
@@ -289,9 +288,8 @@ void ScheduleDAGSDNodes::ClusterNeighboringLoads(SDNode *Node) {
 /// ClusterNodes - Cluster certain nodes which should be scheduled together.
 ///
 void ScheduleDAGSDNodes::ClusterNodes() {
-  for (SelectionDAG::allnodes_iterator NI = DAG->allnodes_begin(),
-       E = DAG->allnodes_end(); NI != E; ++NI) {
-    SDNode *Node = &*NI;
+  for (SDNode &NI : DAG->allnodes()) {
+    SDNode *Node = &NI;
     if (!Node || !Node->isMachineOpcode())
       continue;
 
@@ -308,9 +306,8 @@ void ScheduleDAGSDNodes::BuildSchedUnits() {
   // to their associated SUnits by holding SUnits table indices. A value
   // of -1 means the SDNode does not yet have an associated SUnit.
   unsigned NumNodes = 0;
-  for (SelectionDAG::allnodes_iterator NI = DAG->allnodes_begin(),
-       E = DAG->allnodes_end(); NI != E; ++NI) {
-    NI->setNodeId(-1);
+  for (SDNode &NI : DAG->allnodes()) {
+    NI.setNodeId(-1);
     ++NumNodes;
   }
 
@@ -323,7 +320,7 @@ void ScheduleDAGSDNodes::BuildSchedUnits() {
 
   // Add all nodes in depth first order.
   SmallVector<SDNode*, 64> Worklist;
-  SmallPtrSet<SDNode*, 64> Visited;
+  SmallPtrSet<SDNode*, 32> Visited;
   Worklist.push_back(DAG->getRoot().getNode());
   Visited.insert(DAG->getRoot().getNode());
 
@@ -332,9 +329,9 @@ void ScheduleDAGSDNodes::BuildSchedUnits() {
     SDNode *NI = Worklist.pop_back_val();
 
     // Add all operands to the worklist unless they've already been added.
-    for (unsigned i = 0, e = NI->getNumOperands(); i != e; ++i)
-      if (Visited.insert(NI->getOperand(i).getNode()))
-        Worklist.push_back(NI->getOperand(i).getNode());
+    for (const SDValue &Op : NI->op_values())
+      if (Visited.insert(Op.getNode()).second)
+        Worklist.push_back(Op.getNode());
 
     if (isPassiveNode(NI))  // Leaf node, e.g. a TargetImmediate.
       continue;
@@ -419,7 +416,7 @@ void ScheduleDAGSDNodes::BuildSchedUnits() {
 }
 
 void ScheduleDAGSDNodes::AddSchedEdges() {
-  const TargetSubtargetInfo &ST = TM.getSubtarget<TargetSubtargetInfo>();
+  const TargetSubtargetInfo &ST = MF.getSubtarget();
 
   // Check to see if the scheduler cares about latencies.
   bool UnitLatencies = forceUnitLatencies();
@@ -485,14 +482,15 @@ void ScheduleDAGSDNodes::AddSchedEdges() {
         if(isChain && OpN->getOpcode() == ISD::TokenFactor)
           OpLatency = 0;
 
-        const SDep &dep = SDep(OpSU, isChain ? SDep::Order : SDep::Data,
-                               OpLatency, PhysReg);
+        SDep Dep = isChain ? SDep(OpSU, SDep::Barrier)
+          : SDep(OpSU, SDep::Data, PhysReg);
+        Dep.setLatency(OpLatency);
         if (!isChain && !UnitLatencies) {
-          computeOperandLatency(OpN, N, i, const_cast<SDep &>(dep));
-          ST.adjustSchedDependency(OpSU, SU, const_cast<SDep &>(dep));
+          computeOperandLatency(OpN, N, i, Dep);
+          ST.adjustSchedDependency(OpSU, SU, Dep);
         }
 
-        if (!SU->addPred(dep) && !dep.isCtrl() && OpSU->NumRegDefsLeft > 1) {
+        if (!SU->addPred(Dep) && !Dep.isCtrl() && OpSU->NumRegDefsLeft > 1) {
           // Multiple register uses are combined in the same SUnit. For example,
           // we could have a set of glued nodes with all their defs consumed by
           // another set of glued nodes. Register pressure tracking sees this as
@@ -540,6 +538,14 @@ void ScheduleDAGSDNodes::RegDefIter::InitNodeNumDefs() {
     NodeNumDefs = 0;
     return;
   }
+  if (POpc == TargetOpcode::PATCHPOINT &&
+      Node->getValueType(0) == MVT::Other) {
+    // PATCHPOINT is defined to have one result, but it might really have none
+    // if we're not using CallingConv::AnyReg. Don't mistake the chain for a
+    // real definition.
+    NodeNumDefs = 0;
+    return;
+  }
   unsigned NRegDefs = SchedDAG->TII->get(Node->getMachineOpcode()).getNumDefs();
   // Some instructions define regs that are not represented in the selection DAG
   // (e.g. unused flags). See tMOVi8. Make sure we don't access past NumValues.
@@ -561,12 +567,12 @@ void ScheduleDAGSDNodes::RegDefIter::Advance() {
     for (;DefIdx < NodeNumDefs; ++DefIdx) {
       if (!Node->hasAnyUseOfValue(DefIdx))
         continue;
-      ValueType = Node->getValueType(DefIdx);
+      ValueType = Node->getSimpleValueType(DefIdx);
       ++DefIdx;
       return; // Found a normal regdef.
     }
     Node = Node->getGluedNode();
-    if (Node == NULL) {
+    if (!Node) {
       return; // No values left to visit.
     }
     InitNodeNumDefs();
@@ -642,16 +648,20 @@ void ScheduleDAGSDNodes::computeOperandLatency(SDNode *Def, SDNode *Use,
     dep.setLatency(Latency);
 }
 
-void ScheduleDAGSDNodes::dumpNode(const SUnit *SU) const {
-  if (!SU->getNode()) {
+void ScheduleDAGSDNodes::dumpNode(const SUnit &SU) const {
+#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
+  dumpNodeName(SU);
+  dbgs() << ": ";
+
+  if (!SU.getNode()) {
     dbgs() << "PHYS REG COPY\n";
     return;
   }
 
-  SU->getNode()->dump(DAG);
+  SU.getNode()->dump(DAG);
   dbgs() << "\n";
   SmallVector<SDNode *, 4> GluedNodes;
-  for (SDNode *N = SU->getNode()->getGluedNode(); N; N = N->getGluedNode())
+  for (SDNode *N = SU.getNode()->getGluedNode(); N; N = N->getGluedNode())
     GluedNodes.push_back(N);
   while (!GluedNodes.empty()) {
     dbgs() << "    ";
@@ -659,16 +669,30 @@ void ScheduleDAGSDNodes::dumpNode(const SUnit *SU) const {
     dbgs() << "\n";
     GluedNodes.pop_back();
   }
+#endif
 }
 
+void ScheduleDAGSDNodes::dump() const {
+#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
+  if (EntrySU.getNode() != nullptr)
+    dumpNodeAll(EntrySU);
+  for (const SUnit &SU : SUnits)
+    dumpNodeAll(SU);
+  if (ExitSU.getNode() != nullptr)
+    dumpNodeAll(ExitSU);
+#endif
+}
+
+#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
 void ScheduleDAGSDNodes::dumpSchedule() const {
   for (unsigned i = 0, e = Sequence.size(); i != e; i++) {
     if (SUnit *SU = Sequence[i])
-      SU->dump(this);
+      dumpNode(*SU);
     else
       dbgs() << "**** NOOP ****\n";
   }
 }
+#endif
 
 #ifndef NDEBUG
 /// VerifyScheduledSequence - Verify that all SUnits were scheduled and that
@@ -685,40 +709,28 @@ void ScheduleDAGSDNodes::VerifyScheduledSequence(bool isBottomUp) {
 }
 #endif // NDEBUG
 
-namespace {
-  struct OrderSorter {
-    bool operator()(const std::pair<unsigned, MachineInstr*> &A,
-                    const std::pair<unsigned, MachineInstr*> &B) {
-      return A.first < B.first;
-    }
-  };
-}
-
 /// ProcessSDDbgValues - Process SDDbgValues associated with this node.
-static void ProcessSDDbgValues(SDNode *N, SelectionDAG *DAG,
-                               InstrEmitter &Emitter,
-                    SmallVector<std::pair<unsigned, MachineInstr*>, 32> &Orders,
-                            DenseMap<SDValue, unsigned> &VRBaseMap,
-                            unsigned Order) {
+static void
+ProcessSDDbgValues(SDNode *N, SelectionDAG *DAG, InstrEmitter &Emitter,
+                   SmallVectorImpl<std::pair<unsigned, MachineInstr*> > &Orders,
+                   DenseMap<SDValue, unsigned> &VRBaseMap, unsigned Order) {
   if (!N->getHasDebugValue())
     return;
 
-  // Opportunistically insert immediate dbg_value uses, i.e. those with source
-  // order number right after the N.
+  // Opportunistically insert immediate dbg_value uses, i.e. those with the same
+  // source order number as N.
   MachineBasicBlock *BB = Emitter.getBlock();
   MachineBasicBlock::iterator InsertPos = Emitter.getInsertPos();
-  ArrayRef<SDDbgValue*> DVs = DAG->GetDbgValues(N);
-  for (unsigned i = 0, e = DVs.size(); i != e; ++i) {
-    if (DVs[i]->isInvalidated())
+  for (auto DV : DAG->GetDbgValues(N)) {
+    if (DV->isEmitted())
       continue;
-    unsigned DVOrder = DVs[i]->getOrder();
-    if (!Order || DVOrder == ++Order) {
-      MachineInstr *DbgMI = Emitter.EmitDbgValue(DVs[i], VRBaseMap);
+    unsigned DVOrder = DV->getOrder();
+    if (!Order || DVOrder == Order) {
+      MachineInstr *DbgMI = Emitter.EmitDbgValue(DV, VRBaseMap);
       if (DbgMI) {
-        Orders.push_back(std::make_pair(DVOrder, DbgMI));
+        Orders.push_back({DVOrder, DbgMI});
         BB->insert(InsertPos, DbgMI);
       }
-      DVs[i]->setIsInvalidated();
     }
   }
 }
@@ -726,13 +738,13 @@ static void ProcessSDDbgValues(SDNode *N, SelectionDAG *DAG,
 // ProcessSourceNode - Process nodes with source order numbers. These are added
 // to a vector which EmitSchedule uses to determine how to insert dbg_value
 // instructions in the right order.
-static void ProcessSourceNode(SDNode *N, SelectionDAG *DAG,
-                           InstrEmitter &Emitter,
-                           DenseMap<SDValue, unsigned> &VRBaseMap,
-                    SmallVector<std::pair<unsigned, MachineInstr*>, 32> &Orders,
-                           SmallSet<unsigned, 8> &Seen) {
-  unsigned Order = DAG->GetOrdering(N);
-  if (!Order || !Seen.insert(Order)) {
+static void
+ProcessSourceNode(SDNode *N, SelectionDAG *DAG, InstrEmitter &Emitter,
+                  DenseMap<SDValue, unsigned> &VRBaseMap,
+                  SmallVectorImpl<std::pair<unsigned, MachineInstr*> > &Orders,
+                  SmallSet<unsigned, 8> &Seen) {
+  unsigned Order = N->getIROrder();
+  if (!Order || !Seen.insert(Order).second) {
     // Process any valid SDDbgValues even if node does not have any order
     // assigned.
     ProcessSDDbgValues(N, DAG, Emitter, Orders, VRBaseMap, 0);
@@ -740,13 +752,17 @@ static void ProcessSourceNode(SDNode *N, SelectionDAG *DAG,
   }
 
   MachineBasicBlock *BB = Emitter.getBlock();
-  if (Emitter.getInsertPos() == BB->begin() || BB->back().isPHI()) {
+  auto IP = Emitter.getInsertPos();
+  if (IP == BB->begin() || BB->back().isPHI() ||
+      // Fast-isel may have inserted some instructions, in which case the
+      // BB->back().isPHI() test will not fire when we want it to.
+      std::prev(IP)->isPHI()) {
     // Did not insert any instruction.
-    Orders.push_back(std::make_pair(Order, (MachineInstr*)0));
+    Orders.push_back({Order, (MachineInstr *)nullptr});
     return;
   }
 
-  Orders.push_back(std::make_pair(Order, prior(Emitter.getInsertPos())));
+  Orders.push_back({Order, &*std::prev(IP)});
   ProcessSDDbgValues(N, DAG, Emitter, Orders, VRBaseMap, Order);
 }
 
@@ -805,8 +821,12 @@ EmitSchedule(MachineBasicBlock::iterator &InsertPos) {
     SDDbgInfo::DbgIterator PDE = DAG->ByvalParmDbgEnd();
     for (; PDI != PDE; ++PDI) {
       MachineInstr *DbgMI= Emitter.EmitDbgValue(*PDI, VRBaseMap);
-      if (DbgMI)
+      if (DbgMI) {
         BB->insert(InsertPos, DbgMI);
+        // We re-emit the dbg_value closer to its use, too, after instructions
+        // are emitted to the BB.
+        (*PDI)->clearIsEmitted();
+      }
     }
   }
 
@@ -827,13 +847,11 @@ EmitSchedule(MachineBasicBlock::iterator &InsertPos) {
     }
 
     SmallVector<SDNode *, 4> GluedNodes;
-    for (SDNode *N = SU->getNode()->getGluedNode(); N;
-         N = N->getGluedNode())
+    for (SDNode *N = SU->getNode()->getGluedNode(); N; N = N->getGluedNode())
       GluedNodes.push_back(N);
     while (!GluedNodes.empty()) {
       SDNode *N = GluedNodes.back();
-      Emitter.EmitNode(GluedNodes.back(), SU->OrigNode != SU, SU->isCloned,
-                       VRBaseMap);
+      Emitter.EmitNode(N, SU->OrigNode != SU, SU->isCloned, VRBaseMap);
       // Remember the source order of the inserted instruction.
       if (HasDbg)
         ProcessSourceNode(N, DAG, Emitter, VRBaseMap, Orders, Seen);
@@ -853,8 +871,13 @@ EmitSchedule(MachineBasicBlock::iterator &InsertPos) {
     MachineBasicBlock::iterator BBBegin = BB->getFirstNonPHI();
 
     // Sort the source order instructions and use the order to insert debug
-    // values.
-    std::sort(Orders.begin(), Orders.end(), OrderSorter());
+    // values. Use stable_sort so that DBG_VALUEs are inserted in the same order
+    // regardless of the host's implementation fo std::sort.
+    std::stable_sort(Orders.begin(), Orders.end(), less_first());
+    std::stable_sort(DAG->DbgBegin(), DAG->DbgEnd(),
+                     [](const SDDbgValue *LHS, const SDDbgValue *RHS) {
+                       return LHS->getOrder() < RHS->getOrder();
+                     });
 
     SDDbgInfo::DbgIterator DI = DAG->DbgBegin();
     SDDbgInfo::DbgIterator DE = DAG->DbgEnd();
@@ -866,10 +889,12 @@ EmitSchedule(MachineBasicBlock::iterator &InsertPos) {
       // Insert all SDDbgValue's whose order(s) are before "Order".
       if (!MI)
         continue;
-      for (; DI != DE &&
-             (*DI)->getOrder() >= LastOrder && (*DI)->getOrder() < Order; ++DI) {
-        if ((*DI)->isInvalidated())
+      for (; DI != DE; ++DI) {
+        if ((*DI)->getOrder() < LastOrder || (*DI)->getOrder() >= Order)
+          break;
+        if ((*DI)->isEmitted())
           continue;
+
         MachineInstr *DbgMI = Emitter.EmitDbgValue(*DI, VRBaseMap);
         if (DbgMI) {
           if (!LastOrder)
@@ -879,7 +904,7 @@ EmitSchedule(MachineBasicBlock::iterator &InsertPos) {
             // Insert at the instruction, which may be in a different
             // block, if the block was split by a custom inserter.
             MachineBasicBlock::iterator Pos = MI;
-            MI->getParent()->insert(llvm::next(Pos), DbgMI);
+            MI->getParent()->insert(Pos, DbgMI);
           }
         }
       }
@@ -888,16 +913,51 @@ EmitSchedule(MachineBasicBlock::iterator &InsertPos) {
     // Add trailing DbgValue's before the terminator. FIXME: May want to add
     // some of them before one or more conditional branches?
     SmallVector<MachineInstr*, 8> DbgMIs;
-    while (DI != DE) {
-      if (!(*DI)->isInvalidated())
-        if (MachineInstr *DbgMI = Emitter.EmitDbgValue(*DI, VRBaseMap))
-          DbgMIs.push_back(DbgMI);
-      ++DI;
+    for (; DI != DE; ++DI) {
+      if ((*DI)->isEmitted())
+        continue;
+      assert((*DI)->getOrder() >= LastOrder &&
+             "emitting DBG_VALUE out of order");
+      if (MachineInstr *DbgMI = Emitter.EmitDbgValue(*DI, VRBaseMap))
+        DbgMIs.push_back(DbgMI);
     }
 
     MachineBasicBlock *InsertBB = Emitter.getBlock();
     MachineBasicBlock::iterator Pos = InsertBB->getFirstTerminator();
     InsertBB->insert(Pos, DbgMIs.begin(), DbgMIs.end());
+
+    SDDbgInfo::DbgLabelIterator DLI = DAG->DbgLabelBegin();
+    SDDbgInfo::DbgLabelIterator DLE = DAG->DbgLabelEnd();
+    // Now emit the rest according to source order.
+    LastOrder = 0;
+    for (const auto &InstrOrder : Orders) {
+      unsigned Order = InstrOrder.first;
+      MachineInstr *MI = InstrOrder.second;
+      if (!MI)
+        continue;
+
+      // Insert all SDDbgLabel's whose order(s) are before "Order".
+      for (; DLI != DLE &&
+             (*DLI)->getOrder() >= LastOrder && (*DLI)->getOrder() < Order;
+             ++DLI) {
+        MachineInstr *DbgMI = Emitter.EmitDbgLabel(*DLI);
+        if (DbgMI) {
+          if (!LastOrder)
+            // Insert to start of the BB (after PHIs).
+            BB->insert(BBBegin, DbgMI);
+          else {
+            // Insert at the instruction, which may be in a different
+            // block, if the block was split by a custom inserter.
+            MachineBasicBlock::iterator Pos = MI;
+            MI->getParent()->insert(Pos, DbgMI);
+          }
+        }
+      }
+      if (DLI == DLE)
+        break;
+
+      LastOrder = Order;
+    }
   }
 
   InsertPos = Emitter.getInsertPos();

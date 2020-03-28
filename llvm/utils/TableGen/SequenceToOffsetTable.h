@@ -13,15 +13,15 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef TBLGEN_SEQUENCE_TO_OFFSET_TABLE_H
-#define TBLGEN_SEQUENCE_TO_OFFSET_TABLE_H
+#ifndef LLVM_UTILS_TABLEGEN_SEQUENCETOOFFSETTABLE_H
+#define LLVM_UTILS_TABLEGEN_SEQUENCETOOFFSETTABLE_H
 
 #include "llvm/Support/raw_ostream.h"
-#include <functional>
 #include <algorithm>
-#include <vector>
 #include <cassert>
 #include <cctype>
+#include <functional>
+#include <map>
 
 namespace llvm {
 
@@ -29,15 +29,15 @@ namespace llvm {
 /// Compute the layout of a table that contains all the sequences, possibly by
 /// reusing entries.
 ///
-/// @param SeqT The sequence container. (vector or string).
-/// @param Less A stable comparator for SeqT elements.
+/// @tparam SeqT The sequence container. (vector or string).
+/// @tparam Less A stable comparator for SeqT elements.
 template<typename SeqT, typename Less = std::less<typename SeqT::value_type> >
 class SequenceToOffsetTable {
   typedef typename SeqT::value_type ElemT;
 
   // Define a comparator for SeqT that sorts a suffix immediately before a
   // sequence with that suffix.
-  struct SeqLess : public std::binary_function<SeqT, SeqT, bool> {
+  struct SeqLess {
     Less L;
     bool operator()(const SeqT &A, const SeqT &B) const {
       return std::lexicographical_compare(A.rbegin(), A.rend(),
@@ -79,6 +79,13 @@ public:
     // The entry before I may be a suffix of Seq that can now be erased.
     if (I != Seqs.begin() && isSuffix((--I)->first, Seq))
       Seqs.erase(I);
+  }
+
+  bool empty() const { return Seqs.empty(); }
+
+  unsigned size() const {
+    assert(Entries && "Call layout() before size()");
+    return Entries;
   }
 
   /// layout - Computes the final table layout.

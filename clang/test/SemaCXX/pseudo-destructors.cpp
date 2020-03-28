@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -fsyntax-only -verify %s
+// RUN: %clang_cc1 -fsyntax-only -verify -std=c++11 %s
 struct A {};
 
 enum Foo { F };
@@ -46,7 +46,7 @@ void f(A* a, Foo *f, int *i, double *d, int ii) {
   i->N::~Integer(); // expected-error{{'Integer' does not refer to a type name in pseudo-destructor expression; expected the name of type 'int'}}
   i->Integer::~Double(); // expected-error{{the type of object expression ('int') does not match the type being destroyed ('Double' (aka 'double')) in pseudo-destructor expression}}
 
-  ii->~Integer(); // expected-error{{member reference type 'int' is not a pointer; maybe you meant to use '.'?}}
+  ii->~Integer(); // expected-error{{member reference type 'int' is not a pointer; did you mean to use '.'?}}
   ii.~Integer();
 
   cv_test(a);
@@ -59,7 +59,11 @@ void f(A* a, Foo *f, int *i, double *d, int ii) {
 typedef int Integer;
 
 void destroy_without_call(int *ip) {
-  ip->~Integer; // expected-error{{called immediately}}
+  ip->~Integer; // expected-error{{reference to pseudo-destructor must be called}}
+}
+
+void paren_destroy_with_call(int *ip) {
+  (ip->~Integer)();
 }
 
 // PR5530
@@ -79,4 +83,32 @@ namespace PR11339 {
   }
 
   template void destroy(int*); // expected-note{{in instantiation of function template specialization}}
+}
+
+template<typename T> using Id = T;
+void AliasTemplate(int *p) {
+  p->~Id<int>();
+}
+
+namespace dotPointerAccess {
+struct Base {
+  virtual ~Base() {}
+};
+
+struct Derived : Base {
+  ~Derived() {}
+};
+
+void test() {
+  Derived d;
+  static_cast<Base *>(&d).~Base(); // expected-error {{member reference type 'dotPointerAccess::Base *' is a pointer; did you mean to use '->'}}
+  d->~Derived(); // expected-error {{member reference type 'dotPointerAccess::Derived' is not a pointer; did you mean to use '.'}}
+}
+
+typedef Derived *Foo;
+
+void test2(Foo d) {
+  d.~Foo(); // This is ok
+  d.~Derived(); // expected-error {{member reference type 'dotPointerAccess::Foo' (aka 'dotPointerAccess::Derived *') is a pointer; did you mean to use '->'}}
+}
 }

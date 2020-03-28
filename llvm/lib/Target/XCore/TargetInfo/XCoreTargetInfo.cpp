@@ -8,12 +8,16 @@
 //===----------------------------------------------------------------------===//
 
 #include "XCore.h"
-#include "llvm/Module.h"
+#include "llvm/IR/Module.h"
 #include "llvm/Support/TargetRegistry.h"
 using namespace llvm;
 
-Target llvm::TheXCoreTarget;
+Target &llvm::getTheXCoreTarget() {
+  static Target TheXCoreTarget;
+  return TheXCoreTarget;
+}
 
-extern "C" void LLVMInitializeXCoreTargetInfo() { 
-  RegisterTarget<Triple::xcore> X(TheXCoreTarget, "xcore", "XCore");
+extern "C" void LLVMInitializeXCoreTargetInfo() {
+  RegisterTarget<Triple::xcore> X(getTheXCoreTarget(), "xcore", "XCore",
+                                  "XCore");
 }

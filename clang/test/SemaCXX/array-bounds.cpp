@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -verify %s
+// RUN: %clang_cc1 -verify -std=c++11 %s
 
 int foo() {
   int x[2]; // expected-note 4 {{array 'x' declared here}}
@@ -74,11 +74,11 @@ void test() {
 }
 
 template <int I> struct S {
-  char arr[I]; // expected-note 2 {{declared here}}
+  char arr[I]; // expected-note 3 {{declared here}}
 };
 template <int I> void f() {
   S<3> s;
-  s.arr[4] = 0; // expected-warning {{array index 4 is past the end of the array (which contains 3 elements)}}
+  s.arr[4] = 0; // expected-warning 2 {{array index 4 is past the end of the array (which contains 3 elements)}}
   s.arr[I] = 0; // expected-warning {{array index 5 is past the end of the array (which contains 3 elements)}}
 }
 
@@ -252,4 +252,47 @@ void test_rdar10916006(void)
 {
 	int a[128]; // expected-note {{array 'a' declared here}}
 	a[(unsigned char)'\xA1'] = 1; // expected-warning {{array index 161 is past the end of the array}}
+}
+
+struct P {
+  int a;
+  int b;
+};
+
+void test_struct_array_index() {
+  struct P p[10]; // expected-note {{array 'p' declared here}}
+  p[11] = {0, 1}; // expected-warning {{array index 11 is past the end of the array (which contains 10 elements)}}
+}
+
+int operator+(const struct P &s1, const struct P &s2);
+int test_operator_overload_struct_array_index() {
+  struct P x[10] = {0}; // expected-note {{array 'x' declared here}}
+  return x[1] + x[11]; // expected-warning {{array index 11 is past the end of the array (which contains 10 elements)}}
+}
+
+int multi[2][2][2]; // expected-note 3 {{array 'multi' declared here}}
+int test_multiarray() {
+  return multi[2][0][0] + // expected-warning {{array index 2 is past the end of the array (which contains 2 elements)}}
+         multi[0][2][0] + // expected-warning {{array index 2 is past the end of the array (which contains 2 elements)}}
+         multi[0][0][2];  // expected-warning {{array index 2 is past the end of the array (which contains 2 elements)}}
+}
+
+struct multi_s {
+  int arr[4];
+};
+struct multi_s multi2[4]; // expected-note {{array 'multi2' declared here}}
+int test_struct_multiarray() {
+  return multi2[4].arr[0]; // expected-warning {{array index 4 is past the end of the array (which contains 4 elements)}}
+}
+
+namespace PR39746 {
+  struct S;
+  extern S xxx[2]; // expected-note {{array 'xxx' declared here}}
+  class C {};
+
+  C &f() { return reinterpret_cast<C *>(xxx)[1]; } // no-warning
+  // We have no info on whether this is out-of-bounds.
+  C &g() { return reinterpret_cast<C *>(xxx)[2]; } // no-warning
+  // We can still diagnose this.
+  C &h() { return reinterpret_cast<C *>(xxx)[-1]; } // expected-warning {{array index -1 is before the beginning of the array}}
 }

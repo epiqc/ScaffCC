@@ -1,14 +1,28 @@
 // RUN: %clang_cc1 -std=c++11 -fsyntax-only -verify %s
+// RUN: %clang_cc1 -std=c++14 -fsyntax-only -verify %s
+// RUN: %clang_cc1 -std=c++17 -fsyntax-only -verify %s
 
-namespace std {
+struct pr12960 {
+  int begin;
+  void foo(int x) {
+    for (int& it : x) { // expected-error {{invalid range expression of type 'int'; no viable 'begin' function available}}
+    }
+  }
+};
+
+struct null_t {
+  operator int*();
+};
+
+namespace X {
   template<typename T>
-    auto begin(T &&t) -> decltype(t.begin()) { return t.begin(); } // expected-note 4{{ignored: substitution failure}}
+    auto begin(T &&t) -> decltype(t.begin()) { return t.begin(); } // expected-note 2{{ignored: substitution failure}}
   template<typename T>
     auto end(T &&t) -> decltype(t.end()) { return t.end(); } // expected-note {{candidate template ignored: substitution failure [with T = }}
 
   template<typename T>
     auto begin(T &&t) -> decltype(t.alt_begin()) { return t.alt_begin(); } // expected-note {{selected 'begin' template [with T = }} \
-                                                                              expected-note 4{{candidate template ignored: substitution failure [with T = }}
+                                                                              expected-note 2{{candidate template ignored: substitution failure [with T = }}
   template<typename T>
     auto end(T &&t) -> decltype(t.alt_end()) { return t.alt_end(); } // expected-note {{candidate template ignored: substitution failure [with T = }}
 
@@ -19,19 +33,40 @@ namespace std {
   }
 
   using namespace inner;
+
+  struct A { // expected-note 2 {{candidate constructor}}
+    A();
+    int *begin(); // expected-note 3{{selected 'begin' function with iterator type 'int *'}} expected-note {{'begin' declared here}}
+    int *end();
+  };
+
+  struct B {
+    B();
+    int *alt_begin();
+    int *alt_end();
+  };
+
+  struct NoBeginADL {
+    null_t alt_end();
+  };
+  struct NoEndADL {
+    null_t alt_begin();
+  };
+
+  struct C {
+    C();
+    struct It {
+      int val;
+      operator int &() { return val; }
+    };
+    It begin();
+    It end();
+  };
+
+  constexpr int operator*(const C::It &) { return 0; }
 }
 
-struct A { // expected-note 2 {{candidate constructor}}
-  A();
-  int *begin(); // expected-note 3{{selected 'begin' function with iterator type 'int *'}} expected-note {{'begin' declared here}}
-  int *end();
-};
-
-struct B {
-  B();
-  int *alt_begin();
-  int *alt_end();
-};
+using X::A;
 
 void f();
 void f(int);
@@ -41,19 +76,19 @@ void g() {
     A __begin;
   for (char *a : A()) { // expected-error {{cannot initialize a variable of type 'char *' with an lvalue of type 'int'}}
   }
-  for (char *a : B()) { // expected-error {{cannot initialize a variable of type 'char *' with an lvalue of type 'int'}}
+  for (char *a : X::B()) { // expected-error {{cannot initialize a variable of type 'char *' with an lvalue of type 'int'}}
   }
   // FIXME: Terrible diagnostic here. auto deduction should fail, but does not!
   for (double a : f) { // expected-error {{cannot use type '<overloaded function type>' as a range}}
   }
   for (auto a : A()) {
   }
-  for (auto a : B()) {
+  for (auto a : X::B()) {
   }
   for (auto *a : A()) { // expected-error {{variable 'a' with type 'auto *' has incompatible initializer of type 'int'}}
   }
   // : is not a typo for :: here.
-  for (A NS:A()) { // expected-error {{no viable conversion from 'int' to 'A'}}
+  for (A NS:A()) { // expected-error {{no viable conversion from 'int' to 'X::A'}}
   }
   for (auto not_in_scope : not_in_scope) { // expected-error {{use of undeclared identifier 'not_in_scope'}}
   }
@@ -73,7 +108,7 @@ void g() {
   extern int incomplete[];
   for (auto a : incomplete) // expected-error {{cannot use incomplete type 'int []' as a range}}
     ;
-  extern struct Incomplete also_incomplete[2]; // expected-note {{forward declaration}}
+  extern struct Incomplete also_incomplete[2]; // expected-note 2{{forward declaration}}
   for (auto &a : also_incomplete) // expected-error {{cannot use incomplete type 'struct Incomplete [2]' as a range}}
     ;
 
@@ -84,14 +119,16 @@ void g() {
   for (auto a : VoidBegin()) // expected-error {{cannot use type 'void' as an iterator}}
     ;
 
-  struct null_t {
-    operator int*();
-  };
   struct Differ {
-    int *begin(); // expected-note {{selected 'begin' function with iterator type 'int *'}}
-    null_t end(); // expected-note {{selected 'end' function with iterator type 'null_t'}}
+    int *begin();
+    null_t end();
   };
-  for (auto a : Differ()) // expected-error {{'begin' and 'end' must return the same type (got 'int *' and 'null_t')}}
+  for (auto a : Differ())
+#if __cplusplus <= 201402L
+    // expected-warning@-2 {{'begin' and 'end' returning different types ('int *' and 'null_t') is a C++17 extension}}
+    // expected-note@-6 {{selected 'begin' function with iterator type 'int *'}}
+    // expected-note@-6 {{selected 'end' function with iterator type 'null_t'}}
+#endif
     ;
 
   for (void f() : "error") // expected-error {{for range declaration must declare a variable}}
@@ -99,18 +136,12 @@ void g() {
 
   for (extern int a : A()) {} // expected-error {{loop variable 'a' may not be declared 'extern'}}
   for (static int a : A()) {} // expected-error {{loop variable 'a' may not be declared 'static'}}
-  for (register int a : A()) {} // expected-error {{loop variable 'a' may not be declared 'register'}}
-  for (constexpr int a : A()) {} // expected-error {{loop variable 'a' may not be declared 'constexpr'}}
+  for (register int a : A()) {} // expected-error {{loop variable 'a' may not be declared 'register'}} expected-warning 0-1{{register}} expected-error 0-1{{register}}
+  for (constexpr int a : X::C()) {} // OK per CWG issue #1204.
 
-  struct NoBeginADL {
-    null_t alt_end();
-  };
-  struct NoEndADL {
-    null_t alt_begin();
-  };
-  for (auto u : NoBeginADL()) { // expected-error {{no matching function for call to 'begin'}} expected-note {{range has type 'NoBeginADL'}}
+  for (auto u : X::NoBeginADL()) { // expected-error {{invalid range expression of type 'X::NoBeginADL'; no viable 'begin' function available}}
   }
-  for (auto u : NoEndADL()) { // expected-error {{no matching function for call to 'end'}} expected-note {{range has type 'NoEndADL'}}
+  for (auto u : X::NoEndADL()) { // expected-error {{invalid range expression of type 'X::NoEndADL'; no viable 'end' function available}}
   }
 
   struct NoBegin {
@@ -119,16 +150,17 @@ void g() {
   struct NoEnd {
     null_t begin();
   };
-  for (auto u : NoBegin()) { // expected-error {{range type 'NoBegin' has 'end' member but no 'begin' member}}
+  for (auto u : NoBegin()) { // expected-error {{no viable 'begin' function available}}
   }
-  for (auto u : NoEnd()) { // expected-error {{range type 'NoEnd' has 'begin' member but no 'end' member}}
+  for (auto u : NoEnd()) { // expected-error {{no viable 'end' function available}}
   }
 
   struct NoIncr {
     void *begin(); // expected-note {{selected 'begin' function with iterator type 'void *'}}
     void *end();
   };
-  for (auto u : NoIncr()) { // expected-error {{arithmetic on a pointer to void}}
+  for (auto u : NoIncr()) { // expected-error {{arithmetic on a pointer to void}}\
+    expected-note {{in implicit call to 'operator++' for iterator of type 'NoIncr'}}
   }
 
   struct NoNotEq {
@@ -136,7 +168,19 @@ void g() {
     NoNotEq end();
     void operator++();
   };
-  for (auto u : NoNotEq()) { // expected-error {{invalid operands to binary expression}}
+  for (auto u : NoNotEq()) { // expected-error {{invalid operands to binary expression}}\
+    expected-note {{in implicit call to 'operator!=' for iterator of type 'NoNotEq'}}
+  }
+
+  struct NoDeref {
+    NoDeref begin(); // expected-note {{selected 'begin' function}}
+    NoDeref end();
+    void operator++();
+    bool operator!=(NoDeref &);
+  };
+
+  for (auto u : NoDeref()) { // expected-error {{indirection requires pointer operand}} \
+    expected-note {{in implicit call to 'operator*' for iterator of type 'NoDeref'}}
   }
 
   struct NoCopy {
@@ -148,8 +192,7 @@ void g() {
   for (int n : NoCopy()) { // ok
   }
 
-  for (int n : 42) { // expected-error {{no matching function for call to 'begin'}} \
-                        expected-note {{range has type 'int'}}
+  for (int n : 42) { // expected-error {{invalid range expression of type 'int'; no viable 'begin' function available}}
   }
 
   for (auto a : *also_incomplete) { // expected-error {{cannot use incomplete type 'struct Incomplete' as a range}}
@@ -158,7 +201,7 @@ void g() {
 
 template<typename T, typename U>
 void h(T t) {
-  for (U u : t) { // expected-error {{no viable conversion from 'A' to 'int'}}
+  for (U u : t) { // expected-error {{no viable conversion from 'X::A' to 'int'}}
   }
   for (auto u : t) {
   }
@@ -171,13 +214,23 @@ template void h<A(&)[13], int>(A(&)[13]); // expected-note {{requested here}}
 
 template<typename T>
 void i(T t) {
-  for (auto u : t) { // expected-error {{no matching function for call to 'begin'}} \
-                        expected-error {{member function 'begin' not viable}} \
-                        expected-note {{range has type}}
+  for (auto u : t) { // expected-error {{invalid range expression of type 'X::A *'; no viable 'begin' function available}} \
+                        expected-error {{'this' argument to member function 'begin' has type 'const X::A', but function is not marked const}} \
+                        expected-note {{when looking up 'begin' function}}
+
   }
 }
 template void i<A[13]>(A*); // expected-note {{requested here}}
 template void i<const A>(const A); // expected-note {{requested here}}
+
+struct StdBeginEnd {};
+namespace std {
+  int *begin(StdBeginEnd);
+  int *end(StdBeginEnd);
+}
+void DR1442() {
+  for (auto a : StdBeginEnd()) {} // expected-error {{invalid range expression of type 'StdBeginEnd'; no viable 'begin'}}
+}
 
 namespace NS {
   class ADL {};
@@ -196,9 +249,10 @@ void end(VoidBeginADL);
 void j() {
   for (auto u : NS::ADL()) {
   }
-  for (auto u : NS::NoADL()) { // expected-error {{no matching function for call to 'begin'}} expected-note {{range has type}}
+  for (auto u : NS::NoADL()) { // expected-error {{invalid range expression of type 'NS::NoADL'; no viable 'begin' function available}}
   }
   for (auto a : VoidBeginADL()) { // expected-error {{cannot use type 'void' as an iterator}}
+
   }
 }
 
@@ -206,4 +260,69 @@ void example() {
   int array[5] = { 1, 2, 3, 4, 5 };
   for (int &x : array)
     x *= 2;
+}
+
+namespace rdar13712739 {
+  template<typename T>
+  void foo(const T& t) {
+    auto &x = t.get(); // expected-error{{member reference base type 'const int' is not a structure or union}}
+    for (auto &blah : x) { }
+  }
+
+  template void foo(const int&); // expected-note{{in instantiation of function template specialization}}
+}
+
+namespace p0962r1 {
+  namespace NA {
+    struct A {
+      void begin();
+    };
+    int *begin(A);
+    int *end(A);
+  }
+
+  namespace NB {
+    struct B {
+      void end();
+    };
+    int *begin(B);
+    int *end(B);
+  }
+
+  namespace NC {
+    struct C {
+      void begin();
+    };
+    int *begin(C);
+  }
+
+  namespace ND {
+    struct D {
+      void end();
+    };
+    int *end(D);
+  }
+
+  namespace NE {
+    struct E {
+      void begin(); // expected-note {{member is not a candidate because range type 'p0962r1::NE::E' has no 'end' member}}
+    };
+    int *end(E);
+  }
+
+  namespace NF {
+    struct F {
+      void end(); // expected-note {{member is not a candidate because range type 'p0962r1::NF::F' has no 'begin' member}}
+    };
+    int *begin(F);
+  }
+
+  void use(NA::A a, NB::B b, NC::C c, ND::D d, NE::E e, NF::F f) {
+    for (auto x : a) {}
+    for (auto x : b) {}
+    for (auto x : c) {} // expected-error {{no viable 'end' function}}
+    for (auto x : d) {} // expected-error {{no viable 'begin' function}}
+    for (auto x : e) {} // expected-error {{no viable 'begin' function}}
+    for (auto x : f) {} // expected-error {{no viable 'end' function}}
+  }
 }

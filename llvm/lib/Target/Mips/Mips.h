@@ -12,24 +12,42 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef TARGET_MIPS_H
-#define TARGET_MIPS_H
+#ifndef LLVM_LIB_TARGET_MIPS_MIPS_H
+#define LLVM_LIB_TARGET_MIPS_MIPS_H
 
 #include "MCTargetDesc/MipsMCTargetDesc.h"
 #include "llvm/Target/TargetMachine.h"
 
 namespace llvm {
   class MipsTargetMachine;
+  class ModulePass;
   class FunctionPass;
+  class MipsRegisterBankInfo;
+  class MipsSubtarget;
+  class MipsTargetMachine;
+  class InstructionSelector;
+  class PassRegistry;
 
-  FunctionPass *createMipsISelDag(MipsTargetMachine &TM);
-  FunctionPass *createMipsDelaySlotFillerPass(MipsTargetMachine &TM);
-  FunctionPass *createMipsExpandPseudoPass(MipsTargetMachine &TM);
-  FunctionPass *createMipsEmitGPRestorePass(MipsTargetMachine &TM);
+  ModulePass *createMipsOs16Pass();
+  ModulePass *createMips16HardFloatPass();
 
-  FunctionPass *createMipsJITCodeEmitterPass(MipsTargetMachine &TM,
-                                             JITCodeEmitter &JCE);
+  FunctionPass *createMipsModuleISelDagPass();
+  FunctionPass *createMipsOptimizePICCallPass();
+  FunctionPass *createMipsDelaySlotFillerPass();
+  FunctionPass *createMipsBranchExpansion();
+  FunctionPass *createMipsConstantIslandPass();
+  FunctionPass *createMicroMipsSizeReducePass();
+  FunctionPass *createMipsExpandPseudoPass();
+  FunctionPass *createMipsPreLegalizeCombiner();
 
+  InstructionSelector *createMipsInstructionSelector(const MipsTargetMachine &,
+                                                     MipsSubtarget &,
+                                                     MipsRegisterBankInfo &);
+
+  void initializeMipsDelaySlotFillerPass(PassRegistry &);
+  void initializeMipsBranchExpansionPass(PassRegistry &);
+  void initializeMicroMipsSizeReducePass(PassRegistry &);
+  void initializeMipsPreLegalizerCombinerPass(PassRegistry&);
 } // end namespace llvm;
 
 #endif

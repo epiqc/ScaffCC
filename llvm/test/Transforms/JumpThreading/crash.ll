@@ -1,4 +1,4 @@
-; RUN: opt < %s -jump-threading -disable-output
+; RUN: opt < %s -jump-threading -S | FileCheck %s
 ; PR2285
 target datalayout = "e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128"
 target triple = "x86_64-unknown-linux-gnu"
@@ -356,7 +356,7 @@ B2:
   br label %BrBlock
 
 BrBlock:
-  %L = load i32* %P
+  %L = load i32, i32* %P
   %C = icmp eq i32 %L, 42
   br i1 %C, label %T, label %F
   
@@ -510,4 +510,117 @@ lbl_260:                                          ; preds = %for.cond, %entry
 
 if.end:                                           ; preds = %for.cond
   ret void
+}
+
+define void @PR14233(i1 %cmp, i1 %cmp2, i1 %cmp3, i1 %cmp4) {
+entry:
+  br i1 %cmp, label %cond.true, label %cond.false
+
+cond.true:
+  br label %if.end
+
+cond.false:
+  br label %if.end
+
+if.end:
+  %A = phi i64 [ 0, %cond.true ], [ 1, %cond.false ]
+  br i1 %cmp2, label %bb, label %if.end2
+
+bb:
+  br label %if.end2
+
+if.end2:
+  %B = phi i64 [ ptrtoint (i8* ()* @PR14233.f1 to i64), %bb ], [ %A, %if.end ]
+  %cmp.ptr = icmp eq i64 %B, ptrtoint (i8* ()* @PR14233.f2 to i64)
+  br i1 %cmp.ptr, label %cond.true2, label %if.end3
+
+cond.true2:
+  br i1 %cmp3, label %bb2, label %ur
+
+bb2:
+  br i1 %cmp4, label %if.end4, label %if.end3
+
+if.end4:
+  unreachable
+
+if.end3:
+  %cmp.ptr2 = icmp eq i64 %B, ptrtoint (i8* ()* @PR14233.f2 to i64)
+  br i1 %cmp.ptr2, label %ur, label %if.then601
+
+if.then601:
+  %C = icmp eq i64 %B, 0
+  br i1 %C, label %bb3, label %bb4
+
+bb3:
+  unreachable
+
+bb4:
+  unreachable
+
+ur:
+  unreachable
+}
+
+declare i8* @PR14233.f1()
+
+declare i8* @PR14233.f2()
+
+; Make sure the following compiles in a sane amount of time, as opposed
+; to taking exponential time.
+; (CHECK to make sure the condition doesn't get simplified somehow;
+; if it does, the testcase will need to be revised.)
+; CHECK-LABEL: define void @almost_infinite_loop
+; CHECK: %x39 = or i1 %x38, %x38
+; CHECK: br i1 %x39, label %dest1, label %dest2
+define void @almost_infinite_loop(i1 %x0) {
+entry:
+  br label %if.then57.i
+
+if.then57.i:
+  %x1 = or i1 %x0, %x0
+  %x2 = or i1 %x1, %x1
+  %x3 = or i1 %x2, %x2
+  %x4 = or i1 %x3, %x3
+  %x5 = or i1 %x4, %x4
+  %x6 = or i1 %x5, %x5
+  %x7 = or i1 %x6, %x6
+  %x8 = or i1 %x7, %x7
+  %x9 = or i1 %x8, %x8
+  %x10 = or i1 %x9, %x9
+  %x11 = or i1 %x10, %x10
+  %x12 = or i1 %x11, %x11
+  %x13 = or i1 %x12, %x12
+  %x14 = or i1 %x13, %x13
+  %x15 = or i1 %x14, %x14
+  %x16 = or i1 %x15, %x15
+  %x17 = or i1 %x16, %x16
+  %x18 = or i1 %x17, %x17
+  %x19 = or i1 %x18, %x18
+  %x20 = or i1 %x19, %x19
+  %x21 = or i1 %x20, %x20
+  %x22 = or i1 %x21, %x21
+  %x23 = or i1 %x22, %x22
+  %x24 = or i1 %x23, %x23
+  %x25 = or i1 %x24, %x24
+  %x26 = or i1 %x25, %x25
+  %x27 = or i1 %x26, %x26
+  %x28 = or i1 %x27, %x27
+  %x29 = or i1 %x28, %x28
+  %x30 = or i1 %x29, %x29
+  %x31 = or i1 %x30, %x30
+  %x32 = or i1 %x31, %x31
+  %x33 = or i1 %x32, %x32
+  %x34 = or i1 %x33, %x33
+  %x35 = or i1 %x34, %x34
+  %x36 = or i1 %x35, %x35
+  %x37 = or i1 %x36, %x36
+  %x38 = or i1 %x37, %x37
+  %x39 = or i1 %x38, %x38
+  br i1 %x39, label %dest1, label %dest2
+
+dest1:
+  unreachable
+
+dest2:
+  unreachable
 }

@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -fvisibility hidden -emit-llvm -o - %s | FileCheck %s
+// RUN: %clang_cc1 -triple i386-apple-macosx -fvisibility hidden -emit-llvm -o - %s | FileCheck %s
 // CHECK: @"OBJC_IVAR_$_I.P" = hidden
 // CHECK: @"OBJC_CLASS_$_I" = hidden
 // CHECK: @"OBJC_METACLASS_$_I" = hidden
@@ -16,7 +16,7 @@
 @end
 
 
-@protocol Prot0;
+@protocol Prot0 @end
 
 id f0() {
   return @protocol(Prot0);

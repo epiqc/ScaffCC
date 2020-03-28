@@ -15,13 +15,13 @@ entry:
   %cmp86 = fcmp ogt double %highlights, 0.000000e+00
   %cond90 = select i1 %cmp86, double %sub24, double %add26
   %mul91 = fmul double %highlights, %cond90
-  %add94 = fadd double undef, %mul91
+  %add94 = fadd double %mul91, %mul91
   ret double %add94
 }
 
 ; PR10180: same crash, but with vectors
 define <4 x float> @foo(i1 %b, <4 x float> %x, <4 x float> %y, <4 x float> %z) {
-; CHECK: @foo
+; CHECK-LABEL: @foo(
 ; CHECK: fsub <4 x float>
 ; CHECK: select
 ; CHECK: fadd <4 x float>

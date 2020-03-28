@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -triple x86_64-pc-linux-gnu -fsyntax-only -verify %s
+// RUN: %clang_cc1 -triple x86_64-pc-linux-gnu -fsyntax-only -verify -std=c++11 %s
 
 // GCC will accept anything as the argument of weakref. Should we
 // check for an existing decl?
@@ -28,4 +28,11 @@ int a7() __attribute__((weakref ("f1"))); // expected-error {{weakref declaratio
 int a8 __attribute__((weakref ("v1"))); // expected-error {{weakref declaration must have internal linkage}}
 
 // gcc accepts this
-int a9 __attribute__((weakref)); // expected-error {{weakref declaration must have internal linkage}}
+int a9 __attribute__((weakref));  // expected-error {{weakref declaration of 'a9' must also have an alias attribute}}
+
+static int a10();
+int a10() __attribute__((weakref ("foo")));
+
+static int v __attribute__((weakref(a1), alias("foo"))); // expected-error {{'weakref' attribute requires a string}}
+
+__attribute__((weakref ("foo"))) auto a11 = 1; // expected-error {{weakref declaration must have internal linkage}}

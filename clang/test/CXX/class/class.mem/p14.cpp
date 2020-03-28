@@ -9,8 +9,8 @@ struct X0 {
 };
 
 struct X1 {
-  int X1;
-  X1(); // expected-error{{declarator requires an identifier}}
+  int X1; // expected-error{{member 'X1' has the same name as its class}}
+  X1();
 };
 
 struct X2 {

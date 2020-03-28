@@ -10,10 +10,18 @@ define void @t() {
   %malloccall = tail call i8* @malloc(i64 mul (i64 100, i64 4))
   %P = bitcast i8* %malloccall to i32*
   store i32* %P, i32** @G
-  %GV = load i32** @G
-  %GVe = getelementptr i32* %GV, i32 40
+  %GV = load i32*, i32** @G
+  %GVe = getelementptr i32, i32* %GV, i32 40
   store i32 20, i32* %GVe
   ret void
 }
 
 declare noalias i8* @malloc(i64)
+
+define void @foo(i64 %Size) nounwind noinline #0 {
+entry:
+        %0 = load i32*, i32** @G, align 4
+        ret void
+}
+
+attributes #0 = { "null-pointer-is-valid"="true" }

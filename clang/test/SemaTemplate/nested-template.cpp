@@ -135,6 +135,7 @@ namespace PR10896 {
 	
     template<typename T>
     T SomeField; // expected-error {{member 'SomeField' declared as a template}}
+    template<> int SomeField2; // expected-error {{extraneous 'template<>' in declaration of member 'SomeField2'}}
   };
 
   void g() {
@@ -154,4 +155,16 @@ namespace PR10924 {
   class ReferenceElement< Topology, ctype > :: BaryCenterArray // expected-error{{out-of-line definition of 'BaryCenterArray' does not match any declaration in 'ReferenceElement<Topology, ctype>'}}
   {
   };
+}
+
+class Outer1 {
+    template <typename T> struct X;
+    template <typename T> int X<T>::func() {} //  expected-error{{out-of-line definition of 'func' from class 'X<T>' without definition}}
+};
+
+namespace RefPack {
+  template<const int &...N> struct A { template<typename ...T> void f(T (&...t)[N]); };
+  constexpr int k = 10;
+  int arr[10];
+  void g() { A<k>().f(arr); }
 }

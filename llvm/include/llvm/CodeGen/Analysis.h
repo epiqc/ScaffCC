@@ -7,33 +7,50 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file declares several CodeGen-specific LLVM IR analysis utilties.
+// This file declares several CodeGen-specific LLVM IR analysis utilities.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_CODEGEN_ANALYSIS_H
 #define LLVM_CODEGEN_ANALYSIS_H
 
-#include "llvm/Instructions.h"
-#include "llvm/InlineAsm.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/CodeGen/ValueTypes.h"
+#include "llvm/ADT/Triple.h"
 #include "llvm/CodeGen/ISDOpcodes.h"
-#include "llvm/Support/CallSite.h"
+#include "llvm/IR/CallSite.h"
+#include "llvm/IR/InlineAsm.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/Support/CodeGen.h"
 
 namespace llvm {
-
-class GlobalVariable;
+class GlobalValue;
+class MachineBasicBlock;
+class MachineFunction;
+class TargetLoweringBase;
 class TargetLowering;
+class TargetMachine;
 class SDNode;
 class SDValue;
 class SelectionDAG;
+struct EVT;
 
-/// ComputeLinearIndex - Given an LLVM IR aggregate type and a sequence
-/// of insertvalue or extractvalue indices that identify a member, return
-/// the linearized index of the start of the member.
+/// Compute the linearized index of a member in a nested
+/// aggregate/struct/array.
 ///
+/// Given an LLVM IR aggregate type and a sequence of insertvalue or
+/// extractvalue indices that identify a member, return the linearized index of
+/// the start of the member, i.e the number of element in memory before the
+/// sought one. This is disconnected from the number of bytes.
+///
+/// \param Ty is the type indexed by \p Indices.
+/// \param Indices is an optional pointer in the indices list to the current
+/// index.
+/// \param IndicesEnd is the end of the indices list.
+/// \param CurIndex is the current index in the recursion.
+///
+/// \returns \p CurIndex plus the linear index in \p Ty  the indices list.
 unsigned ComputeLinearIndex(Type *Ty,
                             const unsigned *Indices,
                             const unsigned *IndicesEnd,
@@ -52,13 +69,13 @@ inline unsigned ComputeLinearIndex(Type *Ty,
 /// If Offsets is non-null, it points to a vector to be filled in
 /// with the in-memory offsets of each of the individual values.
 ///
-void ComputeValueVTs(const TargetLowering &TLI, Type *Ty,
+void ComputeValueVTs(const TargetLowering &TLI, const DataLayout &DL, Type *Ty,
                      SmallVectorImpl<EVT> &ValueVTs,
-                     SmallVectorImpl<uint64_t> *Offsets = 0,
+                     SmallVectorImpl<uint64_t> *Offsets = nullptr,
                      uint64_t StartingOffset = 0);
 
 /// ExtractTypeInfo - Returns the type info, possibly bitcast, encoded in V.
-GlobalVariable *ExtractTypeInfo(Value *V);
+GlobalValue *ExtractTypeInfo(Value *V);
 
 /// hasInlineAsmMemConstraint - Return true if the inline asm instruction being
 /// processed uses a memory 'm' constraint.
@@ -86,11 +103,28 @@ ISD::CondCode getICmpCondCode(ICmpInst::Predicate Pred);
 /// between it and the return.
 ///
 /// This function only tests target-independent requirements.
-bool isInTailCallPosition(ImmutableCallSite CS, Attributes CalleeRetAttr,
-                          const TargetLowering &TLI);
+bool isInTailCallPosition(ImmutableCallSite CS, const TargetMachine &TM);
 
-bool isInTailCallPosition(SelectionDAG &DAG, SDNode *Node,
-                          SDValue &Chain, const TargetLowering &TLI);
+/// Test if given that the input instruction is in the tail call position, if
+/// there is an attribute mismatch between the caller and the callee that will
+/// inhibit tail call optimizations.
+/// \p AllowDifferingSizes is an output parameter which, if forming a tail call
+/// is permitted, determines whether it's permitted only if the size of the
+/// caller's and callee's return types match exactly.
+bool attributesPermitTailCall(const Function *F, const Instruction *I,
+                              const ReturnInst *Ret,
+                              const TargetLoweringBase &TLI,
+                              bool *AllowDifferingSizes = nullptr);
+
+/// Test if given that the input instruction is in the tail call position if the
+/// return type or any attributes of the function will inhibit tail call
+/// optimization.
+bool returnTypeIsEligibleForTailCall(const Function *F, const Instruction *I,
+                                     const ReturnInst *Ret,
+                                     const TargetLoweringBase &TLI);
+
+DenseMap<const MachineBasicBlock *, int>
+getEHScopeMembership(const MachineFunction &MF);
 
 } // End llvm namespace
 

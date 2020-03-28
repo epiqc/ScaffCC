@@ -14,25 +14,51 @@
 #include "llvm/Support/DataTypes.h"
 
 namespace llvm {
+
+/// An auxiliary type to facilitate extraction of 3-byte entities.
+struct Uint24 {
+  uint8_t Bytes[3];
+  Uint24(uint8_t U) {
+    Bytes[0] = Bytes[1] = Bytes[2] = U;
+  }
+  Uint24(uint8_t U0, uint8_t U1, uint8_t U2) {
+    Bytes[0] = U0; Bytes[1] = U1; Bytes[2] = U2;
+  }
+  uint32_t getAsUint32(bool IsLittleEndian) const {
+    int LoIx = IsLittleEndian ? 0 : 2;
+    return Bytes[LoIx] + (Bytes[1] << 8) + (Bytes[2-LoIx] << 16);
+  }
+};
+
+using uint24_t = Uint24;
+static_assert(sizeof(uint24_t) == 3, "sizeof(uint24_t) != 3");
+
+/// Needed by swapByteOrder().
+inline uint24_t getSwappedBytes(uint24_t C) {
+  return uint24_t(C.Bytes[2], C.Bytes[1], C.Bytes[0]);
+}
+
 class DataExtractor {
   StringRef Data;
   uint8_t IsLittleEndian;
-  uint8_t PointerSize;
+  uint8_t AddressSize;
 public:
   /// Construct with a buffer that is owned by the caller.
   ///
   /// This constructor allows us to use data that is owned by the
   /// caller. The data must stay around as long as this object is
   /// valid.
-  DataExtractor(StringRef Data, bool IsLittleEndian, uint8_t PointerSize)
-    : Data(Data), IsLittleEndian(IsLittleEndian), PointerSize(PointerSize) {}
+  DataExtractor(StringRef Data, bool IsLittleEndian, uint8_t AddressSize)
+    : Data(Data), IsLittleEndian(IsLittleEndian), AddressSize(AddressSize) {}
 
-  /// getData - Get the data pointed to by this extractor.
+  /// Get the data pointed to by this extractor.
   StringRef getData() const { return Data; }
-  /// isLittleEndian - Get the endianess for this extractor.
+  /// Get the endianness for this extractor.
   bool isLittleEndian() const { return IsLittleEndian; }
-  /// getAddressSize - Get the address size for this extractor.
-  uint8_t getAddressSize() const { return PointerSize; }
+  /// Get the address size for this extractor.
+  uint8_t getAddressSize() const { return AddressSize; }
+  /// Set the address size for this extractor.
+  void setAddressSize(uint8_t Size) { AddressSize = Size; }
 
   /// Extract a C string from \a *offset_ptr.
   ///
@@ -55,6 +81,28 @@ public:
   ///     offset plus the length of the C string is out of bounds,
   ///     NULL will be returned.
   const char *getCStr(uint32_t *offset_ptr) const;
+
+  /// Extract a C string from \a *OffsetPtr.
+  ///
+  /// Returns a StringRef for the C String from the data at the offset
+  /// pointed to by \a OffsetPtr. A variable length NULL terminated C
+  /// string will be extracted and the \a OffsetPtr will be
+  /// updated with the offset of the byte that follows the NULL
+  /// terminator byte.
+  ///
+  /// \param[in,out] OffsetPtr
+  ///     A pointer to an offset within the data that will be advanced
+  ///     by the appropriate number of bytes if the value is extracted
+  ///     correctly. If the offset is out of bounds or there are not
+  ///     enough bytes to extract this value, the offset will be left
+  ///     unmodified.
+  ///
+  /// \return
+  ///     A StringRef for the C string value in the data. If the offset
+  ///     pointed to by \a OffsetPtr is out of bounds, or if the
+  ///     offset plus the length of the C string is out of bounds,
+  ///     a default-initialized StringRef will be returned.
+  StringRef getCStrRef(uint32_t *OffsetPtr) const;
 
   /// Extract an unsigned integer of size \a byte_size from \a
   /// *offset_ptr.
@@ -99,8 +147,8 @@ public:
   ///     enough bytes to extract this value, the offset will be left
   ///     unmodified.
   ///
-  /// @param[in] byte_size
-  ///     The size in byte of the integer to extract.
+  /// @param[in] size
+  ///     The size in bytes of the integer to extract.
   ///
   /// @return
   ///     The sign extended signed integer value that was extracted,
@@ -112,7 +160,7 @@ public:
   ///
   /// Extract a single pointer from the data and update the offset
   /// pointed to by \a offset_ptr. The size of the extracted pointer
-  /// comes from the \a m_addr_size member variable and should be
+  /// is \a getAddressSize(), so the address size has to be
   /// set correctly prior to extracting any pointer values.
   ///
   /// @param[in,out] offset_ptr
@@ -125,7 +173,7 @@ public:
   /// @return
   ///     The extracted pointer value as a 64 integer.
   uint64_t getAddress(uint32_t *offset_ptr) const {
-    return getUnsigned(offset_ptr, PointerSize);
+    return getUnsigned(offset_ptr, AddressSize);
   }
 
   /// Extract a uint8_t value from \a *offset_ptr.
@@ -211,6 +259,23 @@ public:
   ///     \a dst if all values were properly extracted and copied,
   ///     NULL otherise.
   uint16_t *getU16(uint32_t *offset_ptr, uint16_t *dst, uint32_t count) const;
+
+  /// Extract a 24-bit unsigned value from \a *offset_ptr and return it
+  /// in a uint32_t.
+  ///
+  /// Extract 3 bytes from the binary data at the offset pointed to by
+  /// \a offset_ptr, construct a uint32_t from them and update the offset
+  /// on success.
+  ///
+  /// @param[in,out] offset_ptr
+  ///     A pointer to an offset within the data that will be advanced
+  ///     by the 3 bytes if the value is extracted correctly. If the offset
+  ///     is out of bounds or there are not enough bytes to extract this value,
+  ///     the offset will be left unmodified.
+  ///
+  /// @return
+  ///     The extracted 24-bit value represented in a uint32_t.
+  uint32_t getU24(uint32_t *offset_ptr) const;
 
   /// Extract a uint32_t value from \a *offset_ptr.
   ///
@@ -344,6 +409,17 @@ public:
   ///     length bytes available at that offset, \b false otherwise.
   bool isValidOffsetForDataOfSize(uint32_t offset, uint32_t length) const {
     return offset + length >= offset && isValidOffset(offset + length - 1);
+  }
+
+  /// Test the availability of enough bytes of data for a pointer from
+  /// \a offset. The size of a pointer is \a getAddressSize().
+  ///
+  /// @return
+  ///     \b true if \a offset is a valid offset and there are enough
+  ///     bytes for a pointer available at that offset, \b false
+  ///     otherwise.
+  bool isValidOffsetForAddress(uint32_t offset) const {
+    return isValidOffsetForDataOfSize(offset, AddressSize);
   }
 };
 

@@ -3,7 +3,7 @@
 ; rdar://8944252
 
 define void @t(i32 %width, float* nocapture %src, float* nocapture %dst, i32 %index) nounwind {
-; CHECK: t:
+; CHECK-LABEL: t:
 entry:
   %src6 = bitcast float* %src to i8*
   %0 = icmp eq i32 %width, 0
@@ -14,10 +14,10 @@ bb:
 ; CHECK: str [[REGISTER]], [{{r[0-9]+}}], #4
   %j.05 = phi i32 [ %2, %bb ], [ 0, %entry ]
   %tmp = mul i32 %j.05, %index
-  %uglygep = getelementptr i8* %src6, i32 %tmp
+  %uglygep = getelementptr i8, i8* %src6, i32 %tmp
   %src_addr.04 = bitcast i8* %uglygep to float*
-  %dst_addr.03 = getelementptr float* %dst, i32 %j.05
-  %1 = load float* %src_addr.04, align 4
+  %dst_addr.03 = getelementptr float, float* %dst, i32 %j.05
+  %1 = load float, float* %src_addr.04, align 4
   store float %1, float* %dst_addr.03, align 4
   %2 = add i32 %j.05, 1
   %exitcond = icmp eq i32 %2, %width

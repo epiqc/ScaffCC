@@ -11,12 +11,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef MIPS_FRAMEINFO_H
-#define MIPS_FRAMEINFO_H
+#ifndef LLVM_LIB_TARGET_MIPS_MIPSFRAMELOWERING_H
+#define LLVM_LIB_TARGET_MIPS_MIPSFRAMELOWERING_H
 
 #include "Mips.h"
-#include "MipsSubtarget.h"
-#include "llvm/Target/TargetFrameLowering.h"
+#include "llvm/CodeGen/TargetFrameLowering.h"
 
 namespace llvm {
   class MipsSubtarget;
@@ -26,23 +25,33 @@ protected:
   const MipsSubtarget &STI;
 
 public:
-  explicit MipsFrameLowering(const MipsSubtarget &sti)
-    : TargetFrameLowering(StackGrowsDown, sti.hasMips64() ? 16 : 8, 0),
-      STI(sti) {
+  explicit MipsFrameLowering(const MipsSubtarget &sti, unsigned Alignment)
+    : TargetFrameLowering(StackGrowsDown, Alignment, 0, Alignment), STI(sti) {}
+
+  static const MipsFrameLowering *create(const MipsSubtarget &ST);
+
+  bool hasFP(const MachineFunction &MF) const override;
+
+  bool hasBP(const MachineFunction &MF) const;
+
+  bool isFPCloseToIncomingSP() const override { return false; }
+
+  bool enableShrinkWrapping(const MachineFunction &MF) const override {
+    return true;
   }
 
-  bool targetHandlesStackFrameRounding() const;
+  MachineBasicBlock::iterator
+  eliminateCallFramePseudoInstr(MachineFunction &MF,
+                                MachineBasicBlock &MBB,
+                                MachineBasicBlock::iterator I) const override;
 
-  /// emitProlog/emitEpilog - These methods insert prolog and epilog code into
-  /// the function.
-  void emitPrologue(MachineFunction &MF) const;
-  void emitEpilogue(MachineFunction &MF, MachineBasicBlock &MBB) const;
-
-  bool hasFP(const MachineFunction &MF) const;
-
-  void processFunctionBeforeCalleeSavedScan(MachineFunction &MF,
-                                            RegScavenger *RS) const;
+protected:
+  uint64_t estimateStackSize(const MachineFunction &MF) const;
 };
+
+/// Create MipsFrameLowering objects.
+const MipsFrameLowering *createMips16FrameLowering(const MipsSubtarget &ST);
+const MipsFrameLowering *createMipsSEFrameLowering(const MipsSubtarget &ST);
 
 } // End llvm namespace
 

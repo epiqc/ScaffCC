@@ -1,8 +1,7 @@
 ; RUN: llc < %s
-
 declare { i64, double } @wild()
 
-define void @foo(i64* %p, double* %q) nounwind {
+define void @foo(i64* %p, double* %q) nounwind personality i32 (...)* @__gxx_personality_v0 {
         %t = invoke { i64, double } @wild() to label %normal unwind label %handler
 
 normal:
@@ -13,7 +12,7 @@ normal:
 	ret void
   
 handler:
-        %exn = landingpad {i8*, i32} personality i32 (...)* @__gxx_personality_v0
+        %exn = landingpad {i8*, i32}
                  catch i8* null
 	ret void
 }

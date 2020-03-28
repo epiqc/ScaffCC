@@ -12,8 +12,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_TARGET_MSP430_H
-#define LLVM_TARGET_MSP430_H
+#ifndef LLVM_LIB_TARGET_MSP430_MSP430_H
+#define LLVM_LIB_TARGET_MSP430_MSP430_H
 
 #include "MCTargetDesc/MSP430MCTargetDesc.h"
 #include "llvm/Target/TargetMachine.h"
@@ -27,6 +27,8 @@ namespace MSP430CC {
     COND_LO = 3,  // aka COND_NC
     COND_GE = 4,
     COND_L  = 5,
+    COND_N  = 6,  // jump if negative
+    COND_NONE,    // unconditional
 
     COND_INVALID = -1
   };

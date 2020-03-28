@@ -1,4 +1,4 @@
-; RUN: llc < %s -mtriple=i686-apple-darwin -relocation-model=pic --disable-fp-elim
+; RUN: llc < %s -mtriple=i686-apple-darwin -relocation-model=pic --frame-pointer=all
 
 	%struct.FILE = type { i8*, i32, i32, i16, i16, %struct.__sbuf, i32, i8*, i32 (i8*)*, i32 (i8*, i8*, i32)*, i64 (i8*, i64, i32)*, i32 (i8*, i8*, i32)*, %struct.__sbuf, %struct.__sFILEX*, i32, [3 x i8], [1 x i8], %struct.__sbuf, i32, i64 }
 	%struct.__sFILEX = type opaque
@@ -19,8 +19,8 @@ cond_true:		; preds = %bb.preheader
 bb32:		; preds = %bb32, %cond_true
 	%i.2115.0 = phi i32 [ 0, %cond_true ], [ %indvar.next127, %bb32 ]		; <i32> [#uses=1]
 	%c.2112.0 = phi i32 [ 0, %cond_true ], [ %tmp49, %bb32 ]		; <i32> [#uses=1]
-	%tmp43 = getelementptr %struct.partition_def* %part, i32 0, i32 1, i32 %c.2112.0, i32 1		; <%struct.partition_elem**> [#uses=1]
-	%tmp44 = load %struct.partition_elem** %tmp43		; <%struct.partition_elem*> [#uses=1]
+	%tmp43 = getelementptr %struct.partition_def, %struct.partition_def* %part, i32 0, i32 1, i32 %c.2112.0, i32 1		; <%struct.partition_elem**> [#uses=1]
+	%tmp44 = load %struct.partition_elem*, %struct.partition_elem** %tmp43		; <%struct.partition_elem*> [#uses=1]
 	%tmp4445 = ptrtoint %struct.partition_elem* %tmp44 to i32		; <i32> [#uses=1]
 	%tmp48 = sub i32 %tmp4445, 0		; <i32> [#uses=1]
 	%tmp49 = sdiv i32 %tmp48, 12		; <i32> [#uses=1]

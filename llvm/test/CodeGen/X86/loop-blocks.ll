@@ -1,4 +1,4 @@
-; RUN: llc < %s -march=x86-64 -mtriple=x86_64-unknown-linux-gnu -asm-verbose=false | FileCheck %s
+; RUN: llc < %s -mtriple=x86_64-unknown-linux-gnu -asm-verbose=false | FileCheck %s
 
 ; These tests check for loop branching structure, and that the loop align
 ; directive is placed in the expected place.
@@ -6,7 +6,7 @@
 ; CodeGen should insert a branch into the middle of the loop in
 ; order to avoid a branch within the loop.
 
-; CHECK: simple:
+; CHECK-LABEL: simple:
 ;      CHECK:   jmp   .LBB0_1
 ; CHECK-NEXT:   align
 ; CHECK-NEXT: .LBB0_2:
@@ -36,12 +36,11 @@ done:
 ; CodeGen should move block_a to the top of the loop so that it
 ; falls through into the loop, avoiding a branch within the loop.
 
-; CHECK: slightly_more_involved:
+; CHECK-LABEL: slightly_more_involved:
 ;      CHECK:   jmp .LBB1_1
 ; CHECK-NEXT:   align
 ; CHECK-NEXT: .LBB1_4:
 ; CHECK-NEXT:   callq bar99
-; CHECK-NEXT:   align
 ; CHECK-NEXT: .LBB1_1:
 ; CHECK-NEXT:   callq body
 
@@ -73,13 +72,12 @@ exit:
 ; fallthrough edges which should be preserved.
 ; "callq block_a_merge_func" is tail duped.
 
-; CHECK: yet_more_involved:
+; CHECK-LABEL: yet_more_involved:
 ;      CHECK:   jmp .LBB2_1
 ; CHECK-NEXT:   align
 ; CHECK-NEXT: .LBB2_5:
 ; CHECK-NEXT:   callq block_a_true_func
 ; CHECK-NEXT:   callq block_a_merge_func
-; CHECK-NEXT:   align
 ; CHECK-NEXT: .LBB2_1:
 ; CHECK-NEXT:   callq body
 ;
@@ -134,18 +132,18 @@ exit:
 ; conveniently fit anywhere so that they are at least contiguous with the
 ; loop.
 
-; CHECK: cfg_islands:
+; CHECK-LABEL: cfg_islands:
 ;      CHECK:   jmp     .LBB3_1
 ; CHECK-NEXT:   align
 ; CHECK-NEXT: .LBB3_7:
 ; CHECK-NEXT:   callq   bar100
-; CHECK-NEXT:   align
 ; CHECK-NEXT: .LBB3_1:
 ; CHECK-NEXT:   callq   loop_header
 ;      CHECK:   jl .LBB3_7
 ;      CHECK:   jge .LBB3_3
 ; CHECK-NEXT:   callq   bar101
 ; CHECK-NEXT:   jmp     .LBB3_1
+; CHECK-NEXT:   align
 ; CHECK-NEXT: .LBB3_3:
 ;      CHECK:   jge .LBB3_4
 ; CHECK-NEXT:   callq   bar102
@@ -201,6 +199,69 @@ block102:
   call void @bar102()
   br label %loop
 }
+
+; CHECK-LABEL: check_minsize:
+;      CHECK:   jmp   .LBB4_1
+; CHECK-NOT:   align
+; CHECK-NEXT: .LBB4_2:
+; CHECK-NEXT:   callq loop_latch
+; CHECK-NEXT: .LBB4_1:
+; CHECK-NEXT:   callq loop_header
+
+
+define void @check_minsize() minsize nounwind {
+entry:
+  br label %loop
+
+loop:
+  call void @loop_header()
+  %t0 = tail call i32 @get()
+  %t1 = icmp slt i32 %t0, 0
+  br i1 %t1, label %done, label %bb
+
+bb:
+  call void @loop_latch()
+  br label %loop
+
+done:
+  call void @exit()
+  ret void
+}
+
+; This is exactly the same function as slightly_more_involved.
+; The difference is that when optimising for size, we do not want
+; to see this reordering.
+
+; CHECK-LABEL: slightly_more_involved_2:
+; CHECK-NOT:      jmp .LBB5_1
+; CHECK:          .LBB5_1:
+; CHECK-NEXT:     callq body
+
+define void @slightly_more_involved_2() #0 {
+entry:
+  br label %loop
+
+loop:
+  call void @body()
+  %t0 = call i32 @get()
+  %t1 = icmp slt i32 %t0, 2
+  br i1 %t1, label %block_a, label %bb
+
+bb:
+  %t2 = call i32 @get()
+  %t3 = icmp slt i32 %t2, 99
+  br i1 %t3, label %exit, label %loop
+
+block_a:
+  call void @bar99()
+  br label %loop
+
+exit:
+  call void @exit()
+  ret void
+}
+
+attributes #0 = { minsize norecurse nounwind optsize readnone uwtable }
 
 declare void @bar99() nounwind
 declare void @bar100() nounwind

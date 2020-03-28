@@ -1,4 +1,4 @@
-; RUN: llc -filetype=obj -mtriple x86_64-pc-linux-gnu %s -o - | elf-dump | FileCheck -check-prefix=64 %s
+; RUN: llc -filetype=obj -mtriple x86_64-pc-linux-gnu %s -o - | llvm-readobj -s | FileCheck -check-prefix=64 %s
 
 ; Test that constant mergeable strings have sh_entsize set.
 
@@ -8,10 +8,10 @@
 @.c8b = private unnamed_addr constant [1 x i64] [i64 42]
 
 define i32 @main() nounwind {
-  %1 = call i32 @puts(i8* getelementptr inbounds ([6 x i8]* @.str1, i32 0, i32 0))
-  %2 = call i32 @puts(i8* getelementptr inbounds ([7 x i8]* @.str2, i32 0, i32 0))
-  call void @foo(i64* getelementptr inbounds ([1 x i64]* @.c8a, i32 0, i32 0))
-  call void @foo(i64* getelementptr inbounds ([1 x i64]* @.c8b, i32 0, i32 0))
+  %1 = call i32 @puts(i8* getelementptr inbounds ([6 x i8], [6 x i8]* @.str1, i32 0, i32 0))
+  %2 = call i32 @puts(i8* getelementptr inbounds ([7 x i8], [7 x i8]* @.str2, i32 0, i32 0))
+  call void @foo(i64* getelementptr inbounds ([1 x i64], [1 x i64]* @.c8a, i32 0, i32 0))
+  call void @foo(i64* getelementptr inbounds ([1 x i64], [1 x i64]* @.c8b, i32 0, i32 0))
   ret i32 0
 }
 
@@ -20,25 +20,35 @@ declare void @foo(i64* nocapture) nounwind
 
 ;;;;;
 
-; 64: (('sh_name', 0x0000004e) # '.rodata.str1.1'
-; 64-NEXT:   ('sh_type', 0x00000001)
-; 64-NEXT:   ('sh_flags', 0x0000000000000032)
-; 64-NEXT:   ('sh_addr',
-; 64-NEXT:   ('sh_offset',
-; 64-NEXT:   ('sh_size', 0x000000000000000d)
-; 64-NEXT:   ('sh_link',
-; 64-NEXT:   ('sh_info',
-; 64-NEXT:   ('sh_addralign', 0x0000000000000001)
-; 64-NEXT:   ('sh_entsize', 0x0000000000000001)
+; 64:        Section {
+; 64:          Name: .rodata.str1.1
+; 64-NEXT:     Type: SHT_PROGBITS
+; 64-NEXT:     Flags [
+; 64-NEXT:       SHF_ALLOC
+; 64-NEXT:       SHF_MERGE
+; 64-NEXT:       SHF_STRINGS
+; 64-NEXT:     ]
+; 64-NEXT:     Address:
+; 64-NEXT:     Offset:
+; 64-NEXT:     Size: 13
+; 64-NEXT:     Link:
+; 64-NEXT:     Info:
+; 64-NEXT:     AddressAlignment: 1
+; 64-NEXT:     EntrySize: 1
+; 64-NEXT:   }
 
-; 64: (('sh_name', 0x00000041) # '.rodata.cst8'
-; 64-NEXT:   ('sh_type', 0x00000001)
-; 64-NEXT:   ('sh_flags', 0x0000000000000012)
-; 64-NEXT:   ('sh_addr',
-; 64-NEXT:   ('sh_offset',
-; 64-NEXT:   ('sh_size', 0x0000000000000010)
-; 64-NEXT:   ('sh_link',
-; 64-NEXT:   ('sh_info',
-; 64-NEXT:   ('sh_addralign', 0x0000000000000008)
-; 64-NEXT:   ('sh_entsize', 0x0000000000000008)
-
+; 64:        Section {
+; 64:          Name: .rodata.cst8
+; 64-NEXT:     Type: SHT_PROGBITS
+; 64-NEXT:     Flags [
+; 64-NEXT:       SHF_ALLOC
+; 64-NEXT:       SHF_MERGE
+; 64-NEXT:     ]
+; 64-NEXT:     Address:
+; 64-NEXT:     Offset:
+; 64-NEXT:     Size: 16
+; 64-NEXT:     Link:
+; 64-NEXT:     Info:
+; 64-NEXT:     AddressAlignment: 8
+; 64-NEXT:     EntrySize: 8
+; 64-NEXT:   }

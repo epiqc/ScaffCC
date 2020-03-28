@@ -80,7 +80,7 @@ const double h_double[M][M][M][M] =
 // Controlled Phase gate
 // controlled-[e^(i*theta)  0;0  e^(i*theta)] is equivalent to the phase shift gate [1 0; 0 e^(i*theta)] on the control qubit
 // can be written as a product of G(theta/2) and Rz(theta); G is physically unobservable so it can be neglected
-module ControlledPhase (
+scaff_module ControlledPhase (
 	qbit control,
 	qbit target,
 	double theta
@@ -89,7 +89,7 @@ module ControlledPhase (
 }
 
 // Implement the Y gate defined in the GFIs Y=Rx(-PI/2), we'll name it Y_Rx
-module Y_Rx(qbit target)
+scaff_module Y_Rx(qbit target)
 {
 //	G(target,-PI/4); //indistinguishable global phase
 	Z(target);
@@ -100,7 +100,7 @@ module Y_Rx(qbit target)
 }
 
 // Implement the dagger of the Y gate = Rx(PI/2)
-module Y_Rx_Dagger(qbit target)
+scaff_module Y_Rx_Dagger(qbit target)
 {
 //	G(target,-PI/4);
 	H(target);
@@ -108,7 +108,7 @@ module Y_Rx_Dagger(qbit target)
 	H(target);
 }
 
-module DoubleExcitationOperator (
+scaff_module DoubleExcitationOperator (
 	qbit control,
 	qbit reg[M],
 	int p,
@@ -124,7 +124,7 @@ module DoubleExcitationOperator (
   // See Double Excitation Operator circuit in Table A1 of Whitfield et al 2010
   for (int i = 0; i < 4; i++) {
     // NB(pranav): for some reason, ScaffCC wouldn't let me move the M operator
-    // into a separate module. Seems like a ScaffCC bug.
+    // into a separate scaff_module. Seems like a ScaffCC bug.
     switch (i) {  // M operator (as defined in A1)
 			case 0: H(reg[p]); H(reg[q]); Y_Rx(reg[r]); Y_Rx(reg[s]); break;
 			case 1: Y_Rx(reg[p]); Y_Rx(reg[q]); H(reg[r]); H(reg[s]); break;

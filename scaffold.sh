@@ -9,7 +9,7 @@ if [ $(echo $PATH | grep ${RKQC_PATH} | wc -l) -eq 0 ]; then
 fi
 
 function show_help {
-    echo "Usage: $0 [-hv] [-rqfRTFckdso] [-l #] [-P #] <filename>.scaffold"
+    echo "Usage: $0 [-hv] [-rqfRTFckdso] [-l #] [-P #] [-D <pass_name>] <filename>.scaffold"
     echo "    -r   Generate resource estimate (default)"
     echo "    -q   Generate QASM"
     echo "    -f   Generate flattened QASM"
@@ -23,6 +23,7 @@ function show_help {
     echo "    -k   Keep all intermediate files (default only keeps specified output,"
     echo "         but requires recompilation for any new output)"
     echo "    -d   Dry-run; show all commands to be run, but do not execute"
+    echo "    -D   Debug named pass, use SCAFFOLD for all"
     echo "    -s   Generate QX Simulator input file"
     echo "    -o   Generate optimized QASM"
     echo "    -v   Show current Scaffold version information"
@@ -38,6 +39,7 @@ rkqc=0
 clean=0
 dryrun=""
 force=0
+coptimization=0
 purge=1
 res=0
 rot=0
@@ -48,7 +50,8 @@ qc=0
 precision=4
 targets=""
 optimize=0
-while getopts "h?vcdfbsFkqroTRl:P:" opt; do
+debug_passes=""
+while getopts "h?vcdfbsFkqroTRD:l:P:" opt; do
     case "$opt" in
     h|\?)
         show_help
@@ -70,6 +73,8 @@ while getopts "h?vcdfbsFkqroTRl:P:" opt; do
 		;;
     k) purge=0
         ;;
+    O) coptimization=1
+        ;;
     q) targets="${targets} qasm"
         ;;
     r) res=1
@@ -79,6 +84,9 @@ while getopts "h?vcdfbsFkqroTRl:P:" opt; do
     T) toff=1
         ;;        
     s) qc=1
+        ;;
+    D) debug_val=$(echo "${OPTARG}" | tr a-z A-Z)
+       export "DEBUG_${debug_val}=1"
         ;;
     o) optimize=1
         ;;
@@ -136,9 +144,29 @@ if [ ! -e ${filename} ]; then
     show_help
     exit 1
 fi
+shift
+
+expresion=""
+arg_num=0
+while [ "${1}" != "" ]; do
+    if [ $arg_num = 0 ]; then
+        expression="${expression}; "
+    fi
+    expression="${expression}s/argv\[${arg_num}\]/${1}/g"
+    arg_num=${arg_num}+1
+    shift
+done
+
 dir="$(dirname ${filename})/"
 file=$(basename ${filename} .scaffold)
 cfile="${file}.*"
+
+echo "file: $file"
+
+if [ "${expression}" != "" ]; then
+    sed -E -e "${expression}" "${filename}" > "${file}_args.scaffold"
+    file_name="${file}_args.scaffold"
+fi
 
 if [ $(egrep '^rkqc.*{\s*' ${filename} | wc -l) -gt 0 ]; then
 	rkqc=1
@@ -149,6 +177,6 @@ if [ ${clean} -eq 1 ]; then
 	make -f $ROOT/scaffold/Scaffold.makefile ${dryrun} ROOT=$ROOT DIRNAME=${dir} FILENAME=${filename} FILE=${file} CFILE=${cfile} clean
     exit
 fi
-make -f $ROOT/scaffold/Scaffold.makefile ${dryrun} ROOT=$ROOT DIRNAME=${dir} FILENAME=${filename} FILE=${file} CFILE=${cfile} TOFF=${toff} RKQC=${rkqc} ROTATIONS=${rot} PRECISION=${precision} OPTIMIZE=${optimize} ${targets}
+make -f $ROOT/scaffold/Scaffold.makefile ${dryrun} ROOT=$ROOT DIRNAME=${dir} FILENAME=${filename} FILE=${file} CFILE=${cfile} TOFF=${toff} RKQC=${rkqc} COPTIMIZATION=${coptimization}  ROTATIONS=${rot} PRECISION=${precision} OPTIMIZE=${optimize} ${targets}
 
 exit 0

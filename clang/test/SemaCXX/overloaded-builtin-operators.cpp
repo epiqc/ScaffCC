@@ -1,4 +1,7 @@
-// RUN: %clang_cc1 -fsyntax-only -fshow-overloads=best -verify %s 
+// RUN: %clang_cc1 -fsyntax-only -fshow-overloads=best -verify -triple x86_64-linux-gnu %s
+// RUN: %clang_cc1 -fsyntax-only -fshow-overloads=best -verify -triple x86_64-linux-gnu -std=c++98 %s
+// RUN: %clang_cc1 -fsyntax-only -fshow-overloads=best -verify -triple x86_64-linux-gnu -std=c++11 %s
+
 struct yes;
 struct no;
 
@@ -59,7 +62,14 @@ void f(Short s, Long l, Enum1 e1, Enum2 e2, Xpmf pmf) {
   // FIXME: should pass (void)static_cast<no&>(islong(e1 % e2));
 }
 
-struct ShortRef { // expected-note{{candidate function (the implicit copy assignment operator)}}
+struct BoolRef {
+  operator bool&();
+};
+
+struct ShortRef { // expected-note{{candidate function (the implicit copy assignment operator) not viable}}
+#if __cplusplus >= 201103L // C++11 or later
+// expected-note@-2 {{candidate function (the implicit move assignment operator) not viable}}
+#endif
   operator short&();
 };
 
@@ -67,7 +77,14 @@ struct LongRef {
   operator volatile long&();
 };
 
-struct XpmfRef { // expected-note{{candidate function (the implicit copy assignment operator)}}
+struct FloatRef {
+  operator float&();
+};
+
+struct XpmfRef { // expected-note{{candidate function (the implicit copy assignment operator) not viable}}
+#if __cplusplus >= 201103L // C++11 or later
+// expected-note@-2 {{candidate function (the implicit move assignment operator) not viable}}
+#endif
   operator pmf&();
 };
 
@@ -75,12 +92,18 @@ struct E2Ref {
   operator E2&();
 };
 
-void g(ShortRef sr, LongRef lr, E2Ref e2_ref, XpmfRef pmf_ref) {
+void g(BoolRef br, ShortRef sr, LongRef lr, FloatRef fr, E2Ref e2_ref, XpmfRef pmf_ref) {
   // C++ [over.built]p3
   short s1 = sr++;
 
-  // C++ [over.built]p3
+  // C++ [over.built]p4
   long l1 = lr--;
+
+  // C++ [over.built]p4
+  float f1 = fr--;
+
+  // C++ [over.built]p4
+  bool b2 = br--; // expected-error{{cannot decrement value of type 'BoolRef'}}
 
   // C++ [over.built]p18
   short& sr1 = (sr *= lr);
@@ -174,7 +197,7 @@ void test_dr425(A a) {
   // FIXME: lots of candidates here!
   (void)(1.0f * a); // expected-error{{ambiguous}} \
                     // expected-note 4{{candidate}} \
-                    // expected-note {{remaining 77 candidates omitted; pass -fshow-overloads=all to show them}}
+                    // expected-note {{remaining 140 candidates omitted; pass -fshow-overloads=all to show them}}
 }
 
 // pr5432
@@ -236,4 +259,35 @@ namespace PR7851 {
     *x = 0;
     (void)(x - x);
   }
+}
+
+namespace PR12854 {
+  enum { size = 1 };
+  void plus_equals() {
+    int* __restrict py;
+    py += size;
+  }
+
+  struct RestrictInt {
+    operator int* __restrict &();
+  };
+
+  void user_conversions(RestrictInt ri) {
+    ++ri;
+    --ri;
+    ri++;
+    ri--;
+  }
+}
+
+namespace PR12964 {
+  struct X { operator  __int128() const; } x;
+  bool a = x == __int128(0);
+  bool b = x == 0;
+
+  struct Y { operator unsigned __int128() const; } y;
+  bool c = y == __int128(0);
+  bool d = y == 0;
+
+  bool e = x == y;
 }

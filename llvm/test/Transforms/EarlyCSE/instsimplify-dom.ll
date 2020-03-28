@@ -1,4 +1,5 @@
 ; RUN: opt -early-cse -S < %s | FileCheck %s
+; RUN: opt -basicaa -early-cse-memssa -S < %s | FileCheck %s
 ; PR12231
 
 declare i32 @f()
@@ -16,4 +17,4 @@ xxx:
   br label %lbl_1215
 }
 
-; CHECK: define i32 @fn
+; CHECK-LABEL: define i32 @fn(

@@ -4,7 +4,7 @@
 
 define internal fastcc i32 @Callee(i32 %i) nounwind {
 entry:
-; CHECK: Callee:
+; CHECK-LABEL: Callee:
 ; CHECK: push
 ; CHECK: mov r4, sp
 ; CHECK: sub.w [[R12:r[0-9]+]], r4, #1000
@@ -14,9 +14,9 @@ entry:
 
 bb:                                               ; preds = %entry
   %1 = alloca [1000 x i8], align 4                ; <[1000 x i8]*> [#uses=1]
-  %.sub = getelementptr inbounds [1000 x i8]* %1, i32 0, i32 0 ; <i8*> [#uses=2]
-  %2 = call i32 (i8*, i32, i32, i8*, ...)* @__sprintf_chk(i8* %.sub, i32 0, i32 1000, i8* getelementptr inbounds ([4 x i8]* @.str, i32 0, i32 0), i32 %i) nounwind ; <i32> [#uses=0]
-  %3 = load i8* %.sub, align 4                    ; <i8> [#uses=1]
+  %.sub = getelementptr inbounds [1000 x i8], [1000 x i8]* %1, i32 0, i32 0 ; <i8*> [#uses=2]
+  %2 = call i32 (i8*, i32, i32, i8*, ...) @__sprintf_chk(i8* %.sub, i32 0, i32 1000, i8* getelementptr inbounds ([4 x i8], [4 x i8]* @.str, i32 0, i32 0), i32 %i) nounwind ; <i32> [#uses=0]
+  %3 = load i8, i8* %.sub, align 4                    ; <i8> [#uses=1]
   %4 = sext i8 %3 to i32                          ; <i32> [#uses=1]
   ret i32 %4
 
@@ -33,7 +33,7 @@ bb2:                                              ; preds = %entry
 declare i32 @__sprintf_chk(i8*, i32, i32, i8*, ...) nounwind
 
 define i32 @main() nounwind {
-; CHECK: main:
+; CHECK-LABEL: main:
 bb.nph:
   br label %bb
 
@@ -52,7 +52,7 @@ bb2:                                              ; preds = %bb
 ; CHECK-NOT: mov sp, r7
 ; CHECK-NOT: sub sp, #12
 ; CHECK: pop
-  %4 = tail call i32 (i8*, ...)* @printf(i8* getelementptr inbounds ([4 x i8]* @.str, i32 0, i32 0), i32 %2) nounwind ; <i32> [#uses=0]
+  %4 = tail call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([4 x i8], [4 x i8]* @.str, i32 0, i32 0), i32 %2) nounwind ; <i32> [#uses=0]
   ret i32 0
 }
 

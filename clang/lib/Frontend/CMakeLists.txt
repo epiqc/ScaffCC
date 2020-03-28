@@ -1,19 +1,21 @@
-set( LLVM_USED_LIBS
-  clangAST
-  clangBasic
-  clangDriver
-  clangEdit
-  clangLex
-  clangParse
-  clangSema
-  clangSerialization
+add_subdirectory(Rewrite)
+
+set(LLVM_LINK_COMPONENTS
+  BitReader
+  Option
+  ProfileData
+  Support
   )
+
+set(optional_deps intrinsics_gen)
+if (CLANG_BUILT_STANDALONE)
+  set(optional_deps)
+endif()
 
 add_clang_library(clangFrontend
   ASTConsumers.cpp
   ASTMerge.cpp
   ASTUnit.cpp
-  CacheTokens.cpp
   ChainedDiagnosticConsumer.cpp
   ChainedIncludesSource.cpp
   CompilerInstance.cpp
@@ -25,37 +27,36 @@ add_clang_library(clangFrontend
   FrontendAction.cpp
   FrontendActions.cpp
   FrontendOptions.cpp
+  FrontendTiming.cpp
   HeaderIncludeGen.cpp
   InitHeaderSearch.cpp
   InitPreprocessor.cpp
   LangStandards.cpp
   LayoutOverrideSource.cpp
   LogDiagnosticPrinter.cpp
+  ModuleDependencyCollector.cpp
   MultiplexConsumer.cpp
+  PrecompiledPreamble.cpp
   PrintPreprocessedOutput.cpp
   SerializedDiagnosticPrinter.cpp
+  SerializedDiagnosticReader.cpp
+  TestModuleFileExtension.cpp
   TextDiagnostic.cpp
   TextDiagnosticBuffer.cpp
   TextDiagnosticPrinter.cpp
   VerifyDiagnosticConsumer.cpp
-  Warnings.cpp
-  )
 
-IF(MSVC)
-  get_target_property(NON_ANSI_COMPILE_FLAGS clangFrontend COMPILE_FLAGS)
-  string(REPLACE /Za
-    "" NON_ANSI_COMPILE_FLAGS
-    ${NON_ANSI_COMPILE_FLAGS})
-  set_target_properties(clangFrontend PROPERTIES COMPILE_FLAGS ${NON_ANSI_COMPILE_FLAGS})
-ENDIF(MSVC)
-
-add_dependencies(clangFrontend 
-  ClangAttrClasses
-  ClangAttrList
-  ClangCC1Options
-  ClangDiagnosticFrontend 
-  ClangDiagnosticLex
-  ClangDiagnosticSema
+  DEPENDS
   ClangDriverOptions
-  ClangDeclNodes
-  ClangStmtNodes)
+  ${optional_deps}
+
+  LINK_LIBS
+  clangAST
+  clangBasic
+  clangDriver
+  clangEdit
+  clangLex
+  clangParse
+  clangSema
+  clangSerialization
+  )

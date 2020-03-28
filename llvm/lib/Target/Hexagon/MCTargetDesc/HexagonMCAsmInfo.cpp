@@ -15,22 +15,24 @@
 
 using namespace llvm;
 
-HexagonMCAsmInfo::HexagonMCAsmInfo(const Target &T, StringRef TT) {
+// Pin the vtable to this file.
+void HexagonMCAsmInfo::anchor() {}
+
+HexagonMCAsmInfo::HexagonMCAsmInfo(const Triple &TT) {
   Data16bitsDirective = "\t.half\t";
   Data32bitsDirective = "\t.word\t";
-  Data64bitsDirective = 0;  // .xword is only supported by V9.
-  ZeroDirective = "\t.skip\t";
+  Data64bitsDirective = nullptr;  // .xword is only supported by V9.
   CommentString = "//";
-  HasLEB128 = true;
+  SupportsDebugInformation = true;
 
-  PrivateGlobalPrefix = ".L";
-  LCOMMDirectiveType = LCOMM::ByteAlignment;
+  LCOMMDirectiveAlignmentType = LCOMM::ByteAlignment;
   InlineAsmStart = "# InlineAsm Start";
   InlineAsmEnd = "# InlineAsm End";
   ZeroDirective = "\t.space\t";
   AscizDirective = "\t.string\t";
-  WeakRefDirective = "\t.weak\t";
 
+  MinInstAlignment = 4;
   UsesELFSectionDirectiveForBSS  = true;
   ExceptionsType = ExceptionHandling::DwarfCFI;
+  UseLogicalShr = false;
 }

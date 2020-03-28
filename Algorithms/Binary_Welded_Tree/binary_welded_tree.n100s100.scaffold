@@ -27,7 +27,7 @@ const unsigned int s_=100;
 
 
 // Definition of the CZ gate
-module CZ(qbit target[1], qbit control[1])
+scaff_module CZ(qbit target[1], qbit control[1])
 {
   H(target[0]);
   CNOT(control[0], target[0]);
@@ -36,14 +36,14 @@ module CZ(qbit target[1], qbit control[1])
 
 //Definition of the controlled_expZ gate
 
-module controlled_expZ (qbit target[1], qbit control[1])  
+scaff_module controlled_expZ (qbit target[1], qbit control[1])  
 { Rz(target[0], -2*dt); //t substituted
   CNOT(control[0], target[0]);
   Rz(target[0], 2*dt);
 }
 
 //Algorithm 7 of the GFI
-module PARSENODEROOT(qbit a[n+1],qbit root[1],qbit even[1]) // 301 changed to n+1 though it is a better coding but earlier case was not an error
+scaff_module PARSENODEROOT(qbit a[n+1],qbit root[1],qbit even[1]) // 301 changed to n+1 though it is a better coding but earlier case was not an error
 {
   qbit scratch[n+1]; 
   int index;
@@ -74,7 +74,7 @@ module PARSENODEROOT(qbit a[n+1],qbit root[1],qbit even[1]) // 301 changed to n+
 }
 
 //Algorithm 8 of the GFI
-module PARSENODEEVEN(qbit a[n+1],qbit even[1])
+scaff_module PARSENODEEVEN(qbit a[n+1],qbit even[1])
 {qbit  scratch[n+1];
   //Dropped ancl[0] dropped
   int index, i;
@@ -106,7 +106,7 @@ module PARSENODEEVEN(qbit a[n+1],qbit even[1])
 }
 
 //Algorithm 9 of the GFI
-module  TESTISPARENT(qbit a[n+2],qbit root [1], qbit even[1], qbit isparent[1], qbit ismatch[1], int color, int really) 
+scaff_module  TESTISPARENT(qbit a[n+2],qbit root [1], qbit even[1], qbit isparent[1], qbit ismatch[1], int color, int really) 
 {
 
   if (really==0)
@@ -146,7 +146,7 @@ module  TESTISPARENT(qbit a[n+2],qbit root [1], qbit even[1], qbit isparent[1], 
 
 
 //Algorithm 10 of the GFI
-module  TESTISCHILD(qbit even[1],qbit ischild[1],qbit direction[1], int color)
+scaff_module  TESTISCHILD(qbit even[1],qbit ischild[1],qbit direction[1], int color)
 {// Dropped ancl[0]
   
   
@@ -167,7 +167,7 @@ module  TESTISCHILD(qbit even[1],qbit ischild[1],qbit direction[1], int color)
 
 
 //Algorithm 11 of the GFI
-module  SETPARENT(qbit a[n+2],qbit b[n+2],qbit isparent[1])
+scaff_module  SETPARENT(qbit a[n+2],qbit b[n+2],qbit isparent[1])
 { int index;
  
   for  (index=0;index<=n-1;index++)
@@ -180,7 +180,7 @@ module  SETPARENT(qbit a[n+2],qbit b[n+2],qbit isparent[1])
 
 //Algorithm 18 of the GFI
 //Corrected as per the suggestion, no mask register assuming integer indexing for the classical bit array possible
-module CADDNUMCLEAR(qbit control[1], qbit scratch[n], qbit a[n+2])
+scaff_module CADDNUMCLEAR(qbit control[1], qbit scratch[n], qbit a[n+2])
 {
   int i, m, index;
    
@@ -196,7 +196,7 @@ module CADDNUMCLEAR(qbit control[1], qbit scratch[n], qbit a[n+2])
 
 //Algorithm 17 of the GFI
 //Corrected as per the suggestion, no mask register assuming integer indexing for the classical bit array possible
-module CADDNUM(qbit addsub[1],qbit b[n+2],qbit a[n+2])
+scaff_module CADDNUM(qbit addsub[1],qbit b[n+2],qbit a[n+2])
   
 {qbit scratch[n];
   
@@ -224,7 +224,7 @@ module CADDNUM(qbit addsub[1],qbit b[n+2],qbit a[n+2])
   
 //Algorithm 20 of the GFI
 //Corrected as per the suggestion, no mask register assuming integer indexing for the classical bit array possible
-module CSUBNUMCLEAR(qbit addsub[1],qbit scratch[n],qbit a[n+2])
+scaff_module CSUBNUMCLEAR(qbit addsub[1],qbit scratch[n],qbit a[n+2])
 {
   qbit ancland;
   qbit anclswap;
@@ -243,7 +243,7 @@ module CSUBNUMCLEAR(qbit addsub[1],qbit scratch[n],qbit a[n+2])
 
 //Algorithm 19 of the GFI
 //Corrected as per the suggestion, no mask register assuming integer indexing for the classical bit array possible
-module CSUBNUM(qbit addsub[1],qbit b[n+2],qbit a[n+2])
+scaff_module CSUBNUM(qbit addsub[1],qbit b[n+2],qbit a[n+2])
 {qbit scratch[n];
   
   
@@ -271,7 +271,7 @@ module CSUBNUM(qbit addsub[1],qbit b[n+2],qbit a[n+2])
 
 
 //Algorithm 16 of the GFI
-module DOWELD1(qbit a[n+2],qbit b[n+2],qbit weldctrl[1],qbit g[n])
+scaff_module DOWELD1(qbit a[n+2],qbit b[n+2],qbit weldctrl[1],qbit g[n])
 { int index;
   qbit ancl[1]; /*qubit changed to qbit */
   PrepZ (ancl[0],0);  /* closing parenthesis changed from"]" to ")" */
@@ -283,7 +283,7 @@ module DOWELD1(qbit a[n+2],qbit b[n+2],qbit weldctrl[1],qbit g[n])
 }
 
 //Algorithm 15 of the GFI
-module DOWELD0(qbit a[n+2],qbit b[n+2],qbit weldctrl[1])
+scaff_module DOWELD0(qbit a[n+2],qbit b[n+2],qbit weldctrl[1])
 { qbit addsub[1];
   X(a[n+1]);
   Toffoli(addsub[0],weldctrl[0],a[n+1]);
@@ -295,7 +295,7 @@ module DOWELD0(qbit a[n+2],qbit b[n+2],qbit weldctrl[1])
 }
 
 //Algorithm 14 of the GFI
-module SETWELD(qbit a[n+2], qbit b[n+2], qbit childctrl[1], qbit direction[1], qbit g[n])
+scaff_module SETWELD(qbit a[n+2], qbit b[n+2], qbit childctrl[1], qbit direction[1], qbit g[n])
 { qbit weldctrl[1];
   X(direction[0]);
   Toffoli(weldctrl[0], direction[0],childctrl[0]);
@@ -313,7 +313,7 @@ module SETWELD(qbit a[n+2], qbit b[n+2], qbit childctrl[1], qbit direction[1], q
 
 
 //Algorithm 13 of the GFI
-module SETCHILDINTREE(qbit a[n+2], qbit b[n+2], qbit childctrl[1], qbit direction[1]) /* name set to "SETCHILDINTREE" as per GFI */
+scaff_module SETCHILDINTREE(qbit a[n+2], qbit b[n+2], qbit childctrl[1], qbit direction[1]) /* name set to "SETCHILDINTREE" as per GFI */
 {int index;
   Toffoli(b[0],childctrl[0],direction[0]); 
   for (index=1; index<=n; index++) 
@@ -324,7 +324,7 @@ module SETCHILDINTREE(qbit a[n+2], qbit b[n+2], qbit childctrl[1], qbit directio
 }
 
 //Algorithm 12 of the GFI
-module SETCHILD(qbit a[n+2], qbit b[n+2], qbit ischild[1], qbit direction[1], qbit g[n])
+scaff_module SETCHILD(qbit a[n+2], qbit b[n+2], qbit ischild[1], qbit direction[1], qbit g[n])
 { qbit childctrl[1];
   
   Toffoli(childctrl[0], ischild[0],a[n]);
@@ -336,8 +336,8 @@ module SETCHILD(qbit a[n+2], qbit b[n+2], qbit ischild[1], qbit direction[1], qb
   X(a[n]);
 }
 
-// Module for W gate  modified and expressed only in terms of S,T,H,X and CNOT gate
-module W (qbit q1, qbit q2)   
+// scaff_module for W gate  modified and expressed only in terms of S,T,H,X and CNOT gate
+scaff_module W (qbit q1, qbit q2)   
 { CNOT(q2, q1);
   X (q2);
   Sdag(q2);
@@ -351,8 +351,8 @@ module W (qbit q1, qbit q2)
   CNOT(q2, q1);
 }
 
-// module for TIMESTEP operation
-module TIMESTEP(qbit a[n+2], qbit b[n+2], qbit r[1]) /*Algorithm 3 of the GFI */
+// scaff_module for TIMESTEP operation
+scaff_module TIMESTEP(qbit a[n+2], qbit b[n+2], qbit r[1]) /*Algorithm 3 of the GFI */
 { qbit h[1];
   
   int i,j;
@@ -382,8 +382,8 @@ module TIMESTEP(qbit a[n+2], qbit b[n+2], qbit r[1]) /*Algorithm 3 of the GFI */
     }
 }
   
-//Module implementing classical ORACLE function
-module ORACLE ( qbit a[n+2],qbit b[n+2],qbit r[1], int color)   /* b[302] changed to b[n+2] */
+//scaff_module implementing classical ORACLE function
+scaff_module ORACLE ( qbit a[n+2],qbit b[n+2],qbit r[1], int color)   /* b[302] changed to b[n+2] */
   
 { qbit root[1], even[1], isparent[1], ischild[1], ismatch[1], direction[1],g[n]; /*g[n] declared as qbit, diversion from GFI where*/ 
   /*it is declared as a bit array */
@@ -408,7 +408,7 @@ module ORACLE ( qbit a[n+2],qbit b[n+2],qbit r[1], int color)   /* b[302] change
 }
 
 
-// main module
+// main scaff_module
 int main()   
 { qbit a[n+2];
   qbit b[n+2];

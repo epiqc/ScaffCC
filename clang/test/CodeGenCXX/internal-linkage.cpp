@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -emit-llvm -o - %s | FileCheck %s
+// RUN: %clang_cc1 -emit-llvm -triple %itanium_abi_triple -o - %s | FileCheck %s
 
 struct Global { Global(); };
 template<typename T> struct X { X() {} };
@@ -51,7 +51,7 @@ extern char const * extern_nonconst_xyzzy;
 
 char const * *test4()
 {
-    // CHECK: @extern_nonconst_xyzzy = global
+    // CHECK: @extern_nonconst_xyzzy = {{(dso_local )?}}global
     return &extern_nonconst_xyzzy;
 }
 

@@ -1,4 +1,5 @@
 // RUN: %clang_cc1 -fsyntax-only -verify -std=c++11 %s
+// expected-no-diagnostics
 
 struct Base {
   virtual void override();
@@ -9,10 +10,8 @@ struct S : Base {
   virtual void override() override;
 };
 
-struct T {
-  // virt-specifier-seq is only valid in member-declarators, and a function definition is not a member-declarator.
-  // FIXME: This currently doesn't work.
-  // virtual void f() const override { } 
+struct T : Base {
+  virtual void override() override { } 
 };
 
 struct override;

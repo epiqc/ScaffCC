@@ -7,15 +7,15 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Pass.h"
-#include "llvm/Module.h"
-#include "llvm/Function.h"
-#include "llvm/BasicBlock.h"
-#include "llvm/Instruction.h"
-#include "llvm/Constants.h"
-#include "llvm/Intrinsics.h"
-#include "llvm/Support/InstVisitor.h" 
+#include "llvm/IR/Module.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Instruction.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/InstVisitor.h" 
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/LLVMContext.h"
+#include "llvm/IR/LLVMContext.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 
 using namespace llvm;
@@ -127,12 +127,12 @@ namespace {
         
         Constant *StrConstant = ConstantDataArray::getString(CI->getContext(), CF->getName());           
         ArrayType* strTy = cast<ArrayType>(StrConstant->getType());
-        AllocaInst* strAlloc = new AllocaInst(strTy,"",(Instruction*)CI);
-        new StoreInst(StrConstant,strAlloc,"",(Instruction*)CI);	  	  
+        AllocaInst* strAlloc = new AllocaInst(strTy,0,"",(Instruction*)CI);
+        new StoreInst(StrConstant,strAlloc,false,(Instruction*)CI);	  	  
         Value* Idx[2];	  
         Idx[0] = Constant::getNullValue(Type::getInt32Ty(CI->getContext()));  
         Idx[1] = ConstantInt::get(Type::getInt32Ty(CI->getContext()),0);
-        GetElementPtrInst* strPtr = GetElementPtrInst::Create(strAlloc, Idx, "", (Instruction*)CI);
+        GetElementPtrInst* strPtr = GetElementPtrInst::Create(strTy, strAlloc, Idx, "", (Instruction*)CI);
         
         vector<uint32_t> valueOfInt;
         unsigned num_ints = 0;
@@ -152,18 +152,18 @@ namespace {
 
         Constant *IntArrayConstant = ConstantDataArray::get(CI->getContext(), ArrayRef<uint32_t>(valueOfInt));
         ArrayType *intArrTy = cast<ArrayType>(IntArrayConstant->getType());
-        AllocaInst *intArrAlloc = new AllocaInst(intArrTy,"",(Instruction*)CI);
-        new StoreInst(IntArrayConstant,intArrAlloc,"",(Instruction*)CI);
+        AllocaInst *intArrAlloc = new AllocaInst(intArrTy,0,"",(Instruction*)CI);
+        new StoreInst(IntArrayConstant,intArrAlloc,false,(Instruction*)CI);
         GetElementPtrInst* intArrPtr = GetElementPtrInst::CreateInBounds(intArrAlloc, Idx, "", (Instruction*)CI);
 
         Constant *DoubleArrayConstant = ConstantDataArray::get(CI->getContext(), ArrayRef<double>(valueOfDouble));
         ArrayType *doubleArrTy = cast<ArrayType>(DoubleArrayConstant->getType());
-        AllocaInst *doubleArrAlloc = new AllocaInst(doubleArrTy,"",(Instruction*)CI);
-        new StoreInst(DoubleArrayConstant,doubleArrAlloc,"",(Instruction*)CI);	  	  
+        AllocaInst *doubleArrAlloc = new AllocaInst(doubleArrTy,0,"",(Instruction*)CI);
+        new StoreInst(DoubleArrayConstant,doubleArrAlloc,false,(Instruction*)CI);	  	  
         GetElementPtrInst* doubleArrPtr = GetElementPtrInst::CreateInBounds(doubleArrAlloc, Idx, "", (Instruction*)CI);
         
-        Constant *IntNumConstant = ConstantInt::get(Type::getInt32Ty(getGlobalContext()) , num_ints, false);       
-        Constant *DoubleNumConstant = ConstantInt::get(Type::getInt32Ty(getGlobalContext()) , num_doubles);          
+        Constant *IntNumConstant = ConstantInt::get(Type::getInt32Ty(CI->getContext()) , num_ints, false);       
+        Constant *DoubleNumConstant = ConstantInt::get(Type::getInt32Ty(CI->getContext()) , num_doubles);          
 
         vectCallArgs.push_back(cast<Value>(strPtr));
         vectCallArgs.push_back(cast<Value>(intArrPtr));
@@ -214,11 +214,11 @@ namespace {
       // insert initialization and termination functions in "main"
       if(F.getName() == "main"){
         BasicBlock* BB_last = &(F.back());
-        TerminatorInst *BBTerm = BB_last->getTerminator();
+        Instruction *BBTerm = BB_last->getTerminator();
         CallInst::Create(qasmResSum, "",(Instruction*)BBTerm);	
 
         BasicBlock* BB_first = &(F.front());
-        BasicBlock::iterator BBiter = BB_first->getFirstNonPHI();
+        Instruction *BBiter = BB_first->getFirstNonPHI();
         while(isa<AllocaInst>(BBiter))
           ++BBiter;
         CallInst::Create(qasmInitialize, "", (Instruction*)&(*BBiter));
@@ -236,7 +236,7 @@ namespace {
       }
       if(!F.isDeclaration() && isQuantumModule){
         BasicBlock* BB_last = &(F.back());
-        TerminatorInst *BBTerm = BB_last->getTerminator();
+        Instruction *BBTerm = BB_last->getTerminator();
         CallInst::Create(exit_scope, "",(Instruction*)BBTerm);	
       }
     }

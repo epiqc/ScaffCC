@@ -1,5 +1,6 @@
-; RUN: llc < %s -march=x86 -mattr=+sse2 -stats |& \
-; RUN:   grep {twoaddrinstr} | grep {Number of instructions aggressively commuted}
+; REQUIRES: asserts
+; RUN: llc < %s -mattr=+sse2 -mcpu=penryn -stats 2>&1 | \
+; RUN:   grep "twoaddressinstruction" | grep "Number of instructions aggressively commuted"
 ; rdar://6480363
 
 target triple = "i386-apple-darwin9.6"

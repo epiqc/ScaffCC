@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 %s -fsyntax-only -verify
+// RUN: %clang_cc1 %s -fsyntax-only -verify  -triple x86_64-pc-linux-gnu -Wno-unevaluated-expression
 
 typedef unsigned __uint32_t;
 
@@ -34,9 +34,18 @@ bar:
   return &&bar;  // expected-warning {{returning address of label, which is local}}
 }
 
+// PR38569: Don't warn when returning a label from a statement expression.
+void test10_logpc(void*);
+void test10a() {
+  test10_logpc(({
+    my_pc:
+      &&my_pc;
+  }));
+}
+
 // PR6034
 void test11(int bit) {
-  switch (bit) // expected-warning {{switch statement has empty body}} expected-note {{put the semicolon on a separate line to silence this warning}}
+  switch (bit)
   switch (env->fpscr)  // expected-error {{use of undeclared identifier 'env'}}
   {
   }
@@ -90,9 +99,6 @@ void foo(enum x X) {
   }
 }
 
-// PR 8880
-// FIXME: Clang should reject this, since GCC does.  Previously this
-// was causing a crash in the CFG builder.
 int test_pr8880() {
   int first = 1;
   for ( ; ({ if (first) { first = 0; continue; } 0; }); )
@@ -100,3 +106,16 @@ int test_pr8880() {
   return 1;
 }
 
+// In PR22849, we considered __ptr to be a static data member of the anonymous
+// union. Now we declare it in the parent DeclContext.
+void test_pr22849() {
+  struct Bug {
+    typeof(({ unsigned long __ptr; (int *)(0); })) __val;
+    union Nested {
+      typeof(({ unsigned long __ptr; (int *)(0); })) __val;
+    } n;
+  };
+  enum E {
+    SIZE = sizeof(({unsigned long __ptr; __ptr;}))
+  };
+}

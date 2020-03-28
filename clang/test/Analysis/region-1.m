@@ -1,4 +1,5 @@
-// RUN: %clang_cc1 -analyze -analyzer-checker=core,experimental.core -analyzer-store=region -verify %s
+// RUN: %clang_analyze_cc1 -analyzer-checker=core,alpha.core -analyzer-store=region -verify %s
+// expected-no-diagnostics
 //
 // This test case simply should not crash.  It evaluates the logic of not
 // using MemRegion::getRValueType in incorrect places.
@@ -24,7 +25,7 @@ typedef unsigned int NSUInteger;
 CK_UNRESTRICTED= 0,     CK_READ_ONLY,     CK_ADD_ONLY,     CK_REMOVE_ONLY };
 @protocol EcoClass <EcoBehavioredClassifier>      - (NSArray *) ownedAttributes;
 @end @protocol EcoNamespace;
-@protocol EcoType;
+@protocol EcoType @end;
 @protocol EcoClassifier <EcoNamespace,EcoType>    - (NSArray *) features; 
 @end @protocol EcoComment;
 @protocol EcoElement <NSObject> - (NSArray *) ownedElements;

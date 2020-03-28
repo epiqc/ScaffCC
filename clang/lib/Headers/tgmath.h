@@ -22,11 +22,20 @@
  *
 \*===----------------------------------------------------------------------===*/
 
-#ifndef __TGMATH_H
-#define __TGMATH_H
+#ifndef __CLANG_TGMATH_H
+#define __CLANG_TGMATH_H
 
 /* C99 7.22 Type-generic math <tgmath.h>. */
 #include <math.h>
+
+/*
+ * Allow additional definitions and implementation-defined values on Apple
+ * platforms. This is done after #include <math.h> to avoid depcycle conflicts
+ * between libcxx and darwin in C++ modules builds.
+ */
+#if defined(__APPLE__) && __STDC_HOSTED__ && __has_include_next(<tgmath.h>)
+#  include_next <tgmath.h>
+#else
 
 /* C++ handles type genericity with overloading in math.h. */
 #ifndef __cplusplus
@@ -490,7 +499,7 @@ static double _Complex
 
 static long double _Complex
     _TG_ATTRS
-    __tg_pow(long double _Complex __x, long double _Complex __y) 
+    __tg_pow(long double _Complex __x, long double _Complex __y)
     {return cpowl(__x, __y);}
 
 #undef pow
@@ -1340,15 +1349,15 @@ static long double _Complex
 
 // creal
 
-static float _Complex
+static float
     _TG_ATTRS
     __tg_creal(float __x) {return __x;}
 
-static double _Complex
+static double
     _TG_ATTRS
     __tg_creal(double __x) {return __x;}
 
-static long double _Complex
+static long double
     _TG_ATTRS
     __tg_creal(long double __x) {return __x;}
 
@@ -1371,4 +1380,5 @@ static long double
 #undef _TG_ATTRS
 
 #endif /* __cplusplus */
-#endif /* __TGMATH_H */
+#endif /* __has_include_next */
+#endif /* __CLANG_TGMATH_H */

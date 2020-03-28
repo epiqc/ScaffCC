@@ -1,12 +1,12 @@
-; RUN: not llc -march x86 -regalloc=fast       < %s 2> %t1
-; RUN: not llc -march x86 -regalloc=basic      < %s 2> %t2
-; RUN: not llc -march x86 -regalloc=greedy     < %s 2> %t3
+; RUN: not llc -mtriple=i686-- -regalloc=fast -optimize-regalloc=0 < %s 2> %t1
+; RUN: not llc -mtriple=i686-- -regalloc=basic      < %s 2> %t2
+; RUN: not llc -mtriple=i686-- -regalloc=greedy     < %s 2> %t3
 ; RUN: FileCheck %s < %t1
 ; RUN: FileCheck %s < %t2
 ; RUN: FileCheck %s < %t3
 
 ; The register allocator must fail on this function.
-; CHECK: error: ran out of registers during register allocation
+; CHECK: error: inline assembly requires more registers than available
 
 define void @f(i32 %x0, i32 %x1, i32 %x2, i32 %x3, i32 %x4, i32 %x5, i32 %x6, i32 %x7, i32 %x8, i32 %x9) nounwind ssp {
 entry:

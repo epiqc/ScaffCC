@@ -1,7 +1,7 @@
 #include <math.h>
 #define pi 3.141592653589793238462643383279502884197
 
-module PhasePi8 ( qbit bit ) {
+scaff_module PhasePi8 ( qbit bit ) {
     /* PhasePi8 matrix:
        [ [ 1 0    ]
          [ 0 e^i*pi/8 ] ]
@@ -14,7 +14,7 @@ module PhasePi8 ( qbit bit ) {
 	 Rz(bit, pi/8);
 }
 
-module cT ( qbit ctrl, qbit target ) {
+scaff_module cT ( qbit ctrl, qbit target ) {
     /* cT identity matrix:
        [ [ 1 0 0     0    ]
          [ 0 1 0     0    ]
@@ -30,7 +30,7 @@ module cT ( qbit ctrl, qbit target ) {
 
 }
 
-module cS ( qbit ctrl, qbit target ) {
+scaff_module cS ( qbit ctrl, qbit target ) {
     /* cS identity matrix:
        [ [ 1 0 0 0 ]
          [ 0 1 0 0 ]
@@ -46,7 +46,7 @@ module cS ( qbit ctrl, qbit target ) {
 
 }
 
-module cRz ( qbit ctrl, qbit target, const double angle ) {
+scaff_module cRz ( qbit ctrl, qbit target, const double angle ) {
     /* cRz identity matrix:
        [ [ 1 0 0     			0     ]
          [ 0 1 0     			0     ]
@@ -63,7 +63,7 @@ module cRz ( qbit ctrl, qbit target, const double angle ) {
 }
 
 
-module qft5 ( qbit bit[5] ) {
+scaff_module qft5 ( qbit bit[5] ) {
     H   ( bit[0] );
     cS  ( bit[0], bit[1] );
     H   ( bit[1] );

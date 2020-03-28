@@ -1,0 +1,15 @@
+Performing C++ SOURCE FILE Test CXX_SUPPORTS_CLASS_MEMACCESS_FLAG failed with the following output:
+Change Dir: /Users/devinasingh/Desktop/ScaffCC_NISQ/clang/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/bin/make cmTC_a3331/fast && /Library/Developer/CommandLineTools/usr/bin/make -f CMakeFiles/cmTC_a3331.dir/build.make CMakeFiles/cmTC_a3331.dir/build
+Building CXX object CMakeFiles/cmTC_a3331.dir/src.cxx.o
+/Library/Developer/CommandLineTools/usr/bin/c++    -fvisibility-inlines-hidden -Werror=date-time -Werror=unguarded-availability-new -std=c++11 -Wall -Wextra -Wno-unused-parameter -Wwrite-strings -Wcast-qual -Wmissing-field-initializers -Wimplicit-fallthrough -Wcovered-switch-default -DCXX_SUPPORTS_CLASS_MEMACCESS_FLAG   -Wclass-memaccess -o CMakeFiles/cmTC_a3331.dir/src.cxx.o -c /Users/devinasingh/Desktop/ScaffCC_NISQ/clang/CMakeFiles/CMakeTmp/src.cxx
+warning: unknown warning option '-Wclass-memaccess'; did you mean '-Wclass-varargs'? [-Wunknown-warning-option]
+1 warning generated.
+Linking CXX executable cmTC_a3331
+/usr/local/Cellar/cmake/3.15.0/bin/cmake -E cmake_link_script CMakeFiles/cmTC_a3331.dir/link.txt --verbose=1
+/Library/Developer/CommandLineTools/usr/bin/c++   -fvisibility-inlines-hidden -Werror=date-time -Werror=unguarded-availability-new -std=c++11 -Wall -Wextra -Wno-unused-parameter -Wwrite-strings -Wcast-qual -Wmissing-field-initializers -Wimplicit-fallthrough -Wcovered-switch-default -DCXX_SUPPORTS_CLASS_MEMACCESS_FLAG -Wl,-search_paths_first -Wl,-headerpad_max_install_names   CMakeFiles/cmTC_a3331.dir/src.cxx.o  -o cmTC_a3331 
+
+
+Source file was:
+int main() { return 0; }

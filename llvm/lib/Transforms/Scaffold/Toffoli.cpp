@@ -8,16 +8,16 @@
 
 #include "llvm/ADT/ArrayRef.h"
 
-#include "llvm/Constants.h"
-#include "llvm/Function.h"
-#include "llvm/Instructions.h"
-#include "llvm/Intrinsics.h"
-#include "llvm/LLVMContext.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/LLVMContext.h"
 #include "llvm/Pass.h"
 
-#include "llvm/Support/CallSite.h"
+#include "llvm/IR/CallSite.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/InstVisitor.h"
+#include "llvm/IR/InstVisitor.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
@@ -45,7 +45,7 @@ namespace {
 		            std::vector<Type*> ArgTypes(3);
 				    for (int i=0; i<3; i++){
 					    ArgTypes[i] = I.getArgOperand(i)->getType();//Type::getInt16Ty(getGlobalContext());
-                        if(ArgTypes[i] == Type::getInt16Ty(getGlobalContext()))
+                        if(ArgTypes[i] == Type::getInt16Ty(M->getContext()))
                             implName.append("_Q");
                         else
                             implName.append("_A");
@@ -54,7 +54,7 @@ namespace {
                     Function *ToffoliImpl = M->getFunction(implName);
                     if(!ToffoliImpl){
 						FunctionType *FuncType = FunctionType::get(
-								Type::getVoidTy(getGlobalContext()),
+								Type::getVoidTy(M->getContext()),
 								ArrayRef<Type*>(ArgTypes),
 								false);
 						ToffoliImpl = Function::Create(FuncType,
@@ -82,7 +82,7 @@ namespace {
 						//Function* gate_CNOT = Intrinsic::getDeclaration(M, Intrinsic::CNOT);
 
 						// Create BasicBlock
-						BasicBlock *BB = BasicBlock::Create(getGlobalContext(), "", ToffoliImpl, 0);
+						BasicBlock *BB = BasicBlock::Create(M->getContext(), "", ToffoliImpl, 0);
             
             /*
             // -- The standard implementation of Toffoli gates (Mike and Ike)
@@ -197,7 +197,7 @@ namespace {
 						                 ArrayRef<Value*>(Target), "", BB)->setTailCall();
                         //end TODO
 
-						ReturnInst::Create(getGlobalContext(), 0, BB);
+						ReturnInst::Create(M->getContext(), 0, BB);
 					}//end !ToffoliImpl
 					std::vector<Value*>  Args(3);
 					for (int i=0; i<3; i++)

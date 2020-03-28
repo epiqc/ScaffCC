@@ -1,4 +1,4 @@
-; RUN: llc < %s -mtriple=i686-apple-darwin8 -mcpu=yonah -march=x86 | FileCheck %s
+; RUN: llc < %s -mtriple=i686-apple-darwin8 -mcpu=yonah | FileCheck %s
 
 ; These testcases shouldn't require loading into an XMM register then storing 
 ; to memory, then reloading into an FPStack reg.
@@ -7,7 +7,7 @@
 ; CHECK: fldl
 ; CHECK-NEXT: ret
 define double @test1(double *%P) {
-        %A = load double* %P
+        %A = load double, double* %P
         ret double %A
 }
 
@@ -22,7 +22,7 @@ define fastcc double @test2(<2 x double> %A) {
 
 ; CHECK: test3
 ; CHECK: sub{{.*}}%esp
-; CHECLK-NOT: xmm
+; CHECK-NOT: xmm
 define fastcc double @test3(<4 x float> %A) {
 	%B = bitcast <4 x float> %A to <2 x double>
 	%C = call fastcc double @test2(<2 x double> %B)

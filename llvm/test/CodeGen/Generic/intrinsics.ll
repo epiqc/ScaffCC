@@ -1,4 +1,5 @@
 ; RUN: llc < %s
+; RUN: llc -O0 < %s
 
 ;; SQRT
 declare float @llvm.sqrt.f32(float)
@@ -38,3 +39,26 @@ define double @test_cos(float %F) {
         ret double %I
 }
 
+declare i8* @llvm.launder.invariant.group(i8*)
+
+define i8* @launder(i8* %p) {
+        %q = call i8* @llvm.launder.invariant.group(i8* %p)
+        ret i8* %q
+}
+
+declare i8* @llvm.strip.invariant.group(i8*)
+
+define i8* @strip(i8* %p) {
+        %q = call i8* @llvm.strip.invariant.group(i8* %p)
+        ret i8* %q
+}
+
+
+; sideeffect
+
+declare void @llvm.sideeffect()
+
+define void @test_sideeffect() {
+    call void @llvm.sideeffect()
+    ret void
+}

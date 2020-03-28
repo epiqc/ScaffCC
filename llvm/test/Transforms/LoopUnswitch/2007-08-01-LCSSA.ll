@@ -1,4 +1,5 @@
 ; RUN: opt < %s -loop-unswitch -instcombine -disable-output
+; RUN: opt < %s -loop-unswitch -enable-mssa-loop-dependency=true -verify-memoryssa -instcombine -disable-output
 	%struct.ClassDef = type { %struct.QByteArray, %struct.QByteArray, %"struct.QList<ArgumentDef>", %"struct.QList<ArgumentDef>", i8, i8, %"struct.QList<ArgumentDef>", %"struct.QList<ArgumentDef>", %"struct.QList<ArgumentDef>", %"struct.QList<ArgumentDef>", %"struct.QList<ArgumentDef>", %"struct.QList<ArgumentDef>", %"struct.QMap<QByteArray,QByteArray>", %"struct.QList<ArgumentDef>", %"struct.QMap<QByteArray,QByteArray>", i32, i32 }
 	%struct.FILE = type { i32, i8*, i8*, i8*, i8*, i8*, i8*, i8*, i8*, i8*, i8*, i8*, %struct._IO_marker*, %struct.FILE*, i32, i32, i32, i16, i8, [1 x i8], i8*, i64, i8*, i8*, i8*, i8*, i32, i32, [40 x i8] }
 	%struct.Generator = type { %struct.FILE*, %struct.ClassDef*, %"struct.QList<ArgumentDef>", %struct.QByteArray, %"struct.QList<ArgumentDef>" }
@@ -19,7 +20,7 @@ declare i32 @strcmp(i8*, i8*)
 
 define i32 @_ZN9Generator6strregEPKc(%struct.Generator* %this, i8* %s) {
 entry:
-	%s_addr.0 = select i1 false, i8* getelementptr ([1 x i8]* @.str9, i32 0, i32 0), i8* %s		; <i8*> [#uses=2]
+	%s_addr.0 = select i1 false, i8* getelementptr ([1 x i8], [1 x i8]* @.str9, i32 0, i32 0), i8* %s		; <i8*> [#uses=2]
 	%tmp122 = icmp eq i8* %s_addr.0, null		; <i1> [#uses=1]
 	br label %bb184
 

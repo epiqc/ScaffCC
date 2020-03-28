@@ -1,4 +1,4 @@
-; RUN: llc < %s -march=x86
+; RUN: llc < %s
 ; PR3453
 
 target datalayout = "e-p:32:32:32-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:32:64-f32:32:32-f64:32:64-v64:64:64-v128:128:128-a0:0:64-f80:32:32"
@@ -19,7 +19,7 @@ entry:
 
 bb.i49.i72:		; preds = %bb.i49.i72, %entry
 	%UNP.i1482.0 = phi i288 [ %.ins659, %bb.i49.i72 ], [ undef, %entry ]		; <i288> [#uses=1]
-	%0 = load i32* null, align 4		; <i32> [#uses=1]
+	%0 = load i32, i32* null, align 4		; <i32> [#uses=1]
 	%1 = xor i32 %0, 17834		; <i32> [#uses=1]
 	%2 = zext i32 %1 to i288		; <i288> [#uses=1]
 	%3 = shl i288 %2, 160		; <i288> [#uses=1]

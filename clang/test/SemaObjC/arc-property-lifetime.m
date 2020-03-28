@@ -3,9 +3,9 @@
 
 @interface Foo {
 @public
-    id __unsafe_unretained x;
-    id __weak y;
-    id __autoreleasing z; // expected-error {{ivars cannot have __autoreleasing ownership}}
+    id __unsafe_unretained x; // expected-error {{existing instance variable 'x' for strong property 'x' may not be __unsafe_unretained}}
+    id __weak y; // expected-error {{existing instance variable 'y' for strong property 'y' may not be __weak}}
+    id __autoreleasing z; // expected-error {{instance variables cannot have __autoreleasing ownership}}
 }
 @property(strong) id x; // expected-note {{property declared here}}
 @property(strong) id y; // expected-note {{property declared here}}
@@ -13,16 +13,16 @@
 @end
 
 @implementation Foo
-@synthesize x; // expected-error {{existing ivar 'x' for strong property 'x' may not be __unsafe_unretained}}
-@synthesize y; // expected-error {{existing ivar 'y' for strong property 'y' may not be __weak}}
+@synthesize x; // expected-note {{property synthesized here}}
+@synthesize y; // expected-note {{property synthesized here}}
 @synthesize z; // suppressed
 @end
 
 @interface Bar {
 @public
-    id __unsafe_unretained x;
-    id __weak y;
-    id __autoreleasing z; // expected-error {{ivars cannot have __autoreleasing ownership}}
+    id __unsafe_unretained x; // expected-error {{existing instance variable 'x' for strong property 'x' may not be __unsafe_unretained}}
+    id __weak y; // expected-error {{existing instance variable 'y' for strong property 'y' may not be __weak}}
+    id __autoreleasing z; // expected-error {{instance variables cannot have __autoreleasing ownership}}
 }
 @property(retain) id x; // expected-note {{property declared here}}
 @property(retain) id y; // expected-note {{property declared here}}
@@ -30,16 +30,16 @@
 @end
 
 @implementation Bar
-@synthesize x; // expected-error {{existing ivar 'x' for strong property 'x' may not be __unsafe_unretained}}
-@synthesize y; // expected-error {{existing ivar 'y' for strong property 'y' may not be __weak}}
+@synthesize x; // expected-note {{property synthesized here}}
+@synthesize y; // expected-note {{property synthesized here}}
 @synthesize z; // suppressed
 @end
 
 @interface Bas {
 @public
-    id __unsafe_unretained x;
-    id __weak y;
-    id __autoreleasing z; // expected-error {{ivars cannot have __autoreleasing ownership}}
+    id __unsafe_unretained x; // expected-error {{existing instance variable 'x' for strong property 'x' may not be __unsafe_unretained}}
+    id __weak y; // expected-error {{existing instance variable 'y' for strong property 'y' may not be __weak}}
+    id __autoreleasing z; // expected-error {{instance variables cannot have __autoreleasing ownership}}
 }
 @property(copy) id x; // expected-note {{property declared here}}
 @property(copy) id y; // expected-note {{property declared here}} 
@@ -47,8 +47,8 @@
 @end
 
 @implementation Bas
-@synthesize x; // expected-error {{existing ivar 'x' for strong property 'x' may not be __unsafe_unretained}}
-@synthesize y; // expected-error {{existing ivar 'y' for strong property 'y' may not be __weak}}
+@synthesize x; // expected-note {{property synthesized here}}
+@synthesize y; // expected-note {{property synthesized here}}
 @synthesize z; // suppressed
 @end
 
@@ -70,7 +70,7 @@
 // rdar://9341593
 @interface Gorf  {
    id __unsafe_unretained x;
-   id y;
+   id y; // expected-error {{existing instance variable 'y' for property 'y' with assign attribute must be __unsafe_unretained}}
 }
 @property(assign) id __unsafe_unretained x;
 @property(assign) id y; // expected-note {{property declared here}}
@@ -79,13 +79,13 @@
 
 @implementation Gorf
 @synthesize x;
-@synthesize y; // expected-error {{existing ivar 'y' for property 'y' with  assign attribute must be __unsafe_unretained}}
+@synthesize y; // expected-note {{property synthesized here}}
 @synthesize z;
 @end
 
 @interface Gorf2  {
    id __unsafe_unretained x;
-   id y;
+   id y; // expected-error {{existing instance variable 'y' for property 'y' with unsafe_unretained attribute must be __unsafe_unretained}}
 }
 @property(unsafe_unretained) id __unsafe_unretained x;
 @property(unsafe_unretained) id y; // expected-note {{property declared here}}
@@ -94,7 +94,7 @@
 
 @implementation Gorf2
 @synthesize x;
-@synthesize y; // expected-error {{existing ivar 'y' for property 'y' with unsafe_unretained attribute must be __unsafe_unretained}}
+@synthesize y; // expected-note {{property synthesized here}}
 @synthesize z;
 @end
 
@@ -154,7 +154,7 @@
 @property  id prop;
 @property  __strong id strong_prop;
 @property  (strong) id strong_attr_prop;
-@property  (strong) __strong id realy_strong_attr_prop;
+@property  (strong) __strong id really_strong_attr_prop;
 + (id) alloc;
 - (id) init;
 - (id) implicit;
@@ -165,6 +165,48 @@ void foo(Baz *f) {
         f.prop = [[Baz alloc] init];
         f.strong_prop = [[Baz alloc] init];
         f.strong_attr_prop = [[Baz alloc] init];
-        f.realy_strong_attr_prop = [[Baz alloc] init];
+        f.really_strong_attr_prop = [[Baz alloc] init];
         f.implicit = [[Baz alloc] init];
 }
+
+// rdar://11253688
+@interface Boom 
+{
+  const void * innerPointerIvar __attribute__((objc_returns_inner_pointer)); // expected-error {{'objc_returns_inner_pointer' attribute only applies to Objective-C methods and Objective-C properties}}
+}
+@property (readonly) Boom * NotInnerPointer __attribute__((objc_returns_inner_pointer)); // expected-warning {{'objc_returns_inner_pointer' attribute only applies to properties that return a non-retainable pointer}}
+- (Boom *) NotInnerPointerMethod __attribute__((objc_returns_inner_pointer)); // expected-warning {{'objc_returns_inner_pointer' attribute only applies to methods that return a non-retainable pointer}}
+@property (readonly) const void * innerPointer __attribute__((objc_returns_inner_pointer));
+@end
+
+@interface Foo2 {
+  id _prop; // expected-error {{existing instance variable '_prop' for property 'prop' with assign attribute must be __unsafe_unretained}}
+}
+@property (nonatomic, assign) id prop; // expected-note {{property declared here}}
+@end
+
+@implementation Foo2
+@end
+
+// rdar://13885083
+@interface NSObject 
+-(id)init;
+@end
+
+typedef char BOOL;
+@interface Test13885083 : NSObject
+
+@property (nonatomic, assign) BOOL retain; // expected-error {{ARC forbids synthesis of 'retain'}}
+
+-(id)init;
+
+@end
+
+@implementation Test13885083
+-(id) init
+{
+  self = [super init];
+  return self;
+}
+@end
+

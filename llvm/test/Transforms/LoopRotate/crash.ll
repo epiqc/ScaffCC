@@ -1,4 +1,5 @@
-; RUN: opt -loop-rotate %s -disable-output -verify-dom-info -verify-loop-info
+; RUN: opt -loop-rotate -disable-output -verify-dom-info -verify-loop-info < %s
+; RUN: opt -loop-rotate -disable-output -verify-dom-info -verify-loop-info -enable-mssa-loop-dependency=true -verify-memoryssa < %s
 
 target datalayout = "e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64"
 target triple = "x86_64-apple-darwin10.0.0"
@@ -125,7 +126,7 @@ entry:
 	br label %bb15
 bb6:		; preds = %bb15
 	%gep.upgrd.1 = zext i32 %offset.1 to i64		; <i64> [#uses=1]
-	%tmp11 = getelementptr i8* %msg, i64 %gep.upgrd.1		; <i8*> [#uses=0]
+	%tmp11 = getelementptr i8, i8* %msg, i64 %gep.upgrd.1		; <i8*> [#uses=0]
 	br label %bb15
 bb15:		; preds = %bb6, %entry
 	%offset.1 = add i32 0, 1		; <i32> [#uses=2]
@@ -151,5 +152,23 @@ entry:
   br label %"3"
 
 "5":                                              ; preds = %"3", %entry
+  ret void
+}
+
+; PR21968
+define void @test8(i1 %C, i8* %P) #0 {
+entry:
+  br label %for.cond
+
+for.cond:                                         ; preds = %for.inc, %entry
+  br i1 %C, label %l_bad, label %for.body
+
+for.body:                                         ; preds = %for.cond
+  indirectbr i8* %P, [label %for.inc, label %l_bad]
+
+for.inc:                                          ; preds = %for.body
+  br label %for.cond
+
+l_bad:                                            ; preds = %for.body, %for.cond
   ret void
 }

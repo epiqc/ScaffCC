@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_CLANG_REACHABLECODE_H
-#define LLVM_CLANG_REACHABLECODE_H
+#ifndef LLVM_CLANG_ANALYSIS_ANALYSES_REACHABLECODE_H
+#define LLVM_CLANG_ANALYSIS_ANALYSES_REACHABLECODE_H
 
 #include "clang/Basic/SourceLocation.h"
 
@@ -27,6 +27,7 @@ namespace llvm {
 namespace clang {
   class AnalysisDeclContext;
   class CFGBlock;
+  class Preprocessor;
 }
 
 //===----------------------------------------------------------------------===//
@@ -36,20 +37,32 @@ namespace clang {
 namespace clang {
 namespace reachable_code {
 
+/// Classifications of unreachable code.
+enum UnreachableKind {
+  UK_Return,
+  UK_Break,
+  UK_Loop_Increment,
+  UK_Other
+};
+
 class Callback {
   virtual void anchor();
 public:
   virtual ~Callback() {}
-  virtual void HandleUnreachable(SourceLocation L, SourceRange R1,
+  virtual void HandleUnreachable(UnreachableKind UK,
+                                 SourceLocation L,
+                                 SourceRange ConditionVal,
+                                 SourceRange R1,
                                  SourceRange R2) = 0;
 };
 
 /// ScanReachableFromBlock - Mark all blocks reachable from Start.
-/// Returns the total number of blocks that were marked reachable.  
+/// Returns the total number of blocks that were marked reachable.
 unsigned ScanReachableFromBlock(const CFGBlock *Start,
                                 llvm::BitVector &Reachable);
 
-void FindUnreachableCode(AnalysisDeclContext &AC, Callback &CB);
+void FindUnreachableCode(AnalysisDeclContext &AC, Preprocessor &PP,
+                         Callback &CB);
 
 }} // end namespace clang::reachable_code
 

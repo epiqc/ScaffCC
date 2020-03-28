@@ -12,58 +12,64 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/Config/config.h"
-#include "llvm/ExecutionEngine/JITEventListener.h"
-
-#define DEBUG_TYPE "amplifier-jit-event-listener"
-#include "llvm/Function.h"
-#include "llvm/Metadata.h"
+#include "IntelJITEventsWrapper.h"
+#include "llvm-c/ExecutionEngine.h"
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/OwningPtr.h"
-#include "llvm/Analysis/DebugInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
-#include "llvm/ExecutionEngine/IntelJITEventsWrapper.h"
+#include "llvm/Config/config.h"
+#include "llvm/DebugInfo/DIContext.h"
+#include "llvm/DebugInfo/DWARF/DWARFContext.h"
+#include "llvm/ExecutionEngine/JITEventListener.h"
+#include "llvm/IR/DebugInfo.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/Metadata.h"
+#include "llvm/IR/ValueHandle.h"
+#include "llvm/Object/ObjectFile.h"
+#include "llvm/Object/SymbolSize.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/Errno.h"
-#include "llvm/Support/ValueHandle.h"
-#include "EventListenerCommon.h"
+#include "llvm/Support/raw_ostream.h"
 
 using namespace llvm;
-using namespace llvm::jitprofiling;
+using namespace llvm::object;
+
+#define DEBUG_TYPE "amplifier-jit-event-listener"
 
 namespace {
 
 class IntelJITEventListener : public JITEventListener {
   typedef DenseMap<void*, unsigned int> MethodIDMap;
 
-  IntelJITEventsWrapper& Wrapper;
+  std::unique_ptr<IntelJITEventsWrapper> Wrapper;
   MethodIDMap MethodIDs;
-  FilenameCache Filenames;
+
+  typedef SmallVector<const void *, 64> MethodAddressVector;
+  typedef DenseMap<const void *, MethodAddressVector>  ObjectMap;
+
+  ObjectMap  LoadedObjectMap;
+  std::map<ObjectKey, OwningBinary<ObjectFile>> DebugObjects;
 
 public:
-  IntelJITEventListener(IntelJITEventsWrapper& libraryWrapper)
-  : Wrapper(libraryWrapper) {
+  IntelJITEventListener(IntelJITEventsWrapper* libraryWrapper) {
+      Wrapper.reset(libraryWrapper);
   }
 
   ~IntelJITEventListener() {
   }
 
-  virtual void NotifyFunctionEmitted(const Function &F,
-                                     void *FnStart, size_t FnSize,
-                                     const EmittedFunctionDetails &Details);
+  void notifyObjectLoaded(ObjectKey Key, const ObjectFile &Obj,
+                          const RuntimeDyld::LoadedObjectInfo &L) override;
 
-  virtual void NotifyFreeingMachineCode(void *OldPtr);
+  void notifyFreeingObject(ObjectKey Key) override;
 };
 
-static LineNumberInfo LineStartToIntelJITFormat(
-    uintptr_t StartAddress,
-    uintptr_t Address,
-    DebugLoc Loc) {
+static LineNumberInfo DILineInfoToIntelJITFormat(uintptr_t StartAddress,
+                                                 uintptr_t Address,
+                                                 DILineInfo Line) {
   LineNumberInfo Result;
 
   Result.Offset = Address - StartAddress;
-  Result.LineNumber = Loc.getLine();
+  Result.LineNumber = Line.Line;
 
   return Result;
 }
@@ -90,94 +96,152 @@ static iJIT_Method_Load FunctionDescToIntelJITFormat(
   return Result;
 }
 
-// Adds the just-emitted function to the symbol table.
-void IntelJITEventListener::NotifyFunctionEmitted(
-    const Function &F, void *FnStart, size_t FnSize,
-    const EmittedFunctionDetails &Details) {
-  iJIT_Method_Load FunctionMessage = FunctionDescToIntelJITFormat(Wrapper,
-                                      F.getName().data(),
-                                      reinterpret_cast<uint64_t>(FnStart),
-                                      FnSize);
+void IntelJITEventListener::notifyObjectLoaded(
+    ObjectKey Key, const ObjectFile &Obj,
+    const RuntimeDyld::LoadedObjectInfo &L) {
 
-  std::vector<LineNumberInfo> LineInfo;
+  OwningBinary<ObjectFile> DebugObjOwner = L.getObjectForDebug(Obj);
+  const ObjectFile *DebugObj = DebugObjOwner.getBinary();
+  if (!DebugObj)
+    return;
 
-  if (!Details.LineStarts.empty()) {
-    // Now convert the line number information from the address/DebugLoc
-    // format in Details to the offset/lineno in Intel JIT API format.
+  // Get the address of the object image for use as a unique identifier
+  const void* ObjData = DebugObj->getData().data();
+  std::unique_ptr<DIContext> Context = DWARFContext::create(*DebugObj);
+  MethodAddressVector Functions;
 
-    LineInfo.reserve(Details.LineStarts.size() + 1);
+  // Use symbol info to iterate functions in the object.
+  for (const std::pair<SymbolRef, uint64_t> &P : computeSymbolSizes(*DebugObj)) {
+    SymbolRef Sym = P.first;
+    std::vector<LineNumberInfo> LineInfo;
+    std::string SourceFileName;
 
-    DebugLoc FirstLoc = Details.LineStarts[0].Loc;
-    assert(!FirstLoc.isUnknown()
-           && "LineStarts should not contain unknown DebugLocs");
+    Expected<SymbolRef::Type> SymTypeOrErr = Sym.getType();
+    if (!SymTypeOrErr) {
+      // TODO: Actually report errors helpfully.
+      consumeError(SymTypeOrErr.takeError());
+      continue;
+    }
+    SymbolRef::Type SymType = *SymTypeOrErr;
+    if (SymType != SymbolRef::ST_Function)
+      continue;
 
-    MDNode *FirstLocScope = FirstLoc.getScope(F.getContext());
-    DISubprogram FunctionDI = getDISubprogram(FirstLocScope);
-    if (FunctionDI.Verify()) {
-      FunctionMessage.source_file_name = const_cast<char*>(
-                                          Filenames.getFullPath(FirstLocScope));
-
-      LineNumberInfo FirstLine;
-      FirstLine.Offset = 0;
-      FirstLine.LineNumber = FunctionDI.getLineNumber();
-      LineInfo.push_back(FirstLine);
+    Expected<StringRef> Name = Sym.getName();
+    if (!Name) {
+      // TODO: Actually report errors helpfully.
+      consumeError(Name.takeError());
+      continue;
     }
 
-    for (std::vector<EmittedFunctionDetails::LineStart>::const_iterator I =
-          Details.LineStarts.begin(), E = Details.LineStarts.end();
-          I != E; ++I) {
-      // This implementation ignores the DebugLoc filename because the Intel
-      // JIT API does not support multiple source files associated with a single
-      // JIT function
-      LineInfo.push_back(LineStartToIntelJITFormat(
-                          reinterpret_cast<uintptr_t>(FnStart),
-                          I->Address,
-                          I->Loc));
+    Expected<uint64_t> AddrOrErr = Sym.getAddress();
+    if (!AddrOrErr) {
+      // TODO: Actually report errors helpfully.
+      consumeError(AddrOrErr.takeError());
+      continue;
+    }
+    uint64_t Addr = *AddrOrErr;
+    uint64_t Size = P.second;
 
-      // If we have no file name yet for the function, use the filename from
-      // the first instruction that has one
-      if (FunctionMessage.source_file_name == 0) {
-        MDNode *scope = I->Loc.getScope(
-					Details.MF->getFunction()->getContext());
-        FunctionMessage.source_file_name = const_cast<char*>(
-                                                  Filenames.getFullPath(scope));
-      }
+    // Record this address in a local vector
+    Functions.push_back((void*)Addr);
+
+    // Build the function loaded notification message
+    iJIT_Method_Load FunctionMessage =
+      FunctionDescToIntelJITFormat(*Wrapper, Name->data(), Addr, Size);
+    DILineInfoTable Lines = Context->getLineInfoForAddressRange(Addr, Size);
+    DILineInfoTable::iterator Begin = Lines.begin();
+    DILineInfoTable::iterator End = Lines.end();
+    for (DILineInfoTable::iterator It = Begin; It != End; ++It) {
+      LineInfo.push_back(
+          DILineInfoToIntelJITFormat((uintptr_t)Addr, It->first, It->second));
+    }
+    if (LineInfo.size() == 0) {
+      FunctionMessage.source_file_name = 0;
+      FunctionMessage.line_number_size = 0;
+      FunctionMessage.line_number_table = 0;
+    } else {
+      // Source line information for the address range is provided as
+      // a code offset for the start of the corresponding sub-range and
+      // a source line. JIT API treats offsets in LineNumberInfo structures
+      // as the end of the corresponding code region. The start of the code
+      // is taken from the previous element. Need to shift the elements.
+
+      LineNumberInfo last = LineInfo.back();
+      last.Offset = FunctionMessage.method_size;
+      LineInfo.push_back(last);
+      for (size_t i = LineInfo.size() - 2; i > 0; --i)
+        LineInfo[i].LineNumber = LineInfo[i - 1].LineNumber;
+
+      SourceFileName = Lines.front().second.FileName;
+      FunctionMessage.source_file_name =
+        const_cast<char *>(SourceFileName.c_str());
+      FunctionMessage.line_number_size = LineInfo.size();
+      FunctionMessage.line_number_table = &*LineInfo.begin();
     }
 
-    FunctionMessage.line_number_size = LineInfo.size();
-    FunctionMessage.line_number_table = &*LineInfo.begin();
-  } else {
-    FunctionMessage.line_number_size = 0;
-    FunctionMessage.line_number_table = 0;
+    Wrapper->iJIT_NotifyEvent(iJVM_EVENT_TYPE_METHOD_LOAD_FINISHED,
+                              &FunctionMessage);
+    MethodIDs[(void*)Addr] = FunctionMessage.method_id;
   }
 
-  Wrapper.iJIT_NotifyEvent(iJVM_EVENT_TYPE_METHOD_LOAD_FINISHED,
-													 &FunctionMessage);
-  MethodIDs[FnStart] = FunctionMessage.method_id;
+  // To support object unload notification, we need to keep a list of
+  // registered function addresses for each loaded object.  We will
+  // use the MethodIDs map to get the registered ID for each function.
+  LoadedObjectMap[ObjData] = Functions;
+  DebugObjects[Key] = std::move(DebugObjOwner);
 }
 
-void IntelJITEventListener::NotifyFreeingMachineCode(void *FnStart) {
-  MethodIDMap::iterator I = MethodIDs.find(FnStart);
-  if (I != MethodIDs.end()) {
-    Wrapper.iJIT_NotifyEvent(iJVM_EVENT_TYPE_METHOD_UNLOAD_START, &I->second);
-    MethodIDs.erase(I);
+void IntelJITEventListener::notifyFreeingObject(ObjectKey Key) {
+  // This object may not have been registered with the listener. If it wasn't,
+  // bail out.
+  if (DebugObjects.find(Key) == DebugObjects.end())
+    return;
+
+  // Get the address of the object image for use as a unique identifier
+  const ObjectFile &DebugObj = *DebugObjects[Key].getBinary();
+  const void* ObjData = DebugObj.getData().data();
+
+  // Get the object's function list from LoadedObjectMap
+  ObjectMap::iterator OI = LoadedObjectMap.find(ObjData);
+  if (OI == LoadedObjectMap.end())
+    return;
+  MethodAddressVector& Functions = OI->second;
+
+  // Walk the function list, unregistering each function
+  for (MethodAddressVector::iterator FI = Functions.begin(),
+                                     FE = Functions.end();
+       FI != FE;
+       ++FI) {
+    void* FnStart = const_cast<void*>(*FI);
+    MethodIDMap::iterator MI = MethodIDs.find(FnStart);
+    if (MI != MethodIDs.end()) {
+      Wrapper->iJIT_NotifyEvent(iJVM_EVENT_TYPE_METHOD_UNLOAD_START,
+                                &MI->second);
+      MethodIDs.erase(MI);
+    }
   }
+
+  // Erase the object from LoadedObjectMap
+  LoadedObjectMap.erase(OI);
+  DebugObjects.erase(Key);
 }
 
 }  // anonymous namespace.
 
 namespace llvm {
 JITEventListener *JITEventListener::createIntelJITEventListener() {
-  static OwningPtr<IntelJITEventsWrapper> JITProfilingWrapper(
-                                            new IntelJITEventsWrapper);
-  return new IntelJITEventListener(*JITProfilingWrapper);
+  return new IntelJITEventListener(new IntelJITEventsWrapper);
 }
 
 // for testing
 JITEventListener *JITEventListener::createIntelJITEventListener(
                                       IntelJITEventsWrapper* TestImpl) {
-  return new IntelJITEventListener(*TestImpl);
+  return new IntelJITEventListener(TestImpl);
 }
 
 } // namespace llvm
 
+LLVMJITEventListenerRef LLVMCreateIntelJITEventListener(void)
+{
+  return wrap(JITEventListener::createIntelJITEventListener());
+}

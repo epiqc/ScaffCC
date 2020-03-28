@@ -8,22 +8,22 @@
 
 #include <sstream>
 #include <iomanip>
-#include "llvm/Argument.h"
+#include "llvm/IR/Argument.h"
 #include "llvm/Pass.h"
-#include "llvm/Module.h"
-#include "llvm/Function.h"
-#include "llvm/BasicBlock.h"
-#include "llvm/Instruction.h"
-#include "llvm/Instructions.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Instruction.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/Analysis/CallGraph.h"
-#include "llvm/Support/InstIterator.h"
-#include "llvm/Support/CFG.h"
+#include "llvm/IR/InstIterator.h"
+#include "llvm/IR/CFG.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/ADT/SCCIterator.h"
 #include "llvm/ADT/ilist.h"
-#include "llvm/Constants.h"
-#include "llvm/Analysis/DebugInfo.h"
-#include "llvm/IntrinsicInst.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/DebugInfo.h"
+#include "llvm/IR/IntrinsicInst.h"
 
 using namespace llvm;
 using namespace std;
@@ -210,7 +210,7 @@ namespace {
     // getAnalysisUsage - This pass requires the CallGraph.
     virtual void getAnalysisUsage(AnalysisUsage &AU) const {
       AU.setPreservesAll();
-      AU.addRequired<CallGraph>();
+      AU.addRequired<CallGraphWrapperPass>();
     }
   };
 }
@@ -237,11 +237,11 @@ void DynGenQASMLoops::insertCallToHeader(Function* F, Instruction* I,  AllocaIns
   std::stringstream ss;
   ss << std::left << std::setw (MAX_FUNCTION_NAME-1) << std::setfill('.') << fnName;
   Constant *StrConstant = ConstantDataArray::getString(I->getContext(), ss.str());                   
-  new StoreInst(StrConstant,strAlloc,"",FirstInst); 
+  new StoreInst(StrConstant,strAlloc,false,FirstInst); 
   Value* Idx[2];
   Idx[0] = Constant::getNullValue(Type::getInt32Ty(I->getContext()));
   Idx[1] = ConstantInt::get(Type::getInt32Ty(I->getContext()),0);
-  GetElementPtrInst* strPtr = GetElementPtrInst::Create(strAlloc, Idx, "", FirstInst);
+  GetElementPtrInst* strPtr = GetElementPtrInst::Create(strAlloc->getAllocatedType(), strAlloc, Idx, "", FirstInst);
 
   call_args.push_back(strPtr);
 
@@ -405,7 +405,7 @@ void DynGenQASMLoops::insertCallToAllocQbit(AllocaInst* AI, int varSize, AllocaI
   SmallVector<Value*,16> idxVect;
   idxVect.push_back(ConstantInt::get(Type::getInt32Ty(AI->getContext()),0));
   idxVect.push_back(ConstantInt::get(Type::getInt32Ty(AI->getContext()),0));
-  GetElementPtrInst *arrPtr = GetElementPtrInst::Create((Value*)AI, idxVect, "", FirstInst);
+  GetElementPtrInst *arrPtr = GetElementPtrInst::Create(AI->getAllocatedType(), (Value*)AI, idxVect, "", FirstInst);
   
   call_args.push_back(arrPtr);
 
@@ -422,12 +422,12 @@ void DynGenQASMLoops::insertCallToAllocQbit(AllocaInst* AI, int varSize, AllocaI
   std::stringstream ss;
   ss << std::left << std::setw (MAX_FUNCTION_NAME-1) << std::setfill('.') << AI->getName().str();
   Constant *StrConstant = ConstantDataArray::getString(AI->getContext(), ss.str());                  
-  new StoreInst(StrConstant,strAlloc,"",FirstInst); 
+  new StoreInst(StrConstant,strAlloc,false,FirstInst); 
   Value* Idx[2];
   Idx[0] = Constant::getNullValue(Type::getInt32Ty(AI->getContext()));
   Idx[1] = ConstantInt::get(Type::getInt32Ty(AI->getContext()),0);
   
-  GetElementPtrInst* strPtr = GetElementPtrInst::Create(strAlloc, Idx, "", FirstInst);
+  GetElementPtrInst* strPtr = GetElementPtrInst::Create(strAlloc->getAllocatedType(), strAlloc, Idx, "", FirstInst);
 
   call_args.push_back(strPtr);
 
@@ -454,12 +454,12 @@ void DynGenQASMLoops::insertCallToAllocCbit(AllocaInst* AI, int varSize,AllocaIn
   std::stringstream ss;
   ss << std::left << std::setw (MAX_FUNCTION_NAME-1) << std::setfill('.') << AI->getName().str();
   Constant *StrConstant = ConstantDataArray::getString(AI->getContext(), ss.str());                  
-  new StoreInst(StrConstant,strAlloc,"",FirstInst);  
+  new StoreInst(StrConstant,strAlloc,false,FirstInst);  
   Value* Idx[2];
   Idx[0] = Constant::getNullValue(Type::getInt32Ty(AI->getContext()));
   Idx[1] = ConstantInt::get(Type::getInt32Ty(AI->getContext()),0);
   
-  GetElementPtrInst* strPtr = GetElementPtrInst::Create(strAlloc, Idx, "", FirstInst);
+  GetElementPtrInst* strPtr = GetElementPtrInst::Create(strAlloc->getAllocatedType(), strAlloc, Idx, "", FirstInst);
 
   call_args.push_back(strPtr);
 
@@ -479,7 +479,7 @@ void DynGenQASMLoops::insertCallToAllocQbitExec(AllocaInst* AI, int varSize,Allo
     SmallVector<Value*,16> idxVect;
 	idxVect.push_back(ConstantInt::get(Type::getInt32Ty(AI->getContext()),0));
 	idxVect.push_back(ConstantInt::get(Type::getInt32Ty(AI->getContext()),0));
-	GetElementPtrInst *arrPtr = GetElementPtrInst::Create((Value*)AI, idxVect, "", FirstInst);
+	GetElementPtrInst *arrPtr = GetElementPtrInst::Create(AI->getAllocatedType(), (Value*)AI, idxVect, "", FirstInst);
 
   call_args.push_back(arrPtr);
 
@@ -496,12 +496,12 @@ void DynGenQASMLoops::insertCallToAllocQbitExec(AllocaInst* AI, int varSize,Allo
   std::stringstream ss;
   ss << std::left << std::setw (MAX_FUNCTION_NAME-1) << std::setfill('.') << AI->getName().str();
   Constant *StrConstant = ConstantDataArray::getString(AI->getContext(), ss.str());                  
-  new StoreInst(StrConstant,strAlloc,"",FirstInst); 
+  new StoreInst(StrConstant,strAlloc,false,FirstInst); 
   Value* Idx[2];
   Idx[0] = Constant::getNullValue(Type::getInt32Ty(AI->getContext()));
   Idx[1] = ConstantInt::get(Type::getInt32Ty(AI->getContext()),0);
   
-  GetElementPtrInst* strPtr = GetElementPtrInst::Create(strAlloc, Idx, "", FirstInst);
+  GetElementPtrInst* strPtr = GetElementPtrInst::Create(strAlloc->getAllocatedType(), strAlloc, Idx, "", FirstInst);
 
   call_args.push_back(strPtr);
 
@@ -527,12 +527,12 @@ void DynGenQASMLoops::insertCallToAllocCbitExec(AllocaInst* AI, int varSize,Allo
   std::stringstream ss;
   ss << std::left << std::setw (MAX_FUNCTION_NAME-1) << std::setfill('.') << AI->getName().str();
   Constant *StrConstant = ConstantDataArray::getString(AI->getContext(), ss.str());                  
-  new StoreInst(StrConstant,strAlloc,"",FirstInst); 
+  new StoreInst(StrConstant,strAlloc,false,FirstInst); 
   Value* Idx[2];
   Idx[0] = Constant::getNullValue(Type::getInt32Ty(AI->getContext()));
   Idx[1] = ConstantInt::get(Type::getInt32Ty(AI->getContext()),0);
   
-  GetElementPtrInst* strPtr = GetElementPtrInst::Create(strAlloc, Idx, "", FirstInst);
+  GetElementPtrInst* strPtr = GetElementPtrInst::Create(strAlloc->getAllocatedType(), strAlloc, Idx, "", FirstInst);
 
   call_args.push_back(strPtr);
 
@@ -564,12 +564,12 @@ void DynGenQASMLoops::instrumentIntrinsicInst(CallInst* CI, int id, map<unsigned
   std::stringstream ss;
   ss << std::left << std::setw (MAX_FUNCTION_NAME-1) << std::setfill('.') << qname;
   Constant *StrConstant = ConstantDataArray::getString(CI->getContext(), ss.str());                  
-  new StoreInst(StrConstant,strAlloc,"",CI); 
+  new StoreInst(StrConstant,strAlloc,false,CI); 
     Value* Idx[2];
     Idx[0] = Constant::getNullValue(Type::getInt32Ty(CI->getContext()));
     Idx[1] = ConstantInt::get(Type::getInt32Ty(CI->getContext()),0);
     
-    GetElementPtrInst* strPtr = GetElementPtrInst::Create(strAlloc, Idx, "", CI);
+    GetElementPtrInst* strPtr = GetElementPtrInst::Create(strAlloc->getAllocatedType(), strAlloc, Idx, "", CI);
 
     call_args.push_back(strPtr);              
 
@@ -658,12 +658,12 @@ void DynGenQASMLoops::instrumentIntrinsicInst(CallInst* CI, int id, map<unsigned
       std::stringstream ss;
       ss << std::left << std::setw (MAX_FUNCTION_NAME-1) << std::setfill('.') << (*mit).second;
       Constant *StrConstant = ConstantDataArray::getString(CI->getContext(), ss.str());                  
-      new StoreInst(StrConstant,strAlloc,"",CI);       
+      new StoreInst(StrConstant,strAlloc,false,CI);       
       Value* Idx[2];
       Idx[0] = Constant::getNullValue(Type::getInt32Ty(CI->getContext()));
       Idx[1] = ConstantInt::get(Type::getInt32Ty(CI->getContext()),0);
       
-      GetElementPtrInst* strPtr = GetElementPtrInst::Create(strAlloc, Idx, "", CI);
+      GetElementPtrInst* strPtr = GetElementPtrInst::Create(strAlloc->getAllocatedType(), strAlloc, Idx, "", CI);
       
       call_args.push_back(strPtr);              
       
@@ -711,13 +711,13 @@ void DynGenQASMLoops::instrumentNonIntrinsicInst(CallInst* CI, map<unsigned, pai
   std::stringstream ss;
   ss << std::left << std::setw (MAX_FUNCTION_NAME-1) << std::setfill('.') << CI->getCalledFunction()->getName().str();
   Constant *StrConstant = ConstantDataArray::getString(CI->getContext(), ss.str());                  
-  new StoreInst(StrConstant,strAlloc,"",CI); 
+  new StoreInst(StrConstant,strAlloc,false,CI); 
 
   Value* Idx[2];
   Idx[0] = Constant::getNullValue(Type::getInt32Ty(CI->getContext()));
   Idx[1] = ConstantInt::get(Type::getInt32Ty(CI->getContext()),0);
   
-  GetElementPtrInst* strPtr = GetElementPtrInst::Create(strAlloc, Idx, "", CI);
+  GetElementPtrInst* strPtr = GetElementPtrInst::Create(strAlloc->getAllocatedType(), strAlloc, Idx, "", CI);
 
   //call_args.push_back(strPtr);
     
@@ -1338,7 +1338,17 @@ bool DynGenQASMLoops::runOnModule(Module &M) {
 
   FirstInst = NULL; //reset firstInst
   
-  CallGraphNode* rootNode = getAnalysis<CallGraph>().getRoot();
+  CallGraph cg = CallGraph(M);
+
+  CallGraphNode *rootNode = nullptr;
+
+  for(auto it = cg.begin();it != cg.end();it++){
+    if(!(it->second->getFunction())) continue;
+    if(it->second->getFunction()->getName() == "main"){
+      rootNode = &(*it->second);
+      break;
+    }
+  }
   unsigned sccNum = 0;
   forallStr = "";
 
@@ -1382,7 +1392,7 @@ bool DynGenQASMLoops::runOnModule(Module &M) {
 	    
 	    //insert alloca insts here
 	    ArrayType *strTy = ArrayType::get(Type::getInt8Ty(FirstInst->getContext()), MAX_FUNCTION_NAME);
-	    AllocaInst *strAlloc = new AllocaInst(strTy,"",FirstInst);
+	    AllocaInst *strAlloc = new AllocaInst(strTy,0,"",FirstInst);
 	    
 	    //insert call to print qasm header
 	    //insertCallToHeader(F->getName().str(),FirstInst);	    
@@ -1432,7 +1442,7 @@ bool DynGenQASMLoops::runOnModule(Module &M) {
 
 	    //insert alloca insts here
 	    ArrayType *strTy = ArrayType::get(Type::getInt8Ty(FirstInst->getContext()), MAX_FUNCTION_NAME);
-	    AllocaInst *strAlloc = new AllocaInst(strTy,"",FirstInst);
+	    AllocaInst *strAlloc = new AllocaInst(strTy,0,"",FirstInst);
 
 	    for(inst_iterator instIb = inst_begin(F),instIe=inst_end(F); instIb!=instIe;++instIb){
 

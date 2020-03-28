@@ -1,71 +1,59 @@
-# NOTE: The tools are organized into groups of four consisting of one large and
-# three small executables. This is done to minimize memory load in parallel
-# builds.  Please retain this ordering.
+# This file will recurse into all subdirectories that contain CMakeLists.txt
+# Setting variables that match the pattern LLVM_TOOL_{NAME}_BUILD to Off will
+# prevent traversing into a directory.
+#
+# The only tools that need to be explicitly added are ones that have explicit
+# ordering requirements.
 
-# If polly exists and is not disabled compile it and add it to the LLVM tools.
-option(LLVM_BUILD_POLLY "Compile polly" ON)
-if( EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/polly/CMakeLists.txt )
-  if (LLVM_BUILD_POLLY)
-    add_subdirectory( ${CMAKE_CURRENT_SOURCE_DIR}/polly)
-  endif (LLVM_BUILD_POLLY)
-endif( EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/polly/CMakeLists.txt )
+# Iterates all the subdirectories to create CMake options to enable/disable
+# traversing each directory.
+create_llvm_tool_options()
 
-if( NOT WIN32 OR MSYS OR CYGWIN )
-  # We currently require 'sed' to build llvm-config, so don't try to build it
-  # on pure Win32.
-  add_subdirectory(llvm-config)
+# Build polly before the tools: the tools link against polly when
+# LINK_POLLY_INTO_TOOLS is set.
+if(WITH_POLLY)
+  add_llvm_external_project(polly)
+else()
+  set(LLVM_TOOL_POLLY_BUILD Off)
 endif()
 
-add_subdirectory(opt)
-add_subdirectory(llvm-as)
-add_subdirectory(llvm-dis)
-add_subdirectory(llvm-mc)
-
-add_subdirectory(llc)
-add_subdirectory(llvm-ranlib)
-add_subdirectory(llvm-ar)
-add_subdirectory(llvm-nm)
-add_subdirectory(llvm-size)
-
-add_subdirectory(llvm-ld)
-add_subdirectory(llvm-cov)
-add_subdirectory(llvm-prof)
-add_subdirectory(llvm-link)
-add_subdirectory(lli)
-
-add_subdirectory(llvm-extract)
-add_subdirectory(llvm-diff)
-add_subdirectory(macho-dump)
-add_subdirectory(llvm-objdump)
-add_subdirectory(llvm-readobj)
-add_subdirectory(llvm-rtdyld)
-add_subdirectory(llvm-dwarfdump)
-
-add_subdirectory(bugpoint)
-add_subdirectory(bugpoint-passes)
-add_subdirectory(llvm-bcanalyzer)
-add_subdirectory(llvm-stub)
-add_subdirectory(llvm-stress)
-
-if( NOT WIN32 )
-  add_subdirectory(lto)
+if(NOT LLVM_BUILD_LLVM_DYLIB AND NOT LLVM_BUILD_LLVM_C_DYLIB)
+  set(LLVM_TOOL_LLVM_SHLIB_BUILD Off)
 endif()
 
-if( LLVM_ENABLE_PIC )
-  # TODO: support other systems:
-  if( CMAKE_SYSTEM_NAME STREQUAL "Linux" )
-    add_subdirectory(gold)
-  endif()
+if(NOT LLVM_USE_INTEL_JITEVENTS )
+  set(LLVM_TOOL_LLVM_JITLISTENER_BUILD Off)
 endif()
 
-set(LLVM_CLANG_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/clang" CACHE PATH "Path to Clang source directory")
+if(CYGWIN OR NOT LLVM_ENABLE_PIC)
+  set(LLVM_TOOL_LTO_BUILD Off)
+  set(LLVM_TOOL_LLVM_LTO_BUILD Off)
+endif()
 
-if (NOT ${LLVM_CLANG_SOURCE_DIR} STREQUAL ""
-    AND EXISTS ${LLVM_CLANG_SOURCE_DIR}/CMakeLists.txt)
-  option(LLVM_BUILD_CLANG "Whether to build Clang as part of LLVM" ON)
-  if (${LLVM_BUILD_CLANG})
-    add_subdirectory(${LLVM_CLANG_SOURCE_DIR} clang)
-  endif()
-endif ()
+# Add LTO, llvm-ar, llvm-config, and llvm-profdata before clang, ExternalProject
+# requires targets specified in DEPENDS to exist before the call to
+# ExternalProject_Add.
+add_llvm_tool_subdirectory(lto)
+add_llvm_tool_subdirectory(gold)
+add_llvm_tool_subdirectory(llvm-ar)
+add_llvm_tool_subdirectory(llvm-config)
+add_llvm_tool_subdirectory(llvm-lto)
+add_llvm_tool_subdirectory(llvm-profdata)
+
+# Projects supported via LLVM_EXTERNAL_*_SOURCE_DIR need to be explicitly
+# specified.
+add_llvm_external_project(clang)
+add_llvm_external_project(llgo)
+add_llvm_external_project(lld)
+add_llvm_external_project(lldb)
+
+# Automatically add remaining sub-directories containing a 'CMakeLists.txt'
+# file as external projects.
+add_llvm_implicit_projects()
+
+# Add subprojects specified using LLVM_EXTERNAL_PROJECTS
+foreach(p ${LLVM_EXTERNAL_PROJECTS})
+  add_llvm_external_project(${p})
+endforeach(p)
 
 set(LLVM_COMMON_DEPENDS ${LLVM_COMMON_DEPENDS} PARENT_SCOPE)

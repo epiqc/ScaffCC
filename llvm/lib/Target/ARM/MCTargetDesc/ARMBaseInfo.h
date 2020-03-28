@@ -14,77 +14,14 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef ARMBASEINFO_H
-#define ARMBASEINFO_H
+#ifndef LLVM_LIB_TARGET_ARM_MCTARGETDESC_ARMBASEINFO_H
+#define LLVM_LIB_TARGET_ARM_MCTARGETDESC_ARMBASEINFO_H
 
 #include "ARMMCTargetDesc.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "Utils/ARMBaseInfo.h"
 
 namespace llvm {
-
-// Enums corresponding to ARM condition codes
-namespace ARMCC {
-  // The CondCodes constants map directly to the 4-bit encoding of the
-  // condition field for predicated instructions.
-  enum CondCodes { // Meaning (integer)          Meaning (floating-point)
-    EQ,            // Equal                      Equal
-    NE,            // Not equal                  Not equal, or unordered
-    HS,            // Carry set                  >, ==, or unordered
-    LO,            // Carry clear                Less than
-    MI,            // Minus, negative            Less than
-    PL,            // Plus, positive or zero     >, ==, or unordered
-    VS,            // Overflow                   Unordered
-    VC,            // No overflow                Not unordered
-    HI,            // Unsigned higher            Greater than, or unordered
-    LS,            // Unsigned lower or same     Less than or equal
-    GE,            // Greater than or equal      Greater than or equal
-    LT,            // Less than                  Less than, or unordered
-    GT,            // Greater than               Greater than
-    LE,            // Less than or equal         <, ==, or unordered
-    AL             // Always (unconditional)     Always (unconditional)
-  };
-
-  inline static CondCodes getOppositeCondition(CondCodes CC) {
-    switch (CC) {
-    default: llvm_unreachable("Unknown condition code");
-    case EQ: return NE;
-    case NE: return EQ;
-    case HS: return LO;
-    case LO: return HS;
-    case MI: return PL;
-    case PL: return MI;
-    case VS: return VC;
-    case VC: return VS;
-    case HI: return LS;
-    case LS: return HI;
-    case GE: return LT;
-    case LT: return GE;
-    case GT: return LE;
-    case LE: return GT;
-    }
-  }
-} // namespace ARMCC
-
-inline static const char *ARMCondCodeToString(ARMCC::CondCodes CC) {
-  switch (CC) {
-  case ARMCC::EQ:  return "eq";
-  case ARMCC::NE:  return "ne";
-  case ARMCC::HS:  return "hs";
-  case ARMCC::LO:  return "lo";
-  case ARMCC::MI:  return "mi";
-  case ARMCC::PL:  return "pl";
-  case ARMCC::VS:  return "vs";
-  case ARMCC::VC:  return "vc";
-  case ARMCC::HI:  return "hi";
-  case ARMCC::LS:  return "ls";
-  case ARMCC::GE:  return "ge";
-  case ARMCC::LT:  return "lt";
-  case ARMCC::GT:  return "gt";
-  case ARMCC::LE:  return "le";
-  case ARMCC::AL:  return "al";
-  }
-  llvm_unreachable("Unknown condition code");
-}
 
 namespace ARM_PROC {
   enum IMod {
@@ -120,106 +57,104 @@ namespace ARM_MB {
   // The Memory Barrier Option constants map directly to the 4-bit encoding of
   // the option field for memory barrier operations.
   enum MemBOpt {
-    SY    = 15,
-    ST    = 14,
-    ISH   = 11,
-    ISHST = 10,
-    NSH   = 7,
-    NSHST = 6,
+    RESERVED_0 = 0,
+    OSHLD = 1,
+    OSHST = 2,
     OSH   = 3,
-    OSHST = 2
+    RESERVED_4 = 4,
+    NSHLD = 5,
+    NSHST = 6,
+    NSH   = 7,
+    RESERVED_8 = 8,
+    ISHLD = 9,
+    ISHST = 10,
+    ISH   = 11,
+    RESERVED_12 = 12,
+    LD = 13,
+    ST    = 14,
+    SY    = 15
   };
 
-  inline static const char *MemBOptToString(unsigned val) {
+  inline static const char *MemBOptToString(unsigned val, bool HasV8) {
     switch (val) {
     default: llvm_unreachable("Unknown memory operation");
     case SY:    return "sy";
     case ST:    return "st";
+    case LD: return HasV8 ? "ld" : "#0xd";
+    case RESERVED_12: return "#0xc";
     case ISH:   return "ish";
     case ISHST: return "ishst";
+    case ISHLD: return HasV8 ?  "ishld" : "#0x9";
+    case RESERVED_8: return "#0x8";
     case NSH:   return "nsh";
     case NSHST: return "nshst";
+    case NSHLD: return HasV8 ? "nshld" : "#0x5";
+    case RESERVED_4: return "#0x4";
     case OSH:   return "osh";
     case OSHST: return "oshst";
+    case OSHLD: return HasV8 ? "oshld" : "#0x1";
+    case RESERVED_0: return "#0x0";
     }
   }
 } // namespace ARM_MB
 
-/// getARMRegisterNumbering - Given the enum value for some register, e.g.
-/// ARM::LR, return the number that it corresponds to (e.g. 14).
-inline static unsigned getARMRegisterNumbering(unsigned Reg) {
-  using namespace ARM;
-  switch (Reg) {
-  default:
-    llvm_unreachable("Unknown ARM register!");
-  case R0:  case S0:  case D0:  case Q0:  return 0;
-  case R1:  case S1:  case D1:  case Q1:  return 1;
-  case R2:  case S2:  case D2:  case Q2:  return 2;
-  case R3:  case S3:  case D3:  case Q3:  return 3;
-  case R4:  case S4:  case D4:  case Q4:  return 4;
-  case R5:  case S5:  case D5:  case Q5:  return 5;
-  case R6:  case S6:  case D6:  case Q6:  return 6;
-  case R7:  case S7:  case D7:  case Q7:  return 7;
-  case R8:  case S8:  case D8:  case Q8:  return 8;
-  case R9:  case S9:  case D9:  case Q9:  return 9;
-  case R10: case S10: case D10: case Q10: return 10;
-  case R11: case S11: case D11: case Q11: return 11;
-  case R12: case S12: case D12: case Q12: return 12;
-  case SP:  case S13: case D13: case Q13: return 13;
-  case LR:  case S14: case D14: case Q14: return 14;
-  case PC:  case S15: case D15: case Q15: return 15;
+namespace ARM_TSB {
+  enum TraceSyncBOpt {
+    CSYNC = 0
+  };
 
-  case S16: case D16: return 16;
-  case S17: case D17: return 17;
-  case S18: case D18: return 18;
-  case S19: case D19: return 19;
-  case S20: case D20: return 20;
-  case S21: case D21: return 21;
-  case S22: case D22: return 22;
-  case S23: case D23: return 23;
-  case S24: case D24: return 24;
-  case S25: case D25: return 25;
-  case S26: case D26: return 26;
-  case S27: case D27: return 27;
-  case S28: case D28: return 28;
-  case S29: case D29: return 29;
-  case S30: case D30: return 30;
-  case S31: case D31: return 31;
-
-  // Composite registers use the regnum of the first register in the list.
-  /* Q0  */     case D0_D2:   return 0;
-  case D1_D2:   case D1_D3:   return 1;
-  /* Q1  */     case D2_D4:   return 2;
-  case D3_D4:   case D3_D5:   return 3;
-  /* Q2  */     case D4_D6:   return 4;
-  case D5_D6:   case D5_D7:   return 5;
-  /* Q3  */     case D6_D8:   return 6;
-  case D7_D8:   case D7_D9:   return 7;
-  /* Q4  */     case D8_D10:  return 8;
-  case D9_D10:  case D9_D11:  return 9;
-  /* Q5  */     case D10_D12: return 10;
-  case D11_D12: case D11_D13: return 11;
-  /* Q6  */     case D12_D14: return 12;
-  case D13_D14: case D13_D15: return 13;
-  /* Q7  */     case D14_D16: return 14;
-  case D15_D16: case D15_D17: return 15;
-  /* Q8  */     case D16_D18: return 16;
-  case D17_D18: case D17_D19: return 17;
-  /* Q9  */     case D18_D20: return 18;
-  case D19_D20: case D19_D21: return 19;
-  /* Q10 */     case D20_D22: return 20;
-  case D21_D22: case D21_D23: return 21;
-  /* Q11 */     case D22_D24: return 22;
-  case D23_D24: case D23_D25: return 23;
-  /* Q12 */     case D24_D26: return 24;
-  case D25_D26: case D25_D27: return 25;
-  /* Q13 */     case D26_D28: return 26;
-  case D27_D28: case D27_D29: return 27;
-  /* Q14 */     case D28_D30: return 28;
-  case D29_D30: case D29_D31: return 29;
-  /* Q15 */
+  inline static const char *TraceSyncBOptToString(unsigned val) {
+    switch (val) {
+    default:
+      llvm_unreachable("Unknown trace synchronization barrier operation");
+      case CSYNC: return "csync";
+    }
   }
-}
+} // namespace ARM_TSB
+
+namespace ARM_ISB {
+  enum InstSyncBOpt {
+    RESERVED_0 = 0,
+    RESERVED_1 = 1,
+    RESERVED_2 = 2,
+    RESERVED_3 = 3,
+    RESERVED_4 = 4,
+    RESERVED_5 = 5,
+    RESERVED_6 = 6,
+    RESERVED_7 = 7,
+    RESERVED_8 = 8,
+    RESERVED_9 = 9,
+    RESERVED_10 = 10,
+    RESERVED_11 = 11,
+    RESERVED_12 = 12,
+    RESERVED_13 = 13,
+    RESERVED_14 = 14,
+    SY = 15
+  };
+
+  inline static const char *InstSyncBOptToString(unsigned val) {
+    switch (val) {
+    default:
+      llvm_unreachable("Unknown memory operation");
+      case RESERVED_0:  return "#0x0";
+      case RESERVED_1:  return "#0x1";
+      case RESERVED_2:  return "#0x2";
+      case RESERVED_3:  return "#0x3";
+      case RESERVED_4:  return "#0x4";
+      case RESERVED_5:  return "#0x5";
+      case RESERVED_6:  return "#0x6";
+      case RESERVED_7:  return "#0x7";
+      case RESERVED_8:  return "#0x8";
+      case RESERVED_9:  return "#0x9";
+      case RESERVED_10: return "#0xa";
+      case RESERVED_11: return "#0xb";
+      case RESERVED_12: return "#0xc";
+      case RESERVED_13: return "#0xd";
+      case RESERVED_14: return "#0xe";
+      case SY:          return "sy";
+    }
+  }
+} // namespace ARM_ISB
 
 /// isARMLowRegister - Returns true if the register is a low register (r0-r7).
 ///
@@ -265,7 +200,9 @@ namespace ARMII {
     AddrModeT2_so   = 13,
     AddrModeT2_pc   = 14, // +/- i12 for pc relative data
     AddrModeT2_i8s4 = 15, // i8 * 4
-    AddrMode_i12    = 16
+    AddrMode_i12    = 16,
+    AddrMode5FP16   = 17,  // i8 * 2
+    AddrModeT2_ldrex = 18, // i8 * 4, with unscaled offset in MCInst
   };
 
   inline static const char *AddrModeToString(AddrMode addrmode) {
@@ -276,6 +213,7 @@ namespace ARMII {
     case AddrMode3:       return "AddrMode3";
     case AddrMode4:       return "AddrMode4";
     case AddrMode5:       return "AddrMode5";
+    case AddrMode5FP16:   return "AddrMode5FP16";
     case AddrMode6:       return "AddrMode6";
     case AddrModeT1_1:    return "AddrModeT1_1";
     case AddrModeT1_2:    return "AddrModeT1_2";
@@ -287,6 +225,7 @@ namespace ARMII {
     case AddrModeT2_pc:   return "AddrModeT2_pc";
     case AddrModeT2_i8s4: return "AddrModeT2_i8s4";
     case AddrMode_i12:    return "AddrMode_i12";
+    case AddrModeT2_ldrex:return "AddrModeT2_ldrex";
     }
   }
 
@@ -295,42 +234,55 @@ namespace ARMII {
     //===------------------------------------------------------------------===//
     // ARM Specific MachineOperand flags.
 
-    MO_NO_FLAG,
+    MO_NO_FLAG = 0,
 
     /// MO_LO16 - On a symbol operand, this represents a relocation containing
     /// lower 16 bit of the address. Used only via movw instruction.
-    MO_LO16,
+    MO_LO16 = 0x1,
 
     /// MO_HI16 - On a symbol operand, this represents a relocation containing
     /// higher 16 bit of the address. Used only via movt instruction.
-    MO_HI16,
+    MO_HI16 = 0x2,
 
-    /// MO_LO16_NONLAZY - On a symbol operand "FOO", this represents a
-    /// relocation containing lower 16 bit of the non-lazy-ptr indirect symbol,
-    /// i.e. "FOO$non_lazy_ptr".
-    /// Used only via movw instruction.
-    MO_LO16_NONLAZY,
+    /// MO_OPTION_MASK - Most flags are mutually exclusive; this mask selects
+    /// just that part of the flag set.
+    MO_OPTION_MASK = 0x3,
 
-    /// MO_HI16_NONLAZY - On a symbol operand "FOO", this represents a
-    /// relocation containing lower 16 bit of the non-lazy-ptr indirect symbol,
-    /// i.e. "FOO$non_lazy_ptr". Used only via movt instruction.
-    MO_HI16_NONLAZY,
+    /// MO_COFFSTUB - On a symbol operand "FOO", this indicates that the
+    /// reference is actually to the ".refptrp.FOO" symbol.  This is used for
+    /// stub symbols on windows.
+    MO_COFFSTUB = 0x4,
 
-    /// MO_LO16_NONLAZY_PIC - On a symbol operand "FOO", this represents a
-    /// relocation containing lower 16 bit of the PC relative address of the
-    /// non-lazy-ptr indirect symbol, i.e. "FOO$non_lazy_ptr - LABEL".
-    /// Used only via movw instruction.
-    MO_LO16_NONLAZY_PIC,
+    /// MO_GOT - On a symbol operand, this represents a GOT relative relocation.
+    MO_GOT = 0x8,
 
-    /// MO_HI16_NONLAZY_PIC - On a symbol operand "FOO", this represents a
-    /// relocation containing lower 16 bit of the PC relative address of the
-    /// non-lazy-ptr indirect symbol, i.e. "FOO$non_lazy_ptr - LABEL".
-    /// Used only via movt instruction.
-    MO_HI16_NONLAZY_PIC,
+    /// MO_SBREL - On a symbol operand, this represents a static base relative
+    /// relocation. Used in movw and movt instructions.
+    MO_SBREL = 0x10,
 
-    /// MO_PLT - On a symbol operand, this represents an ELF PLT reference on a
-    /// call operand.
-    MO_PLT
+    /// MO_DLLIMPORT - On a symbol operand, this represents that the reference
+    /// to the symbol is for an import stub.  This is used for DLL import
+    /// storage class indication on Windows.
+    MO_DLLIMPORT = 0x20,
+
+    /// MO_SECREL - On a symbol operand this indicates that the immediate is
+    /// the offset from beginning of section.
+    ///
+    /// This is the TLS offset for the COFF/Windows TLS mechanism.
+    MO_SECREL = 0x40,
+
+    /// MO_NONLAZY - This is an independent flag, on a symbol operand "FOO" it
+    /// represents a symbol which, if indirect, will get special Darwin mangling
+    /// as a non-lazy-ptr indirect symbol (i.e. "L_FOO$non_lazy_ptr"). Can be
+    /// combined with MO_LO16, MO_HI16 or MO_NO_FLAG (in a constant-pool, for
+    /// example).
+    MO_NONLAZY = 0x80,
+
+    // It's undefined behaviour if an enum overflows the range between its
+    // smallest and largest values, but since these are |ed together, it can
+    // happen. Put a sentinel in (values of this enum are stored as "unsigned
+    // char").
+    MO_UNUSED_MAXIMUM = 0xff
   };
 
   enum {
@@ -417,6 +369,7 @@ namespace ARMII {
     NVExtFrm      = 39 << FormShift,
     NVMulSLFrm    = 40 << FormShift,
     NVTBLFrm      = 41 << FormShift,
+    N3RegCplxFrm  = 43 << FormShift,
 
     //===------------------------------------------------------------------===//
     // Misc flags.

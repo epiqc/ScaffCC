@@ -1,4 +1,4 @@
-//=-- ExplodedGraph.h - Local, Path-Sens. "Exploded Graph" -*- C++ -*-------==//
+//===- ExplodedGraph.h - Local, Path-Sens. "Exploded Graph" -----*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -16,27 +16,39 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_CLANG_GR_EXPLODEDGRAPH
-#define LLVM_CLANG_GR_EXPLODEDGRAPH
+#ifndef LLVM_CLANG_STATICANALYZER_CORE_PATHSENSITIVE_EXPLODEDGRAPH_H
+#define LLVM_CLANG_STATICANALYZER_CORE_PATHSENSITIVE_EXPLODEDGRAPH_H
 
+#include "clang/Analysis/AnalysisDeclContext.h"
 #include "clang/Analysis/ProgramPoint.h"
-#include "clang/Analysis/AnalysisContext.h"
-#include "clang/AST/Decl.h"
-#include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/FoldingSet.h"
-#include "llvm/ADT/SmallPtrSet.h"
-#include "llvm/Support/Allocator.h"
-#include "llvm/ADT/OwningPtr.h"
-#include "llvm/ADT/GraphTraits.h"
-#include "llvm/ADT/DepthFirstIterator.h"
-#include "llvm/Support/Casting.h"
 #include "clang/Analysis/Support/BumpVector.h"
+#include "clang/Basic/LLVM.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/ProgramState.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/ProgramState_Fwd.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/SVals.h"
+#include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/DepthFirstIterator.h"
+#include "llvm/ADT/FoldingSet.h"
+#include "llvm/ADT/GraphTraits.h"
+#include "llvm/ADT/Optional.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SetVector.h"
+#include "llvm/Support/Allocator.h"
+#include "llvm/Support/Compiler.h"
+#include <cassert>
+#include <cstdint>
+#include <memory>
+#include <utility>
 #include <vector>
 
 namespace clang {
 
 class CFG;
+class Decl;
+class Expr;
+class ParentMap;
+class Stmt;
 
 namespace ento {
 
@@ -52,53 +64,58 @@ class ExplodedGraph;
 // successors to it at any time after creating it.
 
 class ExplodedNode : public llvm::FoldingSetNode {
-  friend class ExplodedGraph;
-  friend class CoreEngine;
-  friend class NodeBuilder;
   friend class BranchNodeBuilder;
-  friend class IndirectGotoNodeBuilder;
-  friend class SwitchNodeBuilder;
+  friend class CoreEngine;
   friend class EndOfFunctionNodeBuilder;
+  friend class ExplodedGraph;
+  friend class IndirectGotoNodeBuilder;
+  friend class NodeBuilder;
+  friend class SwitchNodeBuilder;
 
+  /// Efficiently stores a list of ExplodedNodes, or an optional flag.
+  ///
+  /// NodeGroup provides opaque storage for a list of ExplodedNodes, optimizing
+  /// for the case when there is only one node in the group. This is a fairly
+  /// common case in an ExplodedGraph, where most nodes have only one
+  /// predecessor and many have only one successor. It can also be used to
+  /// store a flag rather than a node list, which ExplodedNode uses to mark
+  /// whether a node is a sink. If the flag is set, the group is implicitly
+  /// empty and no nodes may be added.
   class NodeGroup {
-    enum { Size1 = 0x0, SizeOther = 0x1, AuxFlag = 0x2, Mask = 0x3 };
+    // Conceptually a discriminated union. If the low bit is set, the node is
+    // a sink. If the low bit is not set, the pointer refers to the storage
+    // for the nodes in the group.
+    // This is not a PointerIntPair in order to keep the storage type opaque.
     uintptr_t P;
 
-    unsigned getKind() const {
-      return P & 0x1;
-    }
-
-    void *getPtr() const {
-      assert (!getFlag());
-      return reinterpret_cast<void*>(P & ~Mask);
-    }
-
-    ExplodedNode *getNode() const {
-      return reinterpret_cast<ExplodedNode*>(getPtr());
-    }
-    
   public:
-    NodeGroup() : P(0) {}
+    NodeGroup(bool Flag = false) : P(Flag) {
+      assert(getFlag() == Flag);
+    }
 
-    ExplodedNode **begin() const;
+    ExplodedNode * const *begin() const;
 
-    ExplodedNode **end() const;
+    ExplodedNode * const *end() const;
 
     unsigned size() const;
 
-    bool empty() const { return (P & ~Mask) == 0; }
+    bool empty() const { return P == 0 || getFlag() != 0; }
 
+    /// Adds a node to the list.
+    ///
+    /// The group must not have been created with its flag set.
     void addNode(ExplodedNode *N, ExplodedGraph &G);
 
+    /// Replaces the single node in this group with a new node.
+    ///
+    /// Note that this should only be used when you know the group was not
+    /// created with its flag set, and that the group is empty or contains
+    /// only a single node.
     void replaceNode(ExplodedNode *node);
 
-    void setFlag() {
-      assert(P == 0);
-      P = AuxFlag;
-    }
-
+    /// Returns whether this group was created with its flag set.
     bool getFlag() const {
-      return P & AuxFlag ? true : false;
+      return (P & 1);
     }
   };
 
@@ -116,21 +133,21 @@ class ExplodedNode : public llvm::FoldingSetNode {
   NodeGroup Succs;
 
 public:
-
   explicit ExplodedNode(const ProgramPoint &loc, ProgramStateRef state,
                         bool IsSink)
-    : Location(loc), State(state) {
-    if (IsSink)
-      Succs.setFlag();
+      : Location(loc), State(std::move(state)), Succs(IsSink) {
+    assert(isSink() == IsSink);
   }
-  
-  ~ExplodedNode() {}
 
   /// getLocation - Returns the edge associated with the given node.
   ProgramPoint getLocation() const { return Location; }
 
   const LocationContext *getLocationContext() const {
     return getLocation().getLocationContext();
+  }
+
+  const StackFrameContext *getStackFrame() const {
+    return getLocation().getStackFrame();
   }
 
   const Decl &getCodeDecl() const { return *getLocationContext()->getDecl(); }
@@ -144,22 +161,30 @@ public:
     return *getLocationContext()->getAnalysis<T>();
   }
 
-  ProgramStateRef getState() const { return State; }
+  const ProgramStateRef &getState() const { return State; }
 
   template <typename T>
-  const T* getLocationAs() const { return llvm::dyn_cast<T>(&Location); }
+  Optional<T> getLocationAs() const LLVM_LVALUE_FUNCTION {
+    return Location.getAs<T>();
+  }
+
+  /// Get the value of an arbitrary expression at this node.
+  SVal getSVal(const Stmt *S) const {
+    return getState()->getSVal(S, getLocationContext());
+  }
 
   static void Profile(llvm::FoldingSetNodeID &ID,
                       const ProgramPoint &Loc,
-                      ProgramStateRef state,
+                      const ProgramStateRef &state,
                       bool IsSink) {
     ID.Add(Loc);
-    ID.AddPointer(state.getPtr());
+    ID.AddPointer(state.get());
     ID.AddBoolean(IsSink);
   }
 
   void Profile(llvm::FoldingSetNodeID& ID) const {
-    Profile(ID, getLocation(), getState(), isSink());
+    // We avoid copy constructors by not using accessors.
+    Profile(ID, Location, State, isSink());
   }
 
   /// addPredeccessor - Adds a predecessor to the current node, and
@@ -173,23 +198,31 @@ public:
 
   bool isSink() const { return Succs.getFlag(); }
 
-   bool hasSinglePred() const {
+  bool hasSinglePred() const {
     return (pred_size() == 1);
   }
 
   ExplodedNode *getFirstPred() {
-    return pred_empty() ? NULL : *(pred_begin());
+    return pred_empty() ? nullptr : *(pred_begin());
   }
 
   const ExplodedNode *getFirstPred() const {
     return const_cast<ExplodedNode*>(this)->getFirstPred();
   }
 
+  ExplodedNode *getFirstSucc() {
+    return succ_empty() ? nullptr : *(succ_begin());
+  }
+
+  const ExplodedNode *getFirstSucc() const {
+    return const_cast<ExplodedNode*>(this)->getFirstSucc();
+  }
+
   // Iterators over successor and predecessor vertices.
-  typedef ExplodedNode**       succ_iterator;
-  typedef const ExplodedNode* const * const_succ_iterator;
-  typedef ExplodedNode**       pred_iterator;
-  typedef const ExplodedNode* const * const_pred_iterator;
+  using succ_iterator = ExplodedNode * const *;
+  using const_succ_iterator = const ExplodedNode * const *;
+  using pred_iterator = ExplodedNode * const *;
+  using const_pred_iterator = const ExplodedNode * const *;
 
   pred_iterator pred_begin() { return Preds.begin(); }
   pred_iterator pred_end() { return Preds.end(); }
@@ -211,42 +244,29 @@ public:
     return const_cast<ExplodedNode*>(this)->succ_end();
   }
 
-  // For debugging.
+  int64_t getID(ExplodedGraph *G) const;
 
-public:
+  /// The node is trivial if it has only one successor, only one predecessor,
+  /// it's predecessor has only one successor,
+  /// and its program state is the same as the program state of the previous
+  /// node.
+  /// Trivial nodes may be skipped while printing exploded graph.
+  bool isTrivial() const;
 
-  class Auditor {
-  public:
-    virtual ~Auditor();
-    virtual void AddEdge(ExplodedNode *Src, ExplodedNode *Dst) = 0;
-  };
-
-  static void SetAuditor(Auditor* A);
-  
 private:
   void replaceSuccessor(ExplodedNode *node) { Succs.replaceNode(node); }
   void replacePredecessor(ExplodedNode *node) { Preds.replaceNode(node); }
 };
 
-// FIXME: Is this class necessary?
-class InterExplodedGraphMap {
-  virtual void anchor();
-  llvm::DenseMap<const ExplodedNode*, ExplodedNode*> M;
-  friend class ExplodedGraph;
-
-public:
-  ExplodedNode *getMappedNode(const ExplodedNode *N) const;
-
-  InterExplodedGraphMap() {}
-  virtual ~InterExplodedGraphMap() {}
-};
+using InterExplodedGraphMap =
+    llvm::DenseMap<const ExplodedNode *, const ExplodedNode *>;
 
 class ExplodedGraph {
 protected:
   friend class CoreEngine;
 
   // Type definitions.
-  typedef std::vector<ExplodedNode *> NodeVector;
+  using NodeVector = std::vector<ExplodedNode *>;
 
   /// The roots of the simulation graph. Usually there will be only
   /// one, but clients are free to establish multiple subgraphs within a single
@@ -266,32 +286,44 @@ protected:
   BumpVectorContext BVC;
 
   /// NumNodes - The number of nodes in the graph.
-  unsigned NumNodes;
-  
+  unsigned NumNodes = 0;
+
   /// A list of recently allocated nodes that can potentially be recycled.
   NodeVector ChangedNodes;
-  
+
   /// A list of nodes that can be reused.
   NodeVector FreeNodes;
-  
-  /// A flag that indicates whether nodes should be recycled.
-  bool reclaimNodes;
-  
+
+  /// Determines how often nodes are reclaimed.
+  ///
+  /// If this is 0, nodes will never be reclaimed.
+  unsigned ReclaimNodeInterval = 0;
+
   /// Counter to determine when to reclaim nodes.
-  unsigned reclaimCounter;
+  unsigned ReclaimCounter;
 
 public:
+  ExplodedGraph();
+  ~ExplodedGraph();
 
-  /// \brief Retrieve the node associated with a (Location,State) pair,
+  /// Retrieve the node associated with a (Location,State) pair,
   ///  where the 'Location' is a ProgramPoint in the CFG.  If no node for
   ///  this pair exists, it is created. IsNew is set to true if
   ///  the node was freshly created.
   ExplodedNode *getNode(const ProgramPoint &L, ProgramStateRef State,
                         bool IsSink = false,
-                        bool* IsNew = 0);
+                        bool* IsNew = nullptr);
 
-  ExplodedGraph* MakeEmptyGraph() const {
-    return new ExplodedGraph();
+  /// Create a node for a (Location, State) pair,
+  ///  but don't store it for deduplication later.  This
+  ///  is useful when copying an already completed
+  ///  ExplodedGraph for further processing.
+  ExplodedNode *createUncachedNode(const ProgramPoint &L,
+    ProgramStateRef State,
+    bool IsSink = false);
+
+  std::unique_ptr<ExplodedGraph> MakeEmptyGraph() const {
+    return llvm::make_unique<ExplodedGraph>();
   }
 
   /// addRoot - Add an untyped node to the set of roots.
@@ -306,25 +338,23 @@ public:
     return V;
   }
 
-  ExplodedGraph();
-
-  ~ExplodedGraph();
-  
   unsigned num_roots() const { return Roots.size(); }
   unsigned num_eops() const { return EndNodes.size(); }
 
   bool empty() const { return NumNodes == 0; }
   unsigned size() const { return NumNodes; }
 
+  void reserve(unsigned NodeCount) { Nodes.reserve(NodeCount); }
+
   // Iterators.
-  typedef ExplodedNode                        NodeTy;
-  typedef llvm::FoldingSet<ExplodedNode>      AllNodesTy;
-  typedef NodeVector::iterator                roots_iterator;
-  typedef NodeVector::const_iterator          const_roots_iterator;
-  typedef NodeVector::iterator                eop_iterator;
-  typedef NodeVector::const_iterator          const_eop_iterator;
-  typedef AllNodesTy::iterator                node_iterator;
-  typedef AllNodesTy::const_iterator          const_node_iterator;
+  using NodeTy = ExplodedNode;
+  using AllNodesTy = llvm::FoldingSet<ExplodedNode>;
+  using roots_iterator = NodeVector::iterator;
+  using const_roots_iterator = NodeVector::const_iterator;
+  using eop_iterator = NodeVector::iterator;
+  using const_eop_iterator = NodeVector::const_iterator;
+  using node_iterator = AllNodesTy::iterator;
+  using const_node_iterator = AllNodesTy::const_iterator;
 
   node_iterator nodes_begin() { return Nodes.begin(); }
 
@@ -353,24 +383,36 @@ public:
   llvm::BumpPtrAllocator & getAllocator() { return BVC.getAllocator(); }
   BumpVectorContext &getNodeAllocator() { return BVC; }
 
-  typedef llvm::DenseMap<const ExplodedNode*, ExplodedNode*> NodeMap;
+  using NodeMap = llvm::DenseMap<const ExplodedNode *, ExplodedNode *>;
 
-  std::pair<ExplodedGraph*, InterExplodedGraphMap*>
-  Trim(const NodeTy* const* NBeg, const NodeTy* const* NEnd,
-       llvm::DenseMap<const void*, const void*> *InverseMap = 0) const;
-
-  ExplodedGraph* TrimInternal(const ExplodedNode* const * NBeg,
-                              const ExplodedNode* const * NEnd,
-                              InterExplodedGraphMap *M,
-                    llvm::DenseMap<const void*, const void*> *InverseMap) const;
+  /// Creates a trimmed version of the graph that only contains paths leading
+  /// to the given nodes.
+  ///
+  /// \param Nodes The nodes which must appear in the final graph. Presumably
+  ///              these are end-of-path nodes (i.e. they have no successors).
+  /// \param[out] ForwardMap A optional map from nodes in this graph to nodes in
+  ///                        the returned graph.
+  /// \param[out] InverseMap An optional map from nodes in the returned graph to
+  ///                        nodes in this graph.
+  /// \returns The trimmed graph
+  std::unique_ptr<ExplodedGraph>
+  trim(ArrayRef<const NodeTy *> Nodes,
+       InterExplodedGraphMap *ForwardMap = nullptr,
+       InterExplodedGraphMap *InverseMap = nullptr) const;
 
   /// Enable tracking of recently allocated nodes for potential reclamation
   /// when calling reclaimRecentlyAllocatedNodes().
-  void enableNodeReclamation() { reclaimNodes = true; }
+  void enableNodeReclamation(unsigned Interval) {
+    ReclaimCounter = ReclaimNodeInterval = Interval;
+  }
 
   /// Reclaim "uninteresting" nodes created since the last time this method
   /// was called.
   void reclaimRecentlyAllocatedNodes();
+
+  /// Returns true if nodes for the given expression kind are always
+  ///        kept around.
+  static bool isInterestingLValueExpr(const Expr *Ex);
 
 private:
   bool shouldCollect(const ExplodedNode *node);
@@ -378,29 +420,30 @@ private:
 };
 
 class ExplodedNodeSet {
-  typedef llvm::SmallPtrSet<ExplodedNode*,5> ImplTy;
+  using ImplTy = llvm::SmallSetVector<ExplodedNode *, 4>;
   ImplTy Impl;
 
 public:
   ExplodedNodeSet(ExplodedNode *N) {
-    assert (N && !static_cast<ExplodedNode*>(N)->isSink());
+    assert(N && !static_cast<ExplodedNode*>(N)->isSink());
     Impl.insert(N);
   }
 
-  ExplodedNodeSet() {}
+  ExplodedNodeSet() = default;
 
-  inline void Add(ExplodedNode *N) {
+  void Add(ExplodedNode *N) {
     if (N && !static_cast<ExplodedNode*>(N)->isSink()) Impl.insert(N);
   }
 
-  typedef ImplTy::iterator       iterator;
-  typedef ImplTy::const_iterator const_iterator;
+  using iterator = ImplTy::iterator;
+  using const_iterator = ImplTy::const_iterator;
 
   unsigned size() const { return Impl.size();  }
   bool empty()    const { return Impl.empty(); }
-  bool erase(ExplodedNode *N) { return Impl.erase(N); }
+  bool erase(ExplodedNode *N) { return Impl.remove(N); }
 
   void clear() { Impl.clear(); }
+
   void insert(const ExplodedNodeSet &S) {
     assert(&S != this);
     if (empty())
@@ -409,72 +452,54 @@ public:
       Impl.insert(S.begin(), S.end());
   }
 
-  inline iterator begin() { return Impl.begin(); }
-  inline iterator end()   { return Impl.end();   }
+  iterator begin() { return Impl.begin(); }
+  iterator end() { return Impl.end(); }
 
-  inline const_iterator begin() const { return Impl.begin(); }
-  inline const_iterator end()   const { return Impl.end();   }
+  const_iterator begin() const { return Impl.begin(); }
+  const_iterator end() const { return Impl.end(); }
 };
 
-} // end GR namespace
+} // namespace ento
 
-} // end clang namespace
+} // namespace clang
 
 // GraphTraits
 
 namespace llvm {
-  template<> struct GraphTraits<clang::ento::ExplodedNode*> {
-    typedef clang::ento::ExplodedNode NodeType;
-    typedef NodeType::succ_iterator  ChildIteratorType;
-    typedef llvm::df_iterator<NodeType*>      nodes_iterator;
+  template <> struct GraphTraits<clang::ento::ExplodedGraph *> {
+    using GraphTy = clang::ento::ExplodedGraph *;
+    using NodeRef = clang::ento::ExplodedNode *;
+    using ChildIteratorType = clang::ento::ExplodedNode::succ_iterator;
+    using nodes_iterator = llvm::df_iterator<GraphTy>;
 
-    static inline NodeType* getEntryNode(NodeType* N) {
-      return N;
+    static NodeRef getEntryNode(const GraphTy G) {
+      return *G->roots_begin();
     }
 
-    static inline ChildIteratorType child_begin(NodeType* N) {
+    static bool predecessorOfTrivial(NodeRef N) {
+      return N->succ_size() == 1 && N->getFirstSucc()->isTrivial();
+    }
+
+    static ChildIteratorType child_begin(NodeRef N) {
+      if (predecessorOfTrivial(N))
+        return child_begin(*N->succ_begin());
       return N->succ_begin();
     }
 
-    static inline ChildIteratorType child_end(NodeType* N) {
+    static ChildIteratorType child_end(NodeRef N) {
+      if (predecessorOfTrivial(N))
+        return child_end(N->getFirstSucc());
       return N->succ_end();
     }
 
-    static inline nodes_iterator nodes_begin(NodeType* N) {
-      return df_begin(N);
+    static nodes_iterator nodes_begin(const GraphTy G) {
+      return df_begin(G);
     }
 
-    static inline nodes_iterator nodes_end(NodeType* N) {
-      return df_end(N);
-    }
-  };
-
-  template<> struct GraphTraits<const clang::ento::ExplodedNode*> {
-    typedef const clang::ento::ExplodedNode NodeType;
-    typedef NodeType::const_succ_iterator   ChildIteratorType;
-    typedef llvm::df_iterator<NodeType*>       nodes_iterator;
-
-    static inline NodeType* getEntryNode(NodeType* N) {
-      return N;
-    }
-
-    static inline ChildIteratorType child_begin(NodeType* N) {
-      return N->succ_begin();
-    }
-
-    static inline ChildIteratorType child_end(NodeType* N) {
-      return N->succ_end();
-    }
-
-    static inline nodes_iterator nodes_begin(NodeType* N) {
-      return df_begin(N);
-    }
-
-    static inline nodes_iterator nodes_end(NodeType* N) {
-      return df_end(N);
+    static nodes_iterator nodes_end(const GraphTy G) {
+      return df_end(G);
     }
   };
+} // namespace llvm
 
-} // end llvm namespace
-
-#endif
+#endif // LLVM_CLANG_STATICANALYZER_CORE_PATHSENSITIVE_EXPLODEDGRAPH_H

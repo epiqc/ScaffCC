@@ -11,29 +11,29 @@
 @protocol X;
 
 void foo() {
-  <X> *P;    // expected-warning{{protocol qualifiers without 'id' is archaic}}
+  <X> *P;    // expected-warning{{protocol has no object type specified; defaults to qualified 'id'}}
 }
 
 @class A;
 @class NSString;
 
 @interface Test
-- (void)test:(NSString *)string; // expected-note{{passing argument to parameter 'string' here}}
+- (void)test:(NSString *)string;
 
 @property (copy) NSString *property;
 @end
 
-void g(NSString *a); // expected-note{{passing argument to parameter 'a' here}}
-void h(id a); // expected-note 2{{passing argument to parameter 'a' here}}
+void g(NSString *a);
+void h(id a);
 
 void f(Test *t) {
-  NSString *a = "Foo"; // expected-warning {{incompatible pointer types initializing 'NSString *' with an expression of type 'char [4]'}}
-  id b = "Foo"; // expected-warning {{incompatible pointer types initializing 'id' with an expression of type 'char [4]'}}
-  g("Foo"); // expected-warning{{incompatible pointer types passing 'char [4]' to parameter of type 'NSString *'}}
-  h("Foo"); // expected-warning{{incompatible pointer types passing 'char [4]' to parameter of type 'id'}}
-  h(("Foo")); // expected-warning{{incompatible pointer types passing 'char [4]' to parameter of type 'id'}}
-  [t test:"Foo"]; // expected-warning{{incompatible pointer types sending 'char [4]' to parameter of type 'NSString *'}}
-  t.property = "Foo"; // expected-warning{{incompatible pointer types assigning to 'NSString *' from 'char [4]'}}
+  NSString *a = "Foo"; // expected-error {{string literal must be prefixed by '@'}}
+  id b = "Foo"; // expected-error {{string literal must be prefixed by '@'}}
+  g("Foo"); // expected-error {{string literal must be prefixed by '@'}}
+  h("Foo"); // expected-error {{string literal must be prefixed by '@'}}
+  h(("Foo")); // expected-error {{string literal must be prefixed by '@'}}
+  [t test:"Foo"]; // expected-error {{string literal must be prefixed by '@'}}
+  t.property = "Foo"; // expected-error {{string literal must be prefixed by '@'}}
 
   // <rdar://problem/6896493>
   [t test:@"Foo"]]; // expected-error{{extraneous ']' before ';'}}
@@ -49,7 +49,7 @@ void f(Test *t) {
 @property (assign) int y;
 @end
 
-int f0(Radar7861841 *a) { return a.x; } // expected-error {{property 'x' not found on object of type 'Radar7861841 *'; did you mean to access ivar 'x'}}
+int f0(Radar7861841 *a) { return a.x; } // expected-error {{property 'x' not found on object of type 'Radar7861841 *'; did you mean to access instance variable 'x'}}
 
 int f1(Radar7861841 *a) { return a->y; } // expected-error {{property 'y' found on object of type 'Radar7861841 *'; did you mean to access it with the "." operator?}}
 
@@ -66,4 +66,12 @@ void sentinel(int x, ...) __attribute__((sentinel)); // expected-note{{function 
 void sentinel_test(Sentinel *a) {
   sentinel(1, 2, 3); // expected-warning{{missing sentinel in function call}}
   [a sentinel:1, 2, 3]; // expected-warning{{missing sentinel in method dispatch}}
+}
+
+@interface A
+@property (class) int c;
+@end
+
+int test(A *a) {
+  return a.c; // expected-error {{property 'c' is a class property; did you mean to access it with class 'A'}}
 }

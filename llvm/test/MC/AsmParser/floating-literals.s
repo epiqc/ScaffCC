@@ -1,4 +1,5 @@
-# RUN: llvm-mc -triple i386-unknown-unknown %s | FileCheck %s
+# RUN: not llvm-mc -triple i386-unknown-unknown %s 2> /dev/null | FileCheck %s
+# RUN: not llvm-mc -triple i386-unknown-unknown %s 2>&1 > /dev/null| FileCheck %s --check-prefix=CHECK-ERROR
 
 # CHECK: .long	1067412619
 # CHECK: .long	1075000115
@@ -9,11 +10,20 @@
 # CHECK: .long	2139095040
 .single InFinIty
 
+# CHECK: .quad	9218868437227405312
+.double infinity
+
 # CHECK: .long	4286578688
 .single -iNf
 
+# CHECK: .quad	-4503599627370496
+.double -inf
+
 # CHECK: .long	2147483647
 .single nAN
+
+# CHECK: .quad	9223372036854775807
+.double NaN
 
 # CHECK: .long  1067928519
 .float 1.307
@@ -42,3 +52,34 @@
 // APFloat should reject these with an error, not crash:
 //.double -1.2e+
 //.double -1.2e
+
+# CHECK: .long 1310177520
+.float 0x12f7.1ep+17
+# CHECK: .long 1084227584
+.float 0x.ap+3
+# CHECK: .quad 4602678819172646912
+.double 0x2.p-2
+# CHECK: .long 1094713344
+.float 0x3p2
+# CHECK: .long 872284160
+.float 0x7fp-30
+# CHECK: .long 3212836864
+.float -0x1.0p0
+
+# CHECK-ERROR: invalid hexadecimal floating-point constant: expected at least one exponent digit
+.float 0xa.apa
+
+# CHECK-ERROR: invalid hexadecimal floating-point constant: expected at least one exponent digit
+.double -0x1.2p+
+
+# CHECK-ERROR: invalid hexadecimal floating-point constant: expected at least one exponent digit
+.double -0x1.2p
+
+# CHECK-ERROR: invalid hexadecimal floating-point constant: expected at least one significand digit
+.float 0xp2
+
+# CHECK-ERROR: invalid hexadecimal floating-point constant: expected at least one significand digit
+.float 0x.p5
+
+# CHECK-ERROR: error: invalid hexadecimal floating-point constant: expected exponent part 'p'
+.float 0x1.2

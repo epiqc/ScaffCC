@@ -1,4 +1,4 @@
-//===-- FrontendAction.h - Pluggable Frontend Action Interface --*- C++ -*-===//
+//===- FrontendPluginRegistry.h ---------------------------------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -6,9 +6,13 @@
 // License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
+//
+// Pluggable Frontend Action Interface
+//
+//===----------------------------------------------------------------------===//
 
-#ifndef LLVM_CLANG_FRONTEND_PLUGINFRONTENDACTION_H
-#define LLVM_CLANG_FRONTEND_PLUGINFRONTENDACTION_H
+#ifndef LLVM_CLANG_FRONTEND_FRONTENDPLUGINREGISTRY_H
+#define LLVM_CLANG_FRONTEND_FRONTENDPLUGINREGISTRY_H
 
 #include "clang/Frontend/FrontendAction.h"
 #include "llvm/Support/Registry.h"
@@ -16,8 +20,8 @@
 namespace clang {
 
 /// The frontend plugin registry.
-typedef llvm::Registry<PluginASTAction> FrontendPluginRegistry;
+using FrontendPluginRegistry = llvm::Registry<PluginASTAction>;
 
-} // end namespace clang
+} // namespace clang
 
-#endif
+#endif // LLVM_CLANG_FRONTEND_FRONTENDPLUGINREGISTRY_H

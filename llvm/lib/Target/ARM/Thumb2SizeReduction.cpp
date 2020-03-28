@@ -7,22 +7,45 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "t2-reduce-size"
 #include "ARM.h"
-#include "ARMBaseRegisterInfo.h"
 #include "ARMBaseInstrInfo.h"
 #include "ARMSubtarget.h"
+#include "MCTargetDesc/ARMBaseInfo.h"
 #include "Thumb2InstrInfo.h"
-#include "MCTargetDesc/ARMAddressingModes.h"
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/PostOrderIterator.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallSet.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/Statistic.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/CodeGen/MachineBasicBlock.h"
+#include "llvm/CodeGen/MachineFunction.h"
+#include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
-#include "llvm/CodeGen/MachineFunctionPass.h"
+#include "llvm/CodeGen/MachineOperand.h"
+#include "llvm/CodeGen/TargetInstrInfo.h"
+#include "llvm/IR/DebugLoc.h"
+#include "llvm/IR/Function.h"
+#include "llvm/MC/MCInstrDesc.h"
+#include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/Compiler.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/Statistic.h"
+#include <algorithm>
+#include <cassert>
+#include <cstdint>
+#include <functional>
+#include <iterator>
+#include <utility>
+
 using namespace llvm;
+
+#define DEBUG_TYPE "t2-reduce-size"
+#define THUMB2_SIZE_REDUCE_NAME "Thumb2 instruction size reduce pass"
 
 STATISTIC(NumNarrows,  "Number of 32-bit instrs reduced to 16-bit ones");
 STATISTIC(Num2Addrs,   "Number of 32-bit instrs reduced to 2addr 16-bit ones");
@@ -36,6 +59,7 @@ static cl::opt<int> ReduceLimitLdSt("t2-reduce-limit3",
                                      cl::init(-1), cl::Hidden);
 
 namespace {
+
   /// ReduceTable - A static table with information on mapping from wide
   /// opcodes to narrow
   struct ReduceEntry {
@@ -52,102 +76,112 @@ namespace {
     unsigned PredCC2  : 2;
     unsigned PartFlag : 1; // 16-bit instruction does partial flag update
     unsigned Special  : 1; // Needs to be dealt with specially
+    unsigned AvoidMovs: 1; // Avoid movs with shifter operand (for Swift)
   };
 
   static const ReduceEntry ReduceTable[] = {
-    // Wide,        Narrow1,      Narrow2,     imm1,imm2,  lo1, lo2, P/C, PF, S
-    { ARM::t2ADCrr, 0,            ARM::tADC,     0,   0,    0,   1,  0,0, 0,0 },
-    { ARM::t2ADDri, ARM::tADDi3,  ARM::tADDi8,   3,   8,    1,   1,  0,0, 0,1 },
-    { ARM::t2ADDrr, ARM::tADDrr,  ARM::tADDhirr, 0,   0,    1,   0,  0,1, 0,0 },
-    { ARM::t2ADDSri,ARM::tADDi3,  ARM::tADDi8,   3,   8,    1,   1,  2,2, 0,1 },
-    { ARM::t2ADDSrr,ARM::tADDrr,  0,             0,   0,    1,   0,  2,0, 0,1 },
-    { ARM::t2ANDrr, 0,            ARM::tAND,     0,   0,    0,   1,  0,0, 1,0 },
-    { ARM::t2ASRri, ARM::tASRri,  0,             5,   0,    1,   0,  0,0, 1,0 },
-    { ARM::t2ASRrr, 0,            ARM::tASRrr,   0,   0,    0,   1,  0,0, 1,0 },
-    { ARM::t2BICrr, 0,            ARM::tBIC,     0,   0,    0,   1,  0,0, 1,0 },
-    //FIXME: Disable CMN, as CCodes are backwards from compare expectations
-    //{ ARM::t2CMNrr, ARM::tCMN,  0,             0,   0,    1,   0,  2,0, 0,0 },
-    { ARM::t2CMPri, ARM::tCMPi8,  0,             8,   0,    1,   0,  2,0, 0,0 },
-    { ARM::t2CMPrr, ARM::tCMPhir, 0,             0,   0,    0,   0,  2,0, 0,1 },
-    { ARM::t2EORrr, 0,            ARM::tEOR,     0,   0,    0,   1,  0,0, 1,0 },
-    // FIXME: adr.n immediate offset must be multiple of 4.
-    //{ ARM::t2LEApcrelJT,ARM::tLEApcrelJT, 0,   0,   0,    1,   0,  1,0, 0,0 },
-    { ARM::t2LSLri, ARM::tLSLri,  0,             5,   0,    1,   0,  0,0, 1,0 },
-    { ARM::t2LSLrr, 0,            ARM::tLSLrr,   0,   0,    0,   1,  0,0, 1,0 },
-    { ARM::t2LSRri, ARM::tLSRri,  0,             5,   0,    1,   0,  0,0, 1,0 },
-    { ARM::t2LSRrr, 0,            ARM::tLSRrr,   0,   0,    0,   1,  0,0, 1,0 },
-    // FIXME: tMOVi8 and tMVN also partially update CPSR but they are less
-    // likely to cause issue in the loop. As a size / performance workaround,
-    // they are not marked as such.
-    { ARM::t2MOVi,  ARM::tMOVi8,  0,             8,   0,    1,   0,  0,0, 0,0 },
-    { ARM::t2MOVi16,ARM::tMOVi8,  0,             8,   0,    1,   0,  0,0, 0,1 },
-    // FIXME: Do we need the 16-bit 'S' variant?
-    { ARM::t2MOVr,ARM::tMOVr,     0,             0,   0,    0,   0,  1,0, 0,0 },
-    { ARM::t2MUL,   0,            ARM::tMUL,     0,   0,    0,   1,  0,0, 1,0 },
-    { ARM::t2MVNr,  ARM::tMVN,    0,             0,   0,    1,   0,  0,0, 0,0 },
-    { ARM::t2ORRrr, 0,            ARM::tORR,     0,   0,    0,   1,  0,0, 1,0 },
-    { ARM::t2REV,   ARM::tREV,    0,             0,   0,    1,   0,  1,0, 0,0 },
-    { ARM::t2REV16, ARM::tREV16,  0,             0,   0,    1,   0,  1,0, 0,0 },
-    { ARM::t2REVSH, ARM::tREVSH,  0,             0,   0,    1,   0,  1,0, 0,0 },
-    { ARM::t2RORrr, 0,            ARM::tROR,     0,   0,    0,   1,  0,0, 1,0 },
-    { ARM::t2RSBri, ARM::tRSB,    0,             0,   0,    1,   0,  0,0, 0,1 },
-    { ARM::t2RSBSri,ARM::tRSB,    0,             0,   0,    1,   0,  2,0, 0,1 },
-    { ARM::t2SBCrr, 0,            ARM::tSBC,     0,   0,    0,   1,  0,0, 0,0 },
-    { ARM::t2SUBri, ARM::tSUBi3,  ARM::tSUBi8,   3,   8,    1,   1,  0,0, 0,0 },
-    { ARM::t2SUBrr, ARM::tSUBrr,  0,             0,   0,    1,   0,  0,0, 0,0 },
-    { ARM::t2SUBSri,ARM::tSUBi3,  ARM::tSUBi8,   3,   8,    1,   1,  2,2, 0,0 },
-    { ARM::t2SUBSrr,ARM::tSUBrr,  0,             0,   0,    1,   0,  2,0, 0,0 },
-    { ARM::t2SXTB,  ARM::tSXTB,   0,             0,   0,    1,   0,  1,0, 0,1 },
-    { ARM::t2SXTH,  ARM::tSXTH,   0,             0,   0,    1,   0,  1,0, 0,1 },
-    { ARM::t2TSTrr, ARM::tTST,    0,             0,   0,    1,   0,  2,0, 0,0 },
-    { ARM::t2UXTB,  ARM::tUXTB,   0,             0,   0,    1,   0,  1,0, 0,1 },
-    { ARM::t2UXTH,  ARM::tUXTH,   0,             0,   0,    1,   0,  1,0, 0,1 },
+  // Wide,        Narrow1,      Narrow2,     imm1,imm2, lo1, lo2, P/C,PF,S,AM
+  { ARM::t2ADCrr, 0,            ARM::tADC,     0,   0,   0,   1,  0,0, 0,0,0 },
+  { ARM::t2ADDri, ARM::tADDi3,  ARM::tADDi8,   3,   8,   1,   1,  0,0, 0,1,0 },
+  { ARM::t2ADDrr, ARM::tADDrr,  ARM::tADDhirr, 0,   0,   1,   0,  0,1, 0,0,0 },
+  { ARM::t2ADDSri,ARM::tADDi3,  ARM::tADDi8,   3,   8,   1,   1,  2,2, 0,1,0 },
+  { ARM::t2ADDSrr,ARM::tADDrr,  0,             0,   0,   1,   0,  2,0, 0,1,0 },
+  { ARM::t2ANDrr, 0,            ARM::tAND,     0,   0,   0,   1,  0,0, 1,0,0 },
+  { ARM::t2ASRri, ARM::tASRri,  0,             5,   0,   1,   0,  0,0, 1,0,1 },
+  { ARM::t2ASRrr, 0,            ARM::tASRrr,   0,   0,   0,   1,  0,0, 1,0,1 },
+  { ARM::t2BICrr, 0,            ARM::tBIC,     0,   0,   0,   1,  0,0, 1,0,0 },
+  //FIXME: Disable CMN, as CCodes are backwards from compare expectations
+  //{ ARM::t2CMNrr, ARM::tCMN,  0,             0,   0,   1,   0,  2,0, 0,0,0 },
+  { ARM::t2CMNzrr, ARM::tCMNz,  0,             0,   0,   1,   0,  2,0, 0,0,0 },
+  { ARM::t2CMPri, ARM::tCMPi8,  0,             8,   0,   1,   0,  2,0, 0,0,0 },
+  { ARM::t2CMPrr, ARM::tCMPhir, 0,             0,   0,   0,   0,  2,0, 0,1,0 },
+  { ARM::t2EORrr, 0,            ARM::tEOR,     0,   0,   0,   1,  0,0, 1,0,0 },
+  // FIXME: adr.n immediate offset must be multiple of 4.
+  //{ ARM::t2LEApcrelJT,ARM::tLEApcrelJT, 0,   0,   0,   1,   0,  1,0, 0,0,0 },
+  { ARM::t2LSLri, ARM::tLSLri,  0,             5,   0,   1,   0,  0,0, 1,0,1 },
+  { ARM::t2LSLrr, 0,            ARM::tLSLrr,   0,   0,   0,   1,  0,0, 1,0,1 },
+  { ARM::t2LSRri, ARM::tLSRri,  0,             5,   0,   1,   0,  0,0, 1,0,1 },
+  { ARM::t2LSRrr, 0,            ARM::tLSRrr,   0,   0,   0,   1,  0,0, 1,0,1 },
+  { ARM::t2MOVi,  ARM::tMOVi8,  0,             8,   0,   1,   0,  0,0, 1,0,0 },
+  { ARM::t2MOVi16,ARM::tMOVi8,  0,             8,   0,   1,   0,  0,0, 1,1,0 },
+  // FIXME: Do we need the 16-bit 'S' variant?
+  { ARM::t2MOVr,ARM::tMOVr,     0,             0,   0,   0,   0,  1,0, 0,0,0 },
+  { ARM::t2MUL,   0,            ARM::tMUL,     0,   0,   0,   1,  0,0, 1,0,0 },
+  { ARM::t2MVNr,  ARM::tMVN,    0,             0,   0,   1,   0,  0,0, 0,0,0 },
+  { ARM::t2ORRrr, 0,            ARM::tORR,     0,   0,   0,   1,  0,0, 1,0,0 },
+  { ARM::t2REV,   ARM::tREV,    0,             0,   0,   1,   0,  1,0, 0,0,0 },
+  { ARM::t2REV16, ARM::tREV16,  0,             0,   0,   1,   0,  1,0, 0,0,0 },
+  { ARM::t2REVSH, ARM::tREVSH,  0,             0,   0,   1,   0,  1,0, 0,0,0 },
+  { ARM::t2RORrr, 0,            ARM::tROR,     0,   0,   0,   1,  0,0, 1,0,0 },
+  { ARM::t2RSBri, ARM::tRSB,    0,             0,   0,   1,   0,  0,0, 0,1,0 },
+  { ARM::t2RSBSri,ARM::tRSB,    0,             0,   0,   1,   0,  2,0, 0,1,0 },
+  { ARM::t2SBCrr, 0,            ARM::tSBC,     0,   0,   0,   1,  0,0, 0,0,0 },
+  { ARM::t2SUBri, ARM::tSUBi3,  ARM::tSUBi8,   3,   8,   1,   1,  0,0, 0,0,0 },
+  { ARM::t2SUBrr, ARM::tSUBrr,  0,             0,   0,   1,   0,  0,0, 0,0,0 },
+  { ARM::t2SUBSri,ARM::tSUBi3,  ARM::tSUBi8,   3,   8,   1,   1,  2,2, 0,0,0 },
+  { ARM::t2SUBSrr,ARM::tSUBrr,  0,             0,   0,   1,   0,  2,0, 0,0,0 },
+  { ARM::t2SXTB,  ARM::tSXTB,   0,             0,   0,   1,   0,  1,0, 0,1,0 },
+  { ARM::t2SXTH,  ARM::tSXTH,   0,             0,   0,   1,   0,  1,0, 0,1,0 },
+  { ARM::t2TEQrr, ARM::tEOR,    0,             0,   0,   1,   0,  2,0, 0,1,0 },
+  { ARM::t2TSTrr, ARM::tTST,    0,             0,   0,   1,   0,  2,0, 0,0,0 },
+  { ARM::t2UXTB,  ARM::tUXTB,   0,             0,   0,   1,   0,  1,0, 0,1,0 },
+  { ARM::t2UXTH,  ARM::tUXTH,   0,             0,   0,   1,   0,  1,0, 0,1,0 },
 
-    // FIXME: Clean this up after splitting each Thumb load / store opcode
-    // into multiple ones.
-    { ARM::t2LDRi12,ARM::tLDRi,   ARM::tLDRspi,  5,   8,    1,   0,  0,0, 0,1 },
-    { ARM::t2LDRs,  ARM::tLDRr,   0,             0,   0,    1,   0,  0,0, 0,1 },
-    { ARM::t2LDRBi12,ARM::tLDRBi, 0,             5,   0,    1,   0,  0,0, 0,1 },
-    { ARM::t2LDRBs, ARM::tLDRBr,  0,             0,   0,    1,   0,  0,0, 0,1 },
-    { ARM::t2LDRHi12,ARM::tLDRHi, 0,             5,   0,    1,   0,  0,0, 0,1 },
-    { ARM::t2LDRHs, ARM::tLDRHr,  0,             0,   0,    1,   0,  0,0, 0,1 },
-    { ARM::t2LDRSBs,ARM::tLDRSB,  0,             0,   0,    1,   0,  0,0, 0,1 },
-    { ARM::t2LDRSHs,ARM::tLDRSH,  0,             0,   0,    1,   0,  0,0, 0,1 },
-    { ARM::t2STRi12,ARM::tSTRi,   ARM::tSTRspi,  5,   8,    1,   0,  0,0, 0,1 },
-    { ARM::t2STRs,  ARM::tSTRr,   0,             0,   0,    1,   0,  0,0, 0,1 },
-    { ARM::t2STRBi12,ARM::tSTRBi, 0,             5,   0,    1,   0,  0,0, 0,1 },
-    { ARM::t2STRBs, ARM::tSTRBr,  0,             0,   0,    1,   0,  0,0, 0,1 },
-    { ARM::t2STRHi12,ARM::tSTRHi, 0,             5,   0,    1,   0,  0,0, 0,1 },
-    { ARM::t2STRHs, ARM::tSTRHr,  0,             0,   0,    1,   0,  0,0, 0,1 },
+  // FIXME: Clean this up after splitting each Thumb load / store opcode
+  // into multiple ones.
+  { ARM::t2LDRi12,ARM::tLDRi,   ARM::tLDRspi,  5,   8,   1,   0,  0,0, 0,1,0 },
+  { ARM::t2LDRs,  ARM::tLDRr,   0,             0,   0,   1,   0,  0,0, 0,1,0 },
+  { ARM::t2LDRBi12,ARM::tLDRBi, 0,             5,   0,   1,   0,  0,0, 0,1,0 },
+  { ARM::t2LDRBs, ARM::tLDRBr,  0,             0,   0,   1,   0,  0,0, 0,1,0 },
+  { ARM::t2LDRHi12,ARM::tLDRHi, 0,             5,   0,   1,   0,  0,0, 0,1,0 },
+  { ARM::t2LDRHs, ARM::tLDRHr,  0,             0,   0,   1,   0,  0,0, 0,1,0 },
+  { ARM::t2LDRSBs,ARM::tLDRSB,  0,             0,   0,   1,   0,  0,0, 0,1,0 },
+  { ARM::t2LDRSHs,ARM::tLDRSH,  0,             0,   0,   1,   0,  0,0, 0,1,0 },
+  { ARM::t2LDR_POST,ARM::tLDMIA_UPD,0,         0,   0,   1,   0,  0,0, 0,1,0 },
+  { ARM::t2STRi12,ARM::tSTRi,   ARM::tSTRspi,  5,   8,   1,   0,  0,0, 0,1,0 },
+  { ARM::t2STRs,  ARM::tSTRr,   0,             0,   0,   1,   0,  0,0, 0,1,0 },
+  { ARM::t2STRBi12,ARM::tSTRBi, 0,             5,   0,   1,   0,  0,0, 0,1,0 },
+  { ARM::t2STRBs, ARM::tSTRBr,  0,             0,   0,   1,   0,  0,0, 0,1,0 },
+  { ARM::t2STRHi12,ARM::tSTRHi, 0,             5,   0,   1,   0,  0,0, 0,1,0 },
+  { ARM::t2STRHs, ARM::tSTRHr,  0,             0,   0,   1,   0,  0,0, 0,1,0 },
+  { ARM::t2STR_POST,ARM::tSTMIA_UPD,0,         0,   0,   1,   0,  0,0, 0,1,0 },
 
-    { ARM::t2LDMIA, ARM::tLDMIA,  0,             0,   0,    1,   1,  1,1, 0,1 },
-    { ARM::t2LDMIA_RET,0,         ARM::tPOP_RET, 0,   0,    1,   1,  1,1, 0,1 },
-    { ARM::t2LDMIA_UPD,ARM::tLDMIA_UPD,ARM::tPOP,0,   0,    1,   1,  1,1, 0,1 },
-    // ARM::t2STM (with no basereg writeback) has no Thumb1 equivalent
-    { ARM::t2STMIA_UPD,ARM::tSTMIA_UPD, 0,       0,   0,    1,   1,  1,1, 0,1 },
-    { ARM::t2STMDB_UPD, 0,        ARM::tPUSH,    0,   0,    1,   1,  1,1, 0,1 },
+  { ARM::t2LDMIA, ARM::tLDMIA,  0,             0,   0,   1,   1,  1,1, 0,1,0 },
+  { ARM::t2LDMIA_RET,0,         ARM::tPOP_RET, 0,   0,   1,   1,  1,1, 0,1,0 },
+  { ARM::t2LDMIA_UPD,ARM::tLDMIA_UPD,ARM::tPOP,0,   0,   1,   1,  1,1, 0,1,0 },
+  // ARM::t2STMIA (with no basereg writeback) has no Thumb1 equivalent.
+  // tSTMIA_UPD is a change in semantics which can only be used if the base
+  // register is killed. This difference is correctly handled elsewhere.
+  { ARM::t2STMIA, ARM::tSTMIA_UPD, 0,          0,   0,   1,   1,  1,1, 0,1,0 },
+  { ARM::t2STMIA_UPD,ARM::tSTMIA_UPD, 0,       0,   0,   1,   1,  1,1, 0,1,0 },
+  { ARM::t2STMDB_UPD, 0,        ARM::tPUSH,    0,   0,   1,   1,  1,1, 0,1,0 }
   };
 
   class Thumb2SizeReduce : public MachineFunctionPass {
   public:
     static char ID;
-    Thumb2SizeReduce();
 
     const Thumb2InstrInfo *TII;
     const ARMSubtarget *STI;
 
-    virtual bool runOnMachineFunction(MachineFunction &MF);
+    Thumb2SizeReduce(std::function<bool(const Function &)> Ftor = nullptr);
 
-    virtual const char *getPassName() const {
-      return "Thumb2 instruction size reduction pass";
+    bool runOnMachineFunction(MachineFunction &MF) override;
+
+    MachineFunctionProperties getRequiredProperties() const override {
+      return MachineFunctionProperties().set(
+          MachineFunctionProperties::Property::NoVRegs);
+    }
+
+    StringRef getPassName() const override {
+      return THUMB2_SIZE_REDUCE_NAME;
     }
 
   private:
     /// ReduceOpcodeMap - Maps wide opcode to index of entry in ReduceTable.
     DenseMap<unsigned, unsigned> ReduceOpcodeMap;
 
-    bool canAddPseudoFlagDep(MachineInstr *Def, MachineInstr *Use,
-                             bool IsSelfLoop);
+    bool canAddPseudoFlagDep(MachineInstr *Use, bool IsSelfLoop);
 
     bool VerifyPredAndCC(MachineInstr *MI, const ReduceEntry &Entry,
                          bool is2Addr, ARMCC::CondCodes Pred,
@@ -157,41 +191,81 @@ namespace {
                          const ReduceEntry &Entry);
 
     bool ReduceSpecial(MachineBasicBlock &MBB, MachineInstr *MI,
-                       const ReduceEntry &Entry, bool LiveCPSR,
-                       MachineInstr *CPSRDef, bool IsSelfLoop);
+                       const ReduceEntry &Entry, bool LiveCPSR, bool IsSelfLoop);
 
     /// ReduceTo2Addr - Reduce a 32-bit instruction to a 16-bit two-address
     /// instruction.
     bool ReduceTo2Addr(MachineBasicBlock &MBB, MachineInstr *MI,
-                       const ReduceEntry &Entry,
-                       bool LiveCPSR, MachineInstr *CPSRDef,
+                       const ReduceEntry &Entry, bool LiveCPSR,
                        bool IsSelfLoop);
 
     /// ReduceToNarrow - Reduce a 32-bit instruction to a 16-bit
     /// non-two-address instruction.
     bool ReduceToNarrow(MachineBasicBlock &MBB, MachineInstr *MI,
-                        const ReduceEntry &Entry,
-                        bool LiveCPSR, MachineInstr *CPSRDef,
+                        const ReduceEntry &Entry, bool LiveCPSR,
                         bool IsSelfLoop);
+
+    /// ReduceMI - Attempt to reduce MI, return true on success.
+    bool ReduceMI(MachineBasicBlock &MBB, MachineInstr *MI,
+                  bool LiveCPSR, bool IsSelfLoop);
 
     /// ReduceMBB - Reduce width of instructions in the specified basic block.
     bool ReduceMBB(MachineBasicBlock &MBB);
-  };
-  char Thumb2SizeReduce::ID = 0;
-}
 
-Thumb2SizeReduce::Thumb2SizeReduce() : MachineFunctionPass(ID) {
+    bool OptimizeSize;
+    bool MinimizeSize;
+
+    // Last instruction to define CPSR in the current block.
+    MachineInstr *CPSRDef;
+    // Was CPSR last defined by a high latency instruction?
+    // When CPSRDef is null, this refers to CPSR defs in predecessors.
+    bool HighLatencyCPSR;
+
+    struct MBBInfo {
+      // The flags leaving this block have high latency.
+      bool HighLatencyCPSR = false;
+      // Has this block been visited yet?
+      bool Visited = false;
+
+      MBBInfo() = default;
+    };
+
+    SmallVector<MBBInfo, 8> BlockInfo;
+
+    std::function<bool(const Function &)> PredicateFtor;
+  };
+
+  char Thumb2SizeReduce::ID = 0;
+
+} // end anonymous namespace
+
+INITIALIZE_PASS(Thumb2SizeReduce, DEBUG_TYPE, THUMB2_SIZE_REDUCE_NAME, false,
+                false)
+
+Thumb2SizeReduce::Thumb2SizeReduce(std::function<bool(const Function &)> Ftor)
+    : MachineFunctionPass(ID), PredicateFtor(std::move(Ftor)) {
+  OptimizeSize = MinimizeSize = false;
   for (unsigned i = 0, e = array_lengthof(ReduceTable); i != e; ++i) {
     unsigned FromOpc = ReduceTable[i].WideOpc;
     if (!ReduceOpcodeMap.insert(std::make_pair(FromOpc, i)).second)
-      assert(false && "Duplicated entries?");
+      llvm_unreachable("Duplicated entries?");
   }
 }
 
 static bool HasImplicitCPSRDef(const MCInstrDesc &MCID) {
-  for (const uint16_t *Regs = MCID.getImplicitDefs(); *Regs; ++Regs)
+  for (const MCPhysReg *Regs = MCID.getImplicitDefs(); *Regs; ++Regs)
     if (*Regs == ARM::CPSR)
       return true;
+  return false;
+}
+
+// Check for a likely high-latency flag def.
+static bool isHighLatencyCPSR(MachineInstr *Def) {
+  switch(Def->getOpcode()) {
+  case ARM::FMSTAT:
+  case ARM::tMUL:
+    return true;
+  }
   return false;
 }
 
@@ -213,20 +287,18 @@ static bool HasImplicitCPSRDef(const MCInstrDesc &MCID) {
 /// In this case it would have been ok to narrow the mul.w to muls since there
 /// are indirect RAW dependency between the muls and the mul.w
 bool
-Thumb2SizeReduce::canAddPseudoFlagDep(MachineInstr *Def, MachineInstr *Use,
-                                      bool FirstInSelfLoop) {
-  // FIXME: Disable check for -Oz (aka OptimizeForSizeHarder).
-  if (!STI->avoidCPSRPartialUpdate())
+Thumb2SizeReduce::canAddPseudoFlagDep(MachineInstr *Use, bool FirstInSelfLoop) {
+  // Disable the check for -Oz (aka OptimizeForSizeHarder).
+  if (MinimizeSize || !STI->avoidCPSRPartialUpdate())
     return false;
 
-  if (!Def)
+  if (!CPSRDef)
     // If this BB loops back to itself, conservatively avoid narrowing the
     // first instruction that does partial flag update.
-    return FirstInSelfLoop;
+    return HighLatencyCPSR || FirstInSelfLoop;
 
   SmallSet<unsigned, 2> Defs;
-  for (unsigned i = 0, e = Def->getNumOperands(); i != e; ++i) {
-    const MachineOperand &MO = Def->getOperand(i);
+  for (const MachineOperand &MO : CPSRDef->operands()) {
     if (!MO.isReg() || MO.isUndef() || MO.isUse())
       continue;
     unsigned Reg = MO.getReg();
@@ -235,14 +307,23 @@ Thumb2SizeReduce::canAddPseudoFlagDep(MachineInstr *Def, MachineInstr *Use,
     Defs.insert(Reg);
   }
 
-  for (unsigned i = 0, e = Use->getNumOperands(); i != e; ++i) {
-    const MachineOperand &MO = Use->getOperand(i);
+  for (const MachineOperand &MO : Use->operands()) {
     if (!MO.isReg() || MO.isUndef() || MO.isDef())
       continue;
     unsigned Reg = MO.getReg();
     if (Defs.count(Reg))
       return false;
   }
+
+  // If the current CPSR has high latency, try to avoid the false dependency.
+  if (HighLatencyCPSR)
+    return true;
+
+  // tMOVi8 usually doesn't start long dependency chains, and there are a lot
+  // of them, so always shrink them when CPSR doesn't have high latency.
+  if (Use->getOpcode() == ARM::t2MOVi ||
+      Use->getOpcode() == ARM::t2MOVi16)
+    return false;
 
   // No read-after-write dependency. The narrowing will add false dependency.
   return true;
@@ -293,10 +374,8 @@ Thumb2SizeReduce::VerifyPredAndCC(MachineInstr *MI, const ReduceEntry &Entry,
 
 static bool VerifyLowRegs(MachineInstr *MI) {
   unsigned Opc = MI->getOpcode();
-  bool isPCOk = (Opc == ARM::t2LDMIA_RET || Opc == ARM::t2LDMIA     ||
-                 Opc == ARM::t2LDMDB     || Opc == ARM::t2LDMIA_UPD ||
-                 Opc == ARM::t2LDMDB_UPD);
-  bool isLROk = (Opc == ARM::t2STMIA_UPD || Opc == ARM::t2STMDB_UPD);
+  bool isPCOk = (Opc == ARM::t2LDMIA_RET || Opc == ARM::t2LDMIA_UPD);
+  bool isLROk = (Opc == ARM::t2STMDB_UPD);
   bool isSPOk = isPCOk || isLROk;
   for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
     const MachineOperand &MO = MI->getOperand(i);
@@ -345,7 +424,6 @@ Thumb2SizeReduce::ReduceLoadStore(MachineBasicBlock &MBB, MachineInstr *MI,
     if (MI->getOperand(1).getReg() == ARM::SP) {
       Opc = Entry.NarrowOpc2;
       ImmLimit = Entry.Imm2Limit;
-      HasOffReg = false;
     }
 
     Scale = 4;
@@ -374,16 +452,58 @@ Thumb2SizeReduce::ReduceLoadStore(MachineBasicBlock &MBB, MachineInstr *MI,
     HasShift = true;
     OpNum = 4;
     break;
-  case ARM::t2LDMIA:
-  case ARM::t2LDMDB: {
-    unsigned BaseReg = MI->getOperand(0).getReg();
-    if (!isARMLowRegister(BaseReg) || Entry.WideOpc != ARM::t2LDMIA)
+  case ARM::t2LDR_POST:
+  case ARM::t2STR_POST: {
+    if (!MBB.getParent()->getFunction().optForMinSize())
       return false;
+
+    if (!MI->hasOneMemOperand() ||
+        (*MI->memoperands_begin())->getAlignment() < 4)
+      return false;
+
+    // We're creating a completely different type of load/store - LDM from LDR.
+    // For this reason we can't reuse the logic at the end of this function; we
+    // have to implement the MI building here.
+    bool IsStore = Entry.WideOpc == ARM::t2STR_POST;
+    unsigned Rt = MI->getOperand(IsStore ? 1 : 0).getReg();
+    unsigned Rn = MI->getOperand(IsStore ? 0 : 1).getReg();
+    unsigned Offset = MI->getOperand(3).getImm();
+    unsigned PredImm = MI->getOperand(4).getImm();
+    unsigned PredReg = MI->getOperand(5).getReg();
+    assert(isARMLowRegister(Rt));
+    assert(isARMLowRegister(Rn));
+
+    if (Offset != 4)
+      return false;
+
+    // Add the 16-bit load / store instruction.
+    DebugLoc dl = MI->getDebugLoc();
+    auto MIB = BuildMI(MBB, MI, dl, TII->get(Entry.NarrowOpc1))
+                   .addReg(Rn, RegState::Define)
+                   .addReg(Rn)
+                   .addImm(PredImm)
+                   .addReg(PredReg)
+                   .addReg(Rt, IsStore ? 0 : RegState::Define);
+
+    // Transfer memoperands.
+    MIB.setMemRefs(MI->memoperands());
+
+    // Transfer MI flags.
+    MIB.setMIFlags(MI->getFlags());
+
+    // Kill the old instruction.
+    MI->eraseFromBundle();
+    ++NumLdSts;
+    return true;
+  }
+  case ARM::t2LDMIA: {
+    unsigned BaseReg = MI->getOperand(0).getReg();
+    assert(isARMLowRegister(BaseReg));
 
     // For the non-writeback version (this one), the base register must be
     // one of the registers being loaded.
     bool isOK = false;
-    for (unsigned i = 4; i < MI->getNumOperands(); ++i) {
+    for (unsigned i = 3; i < MI->getNumOperands(); ++i) {
       if (MI->getOperand(i).getReg() == BaseReg) {
         isOK = true;
         break;
@@ -397,6 +517,13 @@ Thumb2SizeReduce::ReduceLoadStore(MachineBasicBlock &MBB, MachineInstr *MI,
     isLdStMul = true;
     break;
   }
+  case ARM::t2STMIA:
+    // If the base register is killed, we don't care what its value is after the
+    // instruction, so we can use an updating STMIA.
+    if (!MI->getOperand(0).isKill())
+      return false;
+
+    break;
   case ARM::t2LDMIA_RET: {
     unsigned BaseReg = MI->getOperand(1).getReg();
     if (BaseReg != ARM::SP)
@@ -407,7 +534,6 @@ Thumb2SizeReduce::ReduceLoadStore(MachineBasicBlock &MBB, MachineInstr *MI,
     break;
   }
   case ARM::t2LDMIA_UPD:
-  case ARM::t2LDMDB_UPD:
   case ARM::t2STMIA_UPD:
   case ARM::t2STMDB_UPD: {
     OpNum = 0;
@@ -431,9 +557,11 @@ Thumb2SizeReduce::ReduceLoadStore(MachineBasicBlock &MBB, MachineInstr *MI,
 
   unsigned OffsetReg = 0;
   bool OffsetKill = false;
+  bool OffsetInternal = false;
   if (HasShift) {
     OffsetReg  = MI->getOperand(2).getReg();
     OffsetKill = MI->getOperand(2).isKill();
+    OffsetInternal = MI->getOperand(2).isInternalRead();
 
     if (MI->getOperand(3).getImm())
       // Thumb1 addressing mode doesn't support shift.
@@ -453,9 +581,15 @@ Thumb2SizeReduce::ReduceLoadStore(MachineBasicBlock &MBB, MachineInstr *MI,
   // Add the 16-bit load / store instruction.
   DebugLoc dl = MI->getDebugLoc();
   MachineInstrBuilder MIB = BuildMI(MBB, MI, dl, TII->get(Opc));
+
+  // tSTMIA_UPD takes a defining register operand. We've already checked that
+  // the register is killed, so mark it as dead here.
+  if (Entry.WideOpc == ARM::t2STMIA)
+    MIB.addReg(MI->getOperand(0).getReg(), RegState::Define | RegState::Dead);
+
   if (!isLdStMul) {
-    MIB.addOperand(MI->getOperand(0));
-    MIB.addOperand(MI->getOperand(1));
+    MIB.add(MI->getOperand(0));
+    MIB.add(MI->getOperand(1));
 
     if (HasImmOffset)
       MIB.addImm(OffsetImm / Scale);
@@ -463,20 +597,22 @@ Thumb2SizeReduce::ReduceLoadStore(MachineBasicBlock &MBB, MachineInstr *MI,
     assert((!HasShift || OffsetReg) && "Invalid so_reg load / store address!");
 
     if (HasOffReg)
-      MIB.addReg(OffsetReg, getKillRegState(OffsetKill));
+      MIB.addReg(OffsetReg, getKillRegState(OffsetKill) |
+                            getInternalReadRegState(OffsetInternal));
   }
 
   // Transfer the rest of operands.
   for (unsigned e = MI->getNumOperands(); OpNum != e; ++OpNum)
-    MIB.addOperand(MI->getOperand(OpNum));
+    MIB.add(MI->getOperand(OpNum));
 
   // Transfer memoperands.
-  MIB->setMemRefs(MI->memoperands_begin(), MI->memoperands_end());
+  MIB.setMemRefs(MI->memoperands());
 
   // Transfer MI flags.
   MIB.setMIFlags(MI->getFlags());
 
-  DEBUG(errs() << "Converted 32-bit: " << *MI << "       to 16-bit: " << *MIB);
+  LLVM_DEBUG(errs() << "Converted 32-bit: " << *MI
+                    << "       to 16-bit: " << *MIB);
 
   MBB.erase_instr(MI);
   ++NumLdSts;
@@ -486,16 +622,15 @@ Thumb2SizeReduce::ReduceLoadStore(MachineBasicBlock &MBB, MachineInstr *MI,
 bool
 Thumb2SizeReduce::ReduceSpecial(MachineBasicBlock &MBB, MachineInstr *MI,
                                 const ReduceEntry &Entry,
-                                bool LiveCPSR, MachineInstr *CPSRDef,
-                                bool IsSelfLoop) {
+                                bool LiveCPSR, bool IsSelfLoop) {
   unsigned Opc = MI->getOpcode();
   if (Opc == ARM::t2ADDri) {
     // If the source register is SP, try to reduce to tADDrSPi, otherwise
     // it's a normal reduce.
     if (MI->getOperand(1).getReg() != ARM::SP) {
-      if (ReduceTo2Addr(MBB, MI, Entry, LiveCPSR, CPSRDef, IsSelfLoop))
+      if (ReduceTo2Addr(MBB, MI, Entry, LiveCPSR, IsSelfLoop))
         return true;
-      return ReduceToNarrow(MBB, MI, Entry, LiveCPSR, CPSRDef, IsSelfLoop);
+      return ReduceToNarrow(MBB, MI, Entry, LiveCPSR, IsSelfLoop);
     }
     // Try to reduce to tADDrSPi.
     unsigned Imm = MI->getOperand(2).getImm();
@@ -513,17 +648,19 @@ Thumb2SizeReduce::ReduceSpecial(MachineBasicBlock &MBB, MachineInstr *MI,
         MI->getOperand(MCID.getNumOperands()-1).getReg() == ARM::CPSR)
       return false;
 
-    MachineInstrBuilder MIB = BuildMI(MBB, MI, MI->getDebugLoc(),
-                                      TII->get(ARM::tADDrSPi))
-      .addOperand(MI->getOperand(0))
-      .addOperand(MI->getOperand(1))
-      .addImm(Imm / 4); // The tADDrSPi has an implied scale by four.
-    AddDefaultPred(MIB);
+    MachineInstrBuilder MIB =
+        BuildMI(MBB, MI, MI->getDebugLoc(),
+                TII->get(ARM::tADDrSPi))
+            .add(MI->getOperand(0))
+            .add(MI->getOperand(1))
+            .addImm(Imm / 4) // The tADDrSPi has an implied scale by four.
+            .add(predOps(ARMCC::AL));
 
     // Transfer MI flags.
     MIB.setMIFlags(MI->getFlags());
 
-    DEBUG(errs() << "Converted 32-bit: " << *MI << "       to 16-bit: " <<*MIB);
+    LLVM_DEBUG(errs() << "Converted 32-bit: " << *MI
+                      << "       to 16-bit: " << *MIB);
 
     MBB.erase_instr(MI);
     ++NumNarrows;
@@ -533,7 +670,7 @@ Thumb2SizeReduce::ReduceSpecial(MachineBasicBlock &MBB, MachineInstr *MI,
   if (Entry.LowRegs1 && !VerifyLowRegs(MI))
     return false;
 
-  if (MI->mayLoad() || MI->mayStore())
+  if (MI->mayLoadOrStore())
     return ReduceLoadStore(MBB, MI, Entry);
 
   switch (Opc) {
@@ -541,16 +678,15 @@ Thumb2SizeReduce::ReduceSpecial(MachineBasicBlock &MBB, MachineInstr *MI,
   case ARM::t2ADDSri:
   case ARM::t2ADDSrr: {
     unsigned PredReg = 0;
-    if (getInstrPredicate(MI, PredReg) == ARMCC::AL) {
+    if (getInstrPredicate(*MI, PredReg) == ARMCC::AL) {
       switch (Opc) {
       default: break;
-      case ARM::t2ADDSri: {
-        if (ReduceTo2Addr(MBB, MI, Entry, LiveCPSR, CPSRDef, IsSelfLoop))
+      case ARM::t2ADDSri:
+        if (ReduceTo2Addr(MBB, MI, Entry, LiveCPSR, IsSelfLoop))
           return true;
-        // fallthrough
-      }
+        LLVM_FALLTHROUGH;
       case ARM::t2ADDSrr:
-        return ReduceToNarrow(MBB, MI, Entry, LiveCPSR, CPSRDef, IsSelfLoop);
+        return ReduceToNarrow(MBB, MI, Entry, LiveCPSR, IsSelfLoop);
       }
     }
     break;
@@ -562,13 +698,13 @@ Thumb2SizeReduce::ReduceSpecial(MachineBasicBlock &MBB, MachineInstr *MI,
   case ARM::t2UXTB:
   case ARM::t2UXTH:
     if (MI->getOperand(2).getImm() == 0)
-      return ReduceToNarrow(MBB, MI, Entry, LiveCPSR, CPSRDef, IsSelfLoop);
+      return ReduceToNarrow(MBB, MI, Entry, LiveCPSR, IsSelfLoop);
     break;
   case ARM::t2MOVi16:
     // Can convert only 'pure' immediate operands, not immediates obtained as
     // globals' addresses.
     if (MI->getOperand(1).isImm())
-      return ReduceToNarrow(MBB, MI, Entry, LiveCPSR, CPSRDef, IsSelfLoop);
+      return ReduceToNarrow(MBB, MI, Entry, LiveCPSR, IsSelfLoop);
     break;
   case ARM::t2CMPrr: {
     // Try to reduce to the lo-reg only version first. Why there are two
@@ -577,10 +713,20 @@ Thumb2SizeReduce::ReduceSpecial(MachineBasicBlock &MBB, MachineInstr *MI,
     // are prioritized, but the table assumes a unique entry for each
     // source insn opcode. So for now, we hack a local entry record to use.
     static const ReduceEntry NarrowEntry =
-      { ARM::t2CMPrr,ARM::tCMPr, 0, 0, 0, 1, 1,2, 0, 0,1 };
-    if (ReduceToNarrow(MBB, MI, NarrowEntry, LiveCPSR, CPSRDef, IsSelfLoop))
+      { ARM::t2CMPrr,ARM::tCMPr, 0, 0, 0, 1, 1,2, 0, 0,1,0 };
+    if (ReduceToNarrow(MBB, MI, NarrowEntry, LiveCPSR, IsSelfLoop))
       return true;
-    return ReduceToNarrow(MBB, MI, Entry, LiveCPSR, CPSRDef, IsSelfLoop);
+    return ReduceToNarrow(MBB, MI, Entry, LiveCPSR, IsSelfLoop);
+  }
+  case ARM::t2TEQrr: {
+    unsigned PredReg = 0;
+    // Can only convert to eors if we're not in an IT block.
+    if (getInstrPredicate(*MI, PredReg) != ARMCC::AL)
+      break;
+    // TODO if Operand 0 is not killed but Operand 1 is, then we could write
+    // to Op1 instead.
+    if (MI->getOperand(0).isKill())
+      return ReduceToNarrow(MBB, MI, Entry, LiveCPSR, IsSelfLoop);
   }
   }
   return false;
@@ -589,10 +735,13 @@ Thumb2SizeReduce::ReduceSpecial(MachineBasicBlock &MBB, MachineInstr *MI,
 bool
 Thumb2SizeReduce::ReduceTo2Addr(MachineBasicBlock &MBB, MachineInstr *MI,
                                 const ReduceEntry &Entry,
-                                bool LiveCPSR, MachineInstr *CPSRDef,
-                                bool IsSelfLoop) {
-
+                                bool LiveCPSR, bool IsSelfLoop) {
   if (ReduceLimit2Addr != -1 && ((int)Num2Addrs >= ReduceLimit2Addr))
+    return false;
+
+  if (!OptimizeSize && Entry.AvoidMovs && STI->avoidMOVsShifterOperand())
+    // Don't issue movs with shifter operand for some CPUs unless we
+    // are optimizing for size.
     return false;
 
   unsigned Reg0 = MI->getOperand(0).getReg();
@@ -610,17 +759,19 @@ Thumb2SizeReduce::ReduceTo2Addr(MachineBasicBlock &MBB, MachineInstr *MI,
       if (Reg1 != Reg0)
         return false;
       // Try to commute the operands to make it a 2-address instruction.
-      MachineInstr *CommutedMI = TII->commuteInstruction(MI);
+      MachineInstr *CommutedMI = TII->commuteInstruction(*MI);
       if (!CommutedMI)
         return false;
     }
   } else if (Reg0 != Reg1) {
     // Try to commute the operands to make it a 2-address instruction.
-    unsigned CommOpIdx1, CommOpIdx2;
-    if (!TII->findCommutedOpIndices(MI, CommOpIdx1, CommOpIdx2) ||
-        CommOpIdx1 != 1 || MI->getOperand(CommOpIdx2).getReg() != Reg0)
+    unsigned CommOpIdx1 = 1;
+    unsigned CommOpIdx2 = TargetInstrInfo::CommuteAnyOperandIndex;
+    if (!TII->findCommutedOpIndices(*MI, CommOpIdx1, CommOpIdx2) ||
+        MI->getOperand(CommOpIdx2).getReg() != Reg0)
       return false;
-    MachineInstr *CommutedMI = TII->commuteInstruction(MI);
+    MachineInstr *CommutedMI =
+        TII->commuteInstruction(*MI, false, CommOpIdx1, CommOpIdx2);
     if (!CommutedMI)
       return false;
   }
@@ -640,7 +791,7 @@ Thumb2SizeReduce::ReduceTo2Addr(MachineBasicBlock &MBB, MachineInstr *MI,
   // Check if it's possible / necessary to transfer the predicate.
   const MCInstrDesc &NewMCID = TII->get(Entry.NarrowOpc2);
   unsigned PredReg = 0;
-  ARMCC::CondCodes Pred = getInstrPredicate(MI, PredReg);
+  ARMCC::CondCodes Pred = getInstrPredicate(*MI, PredReg);
   bool SkipPred = false;
   if (Pred != ARMCC::AL) {
     if (!NewMCID.isPredicable())
@@ -665,19 +816,15 @@ Thumb2SizeReduce::ReduceTo2Addr(MachineBasicBlock &MBB, MachineInstr *MI,
   // Avoid adding a false dependency on partial flag update by some 16-bit
   // instructions which has the 's' bit set.
   if (Entry.PartFlag && NewMCID.hasOptionalDef() && HasCC &&
-      canAddPseudoFlagDep(CPSRDef, MI, IsSelfLoop))
+      canAddPseudoFlagDep(MI, IsSelfLoop))
     return false;
 
   // Add the 16-bit instruction.
   DebugLoc dl = MI->getDebugLoc();
   MachineInstrBuilder MIB = BuildMI(MBB, MI, dl, NewMCID);
-  MIB.addOperand(MI->getOperand(0));
-  if (NewMCID.hasOptionalDef()) {
-    if (HasCC)
-      AddDefaultT1CC(MIB, CCDead);
-    else
-      AddNoT1CC(MIB);
-  }
+  MIB.add(MI->getOperand(0));
+  if (NewMCID.hasOptionalDef())
+    MIB.add(HasCC ? t1CondCodeOp(CCDead) : condCodeOp());
 
   // Transfer the rest of operands.
   unsigned NumOps = MCID.getNumOperands();
@@ -686,13 +833,14 @@ Thumb2SizeReduce::ReduceTo2Addr(MachineBasicBlock &MBB, MachineInstr *MI,
       continue;
     if (SkipPred && MCID.OpInfo[i].isPredicate())
       continue;
-    MIB.addOperand(MI->getOperand(i));
+    MIB.add(MI->getOperand(i));
   }
 
   // Transfer MI flags.
   MIB.setMIFlags(MI->getFlags());
 
-  DEBUG(errs() << "Converted 32-bit: " << *MI << "       to 16-bit: " << *MIB);
+  LLVM_DEBUG(errs() << "Converted 32-bit: " << *MI
+                    << "       to 16-bit: " << *MIB);
 
   MBB.erase_instr(MI);
   ++Num2Addrs;
@@ -702,9 +850,13 @@ Thumb2SizeReduce::ReduceTo2Addr(MachineBasicBlock &MBB, MachineInstr *MI,
 bool
 Thumb2SizeReduce::ReduceToNarrow(MachineBasicBlock &MBB, MachineInstr *MI,
                                  const ReduceEntry &Entry,
-                                 bool LiveCPSR, MachineInstr *CPSRDef,
-                                 bool IsSelfLoop) {
+                                 bool LiveCPSR, bool IsSelfLoop) {
   if (ReduceLimit != -1 && ((int)NumNarrows >= ReduceLimit))
+    return false;
+
+  if (!OptimizeSize && Entry.AvoidMovs && STI->avoidMOVsShifterOperand())
+    // Don't issue movs with shifter operand for some CPUs unless we
+    // are optimizing for size.
     return false;
 
   unsigned Limit = ~0U;
@@ -732,7 +884,7 @@ Thumb2SizeReduce::ReduceToNarrow(MachineBasicBlock &MBB, MachineInstr *MI,
   // Check if it's possible / necessary to transfer the predicate.
   const MCInstrDesc &NewMCID = TII->get(Entry.NarrowOpc1);
   unsigned PredReg = 0;
-  ARMCC::CondCodes Pred = getInstrPredicate(MI, PredReg);
+  ARMCC::CondCodes Pred = getInstrPredicate(*MI, PredReg);
   bool SkipPred = false;
   if (Pred != ARMCC::AL) {
     if (!NewMCID.isPredicable())
@@ -756,18 +908,29 @@ Thumb2SizeReduce::ReduceToNarrow(MachineBasicBlock &MBB, MachineInstr *MI,
   // Avoid adding a false dependency on partial flag update by some 16-bit
   // instructions which has the 's' bit set.
   if (Entry.PartFlag && NewMCID.hasOptionalDef() && HasCC &&
-      canAddPseudoFlagDep(CPSRDef, MI, IsSelfLoop))
+      canAddPseudoFlagDep(MI, IsSelfLoop))
     return false;
 
   // Add the 16-bit instruction.
   DebugLoc dl = MI->getDebugLoc();
   MachineInstrBuilder MIB = BuildMI(MBB, MI, dl, NewMCID);
-  MIB.addOperand(MI->getOperand(0));
-  if (NewMCID.hasOptionalDef()) {
-    if (HasCC)
-      AddDefaultT1CC(MIB, CCDead);
-    else
-      AddNoT1CC(MIB);
+
+  // TEQ is special in that it doesn't define a register but we're converting
+  // it into an EOR which does. So add the first operand as a def and then
+  // again as a use.
+  if (MCID.getOpcode() == ARM::t2TEQrr) {
+    MIB.add(MI->getOperand(0));
+    MIB->getOperand(0).setIsKill(false);
+    MIB->getOperand(0).setIsDef(true);
+    MIB->getOperand(0).setIsDead(true);
+
+    if (NewMCID.hasOptionalDef())
+      MIB.add(HasCC ? t1CondCodeOp(CCDead) : condCodeOp());
+    MIB.add(MI->getOperand(0));
+  } else {
+    MIB.add(MI->getOperand(0));
+    if (NewMCID.hasOptionalDef())
+      MIB.add(HasCC ? t1CondCodeOp(CCDead) : condCodeOp());
   }
 
   // Transfer the rest of operands.
@@ -791,15 +954,16 @@ Thumb2SizeReduce::ReduceToNarrow(MachineBasicBlock &MBB, MachineInstr *MI,
       // Skip implicit def of CPSR. Either it's modeled as an optional
       // def now or it's already an implicit def on the new instruction.
       continue;
-    MIB.addOperand(MO);
+    MIB.add(MO);
   }
   if (!MCID.isPredicable() && NewMCID.isPredicable())
-    AddDefaultPred(MIB);
+    MIB.add(predOps(ARMCC::AL));
 
   // Transfer MI flags.
   MIB.setMIFlags(MI->getFlags());
 
-  DEBUG(errs() << "Converted 32-bit: " << *MI << "       to 16-bit: " << *MIB);
+  LLVM_DEBUG(errs() << "Converted 32-bit: " << *MI
+                    << "       to 16-bit: " << *MIB);
 
   MBB.erase_instr(MI);
   ++NumNarrows;
@@ -808,8 +972,7 @@ Thumb2SizeReduce::ReduceToNarrow(MachineBasicBlock &MBB, MachineInstr *MI,
 
 static bool UpdateCPSRDef(MachineInstr &MI, bool LiveCPSR, bool &DefCPSR) {
   bool HasDef = false;
-  for (unsigned i = 0, e = MI.getNumOperands(); i != e; ++i) {
-    const MachineOperand &MO = MI.getOperand(i);
+  for (const MachineOperand &MO : MI.operands()) {
     if (!MO.isReg() || MO.isUndef() || MO.isUse())
       continue;
     if (MO.getReg() != ARM::CPSR)
@@ -824,8 +987,7 @@ static bool UpdateCPSRDef(MachineInstr &MI, bool LiveCPSR, bool &DefCPSR) {
 }
 
 static bool UpdateCPSRUse(MachineInstr &MI, bool LiveCPSR) {
-  for (unsigned i = 0, e = MI.getNumOperands(); i != e; ++i) {
-    const MachineOperand &MO = MI.getOperand(i);
+  for (const MachineOperand &MO : MI.operands()) {
     if (!MO.isReg() || MO.isUndef() || MO.isDef())
       continue;
     if (MO.getReg() != ARM::CPSR)
@@ -840,13 +1002,53 @@ static bool UpdateCPSRUse(MachineInstr &MI, bool LiveCPSR) {
   return LiveCPSR;
 }
 
+bool Thumb2SizeReduce::ReduceMI(MachineBasicBlock &MBB, MachineInstr *MI,
+                                bool LiveCPSR, bool IsSelfLoop) {
+  unsigned Opcode = MI->getOpcode();
+  DenseMap<unsigned, unsigned>::iterator OPI = ReduceOpcodeMap.find(Opcode);
+  if (OPI == ReduceOpcodeMap.end())
+    return false;
+  const ReduceEntry &Entry = ReduceTable[OPI->second];
+
+  // Don't attempt normal reductions on "special" cases for now.
+  if (Entry.Special)
+    return ReduceSpecial(MBB, MI, Entry, LiveCPSR, IsSelfLoop);
+
+  // Try to transform to a 16-bit two-address instruction.
+  if (Entry.NarrowOpc2 &&
+      ReduceTo2Addr(MBB, MI, Entry, LiveCPSR, IsSelfLoop))
+    return true;
+
+  // Try to transform to a 16-bit non-two-address instruction.
+  if (Entry.NarrowOpc1 &&
+      ReduceToNarrow(MBB, MI, Entry, LiveCPSR, IsSelfLoop))
+    return true;
+
+  return false;
+}
+
 bool Thumb2SizeReduce::ReduceMBB(MachineBasicBlock &MBB) {
   bool Modified = false;
 
   // Yes, CPSR could be livein.
   bool LiveCPSR = MBB.isLiveIn(ARM::CPSR);
-  MachineInstr *CPSRDef = 0;
-  MachineInstr *BundleMI = 0;
+  MachineInstr *BundleMI = nullptr;
+
+  CPSRDef = nullptr;
+  HighLatencyCPSR = false;
+
+  // Check predecessors for the latest CPSRDef.
+  for (auto *Pred : MBB.predecessors()) {
+    const MBBInfo &PInfo = BlockInfo[Pred->getNumber()];
+    if (!PInfo.Visited) {
+      // Since blocks are visited in RPO, this must be a back-edge.
+      continue;
+    }
+    if (PInfo.HighLatencyCPSR) {
+      HighLatencyCPSR = true;
+      break;
+    }
+  }
 
   // If this BB loops back to itself, conservatively avoid narrowing the
   // first instruction that does partial flag update.
@@ -854,50 +1056,32 @@ bool Thumb2SizeReduce::ReduceMBB(MachineBasicBlock &MBB) {
   MachineBasicBlock::instr_iterator MII = MBB.instr_begin(),E = MBB.instr_end();
   MachineBasicBlock::instr_iterator NextMII;
   for (; MII != E; MII = NextMII) {
-    NextMII = llvm::next(MII);
+    NextMII = std::next(MII);
 
     MachineInstr *MI = &*MII;
     if (MI->isBundle()) {
       BundleMI = MI;
       continue;
     }
+    if (MI->isDebugInstr())
+      continue;
 
     LiveCPSR = UpdateCPSRUse(*MI, LiveCPSR);
 
-    unsigned Opcode = MI->getOpcode();
-    DenseMap<unsigned, unsigned>::iterator OPI = ReduceOpcodeMap.find(Opcode);
-    if (OPI != ReduceOpcodeMap.end()) {
-      const ReduceEntry &Entry = ReduceTable[OPI->second];
-      // Ignore "special" cases for now.
-      if (Entry.Special) {
-        if (ReduceSpecial(MBB, MI, Entry, LiveCPSR, CPSRDef, IsSelfLoop)) {
-          Modified = true;
-          MachineBasicBlock::instr_iterator I = prior(NextMII);
-          MI = &*I;
-        }
-        goto ProcessNext;
-      }
+    // Does NextMII belong to the same bundle as MI?
+    bool NextInSameBundle = NextMII != E && NextMII->isBundledWithPred();
 
-      // Try to transform to a 16-bit two-address instruction.
-      if (Entry.NarrowOpc2 &&
-          ReduceTo2Addr(MBB, MI, Entry, LiveCPSR, CPSRDef, IsSelfLoop)) {
-        Modified = true;
-        MachineBasicBlock::instr_iterator I = prior(NextMII);
-        MI = &*I;
-        goto ProcessNext;
-      }
-
-      // Try to transform to a 16-bit non-two-address instruction.
-      if (Entry.NarrowOpc1 &&
-          ReduceToNarrow(MBB, MI, Entry, LiveCPSR, CPSRDef, IsSelfLoop)) {
-        Modified = true;
-        MachineBasicBlock::instr_iterator I = prior(NextMII);
-        MI = &*I;
-      }
+    if (ReduceMI(MBB, MI, LiveCPSR, IsSelfLoop)) {
+      Modified = true;
+      MachineBasicBlock::instr_iterator I = std::prev(NextMII);
+      MI = &*I;
+      // Removing and reinserting the first instruction in a bundle will break
+      // up the bundle. Fix the bundling if it was broken.
+      if (NextInSameBundle && !NextMII->isBundledWithPred())
+        NextMII->bundleWithPred();
     }
 
-  ProcessNext:
-    if (NextMII != E && MI->isInsideBundle() && !NextMII->isInsideBundle()) {
+    if (BundleMI && !NextInSameBundle && MI->isInsideBundle()) {
       // FIXME: Since post-ra scheduler operates on bundles, the CPSR kill
       // marker is only on the BUNDLE instruction. Process the BUNDLE
       // instruction as we finish with the bundled instruction to work around
@@ -907,37 +1091,62 @@ bool Thumb2SizeReduce::ReduceMBB(MachineBasicBlock &MBB) {
       MachineOperand *MO = BundleMI->findRegisterDefOperand(ARM::CPSR);
       if (MO && !MO->isDead())
         LiveCPSR = true;
+      MO = BundleMI->findRegisterUseOperand(ARM::CPSR);
+      if (MO && !MO->isKill())
+        LiveCPSR = true;
     }
 
     bool DefCPSR = false;
     LiveCPSR = UpdateCPSRDef(*MI, LiveCPSR, DefCPSR);
     if (MI->isCall()) {
       // Calls don't really set CPSR.
-      CPSRDef = 0;
+      CPSRDef = nullptr;
+      HighLatencyCPSR = false;
       IsSelfLoop = false;
     } else if (DefCPSR) {
       // This is the last CPSR defining instruction.
       CPSRDef = MI;
+      HighLatencyCPSR = isHighLatencyCPSR(CPSRDef);
       IsSelfLoop = false;
     }
   }
 
+  MBBInfo &Info = BlockInfo[MBB.getNumber()];
+  Info.HighLatencyCPSR = HighLatencyCPSR;
+  Info.Visited = true;
   return Modified;
 }
 
 bool Thumb2SizeReduce::runOnMachineFunction(MachineFunction &MF) {
-  const TargetMachine &TM = MF.getTarget();
-  TII = static_cast<const Thumb2InstrInfo*>(TM.getInstrInfo());
-  STI = &TM.getSubtarget<ARMSubtarget>();
+  if (PredicateFtor && !PredicateFtor(MF.getFunction()))
+    return false;
 
+  STI = &static_cast<const ARMSubtarget &>(MF.getSubtarget());
+  if (STI->isThumb1Only() || STI->prefers32BitThumb())
+    return false;
+
+  TII = static_cast<const Thumb2InstrInfo *>(STI->getInstrInfo());
+
+  // Optimizing / minimizing size? Minimizing size implies optimizing for size.
+  OptimizeSize = MF.getFunction().optForSize();
+  MinimizeSize = MF.getFunction().optForMinSize();
+
+  BlockInfo.clear();
+  BlockInfo.resize(MF.getNumBlockIDs());
+
+  // Visit blocks in reverse post-order so LastCPSRDef is known for all
+  // predecessors.
+  ReversePostOrderTraversal<MachineFunction*> RPOT(&MF);
   bool Modified = false;
-  for (MachineFunction::iterator I = MF.begin(), E = MF.end(); I != E; ++I)
-    Modified |= ReduceMBB(*I);
+  for (ReversePostOrderTraversal<MachineFunction*>::rpo_iterator
+       I = RPOT.begin(), E = RPOT.end(); I != E; ++I)
+    Modified |= ReduceMBB(**I);
   return Modified;
 }
 
 /// createThumb2SizeReductionPass - Returns an instance of the Thumb2 size
 /// reduction pass.
-FunctionPass *llvm::createThumb2SizeReductionPass() {
-  return new Thumb2SizeReduce();
+FunctionPass *llvm::createThumb2SizeReductionPass(
+    std::function<bool(const Function &)> Ftor) {
+  return new Thumb2SizeReduce(std::move(Ftor));
 }

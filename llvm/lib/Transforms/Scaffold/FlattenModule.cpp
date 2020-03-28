@@ -7,28 +7,28 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "FlattenModule"
+//#define DEBUG_TYPE "FlattenModule"
 #include <sstream>
 #include <fstream>
 #include <string>
 #include "llvm/Pass.h"
-#include "llvm/Function.h"
-#include "llvm/Module.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/Module.h"
 #include "llvm/Transforms/Utils/Cloning.h"
-#include "llvm/BasicBlock.h"
-#include "llvm/Instruction.h"
-#include "llvm/Instructions.h"
+#include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Instruction.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/ADT/Statistic.h"
-#include "llvm/Support/InstIterator.h"
+#include "llvm/IR/InstIterator.h"
 #include "llvm/PassAnalysisSupport.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
-#include "llvm/Support/CallSite.h"
-#include "llvm/Transforms/IPO/InlinerPass.h"
+#include "llvm/IR/CallSite.h"
+#include "llvm/Transforms/IPO/Inliner.h"
 #include "llvm/Transforms/Utils/Local.h"
 #include "llvm/Analysis/CallGraph.h"
-#include "llvm/Support/CFG.h"
-#include "llvm/Target/TargetData.h"
+#include "llvm/IR/CFG.h"
+#include "llvm/IR/DataLayout.h"
 #include "llvm/ADT/SCCIterator.h"
 #include "llvm/Support/CommandLine.h"
 
@@ -65,8 +65,8 @@ namespace {
 
     virtual void getAnalysisUsage(AnalysisUsage &AU) const {
         AU.setPreservesCFG();  
-        AU.addRequired<CallGraph>();
-        AU.addRequired<TargetData>();
+        AU.addRequired<CallGraphWrapperPass>();
+        // Could be important AU.addRequired<DataLayout>();
     }
 
   }; // End of struct FlattenModule
@@ -99,9 +99,19 @@ bool FlattenModule::runOnModule( Module & M ) {
   }
 
   // First, get a pointer to previous analysis results
-  CallGraph & CG = getAnalysis<CallGraph>();
+  //CallGraph cg = getAnalysis<CallGraphWrapperPass>().getCallGraph();
 
-  CallGraphNode * entry = CG.getRoot();
+  CallGraph CG = CallGraph(M);
+
+  CallGraphNode *entry = nullptr;
+
+  for(auto it = CG.begin();it != CG.end();it++){
+    if(!(it->second->getFunction())) continue;
+    if(it->second->getFunction()->getName() == "main"){
+      entry = &(*it->second);
+      break;
+    }
+  }
   if( entry && entry->getFunction() && debugFlattening)
     errs() << "Entry is function: " << entry->getFunction()->getName() << "\n";
 
@@ -123,14 +133,14 @@ bool FlattenModule::runOnModule( Module & M ) {
   
   // now we have all the call sites which need to be inlined
   // inline from the leaves all the way up
-  const TargetData *TD = getAnalysisIfAvailable<TargetData>();
-  InlineFunctionInfo InlineInfo(&CG, TD);  
+  const DataLayout TD = M.getDataLayout();
+  InlineFunctionInfo InlineInfo(&CG);//, TD);  
 
   std::reverse(inlineCallInsts.begin(),inlineCallInsts.end());
   for (std::vector<CallInst*>::iterator i = inlineCallInsts.begin(), e = inlineCallInsts.end();
       i!=e; ++i) {
     CallInst* CI = *i;
-    bool success = InlineFunction(CI, InlineInfo, false);
+    bool success = InlineFunction(CI, InlineInfo, nullptr, false);
     if(!success) {
       if (debugFlattening)
         errs() << "Error: Could not inline callee function " << CI->getCalledFunction()->getName()

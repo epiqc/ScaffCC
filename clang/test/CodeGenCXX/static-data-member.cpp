@@ -1,9 +1,13 @@
-// RUN: %clang_cc1 -triple x86_64-apple-darwin10 -emit-llvm -o - %s | FileCheck %s
+// RUN: %clang_cc1 -triple x86_64-pc-linux -emit-llvm -o - %s | FileCheck %s
+// RUN: %clang_cc1 -triple x86_64-apple-darwin -emit-llvm -o - %s | \
+// RUN: FileCheck --check-prefix=MACHO %s
 
 // CHECK: @_ZN5test11A1aE = constant i32 10, align 4
 // CHECK: @_ZN5test212_GLOBAL__N_11AIiE1xE = internal global i32 0, align 4
-// CHECK: @_ZN5test31AIiE1xE = weak_odr global i32 0, align 4
-// CHECK: @_ZGVN5test31AIiE1xE = weak_odr global i64 0
+// CHECK: @_ZN5test31AIiE1xE = weak_odr global i32 0, comdat, align 4
+// CHECK: @_ZGVN5test31AIiE1xE = weak_odr global i64 0, comdat($_ZN5test31AIiE1xE)
+// MACHO: @_ZGVN5test31AIiE1xE = weak_odr global i64 0
+// MACHO-NOT: comdat
 
 // CHECK: _ZN5test51U2k0E = global i32 0
 // CHECK: _ZN5test51U2k1E = global i32 0
@@ -42,7 +46,7 @@ namespace test2 {
     template struct A<int>;
   }
 
-  // CHECK: define internal void @__cxx_global_var_init()
+  // CHECK-LABEL: define internal void @__cxx_global_var_init()
   // CHECK:      [[TMP:%.*]] = call i32 @_ZN5test23fooEv()
   // CHECK-NEXT: store i32 [[TMP]], i32* @_ZN5test212_GLOBAL__N_11AIiE1xE, align 4
   // CHECK-NEXT: ret void
@@ -60,8 +64,10 @@ namespace test3 {
   template <class T> int A<T>::x = foo();
   template struct A<int>;
 
-  // CHECK: define internal void @__cxx_global_var_init1()
-  // CHECK:      [[GUARDBYTE:%.*]] = load i8* bitcast (i64* @_ZGVN5test31AIiE1xE to i8*)
+  // CHECK-LABEL: define internal void @__cxx_global_var_init.1() {{.*}} comdat($_ZN5test31AIiE1xE)
+  // MACHO-LABEL: define internal void @__cxx_global_var_init.1()
+  // MACHO-NOT: comdat
+  // CHECK:      [[GUARDBYTE:%.*]] = load i8, i8* bitcast (i64* @_ZGVN5test31AIiE1xE to i8*)
   // CHECK-NEXT: [[UNINITIALIZED:%.*]] = icmp eq i8 [[GUARDBYTE]], 0
   // CHECK-NEXT: br i1 [[UNINITIALIZED]]
   // CHECK:      [[TMP:%.*]] = call i32 @_ZN5test33fooEv()
@@ -79,7 +85,7 @@ namespace test4 {
   };
 
   int f(A *a) {
-    // CHECK: define i32 @_ZN5test41fEPNS_1AE
+    // CHECK-LABEL: define i32 @_ZN5test41fEPNS_1AE
     // CHECK: ret i32 76
     return a->n;
   }

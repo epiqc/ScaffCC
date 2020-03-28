@@ -30,16 +30,44 @@ struct C {
   float &f(T*) const noexcept;
 
   T* ptr;
-  auto g1() noexcept(noexcept(f(ptr))) -> decltype(f((*this).ptr));
+  auto g1() noexcept(noexcept(f(ptr))) -> decltype(f(ptr));
   auto g2() const noexcept(noexcept(f(((this))->ptr))) -> decltype(f(ptr));
+  auto g3() noexcept(noexcept(f(this->ptr))) -> decltype(f((*this).ptr));
+  auto g4() const noexcept(noexcept(f(((this))->ptr))) -> decltype(f(this->ptr));
+  auto g5() noexcept(noexcept(this->f(ptr))) -> decltype(this->f(ptr));
+  auto g6() const noexcept(noexcept(this->f(((this))->ptr))) -> decltype(this->f(ptr));
+  auto g7() noexcept(noexcept(this->f(this->ptr))) -> decltype(this->f((*this).ptr));
+  auto g8() const noexcept(noexcept(this->f(((this))->ptr))) -> decltype(this->f(this->ptr));
 };
 
 void test_C(C<int> ci) {
-  int *p = 0;
   int &ir = ci.g1();
   float &fr = ci.g2();
+  int &ir2 = ci.g3();
+  float &fr2 = ci.g4();
+  int &ir3 = ci.g5();
+  float &fr3 = ci.g6();
+  int &ir4 = ci.g7();
+  float &fr4 = ci.g8();
   static_assert(!noexcept(ci.g1()), "exception-specification failure");
   static_assert(noexcept(ci.g2()), "exception-specification failure");
+  static_assert(!noexcept(ci.g3()), "exception-specification failure");
+  static_assert(noexcept(ci.g4()), "exception-specification failure");
+  static_assert(!noexcept(ci.g5()), "exception-specification failure");
+  static_assert(noexcept(ci.g6()), "exception-specification failure");
+  static_assert(!noexcept(ci.g7()), "exception-specification failure");
+  static_assert(noexcept(ci.g8()), "exception-specification failure");
+}
+
+namespace PR14263 {
+  template<typename T> struct X {
+    void f();
+    T f() const;
+
+    auto g()       -> decltype(this->f()) { return f(); }
+    auto g() const -> decltype(this->f()) { return f(); }
+  };
+  template struct X<int>;
 }
 
 namespace PR10036 {
@@ -61,9 +89,26 @@ namespace PR10036 {
   }
 }
 
+namespace PR15290 {
+  template<typename T>
+  class A {
+    T v_;
+    friend int add_to_v(A &t) noexcept(noexcept(v_ + 42))
+    {
+      return t.v_ + 42;
+    }
+  };
+  void f()
+  {
+    A<int> t;
+    add_to_v(t);
+  }
+}
+
 namespace Static {
   struct X1 {
     int m;
+    // FIXME: This should be accepted.
     static auto f() -> decltype(m); // expected-error{{'this' cannot be implicitly used in a static member function declaration}}
     static auto g() -> decltype(this->m); // expected-error{{'this' cannot be used in a static member function declaration}}
 
@@ -91,11 +136,30 @@ namespace Static {
 
 namespace PR12564 {
   struct Base {
-    void bar(Base&) {} // unexpected-note {{here}}
+    void bar(Base&) {}
   };
 
   struct Derived : Base {
-    // FIXME: This should be accepted.
-    void foo(Derived& d) noexcept(noexcept(d.bar(d))) {} // unexpected-error {{cannot bind to a value of unrelated type}}
+    void foo(Derived& d) noexcept(noexcept(d.bar(d))) {}
   };
+}
+
+namespace rdar13473493 {
+  template <typename F>
+  class wrap
+  {
+  public:
+    template <typename... Args>
+    auto operator()(Args&&... args) const -> decltype(wrapped(args...)) // expected-note{{candidate template ignored: substitution failure [with Args = <int>]: use of undeclared identifier 'wrapped'}}
+    {
+      return wrapped(args...);
+    }
+  
+  private:
+    F wrapped;
+  };
+
+  void test(wrap<int (*)(int)> w) {
+    w(5); // expected-error{{no matching function for call to object of type 'wrap<int (*)(int)>'}}
+  }
 }

@@ -30,27 +30,6 @@ void test(Foo::foo* x) {
   bar::f(x); // expected-error{{cannot initialize a parameter of type 'Foo::foo *' (aka 'bar::Foo::foo *') with an lvalue of type 'Foo::foo *'}}
 }
 
-// PR9548 - "no known conversion from 'vector<string>' to 'vector<string>'"
-// vector<string> refers to two different types here.  Make sure the message
-// gives a way to tell them apart.
-class versa_string;
-typedef versa_string string;
-
-namespace std {template <typename T> class vector;}
-using std::vector;
-
-void f(vector<string> v);  // expected-note {{candidate function not viable: no known conversion from 'vector<string>' (aka 'std::vector<std::basic_string>') to 'vector<string>' (aka 'std::vector<versa_string>') for 1st argument}}
-
-namespace std {
-  class basic_string;
-  typedef basic_string string;
-  template <typename T> class vector {};
-  void g() {
-    vector<string> v;
-    f(v);  // expected-error{{no matching function for call to 'f'}}
-  }
-}
-
 namespace ns {
  struct str {
    static void method(struct data *) {}
@@ -61,8 +40,25 @@ struct data { int i; };
 
 typedef void (*callback)(struct data *);
 
-void helper(callback cb) {} // expected-note{{candidate function not viable: no known conversion from 'void (*)(struct data *)' (aka 'void (*)(ns::data *)') to 'callback' (aka 'void (*)(struct data *)') for 1st argument;}}
+void helper(callback cb) {} // expected-note{{candidate function not viable: no known conversion from 'void (*)(struct data *)' (aka 'void (*)(ns::data *)') to 'callback' (aka 'void (*)(struct data *)') for 1st argument}}
 
 void test() {
  helper(&ns::str::method); // expected-error{{no matching function for call to 'helper'}}
 }
+
+template <typename T>
+class A {};
+
+int a1 = A<decltype(1 + 2)>(); // expected-error{{no viable conversion from 'A<decltype(1 + 2)>' (aka 'A<int>') to 'int'}}
+int a2 = A<A<decltype(1 + 2)>>(); // expected-error{{no viable conversion from 'A<A<decltype(1 + 2)> >' (aka 'A<A<int> >') to 'int'}}
+int a3 = A<__typeof(1 + 2)>(); // expected-error{{no viable conversion from 'A<typeof (1 + 2)>' (aka 'A<int>') to 'int'}}
+int a4 = A<A<__typeof(1 + 2)>>(); // expected-error{{no viable conversion from 'A<A<typeof (1 + 2)> >' (aka 'A<A<int> >') to 'int'}}
+
+using B = A<decltype(1+2)>;
+int a5 = B(); // expected-error{{no viable conversion from 'B' (aka 'A<int>') to 'int'}}
+
+decltype(void()) (&f1)() = 0; // expected-error{{non-const lvalue reference to type 'decltype(void()) ()' (aka 'void ()') cannot bind to a temporary of type 'int'}}
+decltype(void()) (&f2)(int) = 0; // expected-error{{non-const lvalue reference to type 'decltype(void()) (int)' (aka 'void (int)') cannot bind to a temporary of type 'int'}}
+void (&f3)(decltype(1 + 2)) = 0; // expected-error{{non-const lvalue reference to type 'void (decltype(1 + 2))' (aka 'void (int)') cannot bind to a temporary of type 'int'}}
+decltype(1+2) (&f4)(double, decltype(1 + 2)) = 0; // expected-error{{non-const lvalue reference to type 'decltype(1 + 2) (double, decltype(1 + 2))' (aka 'int (double, int)') cannot bind to a temporary of type 'int'}}
+auto (&f5)() -> decltype(1+2) = 0; // expected-error{{non-const lvalue reference to type 'auto () -> decltype(1 + 2)' (aka 'auto () -> int') cannot bind to a temporary of type 'int'}}

@@ -1,7 +1,8 @@
 OPENQASM 2.0;
 include "qelib1.inc";
 qreg qb[4];
-creg cb[2];
+creg cbx0[1];
+creg cbx1[1];
 reset qb[0];
 reset qb[1];
 x qb[1];
@@ -14,6 +15,5 @@ cx qb[1], qb[2];
 ccx qb[0], qb[1], qb[2];
 cx qb[1], qb[2];
 h qb[2];
-measure qb[2] -> cb[0];
-measure qb[3] -> cb[1];
-
+measure qb[2] -> cbx0[0];
+measure qb[3] -> cbx1[0];

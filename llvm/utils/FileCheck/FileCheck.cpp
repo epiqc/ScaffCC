@@ -10,753 +10,639 @@
 // FileCheck does a line-by line check of a file that validates whether it
 // contains the expected content.  This is useful for regression tests etc.
 //
-// This program exits with an error status of 2 on error, exit status of 0 if
+// This program exits with an exit status of 2 on error, exit status of 0 if
 // the file matched the expected contents, and exit status of 1 if it did not
 // contain the expected contents.
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/ADT/OwningPtr.h"
 #include "llvm/Support/CommandLine.h"
-#include "llvm/Support/MemoryBuffer.h"
-#include "llvm/Support/PrettyStackTrace.h"
-#include "llvm/Support/Regex.h"
-#include "llvm/Support/SourceMgr.h"
+#include "llvm/Support/InitLLVM.h"
+#include "llvm/Support/Process.h"
+#include "llvm/Support/WithColor.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Support/Signals.h"
-#include "llvm/Support/system_error.h"
-#include "llvm/ADT/SmallString.h"
-#include "llvm/ADT/StringMap.h"
-#include <algorithm>
+#include "llvm/Support/FileCheck.h"
 using namespace llvm;
 
 static cl::opt<std::string>
-CheckFilename(cl::Positional, cl::desc("<check-file>"), cl::Required);
+    CheckFilename(cl::Positional, cl::desc("<check-file>"), cl::Optional);
 
 static cl::opt<std::string>
-InputFilename("input-file", cl::desc("File to check (defaults to stdin)"),
-              cl::init("-"), cl::value_desc("filename"));
+    InputFilename("input-file", cl::desc("File to check (defaults to stdin)"),
+                  cl::init("-"), cl::value_desc("filename"));
 
-static cl::opt<std::string>
-CheckPrefix("check-prefix", cl::init("CHECK"),
-            cl::desc("Prefix to use from check file (defaults to 'CHECK')"));
+static cl::list<std::string> CheckPrefixes(
+    "check-prefix",
+    cl::desc("Prefix to use from check file (defaults to 'CHECK')"));
+static cl::alias CheckPrefixesAlias(
+    "check-prefixes", cl::aliasopt(CheckPrefixes), cl::CommaSeparated,
+    cl::NotHidden,
+    cl::desc(
+        "Alias for -check-prefix permitting multiple comma separated values"));
 
-static cl::opt<bool>
-NoCanonicalizeWhiteSpace("strict-whitespace",
-              cl::desc("Do not treat all horizontal whitespace as equivalent"));
+static cl::opt<bool> NoCanonicalizeWhiteSpace(
+    "strict-whitespace",
+    cl::desc("Do not treat all horizontal whitespace as equivalent"));
 
-//===----------------------------------------------------------------------===//
-// Pattern Handling Code.
-//===----------------------------------------------------------------------===//
+static cl::list<std::string> ImplicitCheckNot(
+    "implicit-check-not",
+    cl::desc("Add an implicit negative check with this pattern to every\n"
+             "positive check. This can be used to ensure that no instances of\n"
+             "this pattern occur which are not matched by a positive pattern"),
+    cl::value_desc("pattern"));
 
-class Pattern {
-  SMLoc PatternLoc;
+static cl::list<std::string>
+    GlobalDefines("D", cl::AlwaysPrefix,
+                  cl::desc("Define a variable to be used in capture patterns."),
+                  cl::value_desc("VAR=VALUE"));
 
-  /// MatchEOF - When set, this pattern only matches the end of file. This is
-  /// used for trailing CHECK-NOTs.
-  bool MatchEOF;
+static cl::opt<bool> AllowEmptyInput(
+    "allow-empty", cl::init(false),
+    cl::desc("Allow the input file to be empty. This is useful when making\n"
+             "checks that some error message does not occur, for example."));
 
-  /// FixedStr - If non-empty, this pattern is a fixed string match with the
-  /// specified fixed string.
-  StringRef FixedStr;
+static cl::opt<bool> MatchFullLines(
+    "match-full-lines", cl::init(false),
+    cl::desc("Require all positive matches to cover an entire input line.\n"
+             "Allows leading and trailing whitespace if --strict-whitespace\n"
+             "is not also passed."));
 
-  /// RegEx - If non-empty, this is a regex pattern.
-  std::string RegExStr;
+static cl::opt<bool> EnableVarScope(
+    "enable-var-scope", cl::init(false),
+    cl::desc("Enables scope for regex variables. Variables with names that\n"
+             "do not start with '$' will be reset at the beginning of\n"
+             "each CHECK-LABEL block."));
 
-  /// VariableUses - Entries in this vector map to uses of a variable in the
-  /// pattern, e.g. "foo[[bar]]baz".  In this case, the RegExStr will contain
-  /// "foobaz" and we'll get an entry in this vector that tells us to insert the
-  /// value of bar at offset 3.
-  std::vector<std::pair<StringRef, unsigned> > VariableUses;
+static cl::opt<bool> AllowDeprecatedDagOverlap(
+    "allow-deprecated-dag-overlap", cl::init(false),
+    cl::desc("Enable overlapping among matches in a group of consecutive\n"
+             "CHECK-DAG directives.  This option is deprecated and is only\n"
+             "provided for convenience as old tests are migrated to the new\n"
+             "non-overlapping CHECK-DAG implementation.\n"));
 
-  /// VariableDefs - Entries in this vector map to definitions of a variable in
-  /// the pattern, e.g. "foo[[bar:.*]]baz".  In this case, the RegExStr will
-  /// contain "foo(.*)baz" and VariableDefs will contain the pair "bar",1.  The
-  /// index indicates what parenthesized value captures the variable value.
-  std::vector<std::pair<StringRef, unsigned> > VariableDefs;
+static cl::opt<bool> Verbose("v", cl::init(false),
+                             cl::desc("Print directive pattern matches.\n"));
 
-public:
+static cl::opt<bool> VerboseVerbose(
+    "vv", cl::init(false),
+    cl::desc("Print information helpful in diagnosing internal FileCheck\n"
+             "issues.  Implies -v.\n"));
+static const char * DumpInputEnv = "FILECHECK_DUMP_INPUT_ON_FAILURE";
 
-  Pattern(bool matchEOF = false) : MatchEOF(matchEOF) { }
+static cl::opt<bool> DumpInputOnFailure(
+    "dump-input-on-failure", cl::init(std::getenv(DumpInputEnv)),
+    cl::desc("Dump original input to stderr before failing.\n"
+             "The value can be also controlled using\n"
+             "FILECHECK_DUMP_INPUT_ON_FAILURE environment variable.\n"
+             "This option is deprecated in favor of -dump-input=fail.\n"));
 
-  bool ParsePattern(StringRef PatternStr, SourceMgr &SM);
-
-  /// Match - Match the pattern string against the input buffer Buffer.  This
-  /// returns the position that is matched or npos if there is no match.  If
-  /// there is a match, the size of the matched string is returned in MatchLen.
-  ///
-  /// The VariableTable StringMap provides the current values of filecheck
-  /// variables and is updated if this match defines new values.
-  size_t Match(StringRef Buffer, size_t &MatchLen,
-               StringMap<StringRef> &VariableTable) const;
-
-  /// PrintFailureInfo - Print additional information about a failure to match
-  /// involving this pattern.
-  void PrintFailureInfo(const SourceMgr &SM, StringRef Buffer,
-                        const StringMap<StringRef> &VariableTable) const;
-
-private:
-  static void AddFixedStringToRegEx(StringRef FixedStr, std::string &TheStr);
-  bool AddRegExToRegEx(StringRef RegExStr, unsigned &CurParen, SourceMgr &SM);
-
-  /// ComputeMatchDistance - Compute an arbitrary estimate for the quality of
-  /// matching this pattern at the start of \arg Buffer; a distance of zero
-  /// should correspond to a perfect match.
-  unsigned ComputeMatchDistance(StringRef Buffer,
-                               const StringMap<StringRef> &VariableTable) const;
+enum DumpInputValue {
+  DumpInputDefault,
+  DumpInputHelp,
+  DumpInputNever,
+  DumpInputFail,
+  DumpInputAlways
 };
 
+static cl::opt<DumpInputValue> DumpInput(
+    "dump-input", cl::init(DumpInputDefault),
+    cl::desc("Dump input to stderr, adding annotations representing\n"
+             " currently enabled diagnostics\n"),
+    cl::value_desc("mode"),
+    cl::values(clEnumValN(DumpInputHelp, "help",
+                          "Explain dump format and quit"),
+               clEnumValN(DumpInputNever, "never", "Never dump input"),
+               clEnumValN(DumpInputFail, "fail", "Dump input on failure"),
+               clEnumValN(DumpInputAlways, "always", "Always dump input")));
 
-bool Pattern::ParsePattern(StringRef PatternStr, SourceMgr &SM) {
-  PatternLoc = SMLoc::getFromPointer(PatternStr.data());
+typedef cl::list<std::string>::const_iterator prefix_iterator;
 
-  // Ignore trailing whitespace.
-  while (!PatternStr.empty() &&
-         (PatternStr.back() == ' ' || PatternStr.back() == '\t'))
-    PatternStr = PatternStr.substr(0, PatternStr.size()-1);
 
-  // Check that there is something on the line.
-  if (PatternStr.empty()) {
-    SM.PrintMessage(PatternLoc, SourceMgr::DK_Error,
-                    "found empty check string with prefix '" +
-                    CheckPrefix+":'");
-    return true;
-  }
 
-  // Check to see if this is a fixed string, or if it has regex pieces.
-  if (PatternStr.size() < 2 ||
-      (PatternStr.find("{{") == StringRef::npos &&
-       PatternStr.find("[[") == StringRef::npos)) {
-    FixedStr = PatternStr;
-    return false;
-  }
 
-  // Paren value #0 is for the fully matched string.  Any new parenthesized
-  // values add from there.
-  unsigned CurParen = 1;
 
-  // Otherwise, there is at least one regex piece.  Build up the regex pattern
-  // by escaping scary characters in fixed strings, building up one big regex.
-  while (!PatternStr.empty()) {
-    // RegEx matches.
-    if (PatternStr.startswith("{{")) {
 
-      // Otherwise, this is the start of a regex match.  Scan for the }}.
-      size_t End = PatternStr.find("}}");
-      if (End == StringRef::npos) {
-        SM.PrintMessage(SMLoc::getFromPointer(PatternStr.data()),
-                        SourceMgr::DK_Error,
-                        "found start of regex string with no end '}}'");
-        return true;
-      }
 
-      // Enclose {{}} patterns in parens just like [[]] even though we're not
-      // capturing the result for any purpose.  This is required in case the
-      // expression contains an alternation like: CHECK:  abc{{x|z}}def.  We
-      // want this to turn into: "abc(x|z)def" not "abcx|zdef".
-      RegExStr += '(';
-      ++CurParen;
-
-      if (AddRegExToRegEx(PatternStr.substr(2, End-2), CurParen, SM))
-        return true;
-      RegExStr += ')';
-
-      PatternStr = PatternStr.substr(End+2);
-      continue;
-    }
-
-    // Named RegEx matches.  These are of two forms: [[foo:.*]] which matches .*
-    // (or some other regex) and assigns it to the FileCheck variable 'foo'. The
-    // second form is [[foo]] which is a reference to foo.  The variable name
-    // itself must be of the form "[a-zA-Z_][0-9a-zA-Z_]*", otherwise we reject
-    // it.  This is to catch some common errors.
-    if (PatternStr.startswith("[[")) {
-      // Verify that it is terminated properly.
-      size_t End = PatternStr.find("]]");
-      if (End == StringRef::npos) {
-        SM.PrintMessage(SMLoc::getFromPointer(PatternStr.data()),
-                        SourceMgr::DK_Error,
-                        "invalid named regex reference, no ]] found");
-        return true;
-      }
-
-      StringRef MatchStr = PatternStr.substr(2, End-2);
-      PatternStr = PatternStr.substr(End+2);
-
-      // Get the regex name (e.g. "foo").
-      size_t NameEnd = MatchStr.find(':');
-      StringRef Name = MatchStr.substr(0, NameEnd);
-
-      if (Name.empty()) {
-        SM.PrintMessage(SMLoc::getFromPointer(Name.data()), SourceMgr::DK_Error,
-                        "invalid name in named regex: empty name");
-        return true;
-      }
-
-      // Verify that the name is well formed.
-      for (unsigned i = 0, e = Name.size(); i != e; ++i)
-        if (Name[i] != '_' && !isalnum(Name[i])) {
-          SM.PrintMessage(SMLoc::getFromPointer(Name.data()+i),
-                          SourceMgr::DK_Error, "invalid name in named regex");
-          return true;
-        }
-
-      // Name can't start with a digit.
-      if (isdigit(Name[0])) {
-        SM.PrintMessage(SMLoc::getFromPointer(Name.data()), SourceMgr::DK_Error,
-                        "invalid name in named regex");
-        return true;
-      }
-
-      // Handle [[foo]].
-      if (NameEnd == StringRef::npos) {
-        VariableUses.push_back(std::make_pair(Name, RegExStr.size()));
-        continue;
-      }
-
-      // Handle [[foo:.*]].
-      VariableDefs.push_back(std::make_pair(Name, CurParen));
-      RegExStr += '(';
-      ++CurParen;
-
-      if (AddRegExToRegEx(MatchStr.substr(NameEnd+1), CurParen, SM))
-        return true;
-
-      RegExStr += ')';
-    }
-
-    // Handle fixed string matches.
-    // Find the end, which is the start of the next regex.
-    size_t FixedMatchEnd = PatternStr.find("{{");
-    FixedMatchEnd = std::min(FixedMatchEnd, PatternStr.find("[["));
-    AddFixedStringToRegEx(PatternStr.substr(0, FixedMatchEnd), RegExStr);
-    PatternStr = PatternStr.substr(FixedMatchEnd);
-    continue;
-  }
-
-  return false;
+static void DumpCommandLine(int argc, char **argv) {
+  errs() << "FileCheck command line: ";
+  for (int I = 0; I < argc; I++)
+    errs() << " " << argv[I];
+  errs() << "\n";
 }
 
-void Pattern::AddFixedStringToRegEx(StringRef FixedStr, std::string &TheStr) {
-  // Add the characters from FixedStr to the regex, escaping as needed.  This
-  // avoids "leaning toothpicks" in common patterns.
-  for (unsigned i = 0, e = FixedStr.size(); i != e; ++i) {
-    switch (FixedStr[i]) {
-    // These are the special characters matched in "p_ere_exp".
-    case '(':
-    case ')':
-    case '^':
-    case '$':
-    case '|':
-    case '*':
-    case '+':
-    case '?':
-    case '.':
-    case '[':
-    case '\\':
-    case '{':
-      TheStr += '\\';
-      // FALL THROUGH.
-    default:
-      TheStr += FixedStr[i];
-      break;
-    }
-  }
-}
-
-bool Pattern::AddRegExToRegEx(StringRef RegexStr, unsigned &CurParen,
-                              SourceMgr &SM) {
-  Regex R(RegexStr);
-  std::string Error;
-  if (!R.isValid(Error)) {
-    SM.PrintMessage(SMLoc::getFromPointer(RegexStr.data()), SourceMgr::DK_Error,
-                    "invalid regex: " + Error);
-    return true;
-  }
-
-  RegExStr += RegexStr.str();
-  CurParen += R.getNumMatches();
-  return false;
-}
-
-/// Match - Match the pattern string against the input buffer Buffer.  This
-/// returns the position that is matched or npos if there is no match.  If
-/// there is a match, the size of the matched string is returned in MatchLen.
-size_t Pattern::Match(StringRef Buffer, size_t &MatchLen,
-                      StringMap<StringRef> &VariableTable) const {
-  // If this is the EOF pattern, match it immediately.
-  if (MatchEOF) {
-    MatchLen = 0;
-    return Buffer.size();
-  }
-
-  // If this is a fixed string pattern, just match it now.
-  if (!FixedStr.empty()) {
-    MatchLen = FixedStr.size();
-    return Buffer.find(FixedStr);
-  }
-
-  // Regex match.
-
-  // If there are variable uses, we need to create a temporary string with the
-  // actual value.
-  StringRef RegExToMatch = RegExStr;
-  std::string TmpStr;
-  if (!VariableUses.empty()) {
-    TmpStr = RegExStr;
-
-    unsigned InsertOffset = 0;
-    for (unsigned i = 0, e = VariableUses.size(); i != e; ++i) {
-      StringMap<StringRef>::iterator it =
-        VariableTable.find(VariableUses[i].first);
-      // If the variable is undefined, return an error.
-      if (it == VariableTable.end())
-        return StringRef::npos;
-
-      // Look up the value and escape it so that we can plop it into the regex.
-      std::string Value;
-      AddFixedStringToRegEx(it->second, Value);
-
-      // Plop it into the regex at the adjusted offset.
-      TmpStr.insert(TmpStr.begin()+VariableUses[i].second+InsertOffset,
-                    Value.begin(), Value.end());
-      InsertOffset += Value.size();
-    }
-
-    // Match the newly constructed regex.
-    RegExToMatch = TmpStr;
-  }
-
-
-  SmallVector<StringRef, 4> MatchInfo;
-  if (!Regex(RegExToMatch, Regex::Newline).match(Buffer, &MatchInfo))
-    return StringRef::npos;
-
-  // Successful regex match.
-  assert(!MatchInfo.empty() && "Didn't get any match");
-  StringRef FullMatch = MatchInfo[0];
-
-  // If this defines any variables, remember their values.
-  for (unsigned i = 0, e = VariableDefs.size(); i != e; ++i) {
-    assert(VariableDefs[i].second < MatchInfo.size() &&
-           "Internal paren error");
-    VariableTable[VariableDefs[i].first] = MatchInfo[VariableDefs[i].second];
-  }
-
-  MatchLen = FullMatch.size();
-  return FullMatch.data()-Buffer.data();
-}
-
-unsigned Pattern::ComputeMatchDistance(StringRef Buffer,
-                              const StringMap<StringRef> &VariableTable) const {
-  // Just compute the number of matching characters. For regular expressions, we
-  // just compare against the regex itself and hope for the best.
-  //
-  // FIXME: One easy improvement here is have the regex lib generate a single
-  // example regular expression which matches, and use that as the example
-  // string.
-  StringRef ExampleString(FixedStr);
-  if (ExampleString.empty())
-    ExampleString = RegExStr;
-
-  // Only compare up to the first line in the buffer, or the string size.
-  StringRef BufferPrefix = Buffer.substr(0, ExampleString.size());
-  BufferPrefix = BufferPrefix.split('\n').first;
-  return BufferPrefix.edit_distance(ExampleString);
-}
-
-void Pattern::PrintFailureInfo(const SourceMgr &SM, StringRef Buffer,
-                               const StringMap<StringRef> &VariableTable) const{
-  // If this was a regular expression using variables, print the current
-  // variable values.
-  if (!VariableUses.empty()) {
-    for (unsigned i = 0, e = VariableUses.size(); i != e; ++i) {
-      StringRef Var = VariableUses[i].first;
-      StringMap<StringRef>::const_iterator it = VariableTable.find(Var);
-      SmallString<256> Msg;
-      raw_svector_ostream OS(Msg);
-
-      // Check for undefined variable references.
-      if (it == VariableTable.end()) {
-        OS << "uses undefined variable \"";
-        OS.write_escaped(Var) << "\"";;
-      } else {
-        OS << "with variable \"";
-        OS.write_escaped(Var) << "\" equal to \"";
-        OS.write_escaped(it->second) << "\"";
-      }
-
-      SM.PrintMessage(SMLoc::getFromPointer(Buffer.data()), SourceMgr::DK_Note,
-                      OS.str());
-    }
-  }
-
-  // Attempt to find the closest/best fuzzy match.  Usually an error happens
-  // because some string in the output didn't exactly match. In these cases, we
-  // would like to show the user a best guess at what "should have" matched, to
-  // save them having to actually check the input manually.
-  size_t NumLinesForward = 0;
-  size_t Best = StringRef::npos;
-  double BestQuality = 0;
-
-  // Use an arbitrary 4k limit on how far we will search.
-  for (size_t i = 0, e = std::min(size_t(4096), Buffer.size()); i != e; ++i) {
-    if (Buffer[i] == '\n')
-      ++NumLinesForward;
-
-    // Patterns have leading whitespace stripped, so skip whitespace when
-    // looking for something which looks like a pattern.
-    if (Buffer[i] == ' ' || Buffer[i] == '\t')
-      continue;
-
-    // Compute the "quality" of this match as an arbitrary combination of the
-    // match distance and the number of lines skipped to get to this match.
-    unsigned Distance = ComputeMatchDistance(Buffer.substr(i), VariableTable);
-    double Quality = Distance + (NumLinesForward / 100.);
-
-    if (Quality < BestQuality || Best == StringRef::npos) {
-      Best = i;
-      BestQuality = Quality;
-    }
-  }
-
-  // Print the "possible intended match here" line if we found something
-  // reasonable and not equal to what we showed in the "scanning from here"
-  // line.
-  if (Best && Best != StringRef::npos && BestQuality < 50) {
-      SM.PrintMessage(SMLoc::getFromPointer(Buffer.data() + Best),
-                      SourceMgr::DK_Note, "possible intended match here");
-
-    // FIXME: If we wanted to be really friendly we would show why the match
-    // failed, as it can be hard to spot simple one character differences.
-  }
-}
-
-//===----------------------------------------------------------------------===//
-// Check Strings.
-//===----------------------------------------------------------------------===//
-
-/// CheckString - This is a check that we found in the input file.
-struct CheckString {
-  /// Pat - The pattern to match.
-  Pattern Pat;
-
-  /// Loc - The location in the match file that the check string was specified.
-  SMLoc Loc;
-
-  /// IsCheckNext - This is true if this is a CHECK-NEXT: directive (as opposed
-  /// to a CHECK: directive.
-  bool IsCheckNext;
-
-  /// NotStrings - These are all of the strings that are disallowed from
-  /// occurring between this match string and the previous one (or start of
-  /// file).
-  std::vector<std::pair<SMLoc, Pattern> > NotStrings;
-
-  CheckString(const Pattern &P, SMLoc L, bool isCheckNext)
-    : Pat(P), Loc(L), IsCheckNext(isCheckNext) {}
+struct MarkerStyle {
+  /// The starting char (before tildes) for marking the line.
+  char Lead;
+  /// What color to use for this annotation.
+  raw_ostream::Colors Color;
+  /// A note to follow the marker, or empty string if none.
+  std::string Note;
+  MarkerStyle() {}
+  MarkerStyle(char Lead, raw_ostream::Colors Color,
+              const std::string &Note = "")
+      : Lead(Lead), Color(Color), Note(Note) {}
 };
 
-/// CanonicalizeInputFile - Remove duplicate horizontal space from the specified
-/// memory buffer, free it, and return a new one.
-static MemoryBuffer *CanonicalizeInputFile(MemoryBuffer *MB) {
-  SmallString<128> NewFile;
-  NewFile.reserve(MB->getBufferSize());
-
-  for (const char *Ptr = MB->getBufferStart(), *End = MB->getBufferEnd();
-       Ptr != End; ++Ptr) {
-    // Eliminate trailing dosish \r.
-    if (Ptr <= End - 2 && Ptr[0] == '\r' && Ptr[1] == '\n') {
-      continue;
-    }
-
-    // If C is not a horizontal whitespace, skip it.
-    if (*Ptr != ' ' && *Ptr != '\t') {
-      NewFile.push_back(*Ptr);
-      continue;
-    }
-
-    // Otherwise, add one space and advance over neighboring space.
-    NewFile.push_back(' ');
-    while (Ptr+1 != End &&
-           (Ptr[1] == ' ' || Ptr[1] == '\t'))
-      ++Ptr;
+static MarkerStyle GetMarker(FileCheckDiag::MatchType MatchTy) {
+  switch (MatchTy) {
+  case FileCheckDiag::MatchFoundAndExpected:
+    return MarkerStyle('^', raw_ostream::GREEN);
+  case FileCheckDiag::MatchFoundButExcluded:
+    return MarkerStyle('!', raw_ostream::RED, "error: no match expected");
+  case FileCheckDiag::MatchFoundButWrongLine:
+    return MarkerStyle('!', raw_ostream::RED, "error: match on wrong line");
+  case FileCheckDiag::MatchFoundButDiscarded:
+    return MarkerStyle('!', raw_ostream::CYAN,
+                       "discard: overlaps earlier match");
+  case FileCheckDiag::MatchNoneAndExcluded:
+    return MarkerStyle('X', raw_ostream::GREEN);
+  case FileCheckDiag::MatchNoneButExpected:
+    return MarkerStyle('X', raw_ostream::RED, "error: no match found");
+  case FileCheckDiag::MatchFuzzy:
+    return MarkerStyle('?', raw_ostream::MAGENTA, "possible intended match");
   }
-
-  // Free the old buffer and return a new one.
-  MemoryBuffer *MB2 =
-    MemoryBuffer::getMemBufferCopy(NewFile.str(), MB->getBufferIdentifier());
-
-  delete MB;
-  return MB2;
+  llvm_unreachable_internal("unexpected match type");
 }
 
+static void DumpInputAnnotationHelp(raw_ostream &OS) {
+  OS << "The following description was requested by -dump-input=help to\n"
+     << "explain the input annotations printed by -dump-input=always and\n"
+     << "-dump-input=fail:\n\n";
 
-/// ReadCheckFile - Read the check file, which specifies the sequence of
-/// expected strings.  The strings are added to the CheckStrings vector.
-static bool ReadCheckFile(SourceMgr &SM,
-                          std::vector<CheckString> &CheckStrings) {
-  // Open the check file, and tell SourceMgr about it.
-  OwningPtr<MemoryBuffer> File;
-  if (error_code ec =
-        MemoryBuffer::getFileOrSTDIN(CheckFilename.c_str(), File)) {
-    errs() << "Could not open check file '" << CheckFilename << "': "
-           << ec.message() << '\n';
-    return true;
+  // Labels for input lines.
+  OS << "  - ";
+  WithColor(OS, raw_ostream::SAVEDCOLOR, true) << "L:";
+  OS << "     labels line number L of the input file\n";
+
+  // Labels for annotation lines.
+  OS << "  - ";
+  WithColor(OS, raw_ostream::SAVEDCOLOR, true) << "T:L";
+  OS << "    labels the only match result for a pattern of type T from "
+     << "line L of\n"
+     << "           the check file\n";
+  OS << "  - ";
+  WithColor(OS, raw_ostream::SAVEDCOLOR, true) << "T:L'N";
+  OS << "  labels the Nth match result for a pattern of type T from line "
+     << "L of\n"
+     << "           the check file\n";
+
+  // Markers on annotation lines.
+  OS << "  - ";
+  WithColor(OS, raw_ostream::SAVEDCOLOR, true) << "^~~";
+  OS << "    marks good match (reported if -v)\n"
+     << "  - ";
+  WithColor(OS, raw_ostream::SAVEDCOLOR, true) << "!~~";
+  OS << "    marks bad match, such as:\n"
+     << "           - CHECK-NEXT on same line as previous match (error)\n"
+     << "           - CHECK-NOT found (error)\n"
+     << "           - CHECK-DAG overlapping match (discarded, reported if "
+     << "-vv)\n"
+     << "  - ";
+  WithColor(OS, raw_ostream::SAVEDCOLOR, true) << "X~~";
+  OS << "    marks search range when no match is found, such as:\n"
+     << "           - CHECK-NEXT not found (error)\n"
+     << "           - CHECK-NOT not found (success, reported if -vv)\n"
+     << "           - CHECK-DAG not found after discarded matches (error)\n"
+     << "  - ";
+  WithColor(OS, raw_ostream::SAVEDCOLOR, true) << "?";
+  OS << "      marks fuzzy match when no match is found\n";
+
+  // Colors.
+  OS << "  - colors ";
+  WithColor(OS, raw_ostream::GREEN, true) << "success";
+  OS << ", ";
+  WithColor(OS, raw_ostream::RED, true) << "error";
+  OS << ", ";
+  WithColor(OS, raw_ostream::MAGENTA, true) << "fuzzy match";
+  OS << ", ";
+  WithColor(OS, raw_ostream::CYAN, true, false) << "discarded match";
+  OS << ", ";
+  WithColor(OS, raw_ostream::CYAN, true, true) << "unmatched input";
+  OS << "\n\n"
+     << "If you are not seeing color above or in input dumps, try: -color\n";
+}
+
+/// An annotation for a single input line.
+struct InputAnnotation {
+  /// The check file line (one-origin indexing) where the directive that
+  /// produced this annotation is located.
+  unsigned CheckLine;
+  /// The index of the match result for this check.
+  unsigned CheckDiagIndex;
+  /// The label for this annotation.
+  std::string Label;
+  /// What input line (one-origin indexing) this annotation marks.  This might
+  /// be different from the starting line of the original diagnostic if this is
+  /// a non-initial fragment of a diagnostic that has been broken across
+  /// multiple lines.
+  unsigned InputLine;
+  /// The column range (one-origin indexing, open end) in which to to mark the
+  /// input line.  If InputEndCol is UINT_MAX, treat it as the last column
+  /// before the newline.
+  unsigned InputStartCol, InputEndCol;
+  /// The marker to use.
+  MarkerStyle Marker;
+  /// Whether this annotation represents a good match for an expected pattern.
+  bool FoundAndExpectedMatch;
+};
+
+/// Get an abbreviation for the check type.
+std::string GetCheckTypeAbbreviation(Check::FileCheckType Ty) {
+  switch (Ty) {
+  case Check::CheckPlain:
+    if (Ty.getCount() > 1)
+      return "count";
+    return "check";
+  case Check::CheckNext:
+    return "next";
+  case Check::CheckSame:
+    return "same";
+  case Check::CheckNot:
+    return "not";
+  case Check::CheckDAG:
+    return "dag";
+  case Check::CheckLabel:
+    return "label";
+  case Check::CheckEmpty:
+    return "empty";
+  case Check::CheckEOF:
+    return "eof";
+  case Check::CheckBadNot:
+    return "bad-not";
+  case Check::CheckBadCount:
+    return "bad-count";
+  case Check::CheckNone:
+    llvm_unreachable("invalid FileCheckType");
   }
-  MemoryBuffer *F = File.take();
+  llvm_unreachable("unknown FileCheckType");
+}
 
-  // If we want to canonicalize whitespace, strip excess whitespace from the
-  // buffer containing the CHECK lines.
-  if (!NoCanonicalizeWhiteSpace)
-    F = CanonicalizeInputFile(F);
+static void BuildInputAnnotations(const std::vector<FileCheckDiag> &Diags,
+                                  std::vector<InputAnnotation> &Annotations,
+                                  unsigned &LabelWidth) {
+  // How many diagnostics has the current check seen so far?
+  unsigned CheckDiagCount = 0;
+  // What's the widest label?
+  LabelWidth = 0;
+  for (auto DiagItr = Diags.begin(), DiagEnd = Diags.end(); DiagItr != DiagEnd;
+       ++DiagItr) {
+    InputAnnotation A;
 
-  SM.AddNewSourceBuffer(F, SMLoc());
+    // Build label, which uniquely identifies this check result.
+    A.CheckLine = DiagItr->CheckLine;
+    llvm::raw_string_ostream Label(A.Label);
+    Label << GetCheckTypeAbbreviation(DiagItr->CheckTy) << ":"
+          << DiagItr->CheckLine;
+    A.CheckDiagIndex = UINT_MAX;
+    auto DiagNext = std::next(DiagItr);
+    if (DiagNext != DiagEnd && DiagItr->CheckTy == DiagNext->CheckTy &&
+        DiagItr->CheckLine == DiagNext->CheckLine)
+      A.CheckDiagIndex = CheckDiagCount++;
+    else if (CheckDiagCount) {
+      A.CheckDiagIndex = CheckDiagCount;
+      CheckDiagCount = 0;
+    }
+    if (A.CheckDiagIndex != UINT_MAX)
+      Label << "'" << A.CheckDiagIndex;
+    else
+      A.CheckDiagIndex = 0;
+    Label.flush();
+    LabelWidth = std::max((std::string::size_type)LabelWidth, A.Label.size());
 
-  // Find all instances of CheckPrefix followed by : in the file.
-  StringRef Buffer = F->getBuffer();
+    MarkerStyle Marker = GetMarker(DiagItr->MatchTy);
+    A.Marker = Marker;
+    A.FoundAndExpectedMatch =
+        DiagItr->MatchTy == FileCheckDiag::MatchFoundAndExpected;
 
-  std::vector<std::pair<SMLoc, Pattern> > NotMatches;
-
-  while (1) {
-    // See if Prefix occurs in the memory buffer.
-    Buffer = Buffer.substr(Buffer.find(CheckPrefix));
-
-    // If we didn't find a match, we're done.
-    if (Buffer.empty())
-      break;
-
-    const char *CheckPrefixStart = Buffer.data();
-
-    // When we find a check prefix, keep track of whether we find CHECK: or
-    // CHECK-NEXT:
-    bool IsCheckNext = false, IsCheckNot = false;
-
-    // Verify that the : is present after the prefix.
-    if (Buffer[CheckPrefix.size()] == ':') {
-      Buffer = Buffer.substr(CheckPrefix.size()+1);
-    } else if (Buffer.size() > CheckPrefix.size()+6 &&
-               memcmp(Buffer.data()+CheckPrefix.size(), "-NEXT:", 6) == 0) {
-      Buffer = Buffer.substr(CheckPrefix.size()+7);
-      IsCheckNext = true;
-    } else if (Buffer.size() > CheckPrefix.size()+5 &&
-               memcmp(Buffer.data()+CheckPrefix.size(), "-NOT:", 5) == 0) {
-      Buffer = Buffer.substr(CheckPrefix.size()+6);
-      IsCheckNot = true;
+    // Compute the mark location, and break annotation into multiple
+    // annotations if it spans multiple lines.
+    A.InputLine = DiagItr->InputStartLine;
+    A.InputStartCol = DiagItr->InputStartCol;
+    if (DiagItr->InputStartLine == DiagItr->InputEndLine) {
+      // Sometimes ranges are empty in order to indicate a specific point, but
+      // that would mean nothing would be marked, so adjust the range to
+      // include the following character.
+      A.InputEndCol =
+          std::max(DiagItr->InputStartCol + 1, DiagItr->InputEndCol);
+      Annotations.push_back(A);
     } else {
-      Buffer = Buffer.substr(1);
-      continue;
+      assert(DiagItr->InputStartLine < DiagItr->InputEndLine &&
+             "expected input range not to be inverted");
+      A.InputEndCol = UINT_MAX;
+      A.Marker.Note = "";
+      Annotations.push_back(A);
+      for (unsigned L = DiagItr->InputStartLine + 1, E = DiagItr->InputEndLine;
+           L <= E; ++L) {
+        // If a range ends before the first column on a line, then it has no
+        // characters on that line, so there's nothing to render.
+        if (DiagItr->InputEndCol == 1 && L == E) {
+          Annotations.back().Marker.Note = Marker.Note;
+          break;
+        }
+        InputAnnotation B;
+        B.CheckLine = A.CheckLine;
+        B.CheckDiagIndex = A.CheckDiagIndex;
+        B.Label = A.Label;
+        B.InputLine = L;
+        B.Marker = Marker;
+        B.Marker.Lead = '~';
+        B.InputStartCol = 1;
+        if (L != E) {
+          B.InputEndCol = UINT_MAX;
+          B.Marker.Note = "";
+        } else
+          B.InputEndCol = DiagItr->InputEndCol;
+        B.FoundAndExpectedMatch = A.FoundAndExpectedMatch;
+        Annotations.push_back(B);
+      }
     }
-
-    // Okay, we found the prefix, yay.  Remember the rest of the line, but
-    // ignore leading and trailing whitespace.
-    Buffer = Buffer.substr(Buffer.find_first_not_of(" \t"));
-
-    // Scan ahead to the end of line.
-    size_t EOL = Buffer.find_first_of("\n\r");
-
-    // Remember the location of the start of the pattern, for diagnostics.
-    SMLoc PatternLoc = SMLoc::getFromPointer(Buffer.data());
-
-    // Parse the pattern.
-    Pattern P;
-    if (P.ParsePattern(Buffer.substr(0, EOL), SM))
-      return true;
-
-    Buffer = Buffer.substr(EOL);
-
-
-    // Verify that CHECK-NEXT lines have at least one CHECK line before them.
-    if (IsCheckNext && CheckStrings.empty()) {
-      SM.PrintMessage(SMLoc::getFromPointer(CheckPrefixStart),
-                      SourceMgr::DK_Error,
-                      "found '"+CheckPrefix+"-NEXT:' without previous '"+
-                      CheckPrefix+ ": line");
-      return true;
-    }
-
-    // Handle CHECK-NOT.
-    if (IsCheckNot) {
-      NotMatches.push_back(std::make_pair(SMLoc::getFromPointer(Buffer.data()),
-                                          P));
-      continue;
-    }
-
-
-    // Okay, add the string we captured to the output vector and move on.
-    CheckStrings.push_back(CheckString(P,
-                                       PatternLoc,
-                                       IsCheckNext));
-    std::swap(NotMatches, CheckStrings.back().NotStrings);
   }
-
-  // Add an EOF pattern for any trailing CHECK-NOTs.
-  if (!NotMatches.empty()) {
-    CheckStrings.push_back(CheckString(Pattern(true),
-                                       SMLoc::getFromPointer(Buffer.data()),
-                                       false));
-    std::swap(NotMatches, CheckStrings.back().NotStrings);
-  }
-
-  if (CheckStrings.empty()) {
-    errs() << "error: no check strings found with prefix '" << CheckPrefix
-           << ":'\n";
-    return true;
-  }
-
-  return false;
 }
 
-static void PrintCheckFailed(const SourceMgr &SM, const CheckString &CheckStr,
-                             StringRef Buffer,
-                             StringMap<StringRef> &VariableTable) {
-  // Otherwise, we have an error, emit an error message.
-  SM.PrintMessage(CheckStr.Loc, SourceMgr::DK_Error,
-                  "expected string not found in input");
+static void DumpAnnotatedInput(raw_ostream &OS, const FileCheckRequest &Req,
+                               StringRef InputFileText,
+                               std::vector<InputAnnotation> &Annotations,
+                               unsigned LabelWidth) {
+  OS << "Full input was:\n<<<<<<\n";
 
-  // Print the "scanning from here" line.  If the current position is at the
-  // end of a line, advance to the start of the next line.
-  Buffer = Buffer.substr(Buffer.find_first_not_of(" \t\n\r"));
+  // Sort annotations.
+  //
+  // First, sort in the order of input lines to make it easier to find relevant
+  // annotations while iterating input lines in the implementation below.
+  // FileCheck diagnostics are not always reported and recorded in the order of
+  // input lines due to, for example, CHECK-DAG and CHECK-NOT.
+  //
+  // Second, for annotations for the same input line, sort in the order of the
+  // FileCheck directive's line in the check file (where there's at most one
+  // directive per line) and then by the index of the match result for that
+  // directive.  The rationale of this choice is that, for any input line, this
+  // sort establishes a total order of annotations that, with respect to match
+  // results, is consistent across multiple lines, thus making match results
+  // easier to track from one line to the next when they span multiple lines.
+  std::sort(Annotations.begin(), Annotations.end(),
+            [](const InputAnnotation &A, const InputAnnotation &B) {
+              if (A.InputLine != B.InputLine)
+                return A.InputLine < B.InputLine;
+              if (A.CheckLine != B.CheckLine)
+                return A.CheckLine < B.CheckLine;
+              // FIXME: Sometimes CHECK-LABEL reports its match twice with
+              // other diagnostics in between, and then diag index incrementing
+              // fails to work properly, and then this assert fails.  We should
+              // suppress one of those diagnostics or do a better job of
+              // computing this index.  For now, we just produce a redundant
+              // CHECK-LABEL annotation.
+              // assert(A.CheckDiagIndex != B.CheckDiagIndex &&
+              //        "expected diagnostic indices to be unique within a "
+              //        " check line");
+              return A.CheckDiagIndex < B.CheckDiagIndex;
+            });
 
-  SM.PrintMessage(SMLoc::getFromPointer(Buffer.data()), SourceMgr::DK_Note,
-                  "scanning from here");
+  // Compute the width of the label column.
+  const unsigned char *InputFilePtr = InputFileText.bytes_begin(),
+                      *InputFileEnd = InputFileText.bytes_end();
+  unsigned LineCount = InputFileText.count('\n');
+  if (InputFileEnd[-1] != '\n')
+    ++LineCount;
+  unsigned LineNoWidth = log10(LineCount) + 1;
+  // +3 below adds spaces (1) to the left of the (right-aligned) line numbers
+  // on input lines and (2) to the right of the (left-aligned) labels on
+  // annotation lines so that input lines and annotation lines are more
+  // visually distinct.  For example, the spaces on the annotation lines ensure
+  // that input line numbers and check directive line numbers never align
+  // horizontally.  Those line numbers might not even be for the same file.
+  // One space would be enough to achieve that, but more makes it even easier
+  // to see.
+  LabelWidth = std::max(LabelWidth, LineNoWidth) + 3;
 
-  // Allow the pattern to print additional information if desired.
-  CheckStr.Pat.PrintFailureInfo(SM, Buffer, VariableTable);
-}
+  // Print annotated input lines.
+  auto AnnotationItr = Annotations.begin(), AnnotationEnd = Annotations.end();
+  for (unsigned Line = 1;
+       InputFilePtr != InputFileEnd || AnnotationItr != AnnotationEnd;
+       ++Line) {
+    const unsigned char *InputFileLine = InputFilePtr;
 
-/// CountNumNewlinesBetween - Count the number of newlines in the specified
-/// range.
-static unsigned CountNumNewlinesBetween(StringRef Range) {
-  unsigned NumNewLines = 0;
-  while (1) {
-    // Scan for newline.
-    Range = Range.substr(Range.find_first_of("\n\r"));
-    if (Range.empty()) return NumNewLines;
+    // Print right-aligned line number.
+    WithColor(OS, raw_ostream::BLACK, true)
+        << format_decimal(Line, LabelWidth) << ": ";
 
-    ++NumNewLines;
+    // For the case where -v and colors are enabled, find the annotations for
+    // good matches for expected patterns in order to highlight everything
+    // else in the line.  There are no such annotations if -v is disabled.
+    std::vector<InputAnnotation> FoundAndExpectedMatches;
+    if (Req.Verbose && WithColor(OS).colorsEnabled()) {
+      for (auto I = AnnotationItr; I != AnnotationEnd && I->InputLine == Line;
+           ++I) {
+        if (I->FoundAndExpectedMatch)
+          FoundAndExpectedMatches.push_back(*I);
+      }
+    }
 
-    // Handle \n\r and \r\n as a single newline.
-    if (Range.size() > 1 &&
-        (Range[1] == '\n' || Range[1] == '\r') &&
-        (Range[0] != Range[1]))
-      Range = Range.substr(1);
-    Range = Range.substr(1);
+    // Print numbered line with highlighting where there are no matches for
+    // expected patterns.
+    bool Newline = false;
+    {
+      WithColor COS(OS);
+      bool InMatch = false;
+      if (Req.Verbose)
+        COS.changeColor(raw_ostream::CYAN, true, true);
+      for (unsigned Col = 1; InputFilePtr != InputFileEnd && !Newline; ++Col) {
+        bool WasInMatch = InMatch;
+        InMatch = false;
+        for (auto M : FoundAndExpectedMatches) {
+          if (M.InputStartCol <= Col && Col < M.InputEndCol) {
+            InMatch = true;
+            break;
+          }
+        }
+        if (!WasInMatch && InMatch)
+          COS.resetColor();
+        else if (WasInMatch && !InMatch)
+          COS.changeColor(raw_ostream::CYAN, true, true);
+        if (*InputFilePtr == '\n')
+          Newline = true;
+        else
+          COS << *InputFilePtr;
+        ++InputFilePtr;
+      }
+    }
+    OS << '\n';
+    unsigned InputLineWidth = InputFilePtr - InputFileLine - Newline;
+
+    // Print any annotations.
+    while (AnnotationItr != AnnotationEnd &&
+           AnnotationItr->InputLine == Line) {
+      WithColor COS(OS, AnnotationItr->Marker.Color, true);
+      // The two spaces below are where the ": " appears on input lines.
+      COS << left_justify(AnnotationItr->Label, LabelWidth) << "  ";
+      unsigned Col;
+      for (Col = 1; Col < AnnotationItr->InputStartCol; ++Col)
+        COS << ' ';
+      COS << AnnotationItr->Marker.Lead;
+      // If InputEndCol=UINT_MAX, stop at InputLineWidth.
+      for (++Col; Col < AnnotationItr->InputEndCol && Col <= InputLineWidth;
+           ++Col)
+        COS << '~';
+      const std::string &Note = AnnotationItr->Marker.Note;
+      if (!Note.empty()) {
+        // Put the note at the end of the input line.  If we were to instead
+        // put the note right after the marker, subsequent annotations for the
+        // same input line might appear to mark this note instead of the input
+        // line.
+        for (; Col <= InputLineWidth; ++Col)
+          COS << ' ';
+        COS << ' ' << Note;
+      }
+      COS << '\n';
+      ++AnnotationItr;
+    }
   }
+
+  OS << ">>>>>>\n";
 }
 
 int main(int argc, char **argv) {
-  sys::PrintStackTraceOnErrorSignal();
-  PrettyStackTraceProgram X(argc, argv);
-  cl::ParseCommandLineOptions(argc, argv);
+  // Enable use of ANSI color codes because FileCheck is using them to
+  // highlight text.
+  llvm::sys::Process::UseANSIEscapeCodes(true);
+
+  InitLLVM X(argc, argv);
+  cl::ParseCommandLineOptions(argc, argv, /*Overview*/ "", /*Errs*/ nullptr,
+                              "FILECHECK_OPTS");
+  if (DumpInput == DumpInputHelp) {
+    DumpInputAnnotationHelp(outs());
+    return 0;
+  }
+  if (CheckFilename.empty()) {
+    errs() << "<check-file> not specified\n";
+    return 2;
+  }
+
+  FileCheckRequest Req;
+  for (auto Prefix : CheckPrefixes)
+    Req.CheckPrefixes.push_back(Prefix);
+
+  for (auto CheckNot : ImplicitCheckNot)
+    Req.ImplicitCheckNot.push_back(CheckNot);
+
+  bool GlobalDefineError = false;
+  for (auto G : GlobalDefines) {
+    size_t EqIdx = G.find('=');
+    if (EqIdx == std::string::npos) {
+      errs() << "Missing equal sign in command-line definition '-D" << G
+             << "'\n";
+      GlobalDefineError = true;
+      continue;
+    }
+    if (EqIdx == 0) {
+      errs() << "Missing pattern variable name in command-line definition '-D"
+             << G << "'\n";
+      GlobalDefineError = true;
+      continue;
+    }
+    Req.GlobalDefines.push_back(G);
+  }
+  if (GlobalDefineError)
+    return 2;
+
+  Req.AllowEmptyInput = AllowEmptyInput;
+  Req.EnableVarScope = EnableVarScope;
+  Req.AllowDeprecatedDagOverlap = AllowDeprecatedDagOverlap;
+  Req.Verbose = Verbose;
+  Req.VerboseVerbose = VerboseVerbose;
+  Req.NoCanonicalizeWhiteSpace = NoCanonicalizeWhiteSpace;
+  Req.MatchFullLines = MatchFullLines;
+
+  if (VerboseVerbose)
+    Req.Verbose = true;
+
+  FileCheck FC(Req);
+  if (!FC.ValidateCheckPrefixes()) {
+    errs() << "Supplied check-prefix is invalid! Prefixes must be unique and "
+              "start with a letter and contain only alphanumeric characters, "
+              "hyphens and underscores\n";
+    return 2;
+  }
+
+  Regex PrefixRE = FC.buildCheckPrefixRegex();
+  std::string REError;
+  if (!PrefixRE.isValid(REError)) {
+    errs() << "Unable to combine check-prefix strings into a prefix regular "
+              "expression! This is likely a bug in FileCheck's verification of "
+              "the check-prefix strings. Regular expression parsing failed "
+              "with the following error: "
+           << REError << "\n";
+    return 2;
+  }
 
   SourceMgr SM;
 
   // Read the expected strings from the check file.
-  std::vector<CheckString> CheckStrings;
-  if (ReadCheckFile(SM, CheckStrings))
+  ErrorOr<std::unique_ptr<MemoryBuffer>> CheckFileOrErr =
+      MemoryBuffer::getFileOrSTDIN(CheckFilename);
+  if (std::error_code EC = CheckFileOrErr.getError()) {
+    errs() << "Could not open check file '" << CheckFilename
+           << "': " << EC.message() << '\n';
+    return 2;
+  }
+  MemoryBuffer &CheckFile = *CheckFileOrErr.get();
+
+  SmallString<4096> CheckFileBuffer;
+  StringRef CheckFileText = FC.CanonicalizeFile(CheckFile, CheckFileBuffer);
+
+  SM.AddNewSourceBuffer(MemoryBuffer::getMemBuffer(
+                            CheckFileText, CheckFile.getBufferIdentifier()),
+                        SMLoc());
+
+  std::vector<FileCheckString> CheckStrings;
+  if (FC.ReadCheckFile(SM, CheckFileText, PrefixRE, CheckStrings))
     return 2;
 
   // Open the file to check and add it to SourceMgr.
-  OwningPtr<MemoryBuffer> File;
-  if (error_code ec =
-        MemoryBuffer::getFileOrSTDIN(InputFilename.c_str(), File)) {
-    errs() << "Could not open input file '" << InputFilename << "': "
-           << ec.message() << '\n';
-    return true;
+  ErrorOr<std::unique_ptr<MemoryBuffer>> InputFileOrErr =
+      MemoryBuffer::getFileOrSTDIN(InputFilename);
+  if (std::error_code EC = InputFileOrErr.getError()) {
+    errs() << "Could not open input file '" << InputFilename
+           << "': " << EC.message() << '\n';
+    return 2;
   }
-  MemoryBuffer *F = File.take();
+  MemoryBuffer &InputFile = *InputFileOrErr.get();
 
-  if (F->getBufferSize() == 0) {
+  if (InputFile.getBufferSize() == 0 && !AllowEmptyInput) {
     errs() << "FileCheck error: '" << InputFilename << "' is empty.\n";
-    return 1;
-  }
-  
-  // Remove duplicate spaces in the input file if requested.
-  if (!NoCanonicalizeWhiteSpace)
-    F = CanonicalizeInputFile(F);
-
-  SM.AddNewSourceBuffer(F, SMLoc());
-
-  /// VariableTable - This holds all the current filecheck variables.
-  StringMap<StringRef> VariableTable;
-
-  // Check that we have all of the expected strings, in order, in the input
-  // file.
-  StringRef Buffer = F->getBuffer();
-
-  const char *LastMatch = Buffer.data();
-
-  for (unsigned StrNo = 0, e = CheckStrings.size(); StrNo != e; ++StrNo) {
-    const CheckString &CheckStr = CheckStrings[StrNo];
-
-    StringRef SearchFrom = Buffer;
-
-    // Find StrNo in the file.
-    size_t MatchLen = 0;
-    size_t MatchPos = CheckStr.Pat.Match(Buffer, MatchLen, VariableTable);
-    Buffer = Buffer.substr(MatchPos);
-
-    // If we didn't find a match, reject the input.
-    if (MatchPos == StringRef::npos) {
-      PrintCheckFailed(SM, CheckStr, SearchFrom, VariableTable);
-      return 1;
-    }
-
-    StringRef SkippedRegion(LastMatch, Buffer.data()-LastMatch);
-
-    // If this check is a "CHECK-NEXT", verify that the previous match was on
-    // the previous line (i.e. that there is one newline between them).
-    if (CheckStr.IsCheckNext) {
-      // Count the number of newlines between the previous match and this one.
-      assert(LastMatch != F->getBufferStart() &&
-             "CHECK-NEXT can't be the first check in a file");
-
-      unsigned NumNewLines = CountNumNewlinesBetween(SkippedRegion);
-      if (NumNewLines == 0) {
-        SM.PrintMessage(CheckStr.Loc, SourceMgr::DK_Error,
-                    CheckPrefix+"-NEXT: is on the same line as previous match");
-        SM.PrintMessage(SMLoc::getFromPointer(Buffer.data()),
-                        SourceMgr::DK_Note, "'next' match was here");
-        SM.PrintMessage(SMLoc::getFromPointer(LastMatch), SourceMgr::DK_Note,
-                        "previous match was here");
-        return 1;
-      }
-
-      if (NumNewLines != 1) {
-        SM.PrintMessage(CheckStr.Loc, SourceMgr::DK_Error, CheckPrefix+
-                        "-NEXT: is not on the line after the previous match");
-        SM.PrintMessage(SMLoc::getFromPointer(Buffer.data()),
-                        SourceMgr::DK_Note, "'next' match was here");
-        SM.PrintMessage(SMLoc::getFromPointer(LastMatch), SourceMgr::DK_Note,
-                        "previous match was here");
-        return 1;
-      }
-    }
-
-    // If this match had "not strings", verify that they don't exist in the
-    // skipped region.
-    for (unsigned ChunkNo = 0, e = CheckStr.NotStrings.size();
-         ChunkNo != e; ++ChunkNo) {
-      size_t MatchLen = 0;
-      size_t Pos = CheckStr.NotStrings[ChunkNo].second.Match(SkippedRegion,
-                                                             MatchLen,
-                                                             VariableTable);
-      if (Pos == StringRef::npos) continue;
-
-      SM.PrintMessage(SMLoc::getFromPointer(LastMatch+Pos), SourceMgr::DK_Error,
-                      CheckPrefix+"-NOT: string occurred!");
-      SM.PrintMessage(CheckStr.NotStrings[ChunkNo].first, SourceMgr::DK_Note,
-                      CheckPrefix+"-NOT: pattern specified here");
-      return 1;
-    }
-
-
-    // Otherwise, everything is good.  Step over the matched text and remember
-    // the position after the match as the end of the last match.
-    Buffer = Buffer.substr(MatchLen);
-    LastMatch = Buffer.data();
+    DumpCommandLine(argc, argv);
+    return 2;
   }
 
-  return 0;
+  SmallString<4096> InputFileBuffer;
+  StringRef InputFileText = FC.CanonicalizeFile(InputFile, InputFileBuffer);
+
+  SM.AddNewSourceBuffer(MemoryBuffer::getMemBuffer(
+                            InputFileText, InputFile.getBufferIdentifier()),
+                        SMLoc());
+
+  if (DumpInput == DumpInputDefault)
+    DumpInput = DumpInputOnFailure ? DumpInputFail : DumpInputNever;
+
+  std::vector<FileCheckDiag> Diags;
+  int ExitCode = FC.CheckInput(SM, InputFileText, CheckStrings,
+                               DumpInput == DumpInputNever ? nullptr : &Diags)
+                     ? EXIT_SUCCESS
+                     : 1;
+  if (DumpInput == DumpInputAlways ||
+      (ExitCode == 1 && DumpInput == DumpInputFail)) {
+    errs() << "\n"
+           << "Input file: "
+           << (InputFilename == "-" ? "<stdin>" : InputFilename.getValue())
+           << "\n"
+           << "Check file: " << CheckFilename << "\n"
+           << "\n"
+           << "-dump-input=help describes the format of the following dump.\n"
+           << "\n";
+    std::vector<InputAnnotation> Annotations;
+    unsigned LabelWidth;
+    BuildInputAnnotations(Diags, Annotations, LabelWidth);
+    DumpAnnotatedInput(errs(), Req, InputFileText, Annotations, LabelWidth);
+  }
+
+  return ExitCode;
 }

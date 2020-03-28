@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -analyze -analyzer-checker=experimental.security.MallocOverflow -verify %s
+// RUN: %clang_analyze_cc1 -analyzer-checker=alpha.security.MallocOverflow -verify %s
 
 #define NULL ((void *) 0)
 typedef __typeof__(sizeof(int)) size_t;
@@ -102,7 +102,7 @@ void * f13(struct s13 *s)
 {
   if (s->n > 10)
     return NULL;
-  return malloc(s->n * sizeof(int));  // no warning
+  return malloc(s->n * sizeof(int)); // no-warning
 }
 
 void * f14(int n)

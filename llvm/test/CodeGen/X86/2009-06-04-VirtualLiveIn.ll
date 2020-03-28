@@ -1,4 +1,4 @@
-; RUN: llc < %s -march=x86
+; RUN: llc < %s -mtriple=i686--
 
 	%0 = type { %struct.GAP }		; type %0
 	%1 = type { i16, i8, i8 }		; type %1
@@ -17,7 +17,7 @@
 
 define fastcc void @MinSize(%struct.rec* %x) nounwind {
 entry:
-	%tmp13 = load i8* undef, align 4		; <i8> [#uses=3]
+	%tmp13 = load i8, i8* undef, align 4		; <i8> [#uses=3]
 	%tmp14 = zext i8 %tmp13 to i32		; <i32> [#uses=2]
 	switch i32 %tmp14, label %bb1109 [
 		i32 42, label %bb246
@@ -34,7 +34,7 @@ bb249:		; preds = %bb246
 	br i1 %tmp3240, label %bb974, label %bb269
 
 bb269:
-	%tmp3424 = getelementptr %struct.rec* %x, i32 0, i32 0, i32 0, i32 0, i32 1		; <%struct.rec**> [#uses=0]
+	%tmp3424 = getelementptr %struct.rec, %struct.rec* %x, i32 0, i32 0, i32 0, i32 0, i32 1		; <%struct.rec**> [#uses=0]
 	unreachable
 
 bb974:

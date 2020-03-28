@@ -1,4 +1,4 @@
-; RUN: llc < %s -march=ppc32 | grep fcmp | count 1
+; RUN: llc -verify-machineinstrs < %s -mattr=-vsx -mtriple=ppc32-- | grep fcmp | count 1
 
 declare i1 @llvm.isunordered.f64(double, double)
 

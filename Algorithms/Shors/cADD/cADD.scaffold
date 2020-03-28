@@ -7,7 +7,7 @@
 #include <../../../Library/ccRz/ccRz.scaffold>
 
 // output constant a + b
-module cADD (
+scaff_module cADD (
 	const unsigned int c_width,
 	qbit ctrl0,
 	qbit ctrl1,
@@ -30,7 +30,7 @@ module cADD (
   }
 }
 
-module ciADD (
+scaff_module ciADD (
 	const unsigned int c_width,
 	qbit ctrl0,
 	qbit ctrl1,

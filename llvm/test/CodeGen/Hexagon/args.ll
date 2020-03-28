@@ -1,13 +1,8 @@
-; RUN: true
-; DISABLED: llc -march=hexagon -mcpu=hexagonv4 -disable-dfa-sched < %s | FileCheck %s
-; CHECK: r[[T0:[0-9]+]] = #7
-; CHECK: memw(r29 + #0) = r[[T0]]
-; CHECK: r0 = #1
-; CHECK: r1 = #2
-; CHECK: r2 = #3
-; CHECK: r3 = #4
-; CHECK: r4 = #5
-; CHECK: r5 = #6
+; RUN: llc -march=hexagon < %s | FileCheck %s
+; CHECK-DAG: r5:4 = combine(#6,#5)
+; CHECK-DAG: r3:2 = combine(#4,#3)
+; CHECK-DAG: r1:0 = combine(#2,#1)
+; CHECK: memw(r29+#0) = #7
 
 
 define void @foo() nounwind {

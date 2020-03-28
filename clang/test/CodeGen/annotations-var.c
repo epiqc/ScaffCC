@@ -31,18 +31,18 @@ int foo(int v __attribute__((annotate("param_ann_0"))) __attribute__((annotate("
 
 void local(void) {
     int localvar __attribute__((annotate("localvar_ann_0"))) __attribute__((annotate("localvar_ann_1"))) = 3;
-// LOCAL: define void @local()
+// LOCAL-LABEL: define void @local()
 // LOCAL:      [[LOCALVAR:%.*]] = alloca i32,
 // LOCAL-NEXT: [[T0:%.*]] = bitcast i32* [[LOCALVAR]] to i8*
-// LOCAL-NEXT: call void @llvm.var.annotation(i8* [[T0]], i8* getelementptr inbounds ([15 x i8]* @{{.*}}), i8* getelementptr inbounds ({{.*}}), i32 33)
+// LOCAL-NEXT: call void @llvm.var.annotation(i8* [[T0]], i8* getelementptr inbounds ([15 x i8], [15 x i8]* @{{.*}}), i8* getelementptr inbounds ({{.*}}), i32 33)
 // LOCAL-NEXT: [[T0:%.*]] = bitcast i32* [[LOCALVAR]] to i8*
-// LOCAL-NEXT: call void @llvm.var.annotation(i8* [[T0]], i8* getelementptr inbounds ([15 x i8]* @{{.*}}), i8* getelementptr inbounds ({{.*}}), i32 33)
+// LOCAL-NEXT: call void @llvm.var.annotation(i8* [[T0]], i8* getelementptr inbounds ([15 x i8], [15 x i8]* @{{.*}}), i8* getelementptr inbounds ({{.*}}), i32 33)
 }
 
 void undef(void) {
     int undefvar __attribute__((annotate("undefvar_ann_0")));
-// UNDEF: define void @undef()
+// UNDEF-LABEL: define void @undef()
 // UNDEF:      [[UNDEFVAR:%.*]] = alloca i32,
 // UNDEF-NEXT: [[T0:%.*]] = bitcast i32* [[UNDEFVAR]] to i8*
-// UNDEF-NEXT: call void @llvm.var.annotation(i8* [[T0]], i8* getelementptr inbounds ([15 x i8]* @{{.*}}), i8* getelementptr inbounds ({{.*}}), i32 43)
+// UNDEF-NEXT: call void @llvm.var.annotation(i8* [[T0]], i8* getelementptr inbounds ([15 x i8], [15 x i8]* @{{.*}}), i8* getelementptr inbounds ({{.*}}), i32 43)
 }

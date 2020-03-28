@@ -1,3 +1,7 @@
+set(LLVM_TARGET_DEFINITIONS InstCombineTables.td)
+tablegen(LLVM InstCombineTables.inc -gen-searchable-tables)
+add_public_tablegen_target(InstCombineTableGen)
+
 add_llvm_library(LLVMInstCombine
   InstructionCombining.cpp
   InstCombineAddSub.cpp
@@ -9,7 +13,14 @@ add_llvm_library(LLVMInstCombine
   InstCombineMulDivRem.cpp
   InstCombinePHI.cpp
   InstCombineSelect.cpp
-  InstCombineShifts.cpp 
+  InstCombineShifts.cpp
   InstCombineSimplifyDemanded.cpp
   InstCombineVectorOps.cpp
+
+  ADDITIONAL_HEADER_DIRS
+  ${LLVM_MAIN_INCLUDE_DIR}/llvm/Transforms
+  ${LLVM_MAIN_INCLUDE_DIR}/llvm/Transforms/InstCombine
+
+  DEPENDS
+  intrinsics_gen
   )

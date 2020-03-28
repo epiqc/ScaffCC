@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -emit-llvm -o - %s | FileCheck %s
+// RUN: %clang_cc1 -triple %itanium_abi_triple -emit-llvm -o - %s | FileCheck %s
 namespace std {
   class type_info;
 }
@@ -6,7 +6,7 @@ namespace std {
 struct X { };
 
 void f() {
-  // CHECK: @_ZTS1X = linkonce_odr constant
-  // CHECK: @_ZTI1X = linkonce_odr unnamed_addr constant 
+  // CHECK: @_ZTS1X = linkonce_odr {{(dso_local )?}}constant
+  // CHECK: @_ZTI1X = linkonce_odr {{(dso_local )?}}constant 
   (void)typeid(X&);
 }

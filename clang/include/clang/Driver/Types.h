@@ -7,11 +7,15 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CLANG_DRIVER_TYPES_H_
-#define CLANG_DRIVER_TYPES_H_
+#ifndef LLVM_CLANG_DRIVER_TYPES_H
+#define LLVM_CLANG_DRIVER_TYPES_H
 
 #include "clang/Driver/Phases.h"
+#include "llvm/ADT/SmallVector.h"
 
+namespace llvm {
+class StringRef;
+}
 namespace clang {
 namespace driver {
 namespace types {
@@ -23,7 +27,7 @@ namespace types {
     TY_LAST
   };
 
-  /// getTypeName - Return the name of the type for \arg Id.
+  /// getTypeName - Return the name of the type for \p Id.
   const char *getTypeName(ID Id);
 
   /// getPreprocessedType - Get the ID of the type for this input when
@@ -31,9 +35,14 @@ namespace types {
   /// preprocessed.
   ID getPreprocessedType(ID Id);
 
+  /// getPrecompiledType - Get the ID of the type for this input when
+  /// it has been precompiled, or INVALID if this input is not
+  /// precompiled.
+  ID getPrecompiledType(ID Id);
+
   /// getTypeTempSuffix - Return the suffix to use when creating a
   /// temp file of this type, or null if unspecified.
-  const char *getTypeTempSuffix(ID Id);
+  const char *getTypeTempSuffix(ID Id, bool CLMode = false);
 
   /// onlyAssembleType - Should this type only be assembled.
   bool onlyAssembleType(ID Id);
@@ -59,35 +68,47 @@ namespace types {
   /// isAcceptedByClang - Can clang handle this input type.
   bool isAcceptedByClang(ID Id);
 
-  /// isOnlyAcceptedByClang - Is clang the only compiler that can handle this
-  /// input type.
-  bool isOnlyAcceptedByClang(ID Id);
-
   /// isCXX - Is this a "C++" input (C++ and Obj-C++ sources and headers).
   bool isCXX(ID Id);
+
+  /// Is this LLVM IR.
+  bool isLLVMIR(ID Id);
+
+  /// isCuda - Is this a CUDA input.
+  bool isCuda(ID Id);
+
+  /// isHIP - Is this a HIP input.
+  bool isHIP(ID Id);
 
   /// isObjC - Is this an "ObjC" input (Obj-C and Obj-C++ sources and headers).
   bool isObjC(ID Id);
 
+  /// isSrcFile - Is this a source file, i.e. something that still has to be
+  /// preprocessed. The logic behind this is the same that decides if the first
+  /// compilation phase is a preprocessing one.
+  bool isSrcFile(ID Id);
+
   /// lookupTypeForExtension - Lookup the type to use for the file
-  /// extension \arg Ext.
-  ID lookupTypeForExtension(const char *Ext);
+  /// extension \p Ext.
+  ID lookupTypeForExtension(llvm::StringRef Ext);
 
   /// lookupTypeForTypSpecifier - Lookup the type to use for a user
   /// specified type name.
   ID lookupTypeForTypeSpecifier(const char *Name);
 
-  /// getNumCompilationPhases - Return the complete number of phases
-  /// to be done for this type.
-  unsigned getNumCompilationPhases(ID Id);
+  /// getCompilationPhases - Get the list of compilation phases ('Phases') to be
+  /// done for type 'Id'.
+  void getCompilationPhases(
+    ID Id,
+    llvm::SmallVectorImpl<phases::ID> &Phases);
 
-  /// getCompilationPhase - Return the \args N th compilation phase to
-  /// be done for this type.
-  phases::ID getCompilationPhase(ID Id, unsigned N);
-  
   /// lookupCXXTypeForCType - Lookup CXX input type that corresponds to given
   /// C type (used for clang++ emulation of g++ behaviour)
   ID lookupCXXTypeForCType(ID Id);
+
+  /// Lookup header file input type that corresponds to given
+  /// source file type (used for clang-cl emulation of \Yc).
+  ID lookupHeaderTypeForSourceType(ID Id);
 
 } // end namespace types
 } // end namespace driver

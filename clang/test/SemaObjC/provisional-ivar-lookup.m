@@ -1,4 +1,4 @@
-// RUN: %clang_cc1  -fsyntax-only -fobjc-default-synthesize-properties -verify -Wno-objc-root-class %s
+// RUN: %clang_cc1  -fsyntax-only -verify -Wno-objc-root-class %s
 
 // rdar:// 8565343
 @interface Foo  {
@@ -36,7 +36,7 @@
 
 @synthesize PROP=PROP;
 - (void)setPROP:(int)value {
-    PROP = PROP;        // OK
+    PROP = value;        // OK
 }
 
 @end
