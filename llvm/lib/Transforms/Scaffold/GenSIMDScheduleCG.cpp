@@ -1431,7 +1431,7 @@ void GenSIMDSchedCG::CountCriticalFunctionResources (Function *F) {
   memset_funcQbits(0);
 
   //sort vector
-  sort(priorityVector.begin(), priorityVector.end(), CompareInstPriByValue());
+  std::sort(priorityVector.begin(), priorityVector.end(), CompareInstPriByValue());
 
   //check if this function has a schedule from a different scheduling algo
   bool has_pre_schedule = false;

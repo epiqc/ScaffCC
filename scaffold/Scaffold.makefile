@@ -92,7 +92,7 @@ $(FILE)_merged.scaffold: $(FILENAME)
 # Compile Scaffold to LLVM bytecode
 $(FILE).ll: $(FILE)_merged.scaffold
 	@echo "[Scaffold.makefile] Compiling $(FILE)_merged.scaffold ..."
-	@$(CC) $(FILE)_merged.scaffold $(CC_FLAGS) $(OSX_FLAGS) -o $(FILE).ll
+	@$(CC) $(FILE)_merged.scaffold -ffast-math $(CC_FLAGS) $(OSX_FLAGS) -o $(FILE).ll
 
 $(FILE)1.ll: $(FILE).ll
 	@echo "[Scaffold.makefile] Transforming cbits ..."
@@ -196,7 +196,7 @@ $(FILE)_qasm.scaffold: $(FILE).qasmh
 
 # Compile C++
 $(FILE)_qasm: $(FILE)_qasm.scaffold
-	@$(CC) $(FILE)_qasm.scaffold -o $(FILE)_qasm
+	@$(CC) $(FILE)_qasm.scaffold -lm -o $(FILE)_qasm
 
 # Generate flattened QASM 
 $(FILE).qasmf: $(FILE)12.ll

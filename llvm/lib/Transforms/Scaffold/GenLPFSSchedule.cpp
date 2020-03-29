@@ -2080,7 +2080,7 @@ void GenLPFSSched::find_lp(Function* F, int pathNum){
         //  if(hasPrimitivesOnly) isLeaf.push_back(F);
 
         //sort vector
-        sort(priorityVector.begin(), priorityVector.end(), CompareInstPriByValue());
+	std::sort(priorityVector.begin(), priorityVector.end(), CompareInstPriByValue());
 
         //reset funcQbits vector in preparation for scheduling
         memset_funcQbits(0);

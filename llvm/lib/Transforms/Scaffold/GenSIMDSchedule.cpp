@@ -1421,7 +1421,7 @@ uint64_t GenSIMDSched::get_ts_to_schedule_leaf(Function* F, uint64_t ts, Functio
       if(hasPrimitivesOnly) isLeaf.push_back(F);
 
       //sort vector
-      sort(priorityVector.begin(), priorityVector.end(), CompareInstPriByValue());
+      std::sort(priorityVector.begin(), priorityVector.end(), CompareInstPriByValue());
 
       //reset funcQbits vector in preparation for scheduling
       memset_funcQbits(0);
