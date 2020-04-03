@@ -9,7 +9,7 @@ if [ $(echo $PATH | grep ${RKQC_PATH} | wc -l) -eq 0 ]; then
 fi
 
 function show_help {
-    echo "Usage: $0 [-hv] [-rqfRTFckdso] [-l #] [-P #] [-D <pass_name>] <filename>.scaffold"
+    echo "Usage: $0 [-hv] [-rqfRTFckdso] [-l #] [-P #] [-D <pass_name>] <filename>.scaffold [args]*"
     echo "    -r   Generate resource estimate (default)"
     echo "    -q   Generate QASM"
     echo "    -f   Generate flattened QASM"

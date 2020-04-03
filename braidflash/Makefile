@@ -16,7 +16,7 @@ LFLAGS=-L/usr/lib
 LIBS=-lboost_program_options
 
 # implementation source files
-SOURCES=argparse.cpp braidflash.cpp
+SOURCES=braidflash.cpp
 
 # the build target executable:
 TARGET=braidflash

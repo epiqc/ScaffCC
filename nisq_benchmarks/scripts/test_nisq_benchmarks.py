@@ -8,10 +8,7 @@ from qiskit.transpiler import PassManager
 from qiskit.transpiler.passes import ResourceEstimation
 
 # Add config directory to filepath
-test_path = sys.argv[0]
-test_path = sys.argv[0]
-if test_path[0:2] != "./":
-  test_path = "./" + test_path
+test_path = os.path.abspath(sys.argv[0])
 base_path = "/".join(test_path.split("/")[:-2])
 test_path = "/".join(test_path.split("/")[:-1])
 base_path = os.path.abspath(base_path)
