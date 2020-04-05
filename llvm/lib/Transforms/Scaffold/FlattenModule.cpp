@@ -11,6 +11,8 @@
 #include <sstream>
 #include <fstream>
 #include <string>
+#include <cstring>
+#include <cstdlib>
 #include "llvm/Pass.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Module.h"
@@ -77,6 +79,18 @@ char FlattenModule::ID = 0;
 static RegisterPass<FlattenModule> X("FlattenModule", "Quantum Module Flattening Pass", false, false);
 
 bool FlattenModule::runOnModule( Module & M ) {
+
+  const char *debug_val = getenv("DEBUG_FLATTENMODULE");
+  if(debug_val){
+    if(!strncmp(debug_val, "1", 1)) debugFlattening = true;
+    else debugFlattening = false;
+  }
+
+  debug_val = getenv("DEBUG_SCAFFOLD");
+  if(debug_val && !debugFlattening){
+    if(!strncmp(debug_val, "1", 1)) debugFlattening = true;
+    else debugFlattening = false;
+  }
   
   std::vector<std::string> leafNames;
   
@@ -168,6 +182,7 @@ bool FlattenModule::runOnSCC( const std::vector<CallGraphNode *> &scc ) {
 }
 
 bool FlattenModule::runOnFunction( Function & F ) {
+
   if (debugFlattening)  
     errs() << "run on function: " << F.getName() << "\n";
   // only continue if this function is part of makeLeaf and complete inlining is not toggled on

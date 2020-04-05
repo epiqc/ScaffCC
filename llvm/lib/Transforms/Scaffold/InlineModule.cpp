@@ -11,6 +11,8 @@
 #include <sstream>
 #include <fstream>
 #include <string>
+#include <cstring>
+#include <cstdlib>
 #include "llvm/Pass.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Module.h"
@@ -71,7 +73,19 @@ namespace {
 char InlineModule::ID = 0;
 static RegisterPass<InlineModule> X("InlineModule", "Quantum Module Inlining Pass", false, false);
 
-bool InlineModule::runOnModule( Module & M ) {  
+bool InlineModule::runOnModule( Module & M ) { 
+  const char *debug_val = getenv("DEBUG_INLINEMODULE");
+  if(debug_val){
+    if(!strncmp(debug_val, "1", 1)) debugInlining = true;
+    else debugInlining = false;
+  }
+
+  debug_val = getenv("DEBUG_SCAFFOLD");
+  if(debug_val && !debugInlining){
+    if(!strncmp(debug_val, "1", 1)) debugInlining = true;
+    else debugInlining = false;
+  }
+
   std::vector<std::string> inlinedNames;
   std::string line;
   std::ifstream file ("inline_info.txt");

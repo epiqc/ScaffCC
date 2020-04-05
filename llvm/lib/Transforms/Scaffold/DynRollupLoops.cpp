@@ -6,6 +6,8 @@
 //===----------------------------------------------------------------------===//
 
 #define DEBUG_TYPE "DynRollupLoops"
+#include <cstring>
+#include <cstdlib>
 #include "llvm/IR/Module.h"
 #include "llvm/Pass.h"
 #include "llvm/IR/Function.h"
@@ -1556,6 +1558,19 @@ namespace {
 
 
     bool runOnModule(Module &M){
+      const char *debug_val = getenv("DEBUG_DYNROLLUPLOOPS");
+      if(debug_val){
+        if(!strncmp(debug_val, "1", 1)) debugDynRollupLoops = true;
+        else debugDynRollupLoops = false;
+      }
+
+      debug_val = getenv("DEBUG_SCAFFOLD");
+      if(debug_val && !debugDynRollupLoops){
+        if(!strncmp(debug_val, "1", 1)) debugDynRollupLoops = true;
+        else debugDynRollupLoops = false;
+      }
+
+
       for(Module::iterator mIter = M.begin(); mIter != M.end(); ++mIter) {
         Function* F = &(*mIter);
 

@@ -12,6 +12,8 @@
 #include <algorithm>
 #include <string>
 #include <climits>
+#include <cstring>
+#include <cstdlib>
 #include "llvm/IR/Argument.h"
 #include "llvm/Pass.h"
 #include "llvm/IR/Module.h"
@@ -1337,6 +1339,19 @@ void Optimize::optimal(vector<OpGate>& G, vector<unsigned>& M){
 
 // run - Find datapaths for qubits
 bool Optimize::runOnModule(Module &M) {
+
+  const char *debug_val = getenv("DEBUG_OPTIMIZE");
+  if(debug_val){
+    if(!strncmp(debug_val, "1", 1)) debugOptimize = true;
+    else debugOptimize = false;
+  }
+
+  debug_val = getenv("DEBUG_SCAFFOLD");
+  if(debug_val && !debugOptimize){
+    if(!strncmp(debug_val, "1", 1)) debugOptimize = true;
+    else debugOptimize = false;
+  }
+
   vector<Function*> qFuncs;
 
   CallGraph cg = CallGraph(M);

@@ -7,6 +7,8 @@
 //===----------------------------------------------------------------------===//
 
 #include <sstream>
+#include <cstring>
+#include <cstdlib>
 #include "llvm/IR/Argument.h"
 #include "llvm/Pass.h"
 #include "llvm/IR/Module.h"
@@ -921,6 +923,18 @@ void GenQASMLoops::getFunctionArguments(Function* F)
 
 // run - Find datapaths for qubits
 bool GenQASMLoops::runOnModule(Module &M) {
+  const char *debug_val = getenv("DEBUG_GENQASMLOOPS");
+  if(debug_val){
+    if(!strncmp(debug_val, "1", 1)) debugGenQASMLoops = true;
+    else debugGenQASMLoops = false;
+  }
+
+  debug_val = getenv("DEBUG_SCAFFOLD");
+  if(debug_val && !debugGenQASMLoops){
+    if(!strncmp(debug_val, "1", 1)) debugGenQASMLoops = true;
+    else debugGenQASMLoops = false;
+  }
+
   CallGraph cg = CallGraph(M);
 
   CallGraphNode *rootNode = nullptr;

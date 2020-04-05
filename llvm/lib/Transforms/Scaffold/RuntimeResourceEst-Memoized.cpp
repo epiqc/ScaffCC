@@ -6,6 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <cstring>
+#include <cstdlib>
 #include "llvm/Pass.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Function.h"
@@ -242,6 +244,18 @@ namespace {
     }
     
     bool runOnModule(Module &M) {
+      const char *debug_val = getenv("DEBUG_RUNTIMEFREQUENCYEST_MEMOIZED");
+      if(debug_val){
+        if(!strncmp(debug_val, "1", 1)) debugMemoInstrumentation = true;
+        else debugMemoInstrumentation = false;
+      }
+
+      debug_val = getenv("DEBUG_SCAFFOLD");
+      if(debug_val && !debugMemoInstrumentation){
+        if(!strncmp(debug_val, "1", 1)) debugMemoInstrumentation = true;
+        else debugMemoInstrumentation = false;
+      }
+
       // void qasm_qbit_decl (int)
       qasmQbitDecl = cast<Function>(M.getOrInsertFunction("qasm_qbit_decl", 
                                     Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), 

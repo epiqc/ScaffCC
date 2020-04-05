@@ -10,6 +10,8 @@
 #define DEBUG_TYPE "GetCriticalPath"
 #include <vector>
 #include <limits>
+#include <cstring>
+#include <cstdlib>
 #include "llvm/Pass.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Module.h"
@@ -1342,6 +1344,18 @@ void GetCriticalPath::analyzeCallInst(Function* F, Instruction* pInst){
 
 
   bool GetCriticalPath::runOnModule (Module &M) {
+    const char *debug_val = getenv("DEBUG_GETCRITICALPATH");
+    if(debug_val){
+      if(!strncmp(debug_val, "1", 1)) debugGetCriticalPath = true;
+      else debugGetCriticalPath = false;
+    }
+
+    debug_val = getenv("DEBUG_SCAFFOLD");
+    if(debug_val && !debugGetCriticalPath){
+      if(!strncmp(debug_val, "1", 1)) debugGetCriticalPath = true;
+      else debugGetCriticalPath = false;
+    }
+
     init_gate_names();
     init_gates_as_functions();
 

@@ -9,6 +9,8 @@
 #define DEBUG_TYPE "FunctionClone"
 #include <sstream>
 #include <algorithm>
+#include <cstring>
+#include <cstdlib>
 #include "llvm/Pass.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Module.h"
@@ -52,6 +54,7 @@ namespace {
     void insertNewCallSite(CallInst *CI, std::string specializedName, Module *M);
 
     bool runOnModule (Module &M);
+    static const std::string REVERSE_PREFIX;
 
     virtual void getAnalysisUsage(AnalysisUsage &AU) const {
         AU.setPreservesAll();  
@@ -63,6 +66,7 @@ namespace {
 
 
 char FunctionClone::ID = 0;
+const std::string FunctionClone::REVERSE_PREFIX = "_reverse_";
 static RegisterPass<FunctionClone> X("FunctionClone", "Function Cloning Pass", false, false);
 
 
@@ -111,6 +115,18 @@ void FunctionClone::insertNewCallSite(CallInst *CI, std::string specializedName,
 }
 
 bool FunctionClone::runOnModule (Module &M) {
+
+  const char *debug_val = getenv("DEBUG_FUNCTIONCLONE");
+  if(debug_val){
+    if(!strncmp(debug_val, "1", 1)) debugCloning = true;
+    else debugCloning = false;
+  }
+
+  debug_val = getenv("DEBUG_SCAFFOLD");
+  if(debug_val && !debugCloning){
+    if(!strncmp(debug_val, "1", 1)) debugCloning = true;
+    else debugCloning = false;
+  }
 
   // iterate over all functions, and over all instructions in those functions
   // find call sites that have constant integer or double values.
@@ -174,7 +190,7 @@ bool FunctionClone::runOnModule (Module &M) {
     }      
 
     for (inst_iterator I = inst_begin(*f), E = inst_end(*f); I != E; ++I) {
-      Instruction *pInst = &*I;             
+      Instruction *pInst = &*I;
       if(CallInst *CI = dyn_cast<CallInst>(pInst)) {
         bool isQuantumModuleCall = false;         
         for(unsigned iop=0;iop < CI->getNumArgOperands(); iop++) {
@@ -184,7 +200,8 @@ bool FunctionClone::runOnModule (Module &M) {
           if (CI->getArgOperand(iop)->getType()->isIntegerTy(16))
             isQuantumModuleCall = true;
         }
-        if (!CI->getCalledFunction()->isIntrinsic() && !CI->getCalledFunction()->isDeclaration() && isQuantumModuleCall) {
+        const Value *V = CI->getCalledValue();
+        if (isa<Function>(V) && !CI->getCalledFunction()->isIntrinsic() && (!CI->getCalledFunction()->isDeclaration() || CI->getCalledFunction()->getName().startswith(REVERSE_PREFIX)) && isQuantumModuleCall) {
           // first, find the argument positions of all integers and doubles (regardless of being contstant or not)
           std::vector<unsigned> posOfInt;
           std::vector<unsigned> posOfDouble;
@@ -352,8 +369,8 @@ bool FunctionClone::runOnModule (Module &M) {
 
             SmallVector<ReturnInst*,1> Returns; // FIXME: what is the length of this vector?
             ClonedCodeInfo SpecializedFunctionInfo;
-
-            CloneAndPruneFunctionInto (specializedFunction,   // NewFunc
+            if(!CI->getCalledFunction()->isDeclaration())
+              CloneAndPruneFunctionInto (specializedFunction,   // NewFunc
                                         F,                    // OldFunc
                                         VMap,                 // ValueMap
                                         0,                    // ModuleLevelChanges
@@ -361,7 +378,6 @@ bool FunctionClone::runOnModule (Module &M) {
                                         ".",                  // NameSuffix
                                         &SpecializedFunctionInfo,  // CodeInfo
                                         0);                   // TD            
-
             // replace CI to call the new cloned function
             insertNewCallSite(CI, specializedName, &M);
             instErase.push_back((Instruction*)CI); // queue for erasing
@@ -378,7 +394,7 @@ bool FunctionClone::runOnModule (Module &M) {
 
             // the insertion will invalidate vit - reassign the vector to be safe
             vit = std::find(vectPostOrder.begin(), vectPostOrder.end(), f);
-      
+          
             
           }  
         }

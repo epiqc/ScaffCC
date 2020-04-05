@@ -16,6 +16,8 @@
 #include <map>
 #include <string>
 #include <sstream>
+#include <cstring>
+#include <cstdlib>
 #include "llvm/Pass.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Module.h"

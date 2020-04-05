@@ -13,6 +13,8 @@
 #define DEBUG_TYPE "GenSIMDSched"
 #include <vector>
 #include <limits>
+#include <cstring>
+#include <cstdlib>
 #include "llvm/Pass.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Module.h"
@@ -1470,6 +1472,18 @@ uint64_t GenSIMDSched::get_ts_to_schedule_leaf(Function* F, uint64_t ts, Functio
 
 
     bool GenSIMDSched::runOnModule (Module &M) {
+      const char *debug_val = getenv("DEBUG_GENSIMDSCHEDULE");
+      if(debug_val){
+        if(!strncmp(debug_val, "1", 1)) debugGenSIMDSched = true;
+        else debugGenSIMDSched = false;
+      }
+
+      debug_val = getenv("DEBUG_SCAFFOLD");
+      if(debug_val && !debugGenSIMDSched){
+        if(!strncmp(debug_val, "1", 1)) debugGenSIMDSched = true;
+        else debugGenSIMDSched = false;
+      }
+
       init_gate_names();
       init_gates_as_functions();
 

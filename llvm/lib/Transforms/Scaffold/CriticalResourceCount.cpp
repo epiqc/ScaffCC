@@ -10,6 +10,8 @@
 #define DEBUG_TYPE "CriticalResourceCount"
 #include <vector>
 #include <limits>
+#include <cstring>
+#include <cstdlib>
 #include "llvm/Pass.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Module.h"
@@ -798,6 +800,18 @@ void CriticalResourceCount::init_gates_as_functions(){
 
 
 bool CriticalResourceCount::runOnModule (Module &M) {
+  const char *debug_val = getenv("DEBUG_CRITICALRESOURCEPATH");
+  if(debug_val){
+    if(!strncmp(debug_val, "1", 1)) debugCritDataPath = true;
+    else debugCritDataPath = false;
+  }
+
+  debug_val = getenv("DEBUG_SCAFFOLD");
+  if(debug_val && !debugCritDataPath){
+    if(!strncmp(debug_val, "1", 1)) debugCritDataPath = true;
+    else debugCritDataPath = false;
+  }
+
   init_gate_names();
   init_gates_as_functions();
   

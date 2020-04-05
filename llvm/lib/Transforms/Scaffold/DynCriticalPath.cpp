@@ -6,6 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <cstring>
+#include <cstdlib>
 #include "llvm/Pass.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Function.h"
@@ -208,6 +210,18 @@ namespace {
     }
         
     bool runOnModule(Module &M){
+
+      const char *debug_val = getenv("DEBUG_GEN_OPENQASM");
+      if(debug_val){
+        if(!strncmp(debug_val, "1", 1)) debugDynCritPath = true;
+        else debugDynCritPath = false;
+      }
+
+      debug_val = getenv("DEBUG_SCAFFOLD");
+      if(debug_val && !debugDynCritPath){
+        if(!strncmp(debug_val, "1", 1)) debugDynCritPath = true;
+        else debugDynCritPath = false;
+      }
 
       dcpGate = cast<Function>(M.getOrInsertFunction("dcp_qgate", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt16Ty(M.getContext()), (Type*)0));
       

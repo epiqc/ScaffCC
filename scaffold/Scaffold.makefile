@@ -89,10 +89,15 @@ $(FILE)_merged.scaffold: $(FILENAME)
 		cp $(FILENAME) $(FILE)_merged.scaffold; \
 	fi
 
+$(FILE)_merged_reverse_insert.scaffold: $(FILE)_merged.scaffold
+	@echo "[Scaffold.makefile] Inserting reverse function signatures"
+	python $(ROOT)/scaffold/insert_reverse.py $(FILE)_merged.scaffold
+	@cat $(FILE)_merged.scaffold >> $(FILE)_merged_reverse_insert.scaffold
+
 # Compile Scaffold to LLVM bytecode
-$(FILE).ll: $(FILE)_merged.scaffold
-	@echo "[Scaffold.makefile] Compiling $(FILE)_merged.scaffold ..."
-	@$(CC) $(FILE)_merged.scaffold -ffast-math $(CC_FLAGS) $(OSX_FLAGS) -o $(FILE).ll
+$(FILE).ll: $(FILE)_merged_reverse_insert.scaffold
+	@echo "[Scaffold.makefile] Compiling $(FILE)_merged_reverse_insert.scaffold ..."
+	@$(CC) $(FILE)_merged_reverse_insert.scaffold -ffast-math $(CC_FLAGS) $(OSX_FLAGS) -o $(FILE).ll
 
 $(FILE)1.ll: $(FILE).ll
 	@echo "[Scaffold.makefile] Transforming cbits ..."
@@ -234,7 +239,7 @@ $(FILE).qc: $(FILE).qasmf
 
 # purge cleans temp files
 purge:
-	@rm -f $(FILE)_merged.scaffold $(FILE)_no.scaffold $(FILE).ll $(FILE)1.ll $(FILE)1a.ll $(FILE)1b.ll $(FILE)2.ll $(FILE)3.ll $(FILE)4.ll $(FILE)5.ll $(FILE)5a.ll $(FILE)6.ll $(FILE)6tmp.ll $(FILE)7.ll $(FILE)8.ll $(FILE)9.ll $(FILE)10.ll $(FILE)11.ll $(FILE)12.ll $(FILE)12.inlined.ll $(FILE)tmp.ll $(FILE)_qasm $(FILE)_qasm.scaffold fdecl.out $(CFILE).ctqg $(CFILE).c $(CFILE).signals $(FILE).tmp sim_$(CFILE) $(FILE).*.qasm $(FILE)_args.scaffold
+	@rm -f $(FILE)_merged.scaffold $(FILE)_merged_reverse_insert.scaffold $(FILE)_no.scaffold $(FILE).ll $(FILE)1.ll $(FILE)1a.ll $(FILE)1b.ll $(FILE)2.ll $(FILE)3.ll $(FILE)4.ll $(FILE)5.ll $(FILE)5a.ll $(FILE)6.ll $(FILE)6tmp.ll $(FILE)7.ll $(FILE)8.ll $(FILE)9.ll $(FILE)10.ll $(FILE)11.ll $(FILE)12.ll $(FILE)12.inlined.ll $(FILE)tmp.ll $(FILE)_qasm $(FILE)_qasm.scaffold fdecl.out $(CFILE).ctqg $(CFILE).c $(CFILE).signals $(FILE).tmp sim_$(CFILE) $(FILE).*.qasm $(FILE)_args.scaffold
 
 # clean removes all completed files
 clean: purge

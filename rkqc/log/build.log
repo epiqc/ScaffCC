@@ -1,3 +1,23 @@
-Tue Jul 19 17:45:50 CDT 2016 /home/ali/EPiQC-ScaffCC/rkqc/scripts/build param: -DBUILD_UNSTABLE=ON -DBUILD_EXAMPLES=ON -DBUILD_BINDINGS=OFF
--DBUILD_BINDINGS=OFF -DBUILD_UNSTABLE=ON -DBUILD_EXAMPLES=ON
-you should run bootstrap.sh first. Run it now? y/n
+Sun Mar 29 11:51:49 CDT 2020 /Users/andrewlitteken/Desktop/scaffold/ScaffCC/rkqc/scripts/build param: 
+-DBUILD_BINDINGS=ON -DBUILD_UNSTABLE=ON
+-- The C compiler identification is AppleClang 11.0.3.11030032
+-- The CXX compiler identification is AppleClang 11.0.3.11030032
+-- Check for working C compiler: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/cc
+-- Check for working C compiler: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/cc -- works
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Check for working CXX compiler: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/c++
+-- Check for working CXX compiler: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/c++ -- works
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /Users/andrewlitteken/Desktop/scaffold/ScaffCC/rkqc/build
+Scanning dependencies of target revkit_unstable
+[  2%] Building CXX object unstable/CMakeFiles/revkit_unstable.dir/null.cpp.o
+[  4%] Linking CXX static library librevkit_unstable.a
+[  4%] Built target revkit_unstable

@@ -10,6 +10,8 @@
 #include <algorithm>
 #include <numeric>
 #include <string>
+#include <cstring>
+#include <cstdlib>
 #include "llvm/IR/Argument.h"
 #include "llvm/Pass.h"
 #include "llvm/IR/Module.h"
@@ -819,7 +821,7 @@ bool GenQASM::runOnModule(Module &M){
   /* Functions with quantum registers and operations. */
   vector<Function*> quantumFuncs;
 
-  const char *debug_val = getenv("DEBUG_GEN_OPENQASM");
+  const char *debug_val = getenv("DEBUG_GENOPENQASM");
   if(debug_val){
     if(!strncmp(debug_val, "1", 1)) debugGenOpenQASM = true;
     else debugGenOpenQASM = false;

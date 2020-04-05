@@ -16,6 +16,8 @@
 #include <fstream>
 #include <string>
 #include <limits>
+#include <cstring>
+#include <cstdlib>
 #include "llvm/Pass.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Module.h"
@@ -1469,6 +1471,18 @@ void GenSIMDSchedCG::init_gates_as_functions(){
 
 
 bool GenSIMDSchedCG::runOnModule (Module &M) {
+  const char *debug_val = getenv("DEBUG_GENSIMDSCHEDULECG");
+  if(debug_val){
+    if(!strncmp(debug_val, "1", 1)) debugGenSIMDSchedCG = true;
+    else debugGenSIMDSchedCG = false;
+  }
+
+  debug_val = getenv("DEBUG_SCAFFOLD");
+  if(debug_val && !debugGenSIMDSchedCG){
+    if(!strncmp(debug_val, "1", 1)) debugGenSIMDSchedCG = true;
+    else debugGenSIMDSchedCG = false;
+  }
+
   init_gate_names();
   init_gates_as_functions();
   read_schedule_file();

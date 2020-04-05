@@ -10,6 +10,8 @@
 #include <sstream>
 #include <iostream>
 #include <iomanip>
+#include <cstring>
+#include <cstdlib>
 #include "llvm/Pass.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Module.h"
@@ -63,6 +65,17 @@ char SortCloneArguments::ID = 0;
 static RegisterPass<SortCloneArguments> X("SortCloneArguments", "Sorting Arguments of Cloned Function", false, false);
 
 bool SortCloneArguments::runOnModule (Module &M) {
+  const char *debug_val = getenv("DEBUG_SORTCLONEARGUMENTS");
+  if(debug_val){
+    if(!strncmp(debug_val, "1", 1)) debugSortArgs = true;
+    else debugSortArgs = false;
+  }
+
+  debug_val = getenv("DEBUG_SCAFFOLD");
+  if(debug_val && !debugSortArgs){
+    if(!strncmp(debug_val, "1", 1)) debugSortArgs = true;
+    else debugSortArgs = false;
+  }
    
   for (Module::iterator F = M.begin(); F != M.end(); ++F) {
     if(F->isIntrinsic() || F->isDeclaration() || F->getName()=="main")

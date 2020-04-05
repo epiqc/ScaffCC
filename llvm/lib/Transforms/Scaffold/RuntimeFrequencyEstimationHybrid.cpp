@@ -8,6 +8,8 @@
 
 #include <sstream>
 #include <iomanip>
+#include <cstring>
+#include <cstdlib>
 #include "llvm/Pass.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Function.h"
@@ -282,6 +284,18 @@ namespace {
     }
     
     bool runOnModule(Module &M) {
+      const char *debug_val = getenv("DEBUG_RUNTIMEFREQUENCYESTIMATIONHYBRID");
+      if(debug_val){
+        if(!strncmp(debug_val, "1", 1)) debugRTFreqEstHyb = true;
+        else debugRTFreqEstHyb = false;
+      }
+
+      debug_val = getenv("DEBUG_SCAFFOLD");
+      if(debug_val && !debugRTFreqEstHyb){
+        if(!strncmp(debug_val, "1", 1)) debugRTFreqEstHyb = true;
+        else debugRTFreqEstHyb = false;
+      }
+
       //rep_val = 1;  
       rep_val = ConstantInt::get(Type::getInt32Ty(M.getContext()), 1, false);
 

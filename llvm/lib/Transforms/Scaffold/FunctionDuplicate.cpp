@@ -8,6 +8,8 @@
 
 #define DEBUG_TYPE "FunctionDuplicate"
 #include <sstream>
+#include <cstring>
+#include <cstdlib>
 #include "llvm/Pass.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Module.h"
@@ -204,6 +206,18 @@ void FunctionDuplicate::visitFunction(Function &F) {
 }
 
 bool FunctionDuplicate::runOnModule (Module &M) {
+
+  const char *debug_val = getenv("DEBUG_FUNCTIONDUPLICATE");
+  if(debug_val){
+    if(!strncmp(debug_val, "1", 1)) debugDuplicate = true;
+    else debugDuplicate = false;
+  }
+
+  debug_val = getenv("DEBUG_SCAFFOLD");
+  if(debug_val && !debugDuplicate){
+    if(!strncmp(debug_val, "1", 1)) debugDuplicate = true;
+    else debugDuplicate = false;
+  }
     
   //void qasm_resource_summary ()
   qasmResSum = cast<Function>(M.getOrInsertFunction("summary", Type::getVoidTy(M.getContext()), (Type*)0));

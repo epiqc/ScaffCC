@@ -4,6 +4,7 @@
 
 #include <cstdlib>
 #include <cstdio>
+#include <cstring>
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/IR/Constants.h"

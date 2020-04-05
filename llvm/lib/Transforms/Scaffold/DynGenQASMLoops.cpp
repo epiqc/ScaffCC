@@ -6,6 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <cstring>
+#include <cstdlib>
 #include <sstream>
 #include <iomanip>
 #include "llvm/IR/Argument.h"
@@ -1292,6 +1294,17 @@ void DynGenQASMLoops::removeIntrinsicQtmExec(Function* F,Instruction* I){
 
 // run - Find datapaths for qubits
 bool DynGenQASMLoops::runOnModule(Module &M) {
+  const char *debug_val = getenv("DEBUG_GENQASMLOOPS");
+  if(debug_val){
+    if(!strncmp(debug_val, "1", 1)) debugDynGenQASMLoops = true;
+    else debugDynGenQASMLoops = false;
+  }
+
+  debug_val = getenv("DEBUG_SCAFFOLD");
+  if(debug_val && !debugDynGenQASMLoops){
+    if(!strncmp(debug_val, "1", 1)) debugDynGenQASMLoops = true;
+    else debugDynGenQASMLoops = false;
+  }
 
   qasmAllocQbit = cast<Function>(M.getOrInsertFunction("qasm_print_qbit_alloc", Type::getVoidTy(M.getContext()), Type::getInt16Ty(M.getContext())->getPointerTo(), Type::getInt32Ty(M.getContext()), Type::getInt8Ty(M.getContext())->getPointerTo(), (Type*)0));
 
