@@ -18,9 +18,9 @@ Release Information
 Current Release
 ---------------
 
--   Version 4.0
+-   Version 5.0
 
--   Release Date: June 28, 2018
+-   Release Date: April 15, 2020
 
 Supported Operating Systems
 ---------------------------
@@ -70,7 +70,7 @@ Building ScaffCC
 
 First you need to install the following dependencies. For each one, you
 can either install by building from source, or use the package manager
-of your system (“yum" on Red Hat or “apt-get" on Ubuntu).
+of your system (“yum" on Red Hat or “apt-get" on Ubuntu).  For ScaffCC only items 1 through 5 are required.  For RKQC items 6 through 8 are required.
 
 1.  Static libraries for libstdc++ and glibc
 
@@ -94,7 +94,22 @@ of your system (“yum" on Red Hat or “apt-get" on Ubuntu).
 
 3.  Clang++ 3.5 or higher
 
-4.  Boost 1.48
+4.  CMake
+
+    -   “Ubuntu"
+
+                sudo apt-get install cmake
+                
+
+    -   “Source Build"
+
+        There are instructions for downloading and building CMake from
+        source at:
+        <https://cmake.org/install>
+
+5.  Python 2.7
+
+6.  Boost 1.48
 
     -   “Source Build": Boost installation instructions are here:
         <http://www.boost.org/doc/libs/1_48_0/doc/html/bbv2/installation.html>
@@ -111,7 +126,7 @@ of your system (“yum" on Red Hat or “apt-get" on Ubuntu).
                 sudo apt-get install libboost-all-dev
                 
 
-5.  The GNU Multiple Precision Arithmetic Library (gmp and gmpxx)
+7.  The GNU Multiple Precision Arithmetic Library (gmp and gmpxx)
 
     -   “Ubuntu": Use tab-completion to verify the correct packages
 
@@ -125,7 +140,7 @@ of your system (“yum" on Red Hat or “apt-get" on Ubuntu).
                 sudo make && sudo make check && sudo make install
                 
 
-6.  The GNU MPFR Library (mpfr)
+8.  The GNU MPFR Library (mpfr)
 
     -   “Ubuntu"
 
@@ -139,33 +154,12 @@ of your system (“yum" on Red Hat or “apt-get" on Ubuntu).
                 sudo make && sudo make check && sudo make install
                 
 
-7.  Python 2.7
-
-8.  CMake (For Integrating RKQC Functionality)
-
-    -   “Ubuntu"
-
-                sudo apt-get install cmake
-                
-
-    -   “Source Build"
-
-        There are instructions for downloading and building CMake from
-        source at:
-        <https://cmake.org/install>
-
 ### Installing
 Once you have all of the required libraries, simply run
 
-        make
+        ./build.sh
 
-or
-
-        make USE_GCC=1
-
-at the root of the repository. The `USE_GCC` flag will force the
-Makefile to use GCC to compile instead, and this has been seen to be
-faster on some systems.
+at the root of the repository.
 
 Verifying Installation
 ----------------------
@@ -423,7 +417,7 @@ Passes specific to ScaffCC are stored in:
 In general, to run a pass in LLVM, you invoke the opt program as
 follows:
 
-    build/Release+Asserts/bin/opt -S -load build/Release+Asserts/lib/Scaffold.so {pass_name} {input_ll_file} > {output_ll_file} 2> {log_file}
+    build/bin/opt -S -load build/lib/Scaffold.so {pass_name} {input_ll_file} > {output_ll_file} 2> {log_file}
 
 Note that "pass\_name" refers to the unique name of the pass by which
 it is registered in the LLVM system, by invoking the following in the

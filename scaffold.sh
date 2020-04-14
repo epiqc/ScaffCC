@@ -147,9 +147,9 @@ fi
 shift
 
 expresion=""
-arg_num=0
+arg_num=1
 while [ "${1}" != "" ]; do
-    if [ $arg_num = 0 ]; then
+    if [ $arg_num != 1 ]; then
         expression="${expression}; "
     fi
     expression="${expression}s/argv\[${arg_num}\]/${1}/g"
@@ -165,14 +165,13 @@ echo "file: $file"
 
 if [ "${expression}" != "" ]; then
     sed -E -e "${expression}" "${filename}" > "${file}_args.scaffold"
-    file_name="${file}_args.scaffold"
+    filename="${file}_args.scaffold"
 fi
 
 if [ $(egrep '^rkqc.*{\s*' ${filename} | wc -l) -gt 0 ]; then
 	rkqc=1
 	toff=1
 fi
-
 if [ ${clean} -eq 1 ]; then
 	make -f $ROOT/scaffold/Scaffold.makefile ${dryrun} ROOT=$ROOT DIRNAME=${dir} FILENAME=${filename} FILE=${file} CFILE=${cfile} clean
     exit
