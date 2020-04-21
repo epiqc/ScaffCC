@@ -3160,7 +3160,9 @@ static QualType GetDeclSpecTypeForDeclarator(TypeProcessingState &state,
       bool Cxx = SemaRef.getLangOpts().CPlusPlus;
       switch (cast<TagDecl>(SemaRef.CurContext)->getTagKind()) {
       case TTK_Enum: llvm_unreachable("unhandled tag kind");
+      case TTK_Qstruct: // Scaffold
       case TTK_Struct: Error = Cxx ? 1 : 2; /* Struct member */ break;
+      case TTK_Qunion: // Scaffold
       case TTK_Union:  Error = Cxx ? 3 : 4; /* Union member */ break;
       case TTK_Class:  Error = 5; /* Class member */ break;
       case TTK_Interface: Error = 6; /* Interface member */ break;

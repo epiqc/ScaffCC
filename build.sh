@@ -34,20 +34,20 @@ while getopts "h?mab:" opt; do
 done
 
 cmake_flags=""
-if [ "${OS}" == "Darwin" ]; then
+if [ "${OS}" != "Darwin" ]; then
     cmake_flags="-DLLVM_USE_LINKER=gold"
 fi
 
 if [ "${build_dir}" == "" ]; then
-    build_dir=$(realpath "${source_dir}/build")
+    build_dir=$(cd "$(dirname '$0')" && pwd -P)"/build"
 fi
 
-llvm_src=$(realpath "${source_dir}/llvm")
+llvm_src=$(cd "$(dirname '$0')" && pwd -P)"/llvm"
 
 mkdir "${build_dir}"
 cd ${build_dir}
-cmake "${llvm_src}" ${cmake_flags} -DLLVM_ENABLE_PROJECTS="clang"
+cmake -G Ninja "${llvm_src}" ${cmake_flags} -DLLVM_ENABLE_PROJECTS="clang"
 cd ${curr_dir}
 if [ build = 1 ]; then
-  make -c "${build_dir}" ${build_string}
+  ninja -C "${build_dir}" ${build_string}
 fi

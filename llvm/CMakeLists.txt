@@ -919,18 +919,12 @@ foreach( binding ${LLVM_BINDINGS_LIST} )
   endif()
 endforeach()
 
-add_subdirectory(projects)
-
 if( LLVM_INCLUDE_TOOLS )
   add_subdirectory(tools)
 endif()
 
 if( LLVM_INCLUDE_RUNTIMES )
   add_subdirectory(runtimes)
-endif()
-
-if( LLVM_INCLUDE_EXAMPLES )
-  add_subdirectory(examples)
 endif()
 
 if( LLVM_INCLUDE_TESTS )
@@ -943,11 +937,6 @@ if( LLVM_INCLUDE_TESTS )
       ALWAYS_CLEAN)
   endif()
   add_subdirectory(utils/lit)
-  add_subdirectory(test)
-  add_subdirectory(unittests)
-  if( LLVM_INCLUDE_UTILS )
-    add_subdirectory(utils/unittest)
-  endif()
 
   if (WIN32)
     # This utility is used to prevent crashing tests from calling Dr. Watson on
@@ -978,10 +967,6 @@ if( LLVM_INCLUDE_TESTS )
   add_custom_target(test-depends
                     DEPENDS ${LLVM_LIT_DEPENDS} ${LLVM_ADDITIONAL_TEST_DEPENDS})
   set_target_properties(test-depends PROPERTIES FOLDER "Tests")
-endif()
-
-if (LLVM_INCLUDE_DOCS)
-  add_subdirectory(docs)
 endif()
 
 add_subdirectory(cmake/modules)

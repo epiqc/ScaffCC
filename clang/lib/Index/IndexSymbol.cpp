@@ -110,6 +110,10 @@ SymbolInfo index::getSymbolInfo(const Decl *D) {
       Info.Kind = SymbolKind::Struct; break;
     case TTK_Union:
       Info.Kind = SymbolKind::Union; break;
+    case TTK_Qstruct: // Scaffold, could be fixed
+      Info.Kind = SymbolKind::Struct; break;
+    case TTK_Qunion: // Scaffold, could be fixed
+      Info.Kind = SymbolKind::Union; break;
     case TTK_Class:
       Info.Kind = SymbolKind::Class;
       Info.Lang = SymbolLanguage::CXX;

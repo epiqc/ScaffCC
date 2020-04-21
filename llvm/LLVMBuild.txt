@@ -15,7 +15,7 @@
 ;===------------------------------------------------------------------------===;
 
 [common]
-subdirectories = bindings docs examples lib projects tools utils
+subdirectories = bindings lib tools utils
 
 [component_0]
 type = Group

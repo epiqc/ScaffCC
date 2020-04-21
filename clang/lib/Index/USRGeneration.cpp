@@ -510,7 +510,9 @@ void USRGenerator::VisitTagDecl(const TagDecl *D) {
       switch (D->getTagKind()) {
       case TTK_Interface:
       case TTK_Class:
+      case TTK_Qstruct: // Scaffold
       case TTK_Struct: Out << "@ST"; break;
+      case TTK_Qunion: // Scaffold
       case TTK_Union:  Out << "@UT"; break;
       case TTK_Enum: llvm_unreachable("enum template");
       }
@@ -522,7 +524,9 @@ void USRGenerator::VisitTagDecl(const TagDecl *D) {
       switch (D->getTagKind()) {
       case TTK_Interface:
       case TTK_Class:
+      case TTK_Qstruct: // Scaffold
       case TTK_Struct: Out << "@SP"; break;
+      case TTK_Qunion: // Scaffold
       case TTK_Union:  Out << "@UP"; break;
       case TTK_Enum: llvm_unreachable("enum partial specialization");
       }
@@ -534,7 +538,9 @@ void USRGenerator::VisitTagDecl(const TagDecl *D) {
     switch (D->getTagKind()) {
       case TTK_Interface:
       case TTK_Class:
+      case TTK_Qstruct: // Scaffold
       case TTK_Struct: Out << "@S"; break;
+      case TTK_Qunion: // Scaffold
       case TTK_Union:  Out << "@U"; break;
       case TTK_Enum:   Out << "@E"; break;
     }
