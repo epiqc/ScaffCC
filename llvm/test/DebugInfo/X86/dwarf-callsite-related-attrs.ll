@@ -14,16 +14,24 @@
 
 ; REQUIRES: object-emission
 ; RUN: %llc_dwarf -mtriple=x86_64-- < %s -o - | FileCheck %s -check-prefix=ASM
-; RUN: %llc_dwarf -mtriple=x86_64-- < %s -filetype=obj -o %t.o
+; RUN: %llc_dwarf -debugger-tune=lldb -mtriple=x86_64-- < %s -filetype=obj -o %t.o
 ; RUN: llvm-dwarfdump %t.o -o - | FileCheck %s -check-prefix=OBJ -implicit-check-not=DW_TAG_call_site
 ; RUN: llvm-dwarfdump -verify %t.o 2>&1 | FileCheck %s -check-prefix=VERIFY
 ; RUN: llvm-dwarfdump -statistics %t.o | FileCheck %s -check-prefix=STATS
 ; RUN: llvm-as < %s | llvm-dis | llvm-as | llvm-dis -o /dev/null
 
 ; VERIFY: No errors.
-; STATS: "call site entries":5
+; STATS: "call site DIEs":6
 
 @sink = global i32 0, align 4, !dbg !0
+
+define void @__has_no_subprogram() {
+entry:
+  %0 = load volatile i32, i32* @sink, align 4
+  %inc = add nsw i32 %0, 1
+  store volatile i32 %inc, i32* @sink, align 4
+  ret void
+}
 
 ; ASM: DW_TAG_subprogram
 ; ASM:   DW_AT_call_all_calls
@@ -70,6 +78,7 @@ entry:
 ; OBJ:     DW_AT_call_tail_call
 define void @_Z3foov() !dbg !25 {
 entry:
+  tail call void @__has_no_subprogram()
   tail call void @_Z3barv(), !dbg !26
   tail call void @_Z3batv(), !dbg !27
   tail call void @_Z3barv(), !dbg !26
@@ -84,6 +93,9 @@ entry:
 ; OBJ: DW_AT_name ("main")
 ; OBJ:   DW_TAG_call_site
 ; OBJ:     DW_AT_call_origin ([[foo_sp]])
+; OBJ:     DW_AT_call_return_pc
+; OBJ:   DW_TAG_call_site
+; OBJ:     DW_AT_call_target
 ; OBJ:     DW_AT_call_return_pc
 define i32 @main() !dbg !29 {
 entry:

@@ -1,5 +1,5 @@
 ; RUN: llc -filetype=obj -exception-model=wasm -mattr=+exception-handling %s -o - | obj2yaml | FileCheck %s
-; RUN: llc -filetype=obj -exception-model=wasm -mattr=+exception-handling %s -o - | llvm-readobj -s | FileCheck -check-prefix=SEC %s
+; RUN: llc -filetype=obj -exception-model=wasm -mattr=+exception-handling %s -o - | llvm-readobj -S | FileCheck -check-prefix=SEC %s
 
 target triple = "wasm32-unknown-unknown"
 
@@ -19,13 +19,14 @@ define i32 @test_throw1(i8* %p) {
 ; CHECK-NEXT:   - Type:            TYPE
 ; CHECK-NEXT:     Signatures:
 ; CHECK-NEXT:       - Index:           0
-; CHECK-NEXT:         ReturnType:      I32
 ; CHECK-NEXT:         ParamTypes:
+; CHECK-NEXT:           - I32
+; CHECK-NEXT:         ReturnTypes:
 ; CHECK-NEXT:           - I32
 ; CHECK-NEXT:       - Index:           1
-; CHECK-NEXT:         ReturnType:      NORESULT
 ; CHECK-NEXT:         ParamTypes:
 ; CHECK-NEXT:           - I32
+; CHECK-NEXT:         ReturnTypes:      []
 
 ; CHECK:        - Type:            EVENT
 ; CHECK-NEXT:     Events:
@@ -35,10 +36,10 @@ define i32 @test_throw1(i8* %p) {
 
 ; CHECK-NEXT:   - Type:            CODE
 ; CHECK-NEXT:     Relocations:
-; CHECK-NEXT:       - Type:            R_WEBASSEMBLY_EVENT_INDEX_LEB
+; CHECK-NEXT:       - Type:            R_WASM_EVENT_INDEX_LEB
 ; CHECK-NEXT:         Index:           1
 ; CHECK-NEXT:         Offset:          0x00000006
-; CHECK-NEXT:       - Type:            R_WEBASSEMBLY_EVENT_INDEX_LEB
+; CHECK-NEXT:       - Type:            R_WASM_EVENT_INDEX_LEB
 ; CHECK-NEXT:         Index:           1
 ; CHECK-NEXT:         Offset:          0x00000011
 

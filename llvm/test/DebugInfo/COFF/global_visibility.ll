@@ -1,4 +1,4 @@
-; RUN: llc < %s -filetype=obj | llvm-readobj - -codeview | FileCheck %s
+; RUN: llc < %s -filetype=obj | llvm-readobj - --codeview | FileCheck %s
 ;
 ; This test verifies global variables are emitted within the correct scope.
 ;
@@ -205,8 +205,8 @@ entry:
 ; Function Attrs: nounwind readnone speculatable
 declare void @llvm.dbg.declare(metadata, metadata, metadata) #2
 
-attributes #0 = { noinline optnone uwtable "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "min-legal-vector-width"="0" "no-frame-pointer-elim"="false" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+fxsr,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="false" "use-soft-float"="false" }
-attributes #1 = { noinline nounwind optnone uwtable "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "min-legal-vector-width"="0" "no-frame-pointer-elim"="false" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+fxsr,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="false" "use-soft-float"="false" }
+attributes #0 = { noinline optnone uwtable "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "min-legal-vector-width"="0" "frame-pointer"="none" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+fxsr,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="false" "use-soft-float"="false" }
+attributes #1 = { noinline nounwind optnone uwtable "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "min-legal-vector-width"="0" "frame-pointer"="none" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+fxsr,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="false" "use-soft-float"="false" }
 attributes #2 = { nounwind readnone speculatable }
 
 !llvm.dbg.cu = !{!2}
@@ -235,7 +235,7 @@ attributes #2 = { nounwind readnone speculatable }
 !19 = !DIGlobalVariableExpression(var: !20, expr: !DIExpression())
 !20 = distinct !DIGlobalVariable(name: "comdat_int", linkageName: "?comdat_int@?$A@H@@2HA", scope: !2, file: !3, line: 9, type: !11, isLocal: false, isDefinition: true, declaration: !21)
 !21 = !DIDerivedType(tag: DW_TAG_member, name: "comdat_int", scope: !22, file: !3, line: 5, baseType: !11, flags: DIFlagStaticMember)
-!22 = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "A<int>", file: !3, line: 4, size: 8, flags: DIFlagTypePassByValue | DIFlagTrivial, elements: !23, templateParams: !27, identifier: ".?AU?$A@H@@")
+!22 = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "A<int>", file: !3, line: 4, size: 8, flags: DIFlagTypePassByValue, elements: !23, templateParams: !27, identifier: ".?AU?$A@H@@")
 !23 = !{!21, !24}
 !24 = !DISubprogram(name: "set", linkageName: "?set@?$A@H@@SAHH@Z", scope: !22, file: !3, line: 6, type: !25, scopeLine: 6, flags: DIFlagPrototyped | DIFlagStaticMember, spFlags: 0)
 !25 = !DISubroutineType(types: !26)
@@ -246,7 +246,7 @@ attributes #2 = { nounwind readnone speculatable }
 !30 = distinct !DIGlobalVariable(name: "comdat_int", linkageName: "?comdat_int@?$A@I@@2IA", scope: !2, file: !3, line: 9, type: !31, isLocal: false, isDefinition: true, declaration: !32)
 !31 = !DIBasicType(name: "unsigned int", size: 32, encoding: DW_ATE_unsigned)
 !32 = !DIDerivedType(tag: DW_TAG_member, name: "comdat_int", scope: !33, file: !3, line: 5, baseType: !31, flags: DIFlagStaticMember)
-!33 = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "A<unsigned int>", file: !3, line: 4, size: 8, flags: DIFlagTypePassByValue | DIFlagTrivial, elements: !34, templateParams: !38, identifier: ".?AU?$A@I@@")
+!33 = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "A<unsigned int>", file: !3, line: 4, size: 8, flags: DIFlagTypePassByValue, elements: !34, templateParams: !38, identifier: ".?AU?$A@I@@")
 !34 = !{!32, !35}
 !35 = !DISubprogram(name: "set", linkageName: "?set@?$A@I@@SAII@Z", scope: !33, file: !3, line: 6, type: !36, scopeLine: 6, flags: DIFlagPrototyped | DIFlagStaticMember, spFlags: 0)
 !36 = !DISubroutineType(types: !37)

@@ -55,13 +55,13 @@ namespace {
     static char ID;  // Pass identification, replacement for typeid
 
     //external instrumentation functions
-    Function* dcpGate; 
-    Function* dcpGate2;
-    Function* dcpGate3;
-    Function* dcpQbitInit;
-    Function* dcpAncReset;
-    Function* dcpSumm;
-    Function* dcpInitAlgo;
+    FunctionCallee dcpGate; 
+    FunctionCallee dcpGate2;
+    FunctionCallee dcpGate3;
+    FunctionCallee dcpQbitInit;
+    FunctionCallee dcpAncReset;
+    FunctionCallee dcpSumm;
+    FunctionCallee dcpInitAlgo;
 
     map<AllocaInst*, int> mapAllocaInst;
     //bool isMainFunction;
@@ -223,19 +223,19 @@ namespace {
         else debugDynCritPath = false;
       }
 
-      dcpGate = cast<Function>(M.getOrInsertFunction("dcp_qgate", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt16Ty(M.getContext()), (Type*)0));
+      dcpGate = M.getOrInsertFunction("dcp_qgate", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt16Ty(M.getContext()), (Type*)0);
       
-      dcpGate2 = cast<Function>(M.getOrInsertFunction("dcp_qgate2", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt16Ty(M.getContext()), Type::getInt16Ty(M.getContext()), (Type*)0));
+      dcpGate2 = M.getOrInsertFunction("dcp_qgate2", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt16Ty(M.getContext()), Type::getInt16Ty(M.getContext()), (Type*)0);
 
-      dcpGate3 = cast<Function>(M.getOrInsertFunction("dcp_qgate3", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt16Ty(M.getContext()), Type::getInt16Ty(M.getContext()), Type::getInt16Ty(M.getContext()), (Type*)0));
+      dcpGate3 = M.getOrInsertFunction("dcp_qgate3", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt16Ty(M.getContext()), Type::getInt16Ty(M.getContext()), Type::getInt16Ty(M.getContext()), (Type*)0);
 
-      dcpQbitInit = cast<Function>(M.getOrInsertFunction("dcp_qbit_init", Type::getVoidTy(M.getContext()), Type::getInt16Ty(M.getContext())->getPointerTo(), Type::getInt32Ty(M.getContext()), (Type*)0));
+      dcpQbitInit = M.getOrInsertFunction("dcp_qbit_init", Type::getVoidTy(M.getContext()), Type::getInt16Ty(M.getContext())->getPointerTo(), Type::getInt32Ty(M.getContext()), (Type*)0);
 
-      dcpAncReset = cast<Function>(M.getOrInsertFunction("dcp_anc_reset", Type::getVoidTy(M.getContext()), Type::getInt16Ty(M.getContext())->getPointerTo(), Type::getInt32Ty(M.getContext()), (Type*)0));
+      dcpAncReset = M.getOrInsertFunction("dcp_anc_reset", Type::getVoidTy(M.getContext()), Type::getInt16Ty(M.getContext())->getPointerTo(), Type::getInt32Ty(M.getContext()), (Type*)0);
       
-      dcpSumm = cast<Function>(M.getOrInsertFunction("dcp_summary", Type::getVoidTy(M.getContext()), (Type*)0));
+      dcpSumm = M.getOrInsertFunction("dcp_summary", Type::getVoidTy(M.getContext()), (Type*)0);
 
-      dcpInitAlgo = cast<Function>(M.getOrInsertFunction("dcp_init_algo", Type::getVoidTy(M.getContext()), (Type*)0));
+      dcpInitAlgo = M.getOrInsertFunction("dcp_init_algo", Type::getVoidTy(M.getContext()), (Type*)0);
         
       for(Module::iterator F = M.begin(); F!=M.end(); ++F){
 	if(!F->isDeclaration()){

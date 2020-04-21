@@ -92,7 +92,7 @@ main_body:
 ;CHECK-NEXT: ; %main_body
 ;CHECK-NEXT: s_mov_b64 [[ORIG:s\[[0-9]+:[0-9]+\]]], exec
 ;CHECK-NEXT: s_wqm_b64 exec, exec
-;CHECK: v_mul_lo_i32 [[MUL:v[0-9]+]], v0, v1
+;CHECK: v_mul_lo_u32 [[MUL:v[0-9]+]], v0, v1
 ;CHECK: s_and_b64 exec, exec, [[ORIG]]
 ;CHECK: store
 ;CHECK: s_wqm_b64 exec, exec
@@ -117,6 +117,9 @@ main_body:
 ;CHECK: buffer_load_dword
 ;CHECK: buffer_load_dword
 ;CHECK: v_add_f32_e32
+; WQM was inserting an unecessary v_mov to self after the v_add. Make sure this
+; does not happen - the v_add should write the return reg directly.
+;CHECK-NOT: v_mov_b32_e32
 define amdgpu_ps float @test5(i32 inreg %idx0, i32 inreg %idx1) {
 main_body:
   %src0 = call float @llvm.amdgcn.buffer.load.f32(<4 x i32> undef, i32 %idx0, i32 0, i1 0, i1 0)
@@ -423,6 +426,7 @@ END:
 ;CHECK-NEXT: s_and_b64 [[SAVED]], exec, [[SAVED]]
 ;CHECK-NEXT: s_xor_b64 exec, exec, [[SAVED]]
 ;CHECK-NEXT: mask branch [[END_BB:BB[0-9]+_[0-9]+]]
+;CHECK-NEXT: s_cbranch_execz [[END_BB]]
 ;CHECK-NEXT: BB{{[0-9]+_[0-9]+}}: ; %ELSE
 ;CHECK: store_dword
 ;CHECK: [[END_BB]]: ; %END
@@ -649,12 +653,15 @@ main_body:
 ; CHECK-DAG: v_mov_b32_e32 [[CTR:v[0-9]+]], 0
 ; CHECK-DAG: s_mov_b32 [[SEVEN:s[0-9]+]], 0x40e00000
 
-; CHECK: [[LOOPHDR:BB[0-9]+_[0-9]+]]: ; %body
-; CHECK: v_add_f32_e32 [[CTR]], 2.0, [[CTR]]
+; CHECK: [[LOOPHDR:BB[0-9]+_[0-9]+]]: ; %loop
 ; CHECK: v_cmp_lt_f32_e32 vcc, [[SEVEN]], [[CTR]]
-; CHECK: s_cbranch_vccz [[LOOPHDR]]
-; CHECK: ; %break
+; CHECK: s_cbranch_vccnz
 
+; CHECK: ; %body
+; CHECK: v_add_f32_e32 [[CTR]], 2.0, [[CTR]]
+; CHECK: s_branch [[LOOPHDR]]
+
+; CHECK: ; %break
 ; CHECK: ; return
 define amdgpu_ps <4 x float> @test_loop_vcc(<4 x float> %in) nounwind {
 entry:

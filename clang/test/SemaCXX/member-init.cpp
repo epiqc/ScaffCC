@@ -1,7 +1,7 @@
 // RUN: %clang_cc1 -fsyntax-only -fcxx-exceptions -verify -std=c++11 -Wall %s
 
 struct Bitfield {
-  int n : 3 = 7; // expected-warning {{C++2a extension}} expected-warning {{changes value from 7 to -1}}
+  int n : 3 = 7; // expected-warning {{C++20 extension}} expected-warning {{changes value from 7 to -1}}
 };
 
 int a;
@@ -51,7 +51,7 @@ struct CheckExcSpec {
   int n = 0;
 };
 struct CheckExcSpecFail {
-  CheckExcSpecFail() noexcept(true) = default; // expected-error {{exception specification of explicitly defaulted default constructor does not match the calculated one}}
+  CheckExcSpecFail() noexcept(true) = default; // ok, but calls terminate() on exception
   ThrowCtor tc = 123;
 };
 
@@ -184,7 +184,7 @@ void g() { f<int>(); } // expected-note {{in instantiation of function template 
 namespace PR22056 {
 template <int N>
 struct S {
-  int x[3] = {[N] = 3};
+  int x[3] = {[N] = 3}; // expected-warning {{C99 extension}}
 };
 }
 

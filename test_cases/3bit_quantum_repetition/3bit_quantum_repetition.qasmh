@@ -10,11 +10,11 @@ module main(){
  	CNOT ( q[1] , a[0] );
  	CNOT ( q[1] , a[1] );
  	CNOT ( q[2] , a[1] );
- 	syn[0] = MeasZ ( q[0] );
+ 	syn[0] = MeasZ ( a[0] );
  	X ( q[0] );
  	X ( q[2] );
  	X ( q[1] );
- 	c[0] = MeasZ ( q[0] );
+ 	c[1] = MeasZ ( q[1] );
  }
 
 --------End of QASM generation

@@ -13,8 +13,8 @@ CNOT q0,a0
 CNOT q1,a0
 CNOT q1,a1
 CNOT q2,a1
-MeasZ q0
+MeasZ a0
 X q0
 X q2
 X q1
-MeasZ q0
+MeasZ q1

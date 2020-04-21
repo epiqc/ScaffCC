@@ -1,9 +1,9 @@
 // REQUIRES: systemz-registered-target
 // RUN: %clang_cc1 -target-cpu z14 -triple s390x-linux-gnu \
-// RUN: -O -fzvector -fno-lax-vector-conversions \
+// RUN: -O -fzvector -flax-vector-conversions=none \
 // RUN: -Wall -Wno-unused -Werror -emit-llvm %s -o - | FileCheck %s
 // RUN: %clang_cc1 -target-cpu z14 -triple s390x-linux-gnu \
-// RUN: -O -fzvector -fno-lax-vector-conversions \
+// RUN: -O -fzvector -flax-vector-conversions=none \
 // RUN: -Wall -Wno-unused -Werror -S %s -o - | FileCheck %s --check-prefix=CHECK-ASM
 
 #include <vecintrin.h>
@@ -125,6 +125,16 @@ void test_core(void) {
   vul = vec_bperm_u128(vuc, vuc);
   // CHECK: call <2 x i64> @llvm.s390.vbperm(<16 x i8> %{{.*}}, <16 x i8> %{{.*}})
   // CHECK-ASM: vbperm
+
+  vf = vec_revb(vf);
+  // CHECK-ASM: vperm
+  vd = vec_revb(vd);
+  // CHECK-ASM: vperm
+
+  vf = vec_reve(vf);
+  // CHECK-ASM: vperm
+  vd = vec_reve(vd);
+  // CHECK-ASM: {{vperm|vpdi}}
 
   vf = vec_sel(vf, vf, vui);
   // CHECK-ASM: vsel
@@ -676,11 +686,11 @@ void test_float(void) {
 
   vf = vec_nabs(vf);
   // CHECK: [[ABS:%[^ ]+]] = tail call <4 x float> @llvm.fabs.v4f32(<4 x float> %{{.*}})
-  // CHECK-NEXT: fsub <4 x float> <float -0.000000e+00, float -0.000000e+00, float -0.000000e+00, float -0.000000e+00>, [[ABS]]
+  // CHECK-NEXT: fneg <4 x float> [[ABS]]
   // CHECK-ASM: vflnsb
   vd = vec_nabs(vd);
   // CHECK: [[ABS:%[^ ]+]] = tail call <2 x double> @llvm.fabs.v2f64(<2 x double> %{{.*}})
-  // CHECK-NEXT: fsub <2 x double> <double -0.000000e+00, double -0.000000e+00>, [[ABS]]
+  // CHECK-NEXT: fneg <2 x double> [[ABS]]
   // CHECK-ASM: vflndb
 
   vf = vec_max(vf, vf);
@@ -705,32 +715,32 @@ void test_float(void) {
   // CHECK-ASM: vfmadb
 
   vf = vec_msub(vf, vf, vf);
-  // CHECK: [[NEG:%[^ ]+]] = fsub <4 x float> <float -0.000000e+00, float -0.000000e+00, float -0.000000e+00, float -0.000000e+00>, %{{.*}}
+  // CHECK: [[NEG:%[^ ]+]] = fneg <4 x float> %{{.*}}
   // CHECK: call <4 x float> @llvm.fma.v4f32(<4 x float> %{{.*}}, <4 x float> %{{.*}}, <4 x float> [[NEG]])
   // CHECK-ASM: vfmssb
   vd = vec_msub(vd, vd, vd);
-  // CHECK: [[NEG:%[^ ]+]] = fsub <2 x double> <double -0.000000e+00, double -0.000000e+00>, %{{.*}}
+  // CHECK: [[NEG:%[^ ]+]] = fneg <2 x double> %{{.*}}
   // CHECK: call <2 x double> @llvm.fma.v2f64(<2 x double> %{{.*}}, <2 x double> %{{.*}}, <2 x double> [[NEG]])
   // CHECK-ASM: vfmsdb
 
   vf = vec_nmadd(vf, vf, vf);
   // CHECK: [[RES:%[^ ]+]] = tail call <4 x float> @llvm.fma.v4f32(<4 x float> %{{.*}}, <4 x float> %{{.*}}, <4 x float> %{{.*}})
-  // CHECK: fsub <4 x float> <float -0.000000e+00, float -0.000000e+00, float -0.000000e+00, float -0.000000e+00>, [[RES]]
+  // CHECK: fneg <4 x float> [[RES]]
   // CHECK-ASM: vfnmasb
   vd = vec_nmadd(vd, vd, vd);
   // CHECK: [[RES:%[^ ]+]] = tail call <2 x double> @llvm.fma.v2f64(<2 x double> %{{.*}}, <2 x double> %{{.*}}, <2 x double> %{{.*}})
-  // CHECK: fsub <2 x double> <double -0.000000e+00, double -0.000000e+00>, [[RES]]
+  // CHECK: fneg <2 x double> [[RES]]
   // CHECK-ASM: vfnmadb
 
   vf = vec_nmsub(vf, vf, vf);
-  // CHECK: [[NEG:%[^ ]+]] = fsub <4 x float> <float -0.000000e+00, float -0.000000e+00, float -0.000000e+00, float -0.000000e+00>, %{{.*}}
+  // CHECK: [[NEG:%[^ ]+]] = fneg <4 x float> %{{.*}}
   // CHECK: [[RES:%[^ ]+]] = tail call <4 x float> @llvm.fma.v4f32(<4 x float> %{{.*}}, <4 x float> %{{.*}}, <4 x float> [[NEG]])
-  // CHECK: fsub <4 x float> <float -0.000000e+00, float -0.000000e+00, float -0.000000e+00, float -0.000000e+00>, [[RES]]
+  // CHECK: fneg <4 x float> [[RES]]
   // CHECK-ASM: vfnmssb
   vd = vec_nmsub(vd, vd, vd);
-  // CHECK: [[NEG:%[^ ]+]] = fsub <2 x double> <double -0.000000e+00, double -0.000000e+00>, %{{.*}}
+  // CHECK: [[NEG:%[^ ]+]] = fneg <2 x double> %{{.*}}
   // CHECK: [[RES:%[^ ]+]] = tail call <2 x double> @llvm.fma.v2f64(<2 x double> %{{.*}}, <2 x double> %{{.*}}, <2 x double> [[NEG]])
-  // CHECK: fsub <2 x double> <double -0.000000e+00, double -0.000000e+00>, [[RES]]
+  // CHECK: fneg <2 x double> [[RES]]
   // CHECK-ASM: vfnmsdb
 
   vf = vec_sqrt(vf);

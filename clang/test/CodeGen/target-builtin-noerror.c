@@ -80,6 +80,7 @@ void verifyfeaturestrings() {
   (void)__builtin_cpu_supports("vpclmulqdq");
   (void)__builtin_cpu_supports("avx512vnni");
   (void)__builtin_cpu_supports("avx512bitalg");
+  (void)__builtin_cpu_supports("avx512bf16");
 }
 
 void verifycpustrings() {
@@ -98,6 +99,7 @@ void verifycpustrings() {
   (void)__builtin_cpu_is("btver1");
   (void)__builtin_cpu_is("btver2");
   (void)__builtin_cpu_is("cannonlake");
+  (void)__builtin_cpu_is("cascadelake");
   (void)__builtin_cpu_is("core2");
   (void)__builtin_cpu_is("corei7");
   (void)__builtin_cpu_is("goldmont");
@@ -120,4 +122,5 @@ void verifycpustrings() {
   (void)__builtin_cpu_is("tremont");
   (void)__builtin_cpu_is("westmere");
   (void)__builtin_cpu_is("znver1");
+  (void)__builtin_cpu_is("znver2");
 }

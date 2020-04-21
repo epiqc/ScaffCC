@@ -46,7 +46,7 @@ namespace {
 				Idx[1] = ConstantInt::get(Type::getInt32Ty(M->getContext()),0);
 				ArrayType *arrayType = ArrayType::get(abit_type, 1);
 				AllocaInst *anc = new AllocaInst(arrayType,0,anc_name, BB);
-				anc->setAlignment(8);
+				anc->setAlignment(MaybeAlign(8));
         		Value *intArrPtr = GetElementPtrInst::CreateInBounds(anc,Idx,"",BB);
 				Value *value = new LoadInst(intArrPtr, "", BB);
 				return value;

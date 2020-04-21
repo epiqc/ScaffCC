@@ -11,11 +11,11 @@ int main() {
     CNOT(q[1], a[1]);
     CNOT(q[2], a[1]);
 
-    *syn = MeasZ(*q);
+    *syn = MeasZ(*a);
 
     if(*syn == 1) X(q[0]);
     if(*syn == 2) X(q[2]);
     if(*syn == 3) X(q[1]);
 
-    *c = MeasZ(*q);
+    c[1] = MeasZ(q[1]);
 }

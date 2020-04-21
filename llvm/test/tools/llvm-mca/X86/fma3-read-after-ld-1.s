@@ -7,6 +7,8 @@
 
 # RUN: llvm-mca -mtriple=x86_64-unknown-unknown -mcpu=znver1 -iterations=1 -resource-pressure=false -instruction-info=false -timeline < %s | FileCheck %s -check-prefix=ALL -check-prefix=ZNVER1
 
+# RUN: llvm-mca -mtriple=x86_64-unknown-unknown -mcpu=znver2 -iterations=1 -resource-pressure=false -instruction-info=false -timeline < %s | FileCheck %s -check-prefix=ALL -check-prefix=ZNVER1
+
 vaddps %xmm0, %xmm0, %xmm1
 vfmadd213ps (%rdi), %xmm1, %xmm2
 
@@ -75,3 +77,4 @@ vfmadd213ps (%rdi), %xmm1, %xmm2
 # ALL:                [0]    [1]    [2]    [3]
 # ALL-NEXT:     0.     1     1.0    1.0    0.0       vaddps	%xmm0, %xmm0, %xmm1
 # ALL-NEXT:     1.     1     1.0    0.0    0.0       vfmadd213ps	(%rdi), %xmm1, %xmm2
+# ALL-NEXT:            1     1.0    0.5    0.0       <total>

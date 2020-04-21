@@ -102,28 +102,28 @@ namespace {
 
     Instruction* FirstInst;
 
-    Function* qasmAllocQbit; //alloc function
-    Function* qasmAllocCbit; //alloc function
-    Function* qasmAllocQbitExec; //alloc function
-    Function* qasmAllocCbitExec; //alloc function
-    Function* qasmHeader; //func decl and opening brace
-    Function* qasmHeaderQbit; //quantum call arg
-    Function* qasmHeaderQbitPtr; //quantum call arg
-    Function* qasmHeaderCbitPtr; //quantum call arg
-    Function* qasmHeaderEnd; //quantum call arg
-    Function* qasmHeaderIntArg;
-    Function* qasmHeaderDoubleArg;
-    Function* qasmFooter; //closing brace
-    Function* qasmQCall; //quantum call
-    Function* qasmQCallArgQbit; //quantum call arg
-    Function* qasmQCallArgQbitPtr; //quantum call arg
-    Function* qasmQCallEnd; //quantum call arg
-    Function* qasmGate;
-    Function* qasmGate2;
-    Function* qasmGate3;
-    Function* qasmRot;
-    Function* qasmCallInstIntArg;
-    Function* qasmCallInstDoubleArg;
+    FunctionCallee qasmAllocQbit; //alloc function
+    FunctionCallee qasmAllocCbit; //alloc function
+    FunctionCallee qasmAllocQbitExec; //alloc function
+    FunctionCallee qasmAllocCbitExec; //alloc function
+    FunctionCallee qasmHeader; //func decl and opening brace
+    FunctionCallee qasmHeaderQbit; //quantum call arg
+    FunctionCallee qasmHeaderQbitPtr; //quantum call arg
+    FunctionCallee qasmHeaderCbitPtr; //quantum call arg
+    FunctionCallee qasmHeaderEnd; //quantum call arg
+    FunctionCallee qasmHeaderIntArg;
+    FunctionCallee qasmHeaderDoubleArg;
+    FunctionCallee qasmFooter; //closing brace
+    FunctionCallee qasmQCall; //quantum call
+    FunctionCallee qasmQCallArgQbit; //quantum call arg
+    FunctionCallee qasmQCallArgQbitPtr; //quantum call arg
+    FunctionCallee qasmQCallEnd; //quantum call arg
+    FunctionCallee qasmGate;
+    FunctionCallee qasmGate2;
+    FunctionCallee qasmGate3;
+    FunctionCallee qasmRot;
+    FunctionCallee qasmCallInstIntArg;
+    FunctionCallee qasmCallInstDoubleArg;
 
     DynGenQASMLoops() : ModulePass(ID) {  }
 
@@ -1306,47 +1306,47 @@ bool DynGenQASMLoops::runOnModule(Module &M) {
     else debugDynGenQASMLoops = false;
   }
 
-  qasmAllocQbit = cast<Function>(M.getOrInsertFunction("qasm_print_qbit_alloc", Type::getVoidTy(M.getContext()), Type::getInt16Ty(M.getContext())->getPointerTo(), Type::getInt32Ty(M.getContext()), Type::getInt8Ty(M.getContext())->getPointerTo(), (Type*)0));
+  qasmAllocQbit = M.getOrInsertFunction("qasm_print_qbit_alloc", Type::getVoidTy(M.getContext()), Type::getInt16Ty(M.getContext())->getPointerTo(), Type::getInt32Ty(M.getContext()), Type::getInt8Ty(M.getContext())->getPointerTo(), (Type*)0);
 
-  qasmAllocCbit = cast<Function>(M.getOrInsertFunction("qasm_print_cbit_alloc", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt8Ty(M.getContext())->getPointerTo(), (Type*)0));
+  qasmAllocCbit = M.getOrInsertFunction("qasm_print_cbit_alloc", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt8Ty(M.getContext())->getPointerTo(), (Type*)0);
 
-  qasmAllocQbitExec = cast<Function>(M.getOrInsertFunction("qasm_print_qbit_alloc_exec", Type::getVoidTy(M.getContext()), Type::getInt16Ty(M.getContext())->getPointerTo(), Type::getInt32Ty(M.getContext()), Type::getInt8Ty(M.getContext())->getPointerTo(), (Type*)0));
+  qasmAllocQbitExec = M.getOrInsertFunction("qasm_print_qbit_alloc_exec", Type::getVoidTy(M.getContext()), Type::getInt16Ty(M.getContext())->getPointerTo(), Type::getInt32Ty(M.getContext()), Type::getInt8Ty(M.getContext())->getPointerTo(), (Type*)0);
 
-  qasmAllocCbitExec = cast<Function>(M.getOrInsertFunction("qasm_print_cbit_alloc_exec", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt8Ty(M.getContext())->getPointerTo(), (Type*)0));
+  qasmAllocCbitExec = M.getOrInsertFunction("qasm_print_cbit_alloc_exec", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt8Ty(M.getContext())->getPointerTo(), (Type*)0);
   
-  qasmHeader = cast<Function>(M.getOrInsertFunction("qasm_print_header", Type::getVoidTy(M.getContext()),  Type::getInt8Ty(M.getContext())->getPointerTo(), (Type*)0));       
+  qasmHeader = M.getOrInsertFunction("qasm_print_header", Type::getVoidTy(M.getContext()),  Type::getInt8Ty(M.getContext())->getPointerTo(), (Type*)0);       
 
-  qasmHeaderQbit = cast<Function>(M.getOrInsertFunction("qasm_print_header_qbit_arg", Type::getVoidTy(M.getContext()), Type::getInt8Ty(M.getContext())->getPointerTo(), (Type*)0));
+  qasmHeaderQbit = M.getOrInsertFunction("qasm_print_header_qbit_arg", Type::getVoidTy(M.getContext()), Type::getInt8Ty(M.getContext())->getPointerTo(), (Type*)0);
 
-    qasmHeaderQbitPtr = cast<Function>(M.getOrInsertFunction("qasm_print_header_qbitptr_arg", Type::getVoidTy(M.getContext()), Type::getInt8Ty(M.getContext())->getPointerTo(),(Type*)0));
+    qasmHeaderQbitPtr = M.getOrInsertFunction("qasm_print_header_qbitptr_arg", Type::getVoidTy(M.getContext()), Type::getInt8Ty(M.getContext())->getPointerTo(),(Type*)0);
 
-    qasmHeaderCbitPtr = cast<Function>(M.getOrInsertFunction("qasm_print_header_cbitptr_arg", Type::getVoidTy(M.getContext()), Type::getInt8Ty(M.getContext())->getPointerTo(),(Type*)0));
+    qasmHeaderCbitPtr = M.getOrInsertFunction("qasm_print_header_cbitptr_arg", Type::getVoidTy(M.getContext()), Type::getInt8Ty(M.getContext())->getPointerTo(),(Type*)0);
 
-    qasmHeaderEnd = cast<Function>(M.getOrInsertFunction("qasm_print_header_end", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), (Type*)0));
+    qasmHeaderEnd = M.getOrInsertFunction("qasm_print_header_end", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), (Type*)0);
 
-      qasmHeaderIntArg = cast<Function>(M.getOrInsertFunction("qasm_print_header_int_arg", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()),(Type*)0));
+      qasmHeaderIntArg = M.getOrInsertFunction("qasm_print_header_int_arg", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()),(Type*)0);
 
-      qasmHeaderDoubleArg = cast<Function>(M.getOrInsertFunction("qasm_print_header_double_arg", Type::getVoidTy(M.getContext()), Type::getDoubleTy(M.getContext()),(Type*)0));
+      qasmHeaderDoubleArg = M.getOrInsertFunction("qasm_print_header_double_arg", Type::getVoidTy(M.getContext()), Type::getDoubleTy(M.getContext()),(Type*)0);
 
-  qasmQCall = cast<Function>(M.getOrInsertFunction("qasm_print_call_start", Type::getVoidTy(M.getContext()),  Type::getInt8Ty(M.getContext())->getPointerTo(), (Type*)0));       
+  qasmQCall = M.getOrInsertFunction("qasm_print_call_start", Type::getVoidTy(M.getContext()),  Type::getInt8Ty(M.getContext())->getPointerTo(), (Type*)0);       
  
-       qasmQCallArgQbit = cast<Function>(M.getOrInsertFunction("qasm_print_call_qbit_arg", Type::getVoidTy(M.getContext()), Type::getInt8Ty(M.getContext())->getPointerTo(), Type::getInt16Ty(M.getContext()), (Type*)0));
+       qasmQCallArgQbit = M.getOrInsertFunction("qasm_print_call_qbit_arg", Type::getVoidTy(M.getContext()), Type::getInt8Ty(M.getContext())->getPointerTo(), Type::getInt16Ty(M.getContext()), (Type*)0);
 
-    qasmQCallArgQbitPtr = cast<Function>(M.getOrInsertFunction("qasm_print_call_qbitptr_arg", Type::getVoidTy(M.getContext()), Type::getInt8Ty(M.getContext())->getPointerTo(),(Type*)0));
+    qasmQCallArgQbitPtr = M.getOrInsertFunction("qasm_print_call_qbitptr_arg", Type::getVoidTy(M.getContext()), Type::getInt8Ty(M.getContext())->getPointerTo(),(Type*)0);
 
-    qasmQCallEnd = cast<Function>(M.getOrInsertFunction("qasm_print_call_end", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), (Type*)0));
+    qasmQCallEnd = M.getOrInsertFunction("qasm_print_call_end", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), (Type*)0);
 
-    qasmGate = cast<Function>(M.getOrInsertFunction("qasm_print_qgate", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt8Ty(M.getContext())->getPointerTo(),  Type::getInt16Ty(M.getContext()), (Type*)0));
+    qasmGate = M.getOrInsertFunction("qasm_print_qgate", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt8Ty(M.getContext())->getPointerTo(),  Type::getInt16Ty(M.getContext()), (Type*)0);
       
-      qasmGate2 = cast<Function>(M.getOrInsertFunction("qasm_print_qgate2", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt8Ty(M.getContext())->getPointerTo(), Type::getInt8Ty(M.getContext())->getPointerTo(), Type::getInt16Ty(M.getContext()), Type::getInt16Ty(M.getContext()), (Type*)0));
+      qasmGate2 = M.getOrInsertFunction("qasm_print_qgate2", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt8Ty(M.getContext())->getPointerTo(), Type::getInt8Ty(M.getContext())->getPointerTo(), Type::getInt16Ty(M.getContext()), Type::getInt16Ty(M.getContext()), (Type*)0);
 
-      qasmGate3 = cast<Function>(M.getOrInsertFunction("qasm_print_qgate3", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt8Ty(M.getContext())->getPointerTo(),Type::getInt8Ty(M.getContext())->getPointerTo(),Type::getInt8Ty(M.getContext())->getPointerTo(),  Type::getInt16Ty(M.getContext()), Type::getInt16Ty(M.getContext()), Type::getInt16Ty(M.getContext()),  (Type*)0));
+      qasmGate3 = M.getOrInsertFunction("qasm_print_qgate3", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt8Ty(M.getContext())->getPointerTo(),Type::getInt8Ty(M.getContext())->getPointerTo(),Type::getInt8Ty(M.getContext())->getPointerTo(),  Type::getInt16Ty(M.getContext()), Type::getInt16Ty(M.getContext()), Type::getInt16Ty(M.getContext()),  (Type*)0);
 
-      qasmRot = cast<Function>(M.getOrInsertFunction("qasm_print_rot", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()),  Type::getInt8Ty(M.getContext())->getPointerTo(), Type::getInt16Ty(M.getContext()), Type::getDoubleTy(M.getContext()),(Type*)0));
+      qasmRot = M.getOrInsertFunction("qasm_print_rot", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()),  Type::getInt8Ty(M.getContext())->getPointerTo(), Type::getInt16Ty(M.getContext()), Type::getDoubleTy(M.getContext()),(Type*)0);
       
-      qasmCallInstIntArg = cast<Function>(M.getOrInsertFunction("qasm_print_call_int_arg", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()),(Type*)0));
+      qasmCallInstIntArg = M.getOrInsertFunction("qasm_print_call_int_arg", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()),(Type*)0);
 
-      qasmCallInstDoubleArg = cast<Function>(M.getOrInsertFunction("qasm_print_call_double_arg", Type::getVoidTy(M.getContext()), Type::getDoubleTy(M.getContext()),(Type*)0));
+      qasmCallInstDoubleArg = M.getOrInsertFunction("qasm_print_call_double_arg", Type::getVoidTy(M.getContext()), Type::getDoubleTy(M.getContext()),(Type*)0);
 
 
   FirstInst = NULL; //reset firstInst

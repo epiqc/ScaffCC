@@ -59,9 +59,9 @@ namespace {
     map<BasicBlock*, PHINode*> bbPhiInst;
     map<BasicBlock*, Value*> bbTripCountVal;
 
-    Function* dummyStartLoop32; //dummyFunc to mark start of loop      
-    Function* dummyStartLoop64; //dummyFunc to mark start of loop      
-    Function* dummyEndLoop; //dummyFunc to mark start of loop
+    FunctionCallee dummyStartLoop32; //dummyFunc to mark start of loop      
+    FunctionCallee dummyStartLoop64; //dummyFunc to mark start of loop      
+    FunctionCallee dummyEndLoop; //dummyFunc to mark start of loop
 
     DynRollupLoops() : ModulePass(ID) {}
     //AnalysisUsage AU;
@@ -1590,8 +1590,8 @@ namespace {
       //errs() << "Dummy Fn Name = " << dummyFnName << "\n";
 
 
-      dummyStartLoop32 = cast<Function>(M.getOrInsertFunction("qasmRepLoopStart32", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), (Type*)0));
-      dummyStartLoop64 = cast<Function>(M.getOrInsertFunction("qasmRepLoopStart64", Type::getVoidTy(M.getContext()), Type::getInt64Ty(M.getContext()), (Type*)0));
+      dummyStartLoop32 = M.getOrInsertFunction("qasmRepLoopStart32", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), (Type*)0);
+      dummyStartLoop64 = M.getOrInsertFunction("qasmRepLoopStart64", Type::getVoidTy(M.getContext()), Type::getInt64Ty(M.getContext()), (Type*)0);
 
       string dummyFnNameE = "qasmRepLoopEnd";
       //dummyFnName.append(repStr);
@@ -1600,7 +1600,7 @@ namespace {
 
       //addDummyFunc
 
-      dummyEndLoop = cast<Function>(M.getOrInsertFunction(dummyFnNameE, Type::getVoidTy(M.getContext()), (Type*)0));
+      dummyEndLoop = M.getOrInsertFunction(dummyFnNameE, Type::getVoidTy(M.getContext()), (Type*)0);
 
 
       //process loops identified as candidates

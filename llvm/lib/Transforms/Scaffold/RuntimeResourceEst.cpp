@@ -51,14 +51,14 @@ namespace {
 
     static char ID;  // Pass identification, replacement for typeid
 
-    Function* qasmGate; //external instrumentation function
-    Function* qasmQbitDecl; //external instrumentation function    
-    Function* qasmCbitDecl; //external instrumentation function    
-    Function* qasmResSum; //external instrumentation function    
+    FunctionCallee qasmGate; //external instrumentation function
+    FunctionCallee qasmQbitDecl; //external instrumentation function    
+    FunctionCallee qasmCbitDecl; //external instrumentation function    
+    FunctionCallee qasmResSum; //external instrumentation function    
 
     RTResourceEst() : ModulePass(ID) {  }
 
-    void instrumentInst(Function* F,Instruction* pInst, int intParam, bool isCall){
+    void instrumentInst(FunctionCallee F,Instruction* pInst, int intParam, bool isCall){
       SmallVector<Value*,16> call_args;
       Value* intArg = ConstantInt::get(Type::getInt32Ty(pInst->getContext()),intParam);	
       call_args.push_back(intArg);
@@ -158,13 +158,13 @@ namespace {
         else debugRTResourceEst = false;
       }
 
-      qasmGate = cast<Function>(M.getOrInsertFunction("qasm_gate", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), (Type*)0));
+      qasmGate = M.getOrInsertFunction("qasm_gate", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), (Type*)0);
       
-      qasmQbitDecl = cast<Function>(M.getOrInsertFunction("qasm_qbit_decl", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), (Type*)0));
+      qasmQbitDecl = M.getOrInsertFunction("qasm_qbit_decl", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), (Type*)0);
       
-      qasmCbitDecl = cast<Function>(M.getOrInsertFunction("qasm_cbit_decl", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), (Type*)0));
+      qasmCbitDecl = M.getOrInsertFunction("qasm_cbit_decl", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), (Type*)0);
       
-      qasmResSum = cast<Function>(M.getOrInsertFunction("qasm_resource_summary", Type::getVoidTy(M.getContext()), (Type*)0));
+      qasmResSum = M.getOrInsertFunction("qasm_resource_summary", Type::getVoidTy(M.getContext()), (Type*)0);
             
       visit(M);
 

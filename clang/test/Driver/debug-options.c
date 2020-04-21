@@ -3,24 +3,29 @@
 
 // Linux.
 // RUN: %clang -### -c -g %s -target x86_64-linux-gnu 2>&1 \
-// RUN:             | FileCheck -check-prefix=G -check-prefix=G_GDB %s
+// RUN:             | FileCheck -check-prefix=G_LIMITED -check-prefix=G_GDB %s
 // RUN: %clang -### -c -g2 %s -target x86_64-linux-gnu 2>&1 \
-// RUN:             | FileCheck -check-prefix=G %s
+// RUN:             | FileCheck -check-prefix=G_LIMITED -check-prefix=G_GDB %s
 // RUN: %clang -### -c -g3 %s -target x86_64-linux-gnu 2>&1 \
-// RUN:             | FileCheck -check-prefix=G %s
+// RUN:             | FileCheck -check-prefix=G_LIMITED -check-prefix=G_GDB %s
 // RUN: %clang -### -c -ggdb %s -target x86_64-linux-gnu 2>&1 \
-// RUN:             | FileCheck -check-prefix=G -check-prefix=G_GDB %s
+// RUN:             | FileCheck -check-prefix=G_LIMITED -check-prefix=G_GDB %s
 // RUN: %clang -### -c -ggdb1 %s -target x86_64-linux-gnu 2>&1 \
 // RUN:             | FileCheck -check-prefix=GLTO_ONLY -check-prefix=G_GDB %s
 // RUN: %clang -### -c -ggdb3 %s -target x86_64-linux-gnu 2>&1 \
-// RUN:             | FileCheck -check-prefix=G %s
+// RUN:             | FileCheck -check-prefix=G_LIMITED -check-prefix=G_GDB %s
 // RUN: %clang -### -c -glldb %s -target x86_64-linux-gnu 2>&1 \
-// RUN:             | FileCheck -check-prefix=G -check-prefix=G_LLDB %s
+// RUN:             | FileCheck -check-prefix=G_STANDALONE -check-prefix=G_LLDB %s
 // RUN: %clang -### -c -gsce %s -target x86_64-linux-gnu 2>&1 \
+// RUN:             | FileCheck -check-prefix=G_LIMITED -check-prefix=G_SCE %s
+
+// Android.
+// Android should always generate DWARF4.
+// RUN: %clang -### -c -g %s -target arm-linux-androideabi 2>&1 \
+// RUN:             | FileCheck -check-prefix=G_LIMITED -check-prefix=G_DWARF4 %s
 
 // Darwin.
-// RUN:             | FileCheck -check-prefix=G -check-prefix=G_SCE %s
-// RUN: %clang -### -c -g %s -target x86_64-apple-darwin 2>&1 \
+// RUN: %clang -### -c -g %s -target x86_64-apple-darwin14 2>&1 \
 // RUN:             | FileCheck -check-prefix=G_STANDALONE \
 // RUN:                         -check-prefix=G_DWARF2 \
 // RUN:                         -check-prefix=G_LLDB %s
@@ -59,10 +64,20 @@
 // RUN: %clang -### -c -g %s -target arm64-apple-tvos9.0 2>&1 \
 // RUN:             | FileCheck -check-prefix=G_STANDALONE \
 // RUN:                         -check-prefix=G_DWARF4 %s
+// RUN: %clang -### -c -fsave-optimization-record %s \
+// RUN:        -target x86_64-apple-darwin 2>&1 \
+// RUN:             | FileCheck -check-prefix=GLTO_ONLY %s
+// RUN: %clang -### -c -g -fsave-optimization-record %s \
+// RUN:        -target x86_64-apple-darwin 2>&1 \
+// RUN:             | FileCheck -check-prefix=G_STANDALONE %s
 
 // FreeBSD.
-// RUN: %clang -### -c -g %s -target x86_64-pc-freebsd10.0 2>&1 \
-// RUN:             | FileCheck -check-prefix=G_GDB %s
+// RUN: %clang -### -c -g %s -target x86_64-pc-freebsd11.0 2>&1 \
+// RUN:             | FileCheck -check-prefix=G_GDB \
+// RUN:                         -check-prefix=G_DWARF2 %s
+// RUN: %clang -### -c -g %s -target x86_64-pc-freebsd12.0 2>&1 \
+// RUN:             | FileCheck -check-prefix=G_GDB \
+// RUN:                         -check-prefix=G_DWARF4 %s
 
 // Windows.
 // RUN: %clang -### -c -g %s -target x86_64-w64-windows-gnu 2>&1 \
@@ -188,7 +203,7 @@
 // RUN: %clang -### -c %s 2>&1 | FileCheck -check-prefix=NORNGBSE %s
 // RUN: %clang -### -c -fdebug-ranges-base-address -fno-debug-ranges-base-address %s 2>&1 | FileCheck -check-prefix=NORNGBSE %s
 //
-// RUN: %clang -### -c -glldb %s 2>&1 | FileCheck -check-prefix=GPUB %s
+// RUN: %clang -### -c -glldb %s 2>&1 | FileCheck -check-prefix=NOPUB %s
 // RUN: %clang -### -c -glldb -gno-pubnames %s 2>&1 | FileCheck -check-prefix=NOPUB %s
 //
 // RUN: %clang -### -c -gdwarf-aranges %s 2>&1 | FileCheck -check-prefix=GARANGE %s
@@ -225,9 +240,6 @@
 //
 // RUN: %clang -### -target %itanium_abi_triple -gmodules -gline-directives-only %s 2>&1 \
 // RUN:        | FileCheck -check-prefix=GLIO_ONLY %s
-//
-// G: "-cc1"
-// G: "-debug-info-kind=limited"
 //
 // NOG_PS4: "-cc1"
 // NOG_PS4-NOT "-dwarf-version=
@@ -272,6 +284,9 @@
 //
 // G_STANDALONE: "-cc1"
 // G_STANDALONE: "-debug-info-kind=standalone"
+// G_LIMITED: "-cc1"
+// G_LIMITED: "-debug-info-kind=limited"
+// G_DWARF2: "-dwarf-version=2"
 // G_DWARF4: "-dwarf-version=4"
 //
 // G_GDB:  "-debugger-tuning=gdb"

@@ -56,8 +56,8 @@ namespace {
     static char ID; // Pass identification
 
     //external instrumentation function
-    Function* qasmResSum; 
-    Function* memoize; 
+    FunctionCallee qasmResSum; 
+    FunctionCallee memoize; 
     
     FunctionDuplicate() : ModulePass(ID) {}
 
@@ -220,8 +220,8 @@ bool FunctionDuplicate::runOnModule (Module &M) {
   }
     
   //void qasm_resource_summary ()
-  qasmResSum = cast<Function>(M.getOrInsertFunction("summary", Type::getVoidTy(M.getContext()), (Type*)0));
-  
+  qasmResSum = M.getOrInsertFunction("summary", Type::getVoidTy(M.getContext()), (Type*)0);
+
   // int memoize (char*, int*, unsigned, double*, unsigned)
   vector <Type*> vectParamTypes2;
   vectParamTypes2.push_back(Type::getInt8Ty(M.getContext())->getPointerTo());      
@@ -231,16 +231,14 @@ bool FunctionDuplicate::runOnModule (Module &M) {
   vectParamTypes2.push_back(Type::getInt32Ty(M.getContext()));
   ArrayRef<Type*> Param_Types2(vectParamTypes2);
   Type* Result_Type2 = Type::getInt32Ty(M.getContext());
-  memoize = cast<Function> (  
-      M.getOrInsertFunction(
+  memoize =  M.getOrInsertFunction(
         "memoize",                          /* Name of Function */
         FunctionType::get(                  /* Type of Function */
           Result_Type2,                     /* Result */
           Param_Types2,                     /* Params */
           false                             /* isVarArg */
           )
-        )
-      );
+        );
 
   
   // iterate over all functions, and over all instructions in those functions

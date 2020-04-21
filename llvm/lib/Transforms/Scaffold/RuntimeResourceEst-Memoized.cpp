@@ -57,17 +57,17 @@ namespace {
     static char ID;  // Pass identification, replacement for typeid
 
     //external instrumentation function
-    Function* qasmGate; 
-    Function* qasmQbitDecl; 
-    Function* qasmCbitDecl; 
-    Function* qasmResSum; 
-    Function* memoize; 
-    Function* qasmInitialize; 
-    Function* exit_scope;
+    FunctionCallee qasmGate; 
+    FunctionCallee qasmQbitDecl; 
+    FunctionCallee qasmCbitDecl; 
+    FunctionCallee qasmResSum; 
+    FunctionCallee memoize; 
+    FunctionCallee qasmInitialize; 
+    FunctionCallee exit_scope;
 
     RTResourceEst_Mem() : ModulePass(ID) {  }
 
-    void instrumentInst(Function* F, Instruction* pInst, int intParam, bool toDel){
+    void instrumentInst(FunctionCallee F, Instruction* pInst, int intParam, bool toDel){
       SmallVector<Value*,16> call_args;
       Value* intArg = ConstantInt::get(Type::getInt32Ty(pInst->getContext()),intParam);	
       call_args.push_back(intArg);
@@ -257,27 +257,27 @@ namespace {
       }
 
       // void qasm_qbit_decl (int)
-      qasmQbitDecl = cast<Function>(M.getOrInsertFunction("qasm_qbit_decl", 
+      qasmQbitDecl = M.getOrInsertFunction("qasm_qbit_decl", 
                                     Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), 
-                                    (Type*)0));
+                                    (Type*)0);
       
       // void qasm_cbit_decl (int)
-      qasmCbitDecl = cast<Function>(M.getOrInsertFunction("qasm_cbit_decl", 
+      qasmCbitDecl = M.getOrInsertFunction("qasm_cbit_decl", 
                                     Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), 
-                                    (Type*)0));
+                                    (Type*)0);
 
       // void exit_scope ()      
-      exit_scope = cast<Function>(M.getOrInsertFunction("exit_scope", Type::getVoidTy(M.getContext()), (Type*)0));
+      exit_scope = M.getOrInsertFunction("exit_scope", Type::getVoidTy(M.getContext()), (Type*)0);
 
       //void initialize ()
-      qasmInitialize = cast<Function>(M.getOrInsertFunction("qasm_initialize", Type::getVoidTy(M.getContext()), (Type*)0));
+      qasmInitialize = M.getOrInsertFunction("qasm_initialize", Type::getVoidTy(M.getContext()), (Type*)0);
       
       //void qasm_resource_summary ()
-      qasmResSum = cast<Function>(M.getOrInsertFunction("qasm_resource_summary", Type::getVoidTy(M.getContext()), (Type*)0));
+      qasmResSum = M.getOrInsertFunction("qasm_resource_summary", Type::getVoidTy(M.getContext()), (Type*)0);
 
       // void qasmGate (int gate_id)      
-      qasmGate = cast<Function>(M.getOrInsertFunction("qasm_gate", 
-            Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), (Type*)0));      
+      qasmGate = M.getOrInsertFunction("qasm_gate", 
+            Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), (Type*)0);      
 
 
       // int memoize (char*, int*, unsigned, double*, unsigned)
@@ -289,7 +289,7 @@ namespace {
       vectParamTypes2.push_back(Type::getInt32Ty(M.getContext()));
       ArrayRef<Type*> Param_Types2(vectParamTypes2);
       Type* Result_Type2 = Type::getInt32Ty(M.getContext());
-      memoize = cast<Function> (  
+      memoize =  
           M.getOrInsertFunction(
             "memoize",                          /* Name of Function */
             FunctionType::get(                  /* Type of Function */
@@ -297,8 +297,7 @@ namespace {
               Param_Types2,                     /* Params */
               false                             /* isVarArg */
               )
-            )
-          );
+            );
       
       // iterate over instructions to instrument
       for (Module::iterator F = M.begin(); F != M.end(); ++F) {

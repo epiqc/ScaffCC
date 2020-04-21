@@ -59,11 +59,11 @@ namespace {
     static char ID;  // Pass identification, replacement for typeid
 
     //external instrumentation function
-    Function* qasmGate; 
-    Function* qasmResSum; 
-    Function* memoize; 
-    Function* qasmInitialize; 
-    Function* exit_scope;
+    FunctionCallee qasmGate; 
+    FunctionCallee qasmResSum; 
+    FunctionCallee memoize; 
+    FunctionCallee qasmInitialize; 
+    FunctionCallee exit_scope;
 
     //uint32_t rep_val;
     Value* rep_val;
@@ -300,16 +300,16 @@ namespace {
       rep_val = ConstantInt::get(Type::getInt32Ty(M.getContext()), 1, false);
 
       // void exit_scope ()      
-      exit_scope = cast<Function>(M.getOrInsertFunction("exit_scope", Type::getVoidTy(M.getContext()), (Type*)0));
+      exit_scope = M.getOrInsertFunction("exit_scope", Type::getVoidTy(M.getContext()), (Type*)0);
 
       //void initialize ()
-      qasmInitialize = cast<Function>(M.getOrInsertFunction("qasm_initialize", Type::getVoidTy(M.getContext()), (Type*)0));
+      qasmInitialize = M.getOrInsertFunction("qasm_initialize", Type::getVoidTy(M.getContext()), (Type*)0);
       
       //void qasm_resource_summary ()
-      qasmResSum = cast<Function>(M.getOrInsertFunction("qasm_resource_summary", Type::getVoidTy(M.getContext()), (Type*)0));
+      qasmResSum = M.getOrInsertFunction("qasm_resource_summary", Type::getVoidTy(M.getContext()), (Type*)0);
 
       // void qasmGate ()      
-      qasmGate = cast<Function>(M.getOrInsertFunction("qasm_gate", Type::getVoidTy(M.getContext()), (Type*)0));      
+      qasmGate = M.getOrInsertFunction("qasm_gate", Type::getVoidTy(M.getContext()), (Type*)0);      
 
       // int memoize (char*, int*, unsigned, double*, unsigned, unsigned)
       vector <Type*> vectParamTypes2;
@@ -321,16 +321,14 @@ namespace {
       vectParamTypes2.push_back(Type::getInt32Ty(M.getContext()));
       ArrayRef<Type*> Param_Types2(vectParamTypes2);
       Type* Result_Type2 = Type::getInt32Ty(M.getContext());
-      memoize = cast<Function> (  
-          M.getOrInsertFunction(
+      memoize = M.getOrInsertFunction(
             "memoize",                          /* Name of Function */
             FunctionType::get(                  /* Type of Function */
               Result_Type2,                     /* Result */
               Param_Types2,                     /* Params */
               false                             /* isVarArg */
               )
-            )
-          );
+            );
 
       // iterate over instructions to instrument the initialize and exit scope calls
       // insert alloca instructions at the beginning for subsequent memoize calls         

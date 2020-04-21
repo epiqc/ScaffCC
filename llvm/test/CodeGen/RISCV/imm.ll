@@ -249,7 +249,7 @@ define i64 @imm64_9() nounwind {
 ; RV32I-LABEL: imm64_9:
 ; RV32I:       # %bb.0:
 ; RV32I-NEXT:    addi a0, zero, -1
-; RV32I-NEXT:    mv a1, a0
+; RV32I-NEXT:    addi a1, zero, -1
 ; RV32I-NEXT:    ret
 ;
 ; RV64I-LABEL: imm64_9:

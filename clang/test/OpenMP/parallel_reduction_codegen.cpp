@@ -521,7 +521,7 @@ int main() {
 //  *(Type<n>-1*)lhs[<n>-1] = ReductionOperation<n>-1(*(Type<n>-1*)lhs[<n>-1],
 //  *(Type<n>-1*)rhs[<n>-1]);
 // }
-// CHECK: define internal void [[REDUCTION_FUNC]](i8*, i8*)
+// CHECK: define internal void [[REDUCTION_FUNC]](i8* %0, i8* %1)
 // t_var_lhs = (float*)lhs[0];
 // CHECK: [[T_VAR_RHS_REF:%.+]] = getelementptr inbounds [4 x i8*], [4 x i8*]* [[RED_LIST_RHS:%.+]], i64 0, i64 0
 // CHECK: [[T_VAR_RHS_VOID:%.+]] = load i8*, i8** [[T_VAR_RHS_REF]],
@@ -622,7 +622,7 @@ int main() {
 
 // CHECK-NOT: call i32 @__kmpc_reduce
 
-// CHECK: ret void
+// CHECK: }
 
 // CHECK: define {{.*}} i{{[0-9]+}} [[TMAIN_INT]]()
 // CHECK: [[TEST:%.+]] = alloca [[S_INT_TY]],
@@ -817,7 +817,7 @@ int main() {
 //  *(Type<n>-1*)lhs[<n>-1] = ReductionOperation<n>-1(*(Type<n>-1*)lhs[<n>-1],
 //  *(Type<n>-1*)rhs[<n>-1]);
 // }
-// CHECK: define internal void [[REDUCTION_FUNC]](i8*, i8*)
+// CHECK: define internal void [[REDUCTION_FUNC]](i8* %0, i8* %1)
 // t_var_lhs = (i{{[0-9]+}}*)lhs[0];
 // CHECK: [[T_VAR_RHS_REF:%.+]] = getelementptr inbounds [4 x i8*], [4 x i8*]* [[RED_LIST_RHS:%.+]], i64 0, i64 0
 // CHECK: [[T_VAR_RHS_VOID:%.+]] = load i8*, i8** [[T_VAR_RHS_REF]],

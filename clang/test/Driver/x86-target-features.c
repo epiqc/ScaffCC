@@ -72,8 +72,8 @@
 
 // RUN: %clang -target i386-unknown-linux-gnu -march=i386 -mmpx %s -### -o %t.o 2>&1 | FileCheck -check-prefix=MPX %s
 // RUN: %clang -target i386-unknown-linux-gnu -march=i386 -mno-mpx %s -### -o %t.o 2>&1 | FileCheck -check-prefix=NO-MPX %s
-// MPX: "-target-feature" "+mpx"
-// NO-MPX: "-target-feature" "-mpx"
+// MPX: the flag '-mmpx' has been deprecated and will be ignored
+// NO-MPX: the flag '-mno-mpx' has been deprecated and will be ignored
 
 // RUN: %clang -target i386-unknown-linux-gnu -march=i386 -mshstk %s -### -o %t.o 2>&1 | FileCheck -check-prefix=CETSS %s
 // RUN: %clang -target i386-unknown-linux-gnu -march=i386 -mno-shstk %s -### -o %t.o 2>&1 | FileCheck -check-prefix=NO-CETSS %s
@@ -124,6 +124,11 @@
 // RUN: %clang -target i386-unknown-linux-gnu -march=i386 -mno-avx512vbmi2 %s -### -o %t.o 2>&1 | FileCheck -check-prefix=NO-VBMI2 %s
 // VBMI2: "-target-feature" "+avx512vbmi2"
 // NO-VBMI2: "-target-feature" "-avx512vbmi2"
+
+// RUN: %clang -target i386-linux-gnu -mavx512vp2intersect %s -### -o %t.o 2>&1 | FileCheck -check-prefix=VP2INTERSECT %s
+// RUN: %clang -target i386-linux-gnu -mno-avx512vp2intersect %s -### -o %t.o 2>&1 | FileCheck -check-prefix=NO-VP2INTERSECT %s
+// VP2INTERSECT: "-target-feature" "+avx512vp2intersect"
+// NO-VP2INTERSECT: "-target-feature" "-avx512vp2intersect"
 
 // RUN: %clang -target i386-unknown-linux-gnu -march=i386 -mrdpid %s -### -o %t.o 2>&1 | FileCheck -check-prefix=RDPID %s
 // RUN: %clang -target i386-unknown-linux-gnu -march=i386 -mno-rdpid %s -### -o %t.o 2>&1 | FileCheck -check-prefix=NO-RDPID %s
@@ -178,3 +183,18 @@
 // RUN: %clang -target i386-unknown-linux-gnu -march=i386 -mno-invpcid %s -### -o %t.o 2>&1 | FileCheck -check-prefix=NO-INVPCID %s
 // INVPCID: "-target-feature" "+invpcid"
 // NO-INVPCID: "-target-feature" "-invpcid"
+
+// RUN: %clang -target i386-unknown-linux-gnu -march=i386 -mavx512bf16 %s -### -o %t.o 2>&1 | FileCheck -check-prefix=AVX512BF16 %s
+// RUN: %clang -target i386-unknown-linux-gnu -march=i386 -mno-avx512bf16 %s -### -o %t.o 2>&1 | FileCheck -check-prefix=NO-AVX512BF16 %s
+// AVX512BF16: "-target-feature" "+avx512bf16"
+// NO-AVX512BF16: "-target-feature" "-avx512bf16"
+
+// RUN: %clang -target i386-unknown-linux-gnu -march=i386 -menqcmd %s -### -o %t.o 2>&1 | FileCheck --check-prefix=ENQCMD %s
+// RUN: %clang -target i386-unknown-linux-gnu -march=i386 -mno-enqcmd %s -### -o %t.o 2>&1 | FileCheck --check-prefix=NO-ENQCMD %s
+// ENQCMD: "-target-feature" "+enqcmd"
+// NO-ENQCMD: "-target-feature" "-enqcmd"
+
+// RUN: %clang -target i386-unknown-linux-gnu -march=i386 -mvzeroupper %s -### -o %t.o 2>&1 | FileCheck --check-prefix=VZEROUPPER %s
+// RUN: %clang -target i386-unknown-linux-gnu -march=i386 -mno-vzeroupper %s -### -o %t.o 2>&1 | FileCheck --check-prefix=NO-VZEROUPPER %s
+// VZEROUPPER: "-target-feature" "+vzeroupper"
+// NO-VZEROUPPER: "-target-feature" "-vzeroupper"

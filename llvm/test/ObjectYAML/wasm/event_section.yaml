@@ -7,13 +7,14 @@ Sections:
   - Type:            TYPE
     Signatures:
       - Index:           0
-        ReturnType:      I32
         ParamTypes:
+          - I32
+        ReturnTypes:
           - I32
       - Index:           1
-        ReturnType:      NORESULT
         ParamTypes:
           - I32
+        ReturnTypes:      []
   - Type:            FUNCTION
     FunctionTypes:   [ 0 ]
   - Type:            EVENT
@@ -23,7 +24,7 @@ Sections:
         SigIndex:        1
   - Type:            CODE
     Relocations:
-      - Type:            R_WEBASSEMBLY_EVENT_INDEX_LEB
+      - Type:            R_WASM_EVENT_INDEX_LEB
         Index:           1
         Offset:          0x00000006
     Functions:
@@ -53,13 +54,14 @@ Sections:
 # CHECK-NEXT:   - Type:            TYPE
 # CHECK-NEXT:     Signatures:
 # CHECK-NEXT:       - Index:           0
-# CHECK-NEXT:         ReturnType:      I32
 # CHECK-NEXT:         ParamTypes:
+# CHECK-NEXT:           - I32
+# CHECK-NEXT:         ReturnTypes:
 # CHECK-NEXT:           - I32
 # CHECK-NEXT:       - Index:           1
-# CHECK-NEXT:         ReturnType:      NORESULT
 # CHECK-NEXT:         ParamTypes:
 # CHECK-NEXT:           - I32
+# CHECK-NEXT:         ReturnTypes:     []
 # CHECK-NEXT:   - Type:            FUNCTION
 # CHECK-NEXT:     FunctionTypes:   [ 0 ]
 # CHECK-NEXT:   - Type:            EVENT
@@ -69,7 +71,7 @@ Sections:
 # CHECK-NEXT:         SigIndex:        1
 # CHECK-NEXT:   - Type:            CODE
 # CHECK-NEXT:     Relocations:
-# CHECK-NEXT:       - Type:            R_WEBASSEMBLY_EVENT_INDEX_LEB
+# CHECK-NEXT:       - Type:            R_WASM_EVENT_INDEX_LEB
 # CHECK-NEXT:         Index:           1
 # CHECK-NEXT:         Offset:          0x00000006
 # CHECK-NEXT:     Functions:

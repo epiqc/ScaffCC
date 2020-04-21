@@ -5,7 +5,7 @@
 ; RUN: llc -verify-machineinstrs -mtriple=powerpc64le-unknown-linux-gnu -O2 \
 ; RUN:   -ppc-gpr-icmps=all -ppc-asm-full-reg-names -mcpu=pwr8 < %s | FileCheck %s --check-prefix=CHECK-LE \
 ; RUN:  --implicit-check-not cmpw --implicit-check-not cmpd --implicit-check-not cmpl
-@glob = common local_unnamed_addr global i64 0, align 8
+@glob = local_unnamed_addr global i64 0, align 8
 
 define signext i32 @test_igesll(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_igesll:
@@ -99,14 +99,14 @@ define signext i32 @test_igesll_sext_z(i64 %a) {
 ; CHECK-NEXT:    blr
 ; CHECK-BE-LABEL: test_igesll_sext_z:
 ; CHECK-BE:       # %bb.0: # %entry
-; CHECK-BE-NEXT:    sradi r3, r3, 63
 ; CHECK-BE-NEXT:    not r3, r3
+; CHECK-BE-NEXT:    sradi r3, r3, 63
 ; CHECK-BE-NEXT:    blr
 ;
 ; CHECK-LE-LABEL: test_igesll_sext_z:
 ; CHECK-LE:       # %bb.0: # %entry
-; CHECK-LE-NEXT:    sradi r3, r3, 63
 ; CHECK-LE-NEXT:    not r3, r3
+; CHECK-LE-NEXT:    sradi r3, r3, 63
 ; CHECK-LE-NEXT:    blr
 entry:
   %cmp = icmp sgt i64 %a, -1

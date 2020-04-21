@@ -2,7 +2,7 @@
 ; RUN: llc < %s -mtriple=thumbv7-none-eabihf -mcpu=cortex-m4                    | FileCheck %s -check-prefix=CHECK -check-prefix=HARD -check-prefix=SP -check-prefix=NO-VMLA
 ; RUN: llc < %s -mtriple=thumbv7-none-eabihf -mcpu=cortex-m33                   | FileCheck %s -check-prefix=CHECK -check-prefix=HARD -check-prefix=SP -check-prefix=NO-VMLA
 ; RUN: llc < %s -mtriple=thumbv7-none-eabihf -mcpu=cortex-m7                    | FileCheck %s -check-prefix=CHECK -check-prefix=HARD -check-prefix=DP -check-prefix=VFP  -check-prefix=FP-ARMv8  -check-prefix=VMLA
-; RUN: llc < %s -mtriple=thumbv7-none-eabihf -mcpu=cortex-m7 -mattr=+fp-only-sp | FileCheck %s -check-prefix=CHECK -check-prefix=HARD -check-prefix=SP -check-prefix=FP-ARMv8 -check-prefix=VMLA
+; RUN: llc < %s -mtriple=thumbv7-none-eabihf -mcpu=cortex-m7 -mattr=-fp64 | FileCheck %s -check-prefix=CHECK -check-prefix=HARD -check-prefix=SP -check-prefix=FP-ARMv8 -check-prefix=VMLA
 ; RUN: llc < %s -mtriple=thumbv7-none-eabihf -mcpu=cortex-a7                    | FileCheck %s -check-prefix=CHECK -check-prefix=HARD -check-prefix=DP -check-prefix=NEON -check-prefix=VFP4 -check-prefix=NO-VMLA
 ; RUN: llc < %s -mtriple=thumbv7-none-eabihf -mcpu=cortex-a57                   | FileCheck %s -check-prefix=CHECK -check-prefix=HARD -check-prefix=DP -check-prefix=NEON -check-prefix=FP-ARMv8 -check-prefix=VMLA
 
@@ -194,7 +194,7 @@ define float @fmuladd_f(float %a, float %b, float %c) {
 ; CHECK-LABEL: fmuladd_f:
 ; SOFT: bl __aeabi_fmul
 ; SOFT: bl __aeabi_fadd
-; VMLA: vmla.f32
+; VMLA: vfma.f32
 ; NO-VMLA: vmul.f32
 ; NO-VMLA: vadd.f32
   %1 = call float @llvm.fmuladd.f32(float %a, float %b, float %c)

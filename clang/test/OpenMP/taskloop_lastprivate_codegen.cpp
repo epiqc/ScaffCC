@@ -4,6 +4,7 @@
 // RUN: %clang_cc1 -verify -fopenmp -x c++ -std=c++11 -DLAMBDA -triple x86_64-apple-darwin10 -emit-llvm %s -o - | FileCheck -check-prefix=LAMBDA %s
 // RUN: %clang_cc1 -verify -fopenmp -x c++ -fblocks -DBLOCKS -triple x86_64-apple-darwin10 -emit-llvm %s -o - | FileCheck -check-prefix=BLOCKS %s
 // RUN: %clang_cc1 -verify -fopenmp -x c++ -std=c++11 -DARRAY -triple x86_64-apple-darwin10 -emit-llvm %s -o - | FileCheck -check-prefix=ARRAY %s
+// RUN: %clang_cc1 -verify -fopenmp -x c++ -std=c++11 -DLOOP -triple x86_64-apple-darwin10 -emit-llvm %s -o - | FileCheck -check-prefix=LOOP %s
 
 // RUN: %clang_cc1 -verify -fopenmp-simd -x c++ -triple x86_64-apple-darwin10 -emit-llvm %s -o - | FileCheck --check-prefix SIMD-ONLY0 %s
 // RUN: %clang_cc1 -fopenmp-simd -x c++ -std=c++11 -triple x86_64-apple-darwin10 -emit-pch -o %t %s
@@ -11,11 +12,11 @@
 // RUN: %clang_cc1 -verify -fopenmp-simd -x c++ -std=c++11 -DLAMBDA -triple x86_64-apple-darwin10 -emit-llvm %s -o - | FileCheck --check-prefix SIMD-ONLY0 %s
 // RUN: %clang_cc1 -verify -fopenmp-simd -x c++ -fblocks -DBLOCKS -triple x86_64-apple-darwin10 -emit-llvm %s -o - | FileCheck --check-prefix SIMD-ONLY0 %s
 // RUN: %clang_cc1 -verify -fopenmp-simd -x c++ -std=c++11 -DARRAY -triple x86_64-apple-darwin10 -emit-llvm %s -o - | FileCheck --check-prefix SIMD-ONLY0 %s
+// RUN: %clang_cc1 -verify -fopenmp-simd -x c++ -std=c++11 -DLOOP -triple x86_64-apple-darwin10 -emit-llvm %s -o - | FileCheck -check-prefix=SIMD-ONLY0 %s
 // SIMD-ONLY0-NOT: {{__kmpc|__tgt}}
 // expected-no-diagnostics
-// It doesn't pass on win32.
-// REQUIRES: shell
-#ifndef ARRAY
+
+#if !defined(ARRAY) && !defined(LOOP)
 #ifndef HEADER
 #define HEADER
 
@@ -80,7 +81,7 @@ int main() {
     // LAMBDA: store double 2.0{{.+}}, double* [[G_REF]]
 
     // LAMBDA: store double* %{{.+}}, double** %{{.+}},
-    // LAMBDA: define internal i32 [[TASK_ENTRY]](i32, %{{.+}}* noalias)
+    // LAMBDA: define internal i32 [[TASK_ENTRY]](i32 %0, %{{.+}}* noalias %1)
     g = 1;
     sivar = 11;
     // LAMBDA: store double 1.0{{.+}}, double* %{{.+}},
@@ -123,7 +124,7 @@ int main() {
 
     // BLOCKS: store double* %{{.+}}, double** %{{.+}},
     // BLOCKS: store i{{[0-9]+}}* %{{.+}}, i{{[0-9]+}}** %{{.+}},
-    // BLOCKS: define internal i32 [[TASK_ENTRY]](i32, %{{.+}}* noalias)
+    // BLOCKS: define internal i32 [[TASK_ENTRY]](i32 %0, %{{.+}}* noalias %1)
     g = 1;
     sivar = 11;
     // BLOCKS: store double 1.0{{.+}}, double* %{{.+}},
@@ -239,7 +240,7 @@ int main() {
 // CHECK: ret
 //
 
-// CHECK: define internal void [[PRIVATES_MAP_FN:@.+]]([[PRIVATES_MAIN_TY]]* noalias, [[S_DOUBLE_TY]]** noalias, i32** noalias, [2 x [[S_DOUBLE_TY]]]** noalias, [2 x i32]** noalias, i32** noalias)
+// CHECK: define internal void [[PRIVATES_MAP_FN:@.+]]([[PRIVATES_MAIN_TY]]* noalias %0, [[S_DOUBLE_TY]]** noalias %1, i32** noalias %2, [2 x [[S_DOUBLE_TY]]]** noalias %3, [2 x i32]** noalias %4, i32** noalias %5)
 // CHECK: [[PRIVATES:%.+]] = load [[PRIVATES_MAIN_TY]]*, [[PRIVATES_MAIN_TY]]**
 // CHECK: [[PRIV_S_VAR:%.+]] = getelementptr inbounds [[PRIVATES_MAIN_TY]], [[PRIVATES_MAIN_TY]]* [[PRIVATES]], i32 0, i32 0
 // CHECK: [[ARG3:%.+]] = load [2 x [[S_DOUBLE_TY]]]**, [2 x [[S_DOUBLE_TY]]]*** %{{.+}},
@@ -258,7 +259,7 @@ int main() {
 // CHECK: store i{{[0-9]+}}* [[PRIV_SIVAR]], i{{[0-9]+}}** [[ARG5]],
 // CHECK: ret void
 
-// CHECK: define internal i32 [[TASK_ENTRY]](i32, [[KMP_TASK_MAIN_TY]]* noalias)
+// CHECK: define internal i32 [[TASK_ENTRY]](i32 %0, [[KMP_TASK_MAIN_TY]]* noalias %1)
 
 // CHECK: [[PRIV_VAR_ADDR:%.+]] = alloca [[S_DOUBLE_TY]]*,
 // CHECK: [[PRIV_T_VAR_ADDR:%.+]] = alloca i32*,
@@ -304,7 +305,7 @@ int main() {
 // CHECK: br label
 // CHECK: ret
 
-// CHECK: define internal void [[MAIN_DUP]]([[KMP_TASK_MAIN_TY]]*, [[KMP_TASK_MAIN_TY]]*, i32)
+// CHECK: define internal void [[MAIN_DUP]]([[KMP_TASK_MAIN_TY]]* %0, [[KMP_TASK_MAIN_TY]]* %1, i32 %2)
 // CHECK: getelementptr inbounds [[KMP_TASK_MAIN_TY]], [[KMP_TASK_MAIN_TY]]* %{{.+}}, i32 0, i32 0
 // CHECK: getelementptr inbounds [[KMP_TASK_T_TY]], [[KMP_TASK_T_TY]]* %{{.+}}, i32 0, i32 8
 // CHECK: load i32, i32* %
@@ -325,7 +326,7 @@ int main() {
 // CHECK: call {{.*}} [[S_DOUBLE_TY_CONSTR]]([[S_DOUBLE_TY]]*
 // CHECK: ret void
 
-// CHECK: define internal i32 [[DESTRUCTORS]](i32, [[KMP_TASK_MAIN_TY]]* noalias)
+// CHECK: define internal i32 [[DESTRUCTORS]](i32 %0, [[KMP_TASK_MAIN_TY]]* noalias %1)
 // CHECK: [[PRIVATES:%.+]] = getelementptr inbounds [[KMP_TASK_MAIN_TY]], [[KMP_TASK_MAIN_TY]]* [[RES_KMP_TASK:%.+]], i{{[0-9]+}} 0, i{{[0-9]+}} 1
 // CHECK: [[PRIVATE_S_ARR_REF:%.+]] = getelementptr inbounds [[PRIVATES_MAIN_TY]], [[PRIVATES_MAIN_TY]]* [[PRIVATES]], i{{.+}} 0, i{{.+}} 0
 // CHECK: [[PRIVATE_VAR_REF:%.+]] = getelementptr inbounds [[PRIVATES_MAIN_TY]], [[PRIVATES_MAIN_TY]]* [[PRIVATES]], i{{.+}} 0, i{{.+}} 1
@@ -411,7 +412,7 @@ int main() {
 // CHECK: ret
 //
 
-// CHECK: define internal void [[PRIVATES_MAP_FN:@.+]]([[PRIVATES_TMAIN_TY]]* noalias, i32** noalias, [2 x i32]** noalias, [2 x [[S_INT_TY]]]** noalias, [[S_INT_TY]]** noalias)
+// CHECK: define internal void [[PRIVATES_MAP_FN:@.+]]([[PRIVATES_TMAIN_TY]]* noalias %0, i32** noalias %1, [2 x i32]** noalias %2, [2 x [[S_INT_TY]]]** noalias %3, [[S_INT_TY]]** noalias %4)
 // CHECK: [[PRIVATES:%.+]] = load [[PRIVATES_TMAIN_TY]]*, [[PRIVATES_TMAIN_TY]]**
 // CHECK: [[PRIV_T_VAR:%.+]] = getelementptr inbounds [[PRIVATES_TMAIN_TY]], [[PRIVATES_TMAIN_TY]]* [[PRIVATES]], i32 0, i32 0
 // CHECK: [[ARG1:%.+]] = load i32**, i32*** %{{.+}},
@@ -427,7 +428,7 @@ int main() {
 // CHECK: store [[S_INT_TY]]* [[PRIV_VAR]], [[S_INT_TY]]** [[ARG4]],
 // CHECK: ret void
 
-// CHECK: define internal i32 [[TASK_ENTRY]](i32, [[KMP_TASK_TMAIN_TY]]* noalias)
+// CHECK: define internal i32 [[TASK_ENTRY]](i32 %0, [[KMP_TASK_TMAIN_TY]]* noalias %1)
 // CHECK: alloca i32*,
 // CHECK-DAG: [[PRIV_T_VAR_ADDR:%.+]] = alloca i32*,
 // CHECK-DAG: [[PRIV_VEC_ADDR:%.+]] = alloca [2 x i32]*,
@@ -466,7 +467,7 @@ int main() {
 // CHECK: br label
 // CHECK: ret
 
-// CHECK: define internal void [[TMAIN_DUP]]([[KMP_TASK_TMAIN_TY]]*, [[KMP_TASK_TMAIN_TY]]*, i32)
+// CHECK: define internal void [[TMAIN_DUP]]([[KMP_TASK_TMAIN_TY]]* %0, [[KMP_TASK_TMAIN_TY]]* %1, i32 %2)
 // CHECK: getelementptr inbounds [[KMP_TASK_TMAIN_TY]], [[KMP_TASK_TMAIN_TY]]* %{{.+}}, i32 0, i32 0
 // CHECK: getelementptr inbounds [[KMP_TASK_T_TY]], [[KMP_TASK_T_TY]]* %{{.+}}, i32 0, i32 8
 // CHECK: load i32, i32* %
@@ -487,7 +488,7 @@ int main() {
 // CHECK: call {{.*}} [[S_INT_TY_CONSTR]]([[S_INT_TY]]*
 // CHECK: ret void
 
-// CHECK: define internal i32 [[DESTRUCTORS]](i32, [[KMP_TASK_TMAIN_TY]]* noalias)
+// CHECK: define internal i32 [[DESTRUCTORS]](i32 %0, [[KMP_TASK_TMAIN_TY]]* noalias %1)
 // CHECK: [[PRIVATES:%.+]] = getelementptr inbounds [[KMP_TASK_TMAIN_TY]], [[KMP_TASK_TMAIN_TY]]* [[RES_KMP_TASK:%.+]], i{{[0-9]+}} 0, i{{[0-9]+}} 2
 // CHECK: [[PRIVATE_S_ARR_REF:%.+]] = getelementptr inbounds [[PRIVATES_TMAIN_TY]], [[PRIVATES_TMAIN_TY]]* [[PRIVATES]], i{{.+}} 0, i{{.+}} 2
 // CHECK: [[PRIVATE_VAR_REF:%.+]] = getelementptr inbounds [[PRIVATES_TMAIN_TY]], [[PRIVATES_TMAIN_TY]]* [[PRIVATES]], i{{.+}} 0, i{{.+}} 3
@@ -501,7 +502,7 @@ int main() {
 // CHECK: ret i32
 
 #endif
-#else
+#elif defined(ARRAY)
 // ARRAY-LABEL: array_func
 struct St {
   int a, b;
@@ -520,6 +521,17 @@ void array_func(int n, float a[n], St s[2]) {
 // ARRAY: store %struct.St* %{{.+}}, %struct.St** %{{.+}},
 #pragma omp taskloop lastprivate(a, s)
   for (int i = 0; i < 10; ++i)
+    ;
+}
+#else
+
+// LOOP-LABEL: loop
+void loop() {
+// LOOP: call i8* @__kmpc_omp_task_alloc(
+// LOOP: call void @__kmpc_taskloop(
+  int i;
+#pragma omp taskloop lastprivate(i)
+  for (i = 0; i < 10; ++i)
     ;
 }
 #endif

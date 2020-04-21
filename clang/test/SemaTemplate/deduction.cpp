@@ -365,7 +365,7 @@ namespace deduction_after_explicit_pack {
   int test(ExtraArgs..., unsigned vla_size, const char *input);
   int n = test(0, "");
 
-  template <typename... T> void i(T..., int, T..., ...); // expected-note 5{{deduced conflicting}}
+  template <typename... T> void i(T..., int, T..., ...); // expected-note 5{{deduced packs of different lengths}}
   void j() {
     i(0);
     i(0, 1); // expected-error {{no match}}
@@ -381,7 +381,7 @@ namespace deduction_after_explicit_pack {
   // parameter against the first argument, then passing the first argument
   // through the first parameter.
   template<typename... T> struct X { X(int); operator int(); };
-  template<typename... T> void p(T..., X<T...>, ...); // expected-note {{deduced conflicting}}
+  template<typename... T> void p(T..., X<T...>, ...); // expected-note {{deduced packs of different lengths for parameter 'T' (<> vs. <int>)}}
   void q() { p(X<int>(0), 0); } // expected-error {{no match}}
 
   struct A {
@@ -537,5 +537,47 @@ namespace dependent_list_deduction {
     // expected-note@-9 {{deduced incomplete pack}}
     // We deduce V$1 = (size_t)3, which in C++1z also deduces T$1 = size_t.
 #endif
+  }
+}
+
+namespace designators {
+  template<typename T, int N> constexpr int f(T (&&)[N]) { return N; } // expected-note 2{{couldn't infer template argument 'T'}}
+  static_assert(f({1, 2, [20] = 3}) == 3, ""); // expected-error {{no matching function}} expected-warning 2{{C99}} expected-note {{}}
+
+  static_assert(f({.a = 1, .b = 2}) == 3, ""); // expected-error {{no matching function}}
+}
+
+namespace nested_packs {
+  template<typename ...T, typename ...U> void f(T (*...f)(U...)); // expected-note {{deduced packs of different lengths for parameter 'U' (<> vs. <int>)}}
+  void g() { f(g); f(g, g); f(g, g, g); }
+  void h(int) { f(h); f(h, h); f(h, h, h); }
+  void i() { f(g, h); } // expected-error {{no matching function}}
+
+#if __cplusplus >= 201703L
+  template<auto ...A> struct Q {};
+  template<typename ...T, T ...A, T ...B> void q(Q<A...>, Q<B...>); // #q
+  void qt(Q<> q0, Q<1, 2> qii, Q<1, 2, 3> qiii) {
+    q(q0, q0);
+    q(qii, qii);
+    q(qii, qiii); // expected-error {{no match}} expected-note@#q {{deduced packs of different lengths for parameter 'T' (<int, int> vs. <int, int, int>)}}
+    q(q0, qiii); // expected-error {{no match}} expected-note@#q {{deduced packs of different lengths for parameter 'T' (<> vs. <int, int, int>)}}
+  }
+#endif
+}
+
+namespace PR44890 {
+  template<typename ...Ts>
+    struct tuple {};
+
+  template<int I, typename ...Ts>
+    int get0(const tuple<Ts...> &t) { return 0; }
+
+  template<typename ...Ts> struct tuple_wrapper : tuple<Ts...> {
+    template<int I> int get() { return get0<0, Ts...>(*this); }
+  };
+
+  int f() {
+    tuple_wrapper<int> w;
+    return w.get<0>();
   }
 }

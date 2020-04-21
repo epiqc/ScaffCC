@@ -11,7 +11,9 @@ curr_dir=$(pwd)
 build_dir=""
 build=0
 source_dir=$(echo $0 | sed -E -e "s|^(.*)/?build.sh$|\1|g")
-build_string="clang opt LLVMScaffold"
+build_string="llvm-headers clang opt LLVMScaffold"
+
+OS=$(uname -s)
 
 while getopts "h?mab:" opt; do
     case "$opt" in
@@ -31,6 +33,11 @@ while getopts "h?mab:" opt; do
     esac
 done
 
+cmake_flags=""
+if [ "${OS}" == "Darwin" ]; then
+    cmake_flags="-DLLVM_USE_LINKER=gold"
+fi
+
 if [ "${build_dir}" == "" ]; then
     build_dir=$(realpath "${source_dir}/build")
 fi
@@ -39,7 +46,7 @@ llvm_src=$(realpath "${source_dir}/llvm")
 
 mkdir "${build_dir}"
 cd ${build_dir}
-cmake "${llvm_src}" -DLLVM_USE_LINKER=gold -DLLVM_ENABLE_PROJECTS="clang"
+cmake "${llvm_src}" ${cmake_flags} -DLLVM_ENABLE_PROJECTS="clang"
 cd ${curr_dir}
 if [ build = 1 ]; then
   make -c "${build_dir}" ${build_string}

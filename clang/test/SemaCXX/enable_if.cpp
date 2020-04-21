@@ -1,5 +1,5 @@
 // RUN: %clang_cc1 -std=c++11 -verify %s
-
+// RUN: %clang_cc1 -std=c++2a -verify %s
 typedef int (*fp)(int);
 int surrogate(int);
 struct Incomplete;  // expected-note{{forward declaration of 'Incomplete'}} \
@@ -522,3 +522,42 @@ void test() {
   InConstantContext::foo("abc");
 }
 } // namespace InConstantContext
+
+namespace StringLiteralDetector {
+  void need_string_literal(const char *p) __attribute__((enable_if(__builtin_constant_p(p), "argument is not a string literal"))); // expected-note 2{{not a string literal}}
+  void test(const char *unknown) {
+    need_string_literal("foo");
+    need_string_literal(unknown); // expected-error {{no matching function}}
+    constexpr char str[] = "bar";
+    need_string_literal(str); // expected-error {{no matching function}}
+  }
+}
+
+namespace IgnoreUnusedArgSideEffects {
+  struct A { ~A(); };
+  void f(A a, bool b) __attribute__((enable_if(b, ""))); // expected-note 2-3{{disabled}}
+  void test() {
+    f(A(), true);
+    f(A(), false); // expected-error {{no matching function}}
+    int n;
+    f((n = 1, A()), true);
+    f(A(), (n = 1, true)); // expected-error {{no matching function}}
+    f(A(), (A(), true));
+  }
+
+#if __cplusplus > 201702L
+  struct B { constexpr ~B() {} bool b; };
+  void g(B b) __attribute__((enable_if(b.b, ""))); // expected-note {{disabled}}
+  void test2() {
+    g(B{true});
+    g(B{false}); // expected-error {{no matching function}}
+    f(A(), B{true}.b);
+    f(A(), B{false}.b); // expected-error {{no matching function}}
+  }
+
+  // First condition is non-constant due to non-constexpr destructor of A.
+  int &h() __attribute__((enable_if((A(), true), "")));
+  float &h() __attribute__((enable_if((B(), true), "")));
+  float &x = h();
+#endif
+}

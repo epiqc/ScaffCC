@@ -87,10 +87,10 @@ entry:
 ; Function Attrs: argmemonly nounwind readonly
 declare i8* @llvm.coro.subfn.addr(i8* nocapture readonly, i8) #2
 
-attributes #0 = { noinline nounwind "coroutine.presplit"="1" "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "no-frame-pointer-elim"="false" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "target-features"="+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="false" "use-soft-float"="false" }
+attributes #0 = { noinline nounwind "coroutine.presplit"="1" "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "frame-pointer"="none" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "target-features"="+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="false" "use-soft-float"="false" }
 attributes #1 = { nounwind readnone speculatable }
 attributes #2 = { argmemonly nounwind readonly }
-attributes #3 = { "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "no-frame-pointer-elim"="false" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "target-features"="+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="false" "use-soft-float"="false" }
+attributes #3 = { "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "frame-pointer"="none" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "target-features"="+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="false" "use-soft-float"="false" }
 attributes #4 = { nounwind readnone }
 attributes #5 = { nounwind }
 attributes #6 = { alwaysinline }
@@ -127,9 +127,9 @@ attributes #7 = { noduplicate }
 !24 = !DILocation(line: 62, column: 3, scope: !6)
 
 ; CHECK: define i8* @f(i32 %x) #0 !dbg ![[ORIG:[0-9]+]]
-; CHECK: define internal fastcc void @f.resume(%f.Frame* %FramePtr) #0 !dbg ![[RESUME:[0-9]+]]
-; CHECK: define internal fastcc void @f.destroy(%f.Frame* %FramePtr) #0 !dbg ![[DESTROY:[0-9]+]]
-; CHECK: define internal fastcc void @f.cleanup(%f.Frame* %FramePtr) #0 !dbg ![[CLEANUP:[0-9]+]]
+; CHECK: define internal fastcc void @f.resume(%f.Frame* noalias nonnull %FramePtr) #0 !dbg ![[RESUME:[0-9]+]]
+; CHECK: define internal fastcc void @f.destroy(%f.Frame* noalias nonnull %FramePtr) #0 !dbg ![[DESTROY:[0-9]+]]
+; CHECK: define internal fastcc void @f.cleanup(%f.Frame* noalias nonnull %FramePtr) #0 !dbg ![[CLEANUP:[0-9]+]]
 
 ; CHECK: ![[ORIG]] = distinct !DISubprogram(name: "f", linkageName: "flink"
 ; CHECK: !DILocalVariable(name: "x", arg: 1, scope: ![[ORIG]]

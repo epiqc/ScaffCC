@@ -75,8 +75,8 @@ namespace{
     bool isqbit();
     bool iscbit();
     void printQRegisterName();
-    string qbitVarString();
-    string cbitVarString();
+    string qbitVarString(bool);
+    string cbitVarString(bool);
     /* Used in conditional statement, since OpenQASM only support array-wise measurement. */
     string cbitArrayString();
 
@@ -133,7 +133,7 @@ namespace{
     }
   }
 
-  string dataRepresentation::qbitVarString(){
+  string dataRepresentation::qbitVarString(bool measure=false){
     stringstream ss;
     if(!instPtr) return ss.str();
     ss << getName();
@@ -152,14 +152,18 @@ namespace{
     return retStr;  
   }
 
-  string dataRepresentation::cbitVarString(){
+  string dataRepresentation::cbitVarString(bool measure=false){
     stringstream ss;
     ss << getName();
     if(!isPtr){
-      for(unsigned i = 0; i < index.size(); i++){
-        ss << "x" << index[i];
+      if(index.size() > 1){
+        for(unsigned i = 0; i < index.size()-1; i++){
+          ss << "x" << index[i];
+        }
+        ss << "["<<index[index.size()-1]<<"]";
       }
-      ss << "[0]";
+      else
+        ss << "["<<index[0]<<"]";
     }
     string retStr = ss.str();
     std::replace(retStr.begin(), retStr.end(), '.', '_');
@@ -172,9 +176,10 @@ namespace{
     ss << getName();
 
     if(!isPtr){
-      for(unsigned i = 0; i < index.size(); i++){
-        ss << "x" << index[i];
-      }
+      if(index.size() > 1)
+        for(unsigned i = 0; i < index.size(); i++){
+          ss << "x" << index[i];
+        }
     }
 
     return ss.str();
@@ -366,7 +371,7 @@ void GenQASM::backtraceOperand_helper(dataRepresentation * datRepPtr, Value * op
         int index = CInt->getSExtValue();
         if(debugGenOpenQASM) errs() << "\t\t[" << gettingIndex << "] Index: " << index << "\n";
         backtraceOperand_helper(datRepPtr, GEPI->getOperand(0), gettingIndex, exp);
-      }else if(GEPI->getOperand(2)->getType()->isIntegerTy(32)){
+      }else if(GEPI->getName().find("arraydecay") != StringRef::npos){
         /* Merely a pointer. */
         datRepPtr->isPtr = true;
         backtraceOperand_helper(datRepPtr, GEPI->getOperand(0), gettingIndex, exp);
@@ -460,6 +465,8 @@ dataRepresentation GenQASM::backtraceOperand(Value * operand, backtraceExp exp){
 
 void GenQASM::analyzeAllocInst(Function * F, Instruction * pInst){
   if (AllocaInst * AI = dyn_cast<AllocaInst>(pInst)){
+    if(debugGenOpenQASM) errs() << "\tAllocation Inst: " << AI->getName() << "\n";
+
     Type * allocatedType_ = AI->getAllocatedType();
 
     if(isAllocQuantumType(allocatedType_)){
@@ -505,7 +512,7 @@ void GenQASM::analyzeAllocInst(Function * F, Instruction * pInst){
       }
     }
     return;
-    }
+  }
 }
 
 void GenQASM::processStoreCbitInst(CallInst * CI){
@@ -667,16 +674,16 @@ void GenQASM::genQASM_REG(Function* F){
         //std::replace(ss.begin(), ss.end(), '_', 'x');
         errs() << "creg " << ss << "[" << num << "];\n";
       }else{
-        for(int n = 0; n < num; n++){
+        for(int n = 0; n < num/(*vvit).dimSize[numDim-1]; n++){
           string ss = (*vvit).getName();
           std::replace(ss.begin(), ss.end(), '.', '_');
           //std::replace(ss.begin(), ss.end(), '_', 'x');
           errs() << "creg " << ss;
-          for(int i = 0; i < numDim; i++){
+          for(int i = 0; i < numDim - 1; i++){
             errs() << "x" << count[i];
           }
           if(count[j] < (*vvit).dimSize[j]) count[j]++; else j--;
-          errs() << "[1];\n";
+          errs() << "["<<(*vvit).dimSize[numDim-1]<<"];\n";
         }
       }
     }
@@ -697,18 +704,18 @@ void GenQASM::genQASM_block(BasicBlock * blockBlock){
       //and Fredkin in terms of the other gates during an earlier LLVM pass
 
       if(fToPrint.find("MeasX") != string::npos){
-        errs()<<"h " << fnCallList[mIndex].qArgs.front().qbitVarString() << ";\n";
+        errs()<<"h " << fnCallList[mIndex].qArgs.front().qbitVarString(true) << ";\n";
         fToPrint = "MeasZ";
       }
 
       if(fToPrint.find("MeasZ") != string::npos){
-        errs()<<"measure " << fnCallList[mIndex].qArgs.front().qbitVarString() << " -> ";
+        errs()<<"measure " << fnCallList[mIndex].qArgs.front().qbitVarString(true) << " -> ";
 
         //get inst ptr
         Value* thisInstPtr = fnCallList[mIndex].instPtr;
         map<Value*, dataRepresentation>::iterator hit = mapInstRtn.find(thisInstPtr);
         if(hit != mapInstRtn.end()){
-          errs() << hit->second.cbitVarString() << ";\n";
+          errs() << hit->second.cbitVarString(true) << ";\n";
         }
         continue;
       }

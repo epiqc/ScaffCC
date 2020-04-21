@@ -5,6 +5,7 @@
 # RUN: llvm-mca -mtriple=x86_64-unknown-unknown -mcpu=bdver2 -iterations=1 -timeline -resource-pressure=false < %s | FileCheck %s -check-prefix=ALL -check-prefix=BDVER2
 # RUN: llvm-mca -mtriple=x86_64-unknown-unknown -mcpu=btver2 -iterations=1 -timeline -resource-pressure=false < %s | FileCheck %s -check-prefix=ALL -check-prefix=BTVER2
 # RUN: llvm-mca -mtriple=x86_64-unknown-unknown -mcpu=znver1 -iterations=1 -timeline -resource-pressure=false < %s | FileCheck %s -check-prefix=ALL -check-prefix=ZNVER1
+# RUN: llvm-mca -mtriple=x86_64-unknown-unknown -mcpu=znver2 -iterations=1 -timeline -resource-pressure=false < %s | FileCheck %s -check-prefix=ALL -check-prefix=ZNVER2
 
 add     %edi, %esi
 bextrl	%esi, (%rdi), %eax
@@ -30,10 +31,13 @@ bextrl	%esi, (%rdi), %eax
 # ZNVER1-NEXT:  Total Cycles:      8
 # ZNVER1-NEXT:  Total uOps:        3
 
+# ZNVER2-NEXT:  Total Cycles:      8
+# ZNVER2-NEXT:  Total uOps:        3
+
 # BDVER2:       Dispatch Width:    4
 # BDVER2-NEXT:  uOps Per Cycle:    0.33
 # BDVER2-NEXT:  IPC:               0.22
-# BDVER2-NEXT:  Block RThroughput: 1.0
+# BDVER2-NEXT:  Block RThroughput: 2.0
 
 # BDWELL:       Dispatch Width:    4
 # BDWELL-NEXT:  uOps Per Cycle:    0.40
@@ -70,8 +74,8 @@ bextrl	%esi, (%rdi), %eax
 
 # ALL:          [1]    [2]    [3]    [4]    [5]    [6]    Instructions:
 
-# BDVER2-NEXT:   1      1     0.50                        addl	%edi, %esi
-# BDVER2-NEXT:   2      6     0.50    *                   bextrl	%esi, (%rdi), %eax
+# BDVER2-NEXT:   1      1     1.00                        addl	%edi, %esi
+# BDVER2-NEXT:   2      6     1.50    *                   bextrl	%esi, (%rdi), %eax
 
 # BDWELL-NEXT:   1      1     0.25                        addl	%edi, %esi
 # BDWELL-NEXT:   3      7     0.50    *                   bextrl	%esi, (%rdi), %eax
@@ -124,3 +128,4 @@ bextrl	%esi, (%rdi), %eax
 # ALL:                [0]    [1]    [2]    [3]
 # ALL-NEXT:     0.     1     1.0    1.0    0.0       addl	%edi, %esi
 # ALL-NEXT:     1.     1     1.0    0.0    0.0       bextrl	%esi, (%rdi), %eax
+# ALL-NEXT:            1     1.0    0.5    0.0       <total>

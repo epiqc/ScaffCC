@@ -1,8 +1,8 @@
 // Make sure that compiler-added local variables (whose line number is zero)
 // don't crash llvm-cov.
 
-// We need shell for cd
-// REQUIRES: shell
+
+
 
 // RUN: rm -rf %t
 // RUN: mkdir %t
@@ -26,4 +26,4 @@ int main(int argc, const char *argv[]) { // GCOV: 1:    [[@LINE]]:int main(
 }                                        // GCOV: -:    [[@LINE]]:}
 
 // llvm-cov doesn't work on big endian yet
-// XFAIL: powerpc-, powerpc64-, s390x, mips-, mips64-, sparc
+// XFAIL: host-byteorder-big-endian
