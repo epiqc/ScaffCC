@@ -70,7 +70,7 @@ Building ScaffCC
 
 First you need to install the following dependencies. For each one, you
 can either install by building from source, or use the package manager
-of your system (“yum" on Red Hat or “apt-get" on Ubuntu).  For ScaffCC only items 1 through 5 are required.  For RKQC items 6 through 8 are required.
+of your system (“yum" on Red Hat or “apt-get" on Ubuntu).  For ScaffCC only items 1 through 5 are required.  For RKQC items 7 through 9 are required.
 
 1.  Static libraries for libstdc++ and glibc
 
@@ -107,9 +107,11 @@ of your system (“yum" on Red Hat or “apt-get" on Ubuntu).  For ScaffCC only 
         source at:
         <https://cmake.org/install>
 
-5.  Python 2.7
+5.  Python 2.7+
 
-6.  Boost 1.48
+6.  Ninja, for much faster builds: https://ninja-build.org
+
+7.  Boost 1.48
 
     -   “Source Build": Boost installation instructions are here:
         <http://www.boost.org/doc/libs/1_48_0/doc/html/bbv2/installation.html>
@@ -126,7 +128,7 @@ of your system (“yum" on Red Hat or “apt-get" on Ubuntu).  For ScaffCC only 
                 sudo apt-get install libboost-all-dev
                 
 
-7.  The GNU Multiple Precision Arithmetic Library (gmp and gmpxx)
+8.  The GNU Multiple Precision Arithmetic Library (gmp and gmpxx)
 
     -   “Ubuntu": Use tab-completion to verify the correct packages
 
@@ -140,7 +142,7 @@ of your system (“yum" on Red Hat or “apt-get" on Ubuntu).  For ScaffCC only 
                 sudo make && sudo make check && sudo make install
                 
 
-8.  The GNU MPFR Library (mpfr)
+9.  The GNU MPFR Library (mpfr)
 
     -   “Ubuntu"
 
