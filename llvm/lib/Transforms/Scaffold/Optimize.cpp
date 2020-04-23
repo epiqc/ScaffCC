@@ -421,7 +421,7 @@ void Optimize::analyzeAllocInstShort(Function* F, Instruction* pInst){
       qGateArg tmpQArg;
 
       Type *elementType = arrayType->getElementType();
-      uint64_t arraySize = arrayType->getNumElements();
+      // uint64_t arraySize = arrayType->getNumElements();
       if (elementType->isIntegerTy(16)){
 	if(debugOptimize)
 	  errs() << "New QBit Allocation Found: " << AI->getName() <<"\n";
