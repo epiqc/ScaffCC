@@ -20,7 +20,7 @@ Current Release
 
 -   Version 5.0
 
--   Release Date: April 15, 2020
+-   Release Date: April 23, 2020
 
 Supported Operating Systems
 ---------------------------
@@ -31,7 +31,7 @@ ScaffCC currently offers support for the following operating systems:
 
 -   “Red Hat"
 
--   "OS X"
+-   "macOS"
 
 This list will continue to grow in the future!
 
@@ -64,7 +64,7 @@ Building ScaffCC
 
             xcode-select --install
 
-2.  Python 2.7: Python is usually bundled with OS X. The built-in version should be sufficient.
+2.  Python 2.7/3: Python is usually bundled with macOS. The built-in version should be sufficient.
  
 #### For Unix build
 
@@ -107,9 +107,9 @@ of your system (“yum" on Red Hat or “apt-get" on Ubuntu).  For ScaffCC only 
         source at:
         <https://cmake.org/install>
 
-5.  Python 2.7+
+5.  Python 2.7/3+
 
-6.  Ninja, for much faster builds: https://ninja-build.org
+6.  Ninja, for much faster builds: <https://ninja-build.org>
 
 7.  Boost 1.48
 
@@ -157,11 +157,9 @@ of your system (“yum" on Red Hat or “apt-get" on Ubuntu).  For ScaffCC only 
                 
 
 ### Installing
-Once you have all of the required libraries, simply run
+Once you have all of the required libraries, simply run `./build.sh` at the root of the repository.
 
-        ./build.sh
-
-at the root of the repository.
+Then run `ninja llvm-headers` followed by `ninja opt clang LLVMScaffold` in `build` to build the most necessary components.
 
 Verifying Installation
 ----------------------
