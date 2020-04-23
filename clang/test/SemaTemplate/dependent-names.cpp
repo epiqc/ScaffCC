@@ -232,7 +232,7 @@ namespace PR10053 {
       struct Data {};
     }
 
-    std::ostream &print(std::ostream &out, int); // expected-note-re {{should be declared prior to the call site$}}
+    std::ostream &print(std::ostream &out, int); // expected-note-re {{should be declared prior to the call site{{$}}}}
     std::ostream &print(std::ostream &out, ns::Data); // expected-note {{should be declared prior to the call site or in namespace 'PR10053::my_file2_a::ns'}}
     std::ostream &print(std::ostream &out, std::vector<ns2::Data>); // expected-note {{should be declared prior to the call site or in namespace 'PR10053::my_file2_a::ns2'}}
     std::ostream &print(std::ostream &out, std::pair<ns::Data, ns2::Data>); // expected-note {{should be declared prior to the call site or in an associated namespace of one of its arguments}}
@@ -264,7 +264,7 @@ namespace PR10053 {
 }
 
 namespace PR10187 {
-  namespace A {
+  namespace A1 {
     template<typename T>
     struct S {
       void f() {
@@ -273,8 +273,24 @@ namespace PR10187 {
       }
       int e[10];
     };
+  }
+
+  namespace A2 {
+    template<typename T>
+    struct S {
+      void f() {
+        for (auto &a : e)
+          __range(a); // expected-error {{undeclared identifier '__range'}}
+      }
+      T e[10];
+    };
     void g() {
       S<int>().f(); // expected-note {{here}}
+    }
+    struct X {};
+    void __range(X);
+    void h() {
+      S<X>().f();
     }
   }
 
@@ -319,8 +335,124 @@ namespace PR11421 {
 template < unsigned > struct X {
   static const unsigned dimension = 3;
   template<unsigned dim=dimension> 
-  struct Y: Y<dim> { }; // expected-error {{incomplete type}} expected-note {{is not complete until the closing}}
+  struct Y: Y<dim> { }; // expected-error{{circular inheritance between 'Y<dim>' and 'Y<dim>'}}
 };
 typedef X<3> X3;
-X3::Y<>::iterator it; // expected-note {{requested here}}
+X3::Y<>::iterator it; // expected-error {{no type named 'iterator' in 'PR11421::X<3>::Y<3>'}}
+}
+
+namespace rdar12629723 {
+  template<class T>
+  struct X {
+    struct C : public C { }; // expected-error{{circular inheritance between 'rdar12629723::X::C' and 'rdar12629723::X::C'}}
+
+    struct B;
+
+    struct A : public B {  // expected-note{{'rdar12629723::X::A' declared here}}
+      virtual void foo() { }
+    };
+
+    struct D : T::foo { };
+    struct E : D { };
+  };
+
+  template<class T>
+  struct X<T>::B : public A {  // expected-error{{circular inheritance between 'rdar12629723::X::A' and 'rdar12629723::X::B'}}
+    virtual void foo() { }
+  };
+}
+
+namespace test_reserved_identifiers {
+  template<typename A, typename B> void tempf(A a, B b) {
+    a + b;  // expected-error{{call to function 'operator+' that is neither visible in the template definition nor found by argument-dependent lookup}}
+  }
+  namespace __gnu_cxx { struct X {}; }
+  namespace ns { struct Y {}; }
+  void operator+(__gnu_cxx::X, ns::Y);  // expected-note{{or in namespace 'test_reserved_identifiers::ns'}}
+  void test() {
+    __gnu_cxx::X x;
+    ns::Y y;
+    tempf(x, y);  // expected-note{{in instantiation of}}
+  }
+}
+
+// This test must live in the global namespace.
+struct PR14695_X {};
+// FIXME: This note is bogus; it is the using directive which would need to move
+// to prior to the call site to fix the problem.
+namespace PR14695_A { void PR14695_f(PR14695_X); } // expected-note {{'PR14695_f' should be declared prior to the call site or in the global namespace}}
+template<typename T> void PR14695_g(T t) { PR14695_f(t); } // expected-error {{call to function 'PR14695_f' that is neither visible in the template definition nor found by argument-dependent lookup}}
+using namespace PR14695_A;
+template void PR14695_g(PR14695_X); // expected-note{{requested here}}
+
+namespace OperatorNew {
+  template<typename T> void f(T t) {
+    operator new(100, t); // expected-error{{call to function 'operator new' that is neither visible in the template definition nor found by argument-dependent lookup}}
+    // FIXME: This should give the same error.
+    new (t) int;
+  }
+  struct X {};
+};
+using size_t = decltype(sizeof(0));
+void *operator new(size_t, OperatorNew::X); // expected-note-re {{should be declared prior to the call site{{$}}}}
+template void OperatorNew::f(OperatorNew::X); // expected-note {{instantiation of}}
+
+namespace PR19936 {
+  template<typename T> decltype(*T()) f() {} // expected-note {{previous}}
+  template<typename T> decltype(T() * T()) g() {} // expected-note {{previous}}
+
+  // Create some overloaded operators so we build an overload operator call
+  // instead of a builtin operator call for the dependent expression.
+  enum E {};
+  int operator*(E);
+  int operator*(E, E);
+
+  // Check that they still profile the same.
+  template<typename T> decltype(*T()) f() {} // expected-error {{redefinition}}
+  template<typename T> decltype(T() * T()) g() {} // expected-error {{redefinition}}
+}
+
+template <typename> struct CT2 {
+  template <class U> struct X;
+};
+template <typename T> int CT2<int>::X<>; // expected-error {{template parameter list matching the non-templated nested type 'CT2<int>' should be empty}}
+
+namespace DependentTemplateIdWithNoArgs {
+  template<typename T> void f() { T::template f(); }
+  struct X {
+    template<int = 0> static void f();
+  };
+  void g() { f<X>(); }
+}
+
+namespace DependentUnresolvedUsingTemplate {
+  template<typename T>
+  struct X : T {
+    using T::foo;
+    void f() { this->template foo(); } // expected-error {{does not refer to a template}}
+    void g() { this->template foo<>(); } // expected-error {{does not refer to a template}}
+    void h() { this->template foo<int>(); } // expected-error {{does not refer to a template}}
+  };
+  struct A { template<typename = int> int foo(); };
+  struct B { int foo(); }; // expected-note 3{{non-template here}}
+  void test(X<A> xa, X<B> xb) {
+    xa.f();
+    xa.g();
+    xa.h();
+    xb.f(); // expected-note {{instantiation of}}
+    xb.g(); // expected-note {{instantiation of}}
+    xb.h(); // expected-note {{instantiation of}}
+  }
+}
+
+namespace PR37680 {
+  template <class a> struct b : a {
+    using a::add;
+    template<int> int add() { return this->template add(0); }
+  };
+  struct a {
+    template<typename T = void> int add(...);
+    void add(int);
+  };
+  int f(b<a> ba) { return ba.add<0>(); }
 }

@@ -1,9 +1,8 @@
 //===- llvm/Support/Unix/Unix.h - Common Unix Include File -------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,66 +10,53 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_SYSTEM_UNIX_UNIX_H
-#define LLVM_SYSTEM_UNIX_UNIX_H
+#ifndef LLVM_LIB_SUPPORT_UNIX_UNIX_H
+#define LLVM_LIB_SUPPORT_UNIX_UNIX_H
 
 //===----------------------------------------------------------------------===//
 //=== WARNING: Implementation here must contain only generic UNIX code that
 //===          is guaranteed to work on all UNIX variants.
 //===----------------------------------------------------------------------===//
 
-#include "llvm/Config/config.h"     // Get autoconf configuration settings
+#include "llvm/Config/config.h"
+#include "llvm/Support/Chrono.h"
 #include "llvm/Support/Errno.h"
-#include <cstdlib>
-#include <cstdio>
-#include <cstring>
-#include <cerrno>
-#include <string>
+#include "llvm/Support/ErrorHandling.h"
 #include <algorithm>
+#include <assert.h>
+#include <cerrno>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <string>
+#include <sys/types.h>
+#include <sys/wait.h>
 
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
-#endif
-
-#ifdef HAVE_SYS_TYPES_H
-#include <sys/types.h>
 #endif
 
 #ifdef HAVE_SYS_PARAM_H
 #include <sys/param.h>
 #endif
 
-#ifdef HAVE_ASSERT_H
-#include <assert.h>
-#endif
-
-#ifdef TIME_WITH_SYS_TIME
+#ifdef HAVE_SYS_TIME_H
 # include <sys/time.h>
-# include <time.h>
-#else
-# ifdef HAVE_SYS_TIME_H
-#  include <sys/time.h>
-# else
-#  include <time.h>
-# endif
+#endif
+#include <time.h>
+
+#ifdef HAVE_DLFCN_H
+# include <dlfcn.h>
 #endif
 
-#ifdef HAVE_SYS_WAIT_H
-# include <sys/wait.h>
-#endif
-
-#ifndef WEXITSTATUS
-# define WEXITSTATUS(stat_val) ((unsigned)(stat_val) >> 8)
-#endif
-
-#ifndef WIFEXITED
-# define WIFEXITED(stat_val) (((stat_val) & 255) == 0)
+#ifdef HAVE_FCNTL_H
+# include <fcntl.h>
 #endif
 
 /// This function builds an error message into \p ErrMsg using the \p prefix
 /// string and the Unix error number given by \p errnum. If errnum is -1, the
 /// default then the value of errno is used.
-/// @brief Make an error message
+/// Make an error message
 ///
 /// If the error number can be converted to a string, it will be
 /// separated from prefix by ": ".
@@ -83,5 +69,46 @@ static inline bool MakeErrMsg(
   *ErrMsg = prefix + ": " + llvm::sys::StrError(errnum);
   return true;
 }
+
+// Include StrError(errnum) in a fatal error message.
+LLVM_ATTRIBUTE_NORETURN static inline void ReportErrnumFatal(const char *Msg,
+                                                             int errnum) {
+  std::string ErrMsg;
+  MakeErrMsg(&ErrMsg, Msg, errnum);
+  llvm::report_fatal_error(ErrMsg);
+}
+
+namespace llvm {
+namespace sys {
+
+/// Convert a struct timeval to a duration. Note that timeval can be used both
+/// as a time point and a duration. Be sure to check what the input represents.
+inline std::chrono::microseconds toDuration(const struct timeval &TV) {
+  return std::chrono::seconds(TV.tv_sec) +
+         std::chrono::microseconds(TV.tv_usec);
+}
+
+/// Convert a time point to struct timespec.
+inline struct timespec toTimeSpec(TimePoint<> TP) {
+  using namespace std::chrono;
+
+  struct timespec RetVal;
+  RetVal.tv_sec = toTimeT(TP);
+  RetVal.tv_nsec = (TP.time_since_epoch() % seconds(1)).count();
+  return RetVal;
+}
+
+/// Convert a time point to struct timeval.
+inline struct timeval toTimeVal(TimePoint<std::chrono::microseconds> TP) {
+  using namespace std::chrono;
+
+  struct timeval RetVal;
+  RetVal.tv_sec = toTimeT(TP);
+  RetVal.tv_usec = (TP.time_since_epoch() % seconds(1)).count();
+  return RetVal;
+}
+
+} // namespace sys
+} // namespace llvm
 
 #endif

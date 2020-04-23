@@ -19,7 +19,7 @@ To see a list of compiler options which can be passed as flags, run:
 \begin{lstlisting}
 ./scaffold.sh -h
 
-Usage: ./scaffold.sh [-hv] [-rqfRFckdso] [-l #] [-P #] <filename>.scaffold
+Usage: ./scaffold.sh [-hv] [-rqfRFckdso] [-l #] [-P #] <filename>.scaffold [args]
     -r   Generate resource estimate (default)
     -q   Generate QASM
     -f   Generate flattened QASM
@@ -33,12 +33,13 @@ Usage: ./scaffold.sh [-hv] [-rqfRFckdso] [-l #] [-P #] <filename>.scaffold
     -k   Keep all intermediate files (default only keeps specified output,
          but requires recompilation for any new output)
     -d   Dry-run; show all commands to be run, but do not execute
+    -D   Debug named pass, use SCAFFOLD for all"
     -s   Generate QX Simulator input file 
     -o   Generate optimized QASM
     -v   Show current ScaffCC version
 \end{lstlisting}
 
-
+Where \textt{args} replaces instances of \textt{argv[#]} in the scaffold program, starting from a=\textt{argv[1]}.
 
 \section{Sample Scripts}
 This section describes some of the example scripts contained in the `scripts/' directory. They are written to test the various functionalities 

@@ -1,9 +1,8 @@
 //===-- Vectorize.h - Vectorization Transformations -------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -17,88 +16,110 @@
 
 namespace llvm {
 class BasicBlock;
-class BasicBlockPass;
+class Pass;
 
 //===----------------------------------------------------------------------===//
-/// @brief Vectorize configuration.
+/// Vectorize configuration.
 struct VectorizeConfig {
   //===--------------------------------------------------------------------===//
   // Target architecture related parameters
 
-  /// @brief The size of the native vector registers.
+  /// The size of the native vector registers.
   unsigned VectorBits;
 
-  /// @brief Vectorize integer values.
+  /// Vectorize boolean values.
+  bool VectorizeBools;
+
+  /// Vectorize integer values.
   bool VectorizeInts;
 
-  /// @brief Vectorize floating-point values.
+  /// Vectorize floating-point values.
   bool VectorizeFloats;
 
-  /// @brief Vectorize pointer values.
+  /// Vectorize pointer values.
   bool VectorizePointers;
 
-  /// @brief Vectorize casting (conversion) operations.
+  /// Vectorize casting (conversion) operations.
   bool VectorizeCasts;
 
-  /// @brief Vectorize floating-point math intrinsics.
+  /// Vectorize floating-point math intrinsics.
   bool VectorizeMath;
 
-  /// @brief Vectorize the fused-multiply-add intrinsic.
+  /// Vectorize bit intrinsics.
+  bool VectorizeBitManipulations;
+
+  /// Vectorize the fused-multiply-add intrinsic.
   bool VectorizeFMA;
 
-  /// @brief Vectorize select instructions.
+  /// Vectorize select instructions.
   bool VectorizeSelect;
 
-  /// @brief Vectorize getelementptr instructions.
+  /// Vectorize comparison instructions.
+  bool VectorizeCmp;
+
+  /// Vectorize getelementptr instructions.
   bool VectorizeGEP;
 
-  /// @brief Vectorize loads and stores.
+  /// Vectorize loads and stores.
   bool VectorizeMemOps;
 
-  /// @brief Only generate aligned loads and stores.
+  /// Only generate aligned loads and stores.
   bool AlignedOnly;
 
   //===--------------------------------------------------------------------===//
   // Misc parameters
 
-  /// @brief The required chain depth for vectorization.
+  /// The required chain depth for vectorization.
   unsigned ReqChainDepth;
 
-  /// @brief The maximum search distance for instruction pairs.
+  /// The maximum search distance for instruction pairs.
   unsigned SearchLimit;
 
-  /// @brief The maximum number of candidate pairs with which to use a full
+  /// The maximum number of candidate pairs with which to use a full
   ///        cycle check.
   unsigned MaxCandPairsForCycleCheck;
 
-  /// @brief Replicating one element to a pair breaks the chain.
+  /// Replicating one element to a pair breaks the chain.
   bool SplatBreaksChain;
 
-  /// @brief The maximum number of pairable instructions per group.
+  /// The maximum number of pairable instructions per group.
   unsigned MaxInsts;
 
-  /// @brief The maximum number of pairing iterations.
+  /// The maximum number of candidate instruction pairs per group.
+  unsigned MaxPairs;
+
+  /// The maximum number of pairing iterations.
   unsigned MaxIter;
 
-  /// @brief Don't boost the chain-depth contribution of loads and stores.
+  /// Don't try to form odd-length vectors.
+  bool Pow2LenOnly;
+
+  /// Don't boost the chain-depth contribution of loads and stores.
   bool NoMemOpBoost;
 
-  /// @brief Use a fast instruction dependency analysis.
+  /// Use a fast instruction dependency analysis.
   bool FastDep;
 
-  /// @brief Initialize the VectorizeConfig from command line options.
+  /// Initialize the VectorizeConfig from command line options.
   VectorizeConfig();
 };
 
 //===----------------------------------------------------------------------===//
 //
-// BBVectorize - A basic-block vectorization pass.
+// LoopVectorize - Create a loop vectorization pass.
 //
-BasicBlockPass *
-createBBVectorizePass(const VectorizeConfig &C = VectorizeConfig());
+Pass *createLoopVectorizePass();
+Pass *createLoopVectorizePass(bool InterleaveOnlyWhenForced,
+                              bool VectorizeOnlyWhenForced);
 
 //===----------------------------------------------------------------------===//
-/// @brief Vectorize the BasicBlock.
+//
+// SLPVectorizer - Create a bottom-up SLP vectorizer pass.
+//
+Pass *createSLPVectorizerPass();
+
+//===----------------------------------------------------------------------===//
+/// Vectorize the BasicBlock.
 ///
 /// @param BB The BasicBlock to be vectorized
 /// @param P  The current running pass, should require AliasAnalysis and
@@ -109,6 +130,13 @@ createBBVectorizePass(const VectorizeConfig &C = VectorizeConfig());
 ///
 bool vectorizeBasicBlock(Pass *P, BasicBlock &BB,
                          const VectorizeConfig &C = VectorizeConfig());
+
+//===----------------------------------------------------------------------===//
+//
+// LoadStoreVectorizer - Create vector loads and stores, but leave scalar
+// operations.
+//
+Pass *createLoadStoreVectorizerPass();
 
 } // End llvm namespace
 

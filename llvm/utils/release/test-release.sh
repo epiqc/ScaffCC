@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 #===-- test-release.sh - Test the LLVM release candidates ------------------===#
 #
-#                     The LLVM Compiler Infrastructure
-#
-# This file is distributed under the University of Illinois Open Source
-# License.
+# Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 #
 #===------------------------------------------------------------------------===#
 #
@@ -12,13 +11,13 @@
 #
 #===------------------------------------------------------------------------===#
 
-if [ `uname -s` = "FreeBSD" ]; then
+System=`uname -s`
+if [ "$System" = "FreeBSD" ]; then
     MAKE=gmake
 else
     MAKE=make
 fi
-
-projects="llvm cfe dragonegg compiler-rt test-suite"
+generator="Unix Makefiles"
 
 # Base SVN URL for the sources.
 Base_url="http://llvm.org/svn/llvm-project"
@@ -26,36 +25,55 @@ Base_url="http://llvm.org/svn/llvm-project"
 Release=""
 Release_no_dot=""
 RC=""
+Triple=""
+use_gzip="no"
 do_checkout="yes"
-do_ada="no"
-do_clang="yes"
-do_dragonegg="no"
-do_fortran="no"
-do_objc="yes"
-do_64bit="yes"
 do_debug="no"
 do_asserts="no"
 do_compare="yes"
+do_rt="yes"
+do_libs="yes"
+do_libcxxabi="yes"
+do_libunwind="yes"
+do_test_suite="yes"
+do_openmp="yes"
+do_lld="yes"
+do_lldb="no"
+do_polly="yes"
+do_mlir="yes"
 BuildDir="`pwd`"
+ExtraConfigureFlags=""
+ExportBranch=""
+git_ref=""
 
 function usage() {
-    echo "usage: `basename $0` -release X.Y -rc NUM [OPTIONS]"
+    echo "usage: `basename $0` -release X.Y.Z -rc NUM [OPTIONS]"
     echo ""
-    echo " -release X.Y      The release number to test."
-    echo " -rc NUM           The pre-release candidate number."
-    echo " -final            The final release candidate."
-    echo " -j NUM            Number of compile jobs to run. [default: 3]"
-    echo " -build-dir DIR    Directory to perform testing in. [default: pwd]"
-    echo " -no-checkout      Don't checkout the sources from SVN."
-    echo " -no-64bit         Don't test the 64-bit version. [default: yes]"
-    echo " -enable-ada       Build Ada. [default: disable]"
-    echo " -disable-clang    Do not test clang. [default: enable]"
-    echo " -enable-dragonegg Test dragonegg. [default: disable]"
-    echo " -enable-fortran   Enable Fortran build. [default: disable]"
-    echo " -disable-objc     Disable ObjC build. [default: enable]"
-    echo " -test-debug       Test the debug build. [default: no]"
-    echo " -test-asserts     Test with asserts on. [default: no]"
-    echo " -no-compare-files Don't test that phase 2 and 3 files are identical."
+    echo " -release X.Y.Z       The release version to test."
+    echo " -rc NUM              The pre-release candidate number."
+    echo " -final               The final release candidate."
+    echo " -triple TRIPLE       The target triple for this machine."
+    echo " -j NUM               Number of compile jobs to run. [default: 3]"
+    echo " -build-dir DIR       Directory to perform testing in. [default: pwd]"
+    echo " -no-checkout         Don't checkout the sources from SVN."
+    echo " -test-debug          Test the debug build. [default: no]"
+    echo " -test-asserts        Test with asserts on. [default: no]"
+    echo " -no-compare-files    Don't test that phase 2 and 3 files are identical."
+    echo " -use-gzip            Use gzip instead of xz."
+    echo " -use-ninja           Use ninja instead of make/gmake."
+    echo " -configure-flags FLAGS  Extra flags to pass to the configure step."
+    echo " -git-ref sha         Use the specified git ref for testing instead of a release."
+    echo " -no-rt               Disable check-out & build Compiler-RT"
+    echo " -no-libs             Disable check-out & build libcxx/libcxxabi/libunwind"
+    echo " -no-libcxxabi        Disable check-out & build libcxxabi"
+    echo " -no-libunwind        Disable check-out & build libunwind"
+    echo " -no-test-suite       Disable check-out & build test-suite"
+    echo " -no-openmp           Disable check-out & build libomp"
+    echo " -no-lld              Disable check-out & build lld"
+    echo " -lldb                Enable check-out & build lldb"
+    echo " -no-lldb             Disable check-out & build lldb (default)"
+    echo " -no-polly            Disable check-out & build Polly"
+    echo " -no-mlir             Disable check-out & build MLIR"
 }
 
 while [ $# -gt 0 ]; do
@@ -63,7 +81,7 @@ while [ $# -gt 0 ]; do
         -release | --release )
             shift
             Release="$1"
-            Release_no_dot="`echo $1 | sed -e 's,\.,,'`"
+            Release_no_dot="`echo $1 | sed -e 's,\.,,g'`"
             ;;
         -rc | --rc | -RC | --RC )
             shift
@@ -72,6 +90,25 @@ while [ $# -gt 0 ]; do
         -final | --final )
             RC=final
             ;;
+        -git-ref | --git-ref )
+            shift
+            Release="test"
+            Release_no_dot="test"
+            ExportBranch="$1"
+            RC="`echo $ExportBranch | sed -e 's,/,_,g'`"
+            git_ref="$1"
+            echo "WARNING: Using the ref $git_ref instead of a release tag"
+            echo "         This is intended to aid new packagers in trialing "
+            echo "         builds without requiring a tag to be created first"
+            ;;
+        -triple | --triple )
+            shift
+            Triple="$1"
+            ;;
+        -configure-flags | --configure-flags )
+            shift
+            ExtraConfigureFlags="$1"
+            ;;
         -j* )
             NumJobs="`echo $1 | sed -e 's,-j\([0-9]*\),\1,g'`"
             if [ -z "$NumJobs" ]; then
@@ -79,30 +116,16 @@ while [ $# -gt 0 ]; do
                 NumJobs="$1"
             fi
             ;;
+        -use-ninja )
+            MAKE=ninja
+            generator=Ninja
+            ;;
         -build-dir | --build-dir | -builddir | --builddir )
             shift
             BuildDir="$1"
             ;;
         -no-checkout | --no-checkout )
             do_checkout="no"
-            ;;
-        -no-64bit | --no-64bit )
-            do_64bit="no"
-            ;;
-        -enable-ada | --enable-ada )
-            do_ada="yes"
-            ;;
-        -disable-clang | --disable-clang )
-            do_clang="no"
-            ;;
-        -enable-dragonegg | --enable-dragonegg )
-            do_dragonegg="yes"
-            ;;
-        -enable-fortran | --enable-fortran )
-            do_fortran="yes"
-            ;;
-        -disable-objc | --disable-objc )
-            do_objc="no"
             ;;
         -test-debug | --test-debug )
             do_debug="yes"
@@ -112,6 +135,42 @@ while [ $# -gt 0 ]; do
             ;;
         -no-compare-files | --no-compare-files )
             do_compare="no"
+            ;;
+        -use-gzip | --use-gzip )
+            use_gzip="yes"
+            ;;
+        -no-rt )
+            do_rt="no"
+            ;;
+        -no-libs )
+            do_libs="no"
+            ;;
+        -no-libcxxabi )
+            do_libcxxabi="no"
+            ;;
+        -no-libunwind )
+            do_libunwind="no"
+            ;;
+        -no-test-suite )
+            do_test_suite="no"
+            ;;
+        -no-openmp )
+            do_openmp="no"
+            ;;
+        -no-lld )
+            do_lld="no"
+            ;;
+        -lldb )
+            do_lldb="yes"
+            ;;
+        -no-lldb )
+            do_lldb="no"
+            ;;
+        -no-polly )
+            do_polly="no"
+            ;;
+        -no-mlir )
+            do_mlir="no"
             ;;
         -help | --help | -h | --h | -\? )
             usage
@@ -135,6 +194,24 @@ if [ -z "$RC" ]; then
     echo "error: no release candidate number specified"
     exit 1
 fi
+if [ -z "$ExportBranch" ]; then
+    ExportBranch="tags/RELEASE_$Release_no_dot/$RC"
+fi
+if [ -z "$Triple" ]; then
+    echo "error: no target triple specified"
+    exit 1
+fi
+
+if [ "$Release" != "test" ]; then
+  if [ -n "$git_ref" ]; then
+    echo "error: can't specify both -release and -git-ref"
+    exit 1
+  fi
+  git_ref=llvmorg-$Release
+  if [ "$RC" != "final" ]; then
+    git_ref="$git_ref-$RC"
+  fi
+fi
 
 # Figure out how many make processes to run.
 if [ -z "$NumJobs" ]; then
@@ -150,6 +227,41 @@ if [ -z "$NumJobs" ]; then
     NumJobs=3
 fi
 
+# Projects list
+projects="llvm clang clang-tools-extra"
+if [ $do_rt = "yes" ]; then
+  projects="$projects compiler-rt"
+fi
+if [ $do_libs = "yes" ]; then
+  projects="$projects libcxx"
+  if [ $do_libcxxabi = "yes" ]; then
+    projects="$projects libcxxabi"
+  fi
+  if [ $do_libunwind = "yes" ]; then
+    projects="$projects libunwind"
+  fi
+fi
+case $do_test_suite in
+  yes|export-only)
+    projects="$projects test-suite"
+    ;;
+esac
+if [ $do_openmp = "yes" ]; then
+  projects="$projects openmp"
+fi
+if [ $do_lld = "yes" ]; then
+  projects="$projects lld"
+fi
+if [ $do_lldb = "yes" ]; then
+  projects="$projects lldb"
+fi
+if [ $do_polly = "yes" ]; then
+  projects="$projects polly"
+fi
+if [ $do_mlir = "yes" ]; then
+  projects="$projects mlir"
+fi
+
 # Go to the build directory (may be different from CWD)
 BuildDir=$BuildDir/$RC
 mkdir -p $BuildDir
@@ -159,85 +271,93 @@ cd $BuildDir
 LogDir=$BuildDir/logs
 mkdir -p $LogDir
 
-# Find compilers.
-if [ "$do_dragonegg" = "yes" ]; then
-    gcc_compiler="$GCC"
-    if [ -z "$gcc_compiler" ]; then
-        gcc_compiler="`which gcc`"
-        if [ -z "$gcc_compiler" ]; then
-            echo "error: cannot find gcc to use with dragonegg"
-            exit 1
-        fi
-    fi
-
-    gxx_compiler="$GXX"
-    if [ -z "$gxx_compiler" ]; then
-        gxx_compiler="`which g++`"
-        if [ -z "$gxx_compiler" ]; then
-            echo "error: cannot find g++ to use with dragonegg"
-            exit 1
-        fi
-    fi
+# Final package name.
+Package=clang+llvm-$Release
+if [ $RC != "final" ]; then
+  Package=$Package-$RC
 fi
+Package=$Package-$Triple
 
+# Errors to be highlighted at the end are written to this file.
+echo -n > $LogDir/deferred_errors.log
 
-# Make sure that the URLs are valid.
-function check_valid_urls() {
-    for proj in $projects ; do
-        echo "# Validating $proj SVN URL"
-
-        if ! svn ls $Base_url/$proj/tags/RELEASE_$Release_no_dot/$RC > /dev/null 2>&1 ; then
-            echo "llvm $Release release candidate $RC doesn't exist!"
-            exit 1
-        fi
-    done
+function deferred_error() {
+  Phase="$1"
+  Flavor="$2"
+  Msg="$3"
+  echo "[${Flavor} Phase${Phase}] ${Msg}" | tee -a $LogDir/deferred_errors.log
 }
 
-# Export sources to the the build directory.
+# Make sure that a required program is available
+function check_program_exists() {
+  local program="$1"
+  if ! type -P $program > /dev/null 2>&1 ; then
+    echo "program '$1' not found !"
+    exit 1
+  fi
+}
+
+if [ "$System" != "Darwin" -a "$System" != "SunOS" ]; then
+  check_program_exists 'chrpath'
+fi
+
+if [ "$System" != "Darwin" ]; then
+  check_program_exists 'file'
+  check_program_exists 'objdump'
+fi
+
+check_program_exists ${MAKE}
+
+# Export sources to the build directory.
 function export_sources() {
-    check_valid_urls
+  SrcDir=$BuildDir/llvm-project
+  mkdir -p $SrcDir
+  echo "# Using git ref: $git_ref"
 
-    for proj in $projects ; do
-        echo "# Exporting $proj $Release-RC$RC sources"
-        if ! svn export -q $Base_url/$proj/tags/RELEASE_$Release_no_dot/$RC $proj.src ; then
-            echo "error: failed to export $proj project"
-            exit 1
-        fi
-    done
+  # GitHub allows you to download a tarball of any commit using the URL:
+  # https://github.com/$organization/$repo/archive/$ref.tar.gz
+  curl -L https://github.com/llvm/llvm-project/archive/$git_ref.tar.gz | \
+    tar -C $SrcDir --strip-components=1 -xzf -
 
-    echo "# Creating symlinks"
-    cd $BuildDir/llvm.src/tools
-    if [ ! -h clang ]; then
-        ln -s ../../cfe.src clang
+  if [ "$do_test_suite" = "yes" ]; then
+    TestSuiteSrcDir=$BuildDir/llvm-test-suite
+    mkdir -p $TestSuiteSrcDir
+
+    # We can only use named refs, like branches and tags, that exist in
+    # both the llvm-project and test-suite repos if we want to run the
+    # test suite.
+    # If the test-suite fails to download assume we are using a ref that
+    # doesn't exist in the test suite and disable it.
+    set +e
+    curl -L https://github.com/llvm/test-suite/archive/$git_ref.tar.gz | \
+      tar -C $TestSuiteSrcDir --strip-components=1 -xzf -
+    if [ $? -ne -0 ]; then
+      echo "$git_ref not found in test-suite repo, test-suite disabled."
+      do_test_suite="no"
     fi
-    cd $BuildDir/llvm.src/projects
-    if [ ! -h llvm-test ]; then
-        ln -s ../../test-suite.src llvm-test
-    fi
-    if [ ! -h compiler-rt ]; then
-        ln -s ../../compiler-rt.src compiler-rt
-    fi
-    cd $BuildDir
+    set -e
+  fi
+
+  cd $BuildDir
 }
 
 function configure_llvmCore() {
     Phase="$1"
     Flavor="$2"
     ObjDir="$3"
-    InstallDir="$4"
 
     case $Flavor in
-        Release | Release-64 )
-            Optimized="yes"
-            Assertions="no"
+        Release )
+            BuildType="Release"
+            Assertions="OFF"
             ;;
         Release+Asserts )
-            Optimized="yes"
-            Assertions="yes"
+            BuildType="Release"
+            Assertions="ON"
             ;;
         Debug )
-            Optimized="no"
-            Assertions="yes"
+            BuildType="Debug"
+            Assertions="ON"
             ;;
         * )
             echo "# Invalid flavor '$Flavor'"
@@ -246,20 +366,26 @@ function configure_llvmCore() {
             ;;
     esac
 
+    project_list=${projects// /;}
     echo "# Using C compiler: $c_compiler"
     echo "# Using C++ compiler: $cxx_compiler"
 
     cd $ObjDir
     echo "# Configuring llvm $Release-$RC $Flavor"
-    echo "# $BuildDir/llvm.src/configure --prefix=$InstallDir \
-        --enable-optimized=$Optimized \
-        --enable-assertions=$Assertions"
-    env CC="$c_compiler" CXX="$cxx_compiler" \
-    $BuildDir/llvm.src/configure --prefix=$InstallDir \
-        --enable-optimized=$Optimized \
-        --enable-assertions=$Assertions \
-        --disable-timestamps \
+
+    echo "#" env CC="$c_compiler" CXX="$cxx_compiler" \
+        cmake -G "$generator" \
+        -DCMAKE_BUILD_TYPE=$BuildType -DLLVM_ENABLE_ASSERTIONS=$Assertions \
+        -DLLVM_ENABLE_PROJECTS="$project_list" \
+        $ExtraConfigureFlags $BuildDir/llvm-project/llvm \
         2>&1 | tee $LogDir/llvm.configure-Phase$Phase-$Flavor.log
+    env CC="$c_compiler" CXX="$cxx_compiler" \
+        cmake -G "$generator" \
+        -DCMAKE_BUILD_TYPE=$BuildType -DLLVM_ENABLE_ASSERTIONS=$Assertions \
+        -DLLVM_ENABLE_PROJECTS="$project_list" \
+        $ExtraConfigureFlags $BuildDir/llvm-project/llvm \
+        2>&1 | tee $LogDir/llvm.configure-Phase$Phase-$Flavor.log
+
     cd $BuildDir
 }
 
@@ -267,44 +393,23 @@ function build_llvmCore() {
     Phase="$1"
     Flavor="$2"
     ObjDir="$3"
-    ExtraOpts=""
+    DestDir="$4"
 
-    if [ "$Flavor" = "Release-64" ]; then
-        ExtraOpts="EXTRA_OPTIONS=-m64"
+    Verbose="VERBOSE=1"
+    if [ ${MAKE} = 'ninja' ]; then
+      Verbose="-v"
     fi
 
     cd $ObjDir
     echo "# Compiling llvm $Release-$RC $Flavor"
-    echo "# ${MAKE} -j $NumJobs VERBOSE=1 $ExtraOpts"
-    ${MAKE} -j $NumJobs VERBOSE=1 $ExtraOpts \
+    echo "# ${MAKE} -j $NumJobs $Verbose"
+    ${MAKE} -j $NumJobs $Verbose \
         2>&1 | tee $LogDir/llvm.make-Phase$Phase-$Flavor.log
 
     echo "# Installing llvm $Release-$RC $Flavor"
     echo "# ${MAKE} install"
-    ${MAKE} install \
+    DESTDIR="${DestDir}" ${MAKE} install \
         2>&1 | tee $LogDir/llvm.install-Phase$Phase-$Flavor.log
-    cd $BuildDir
-}
-
-function build_dragonegg() {
-    Phase="$1"
-    Flavor="$2"
-    LLVMInstallDir="$3"
-    DragonEggObjDir="$4"
-    LLVM_CONFIG=$LLVMInstallDir/bin/llvm-config
-    TOP_DIR=$BuildDir/dragonegg.src
-
-    echo "# Targeted compiler: $gcc_compiler"
-
-    cd $DragonEggObjDir
-    echo "# Compiling phase $Phase dragonegg $Release-$RC $Flavor"
-    echo -n "# CXX=$cxx_compiler TOP_DIR=$TOP_DIR GCC=$gcc_compiler "
-    echo -n "LLVM_CONFIG=$LLVM_CONFIG ${MAKE} -f $TOP_DIR/Makefile "
-    echo "-j $NumJobs VERBOSE=1"
-    CXX="$cxx_compiler" TOP_DIR="$TOP_DIR" GCC="$gcc_compiler" \
-    LLVM_CONFIG="$LLVM_CONFIG" ${MAKE} -f $TOP_DIR/Makefile \
-        -j $NumJobs VERBOSE=1 \
-            2>&1 | tee $LogDir/dragonegg-Phase$Phase-$Flavor.log
     cd $BuildDir
 }
 
@@ -313,18 +418,87 @@ function test_llvmCore() {
     Flavor="$2"
     ObjDir="$3"
 
+    KeepGoing="-k"
+    if [ ${MAKE} = 'ninja' ]; then
+      # Ninja doesn't have a documented "keep-going-forever" mode, we need to
+      # set a limit on how many jobs can fail before we give up.
+      KeepGoing="-k 100"
+    fi
+
     cd $ObjDir
-    ${MAKE} -k check-all \
-        2>&1 | tee $LogDir/llvm.check-Phase$Phase-$Flavor.log
-    ${MAKE} -k unittests \
-        2>&1 | tee $LogDir/llvm.unittests-Phase$Phase-$Flavor.log
+    if ! ( ${MAKE} -j $NumJobs $KeepGoing check-all \
+        2>&1 | tee $LogDir/llvm.check-Phase$Phase-$Flavor.log ) ; then
+      deferred_error $Phase $Flavor "check-all failed"
+    fi
+
+    if [ $do_test_suite = 'yes' ]; then
+      cd $TestSuiteBuildDir
+      env CC="$c_compiler" CXX="$cxx_compiler" \
+          cmake $TestSuiteSrcDir -G "$generator" -DTEST_SUITE_LIT=$Lit
+
+      if ! ( ${MAKE} -j $NumJobs $KeepGoing check \
+          2>&1 | tee $LogDir/llvm.check-Phase$Phase-$Flavor.log ) ; then
+        deferred_error $Phase $Flavor "test suite failed"
+      fi
+    fi
     cd $BuildDir
 }
 
-set -e                          # Exit if any command fails
+# Clean RPATH. Libtool adds the build directory to the search path, which is
+# not necessary --- and even harmful --- for the binary packages we release.
+function clean_RPATH() {
+  if [ "$System" = "Darwin" -o "$System" = "SunOS" ]; then
+    return
+  fi
+  local InstallPath="$1"
+  for Candidate in `find $InstallPath/{bin,lib} -type f`; do
+    if file $Candidate | grep ELF | egrep 'executable|shared object' > /dev/null 2>&1 ; then
+      if rpath=`objdump -x $Candidate | grep 'RPATH'` ; then
+        rpath=`echo $rpath | sed -e's/^ *RPATH *//'`
+        if [ -n "$rpath" ]; then
+          newrpath=`echo $rpath | sed -e's/.*\(\$ORIGIN[^:]*\).*/\1/'`
+          chrpath -r $newrpath $Candidate 2>&1 > /dev/null 2>&1
+        fi
+      fi
+    fi
+  done
+}
+
+# Create a package of the release binaries.
+function package_release() {
+    cwd=`pwd`
+    cd $BuildDir/Phase3/Release
+    mv llvmCore-$Release-$RC.install/usr/local $Package
+    if [ "$use_gzip" = "yes" ]; then
+      tar cfz $BuildDir/$Package.tar.gz $Package
+    else
+      tar cfJ $BuildDir/$Package.tar.xz $Package
+    fi
+    mv $Package llvmCore-$Release-$RC.install/usr/local
+    cd $cwd
+}
+
+# Exit if any command fails
+# Note: pipefail is necessary for running build commands through
+# a pipe (i.e. it changes the output of ``false | tee /dev/null ; echo $?``)
+set -e
+set -o pipefail
 
 if [ "$do_checkout" = "yes" ]; then
     export_sources
+fi
+
+# Setup the test-suite.  Do this early so we can catch failures before
+# we do the full 3 stage build.
+if [ $do_test_suite = "yes" ]; then
+  SandboxDir="$BuildDir/sandbox"
+  Lit=$SandboxDir/bin/lit
+  TestSuiteBuildDir="$BuildDir/test-suite-build"
+  TestSuiteSrcDir="$BuildDir/llvm-test-suite"
+
+  virtualenv $SandboxDir
+  $SandboxDir/bin/python $BuildDir/llvm-project/llvm/utils/lit/setup.py install
+  mkdir -p $TestSuiteBuildDir
 fi
 
 (
@@ -334,9 +508,6 @@ if [ "$do_debug" = "yes" ]; then
 fi
 if [ "$do_asserts" = "yes" ]; then
     Flavors="$Flavors Release+Asserts"
-fi
-if [ "$do_64bit" = "yes" ]; then
-    Flavors="$Flavors Release-64"
 fi
 
 for Flavor in $Flavors ; do
@@ -352,168 +523,110 @@ for Flavor in $Flavors ; do
 
     c_compiler="$CC"
     cxx_compiler="$CXX"
-
     llvmCore_phase1_objdir=$BuildDir/Phase1/$Flavor/llvmCore-$Release-$RC.obj
-    llvmCore_phase1_installdir=$BuildDir/Phase1/$Flavor/llvmCore-$Release-$RC.install
-    dragonegg_phase1_objdir=$BuildDir/Phase1/$Flavor/DragonEgg-$Release-$RC.obj
+    llvmCore_phase1_destdir=$BuildDir/Phase1/$Flavor/llvmCore-$Release-$RC.install
 
     llvmCore_phase2_objdir=$BuildDir/Phase2/$Flavor/llvmCore-$Release-$RC.obj
-    llvmCore_phase2_installdir=$BuildDir/Phase2/$Flavor/llvmCore-$Release-$RC.install
-    llvmCore_de_phase2_objdir=$BuildDir/Phase2/$Flavor/llvmCore-DragonEgg-$Release-$RC.obj
-    llvmCore_de_phase2_installdir=$BuildDir/Phase2/$Flavor/llvmCore-DragonEgg-$Release-$RC.install
-    dragonegg_phase2_objdir=$BuildDir/Phase2/$Flavor/DragonEgg-$Release-$RC.obj
+    llvmCore_phase2_destdir=$BuildDir/Phase2/$Flavor/llvmCore-$Release-$RC.install
 
     llvmCore_phase3_objdir=$BuildDir/Phase3/$Flavor/llvmCore-$Release-$RC.obj
-    llvmCore_phase3_installdir=$BuildDir/Phase3/$Flavor/llvmCore-$Release-$RC.install
-    llvmCore_de_phase3_objdir=$BuildDir/Phase3/$Flavor/llvmCore-DragonEgg-$Release-$RC.obj
-    llvmCore_de_phase3_installdir=$BuildDir/Phase3/$Flavor/llvmCore-DragonEgg-$Release-$RC.install
-    dragonegg_phase3_objdir=$BuildDir/Phase3/$Flavor/DragonEgg-$Release-$RC.obj
+    llvmCore_phase3_destdir=$BuildDir/Phase3/$Flavor/llvmCore-$Release-$RC.install
 
     rm -rf $llvmCore_phase1_objdir
-    rm -rf $llvmCore_phase1_installdir
-    rm -rf $dragonegg_phase1_objdir
+    rm -rf $llvmCore_phase1_destdir
 
     rm -rf $llvmCore_phase2_objdir
-    rm -rf $llvmCore_phase2_installdir
-    rm -rf $llvmCore_de_phase2_objdir
-    rm -rf $llvmCore_de_phase2_installdir
-    rm -rf $dragonegg_phase2_objdir
+    rm -rf $llvmCore_phase2_destdir
 
     rm -rf $llvmCore_phase3_objdir
-    rm -rf $llvmCore_phase3_installdir
-    rm -rf $llvmCore_de_phase3_objdir
-    rm -rf $llvmCore_de_phase3_installdir
-    rm -rf $dragonegg_phase3_objdir
+    rm -rf $llvmCore_phase3_destdir
 
     mkdir -p $llvmCore_phase1_objdir
-    mkdir -p $llvmCore_phase1_installdir
-    mkdir -p $dragonegg_phase1_objdir
+    mkdir -p $llvmCore_phase1_destdir
 
     mkdir -p $llvmCore_phase2_objdir
-    mkdir -p $llvmCore_phase2_installdir
-    mkdir -p $llvmCore_de_phase2_objdir
-    mkdir -p $llvmCore_de_phase2_installdir
-    mkdir -p $dragonegg_phase2_objdir
+    mkdir -p $llvmCore_phase2_destdir
 
     mkdir -p $llvmCore_phase3_objdir
-    mkdir -p $llvmCore_phase3_installdir
-    mkdir -p $llvmCore_de_phase3_objdir
-    mkdir -p $llvmCore_de_phase3_installdir
-    mkdir -p $dragonegg_phase3_objdir
+    mkdir -p $llvmCore_phase3_destdir
 
     ############################################################################
     # Phase 1: Build llvmCore and clang
     echo "# Phase 1: Building llvmCore"
-    configure_llvmCore 1 $Flavor \
-        $llvmCore_phase1_objdir $llvmCore_phase1_installdir
+    configure_llvmCore 1 $Flavor $llvmCore_phase1_objdir
     build_llvmCore 1 $Flavor \
-        $llvmCore_phase1_objdir
+        $llvmCore_phase1_objdir $llvmCore_phase1_destdir
+    clean_RPATH $llvmCore_phase1_destdir/usr/local
 
-    # Test clang
-    if [ "$do_clang" = "yes" ]; then
-        ########################################################################
-        # Phase 2: Build llvmCore with newly built clang from phase 1.
-        c_compiler=$llvmCore_phase1_installdir/bin/clang
-        cxx_compiler=$llvmCore_phase1_installdir/bin/clang++
-        echo "# Phase 2: Building llvmCore"
-        configure_llvmCore 2 $Flavor \
-            $llvmCore_phase2_objdir $llvmCore_phase2_installdir
-        build_llvmCore 2 $Flavor \
-            $llvmCore_phase2_objdir
+    ########################################################################
+    # Phase 2: Build llvmCore with newly built clang from phase 1.
+    c_compiler=$llvmCore_phase1_destdir/usr/local/bin/clang
+    cxx_compiler=$llvmCore_phase1_destdir/usr/local/bin/clang++
+    echo "# Phase 2: Building llvmCore"
+    configure_llvmCore 2 $Flavor $llvmCore_phase2_objdir
+    build_llvmCore 2 $Flavor \
+        $llvmCore_phase2_objdir $llvmCore_phase2_destdir
+    clean_RPATH $llvmCore_phase2_destdir/usr/local
 
-        ########################################################################
-        # Phase 3: Build llvmCore with newly built clang from phase 2.
-        c_compiler=$llvmCore_phase2_installdir/bin/clang
-        cxx_compiler=$llvmCore_phase2_installdir/bin/clang++
-        echo "# Phase 3: Building llvmCore"
-        configure_llvmCore 3 $Flavor \
-            $llvmCore_phase3_objdir $llvmCore_phase3_installdir
-        build_llvmCore 3 $Flavor \
-            $llvmCore_phase3_objdir
+    ########################################################################
+    # Phase 3: Build llvmCore with newly built clang from phase 2.
+    c_compiler=$llvmCore_phase2_destdir/usr/local/bin/clang
+    cxx_compiler=$llvmCore_phase2_destdir/usr/local/bin/clang++
+    echo "# Phase 3: Building llvmCore"
+    configure_llvmCore 3 $Flavor $llvmCore_phase3_objdir
+    build_llvmCore 3 $Flavor \
+        $llvmCore_phase3_objdir $llvmCore_phase3_destdir
+    clean_RPATH $llvmCore_phase3_destdir/usr/local
 
-        ########################################################################
-        # Testing: Test phase 3
-        echo "# Testing - built with clang"
-        test_llvmCore 3 $Flavor $llvmCore_phase3_objdir
+    ########################################################################
+    # Testing: Test phase 3
+    c_compiler=$llvmCore_phase3_destdir/usr/local/bin/clang
+    cxx_compiler=$llvmCore_phase3_destdir/usr/local/bin/clang++
+    echo "# Testing - built with clang"
+    test_llvmCore 3 $Flavor $llvmCore_phase3_objdir
 
-        ########################################################################
-        # Compare .o files between Phase2 and Phase3 and report which ones
-        # differ.
-        if [ "$do_compare" = "yes" ]; then
-            echo
-            echo "# Comparing Phase 2 and Phase 3 files"
-            for o in `find $llvmCore_phase2_objdir -name '*.o'` ; do
-                p3=`echo $o | sed -e 's,Phase2,Phase3,'`
-                if ! cmp --ignore-initial=16 $o $p3 > /dev/null 2>&1 ; then
-                    echo "file `basename $o` differs between phase 2 and phase 3"
-                fi
-            done
-        fi
-    fi
-
-    # Test dragonegg
-    if [ "$do_dragonegg" = "yes" ]; then
-        # Build dragonegg using the targeted gcc.  This isn't necessary, but
-        # helps avoid using broken versions of gcc (which are legion), tests
-        # that the targeted gcc is basically sane and is consistent with the
-        # later phases in which the targeted gcc + dragonegg are used.
-        c_compiler="$gcc_compiler"
-        cxx_compiler="$gxx_compiler"
-        build_dragonegg 1 $Flavor $llvmCore_phase1_installdir $dragonegg_phase1_objdir
-
-        ########################################################################
-        # Phase 2: Build llvmCore with newly built dragonegg from phase 1.
-        c_compiler="$gcc_compiler -fplugin=$dragonegg_phase1_objdir/dragonegg.so"
-        cxx_compiler="$gxx_compiler -fplugin=$dragonegg_phase1_objdir/dragonegg.so"
-        echo "# Phase 2: Building llvmCore with dragonegg"
-        configure_llvmCore 2 $Flavor \
-            $llvmCore_de_phase2_objdir $llvmCore_de_phase2_installdir
-        build_llvmCore 2 $Flavor \
-            $llvmCore_de_phase2_objdir
-        build_dragonegg 2 $Flavor $llvmCore_de_phase2_installdir $dragonegg_phase2_objdir
-
-        ########################################################################
-        # Phase 3: Build llvmCore with newly built clang from phase 2.
-        c_compiler="$gcc_compiler -fplugin=$dragonegg_phase2_objdir/dragonegg.so"
-        cxx_compiler="$gxx_compiler -fplugin=$dragonegg_phase2_objdir/dragonegg.so"
-        echo "# Phase 3: Building llvmCore with dragonegg"
-        configure_llvmCore 3 $Flavor \
-            $llvmCore_de_phase3_objdir $llvmCore_de_phase3_installdir
-        build_llvmCore 3 $Flavor \
-            $llvmCore_de_phase3_objdir
-        build_dragonegg 3 $Flavor $llvmCore_de_phase3_installdir $dragonegg_phase3_objdir
-
-        ########################################################################
-        # Testing: Test phase 3
-        c_compiler="$gcc_compiler -fplugin=$dragonegg_phase3_objdir/dragonegg.so"
-        cxx_compiler="$gxx_compiler -fplugin=$dragonegg_phase3_objdir/dragonegg.so"
-        echo "# Testing - built with dragonegg"
-        test_llvmCore 3 $Flavor $llvmCore_de_phase3_objdir
-
-        ########################################################################
-        # Compare .o files between Phase2 and Phase3 and report which ones differ.
+    ########################################################################
+    # Compare .o files between Phase2 and Phase3 and report which ones
+    # differ.
+    if [ "$do_compare" = "yes" ]; then
         echo
         echo "# Comparing Phase 2 and Phase 3 files"
-        for o in `find $llvmCore_de_phase2_objdir -name '*.o'` \
-          `find $dragonegg_phase2_objdir -name '*.o'` ; do
-            p3=`echo $o | sed -e 's,Phase2,Phase3,'`
-            if ! cmp --ignore-initial=16 $o $p3 > /dev/null 2>&1 ; then
-                echo "file `basename $o` differs between dragonegg phase 2 and phase 3"
+        for p2 in `find $llvmCore_phase2_objdir -name '*.o'` ; do
+            p3=`echo $p2 | sed -e 's,Phase2,Phase3,'`
+            # Substitute 'Phase2' for 'Phase3' in the Phase 2 object file in
+            # case there are build paths in the debug info. Do the same sub-
+            # stitution on both files in case the string occurrs naturally.
+            if ! cmp -s \
+                <(env LC_CTYPE=C sed -e 's,Phase1,Phase2,g' -e 's,Phase2,Phase3,g' $p2) \
+                <(env LC_CTYPE=C sed -e 's,Phase1,Phase2,g' -e 's,Phase2,Phase3,g' $p3) \
+                16 16; then
+                echo "file `basename $p2` differs between phase 2 and phase 3"
             fi
         done
     fi
-
-    # Otherwise just test the core.
-    if [ "$do_clang" != "yes" -a "$do_dragonegg" != "yes" ]; then
-        echo "# Testing - built with system compiler"
-        test_llvmCore 1 $Flavor $llvmCore_phase1_objdir
-    fi
 done
+
 ) 2>&1 | tee $LogDir/testing.$Release-$RC.log
+
+if [ "$use_gzip" = "yes" ]; then
+  echo "# Packaging the release as $Package.tar.gz"
+else
+  echo "# Packaging the release as $Package.tar.xz"
+fi
+package_release
 
 set +e
 
 # Woo hoo!
 echo "### Testing Finished ###"
 echo "### Logs: $LogDir"
+
+echo "### Errors:"
+if [ -s "$LogDir/deferred_errors.log" ]; then
+  cat "$LogDir/deferred_errors.log"
+  exit 1
+else
+  echo "None."
+fi
+
 exit 0

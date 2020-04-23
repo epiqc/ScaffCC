@@ -1,16 +1,15 @@
-//===--- DeltaAlgorithm.h - A Set Minimization Algorithm -------*- C++ -*--===//
+//===- DeltaAlgorithm.h - A Set Minimization Algorithm ---------*- C++ -*--===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_ADT_DELTAALGORITHM_H
 #define LLVM_ADT_DELTAALGORITHM_H
 
-#include <vector>
 #include <set>
+#include <vector>
 
 namespace llvm {
 
@@ -35,52 +34,54 @@ namespace llvm {
 /// predicate.
 class DeltaAlgorithm {
 public:
-  typedef unsigned change_ty;
+  using change_ty = unsigned;
   // FIXME: Use a decent data structure.
-  typedef std::set<change_ty> changeset_ty;
-  typedef std::vector<changeset_ty> changesetlist_ty;
+  using changeset_ty = std::set<change_ty>;
+  using changesetlist_ty = std::vector<changeset_ty>;
 
 private:
   /// Cache of failed test results. Successful test results are never cached
   /// since we always reduce following a success.
   std::set<changeset_ty> FailedTestsCache;
 
-  /// GetTestResult - Get the test result for the \arg Changes from the
+  /// GetTestResult - Get the test result for the \p Changes from the
   /// cache, executing the test if necessary.
   ///
   /// \param Changes - The change set to test.
   /// \return - The test result.
   bool GetTestResult(const changeset_ty &Changes);
 
-  /// Split - Partition a set of changes \arg S into one or two subsets.
+  /// Split - Partition a set of changes \p S into one or two subsets.
   void Split(const changeset_ty &S, changesetlist_ty &Res);
 
-  /// Delta - Minimize a set of \arg Changes which has been partioned into
+  /// Delta - Minimize a set of \p Changes which has been partioned into
   /// smaller sets, by attempting to remove individual subsets.
   changeset_ty Delta(const changeset_ty &Changes,
                      const changesetlist_ty &Sets);
 
-  /// Search - Search for a subset (or subsets) in \arg Sets which can be
-  /// removed from \arg Changes while still satisfying the predicate.
+  /// Search - Search for a subset (or subsets) in \p Sets which can be
+  /// removed from \p Changes while still satisfying the predicate.
   ///
   /// \param Res - On success, a subset of Changes which satisfies the
   /// predicate.
   /// \return - True on success.
   bool Search(const changeset_ty &Changes, const changesetlist_ty &Sets,
               changeset_ty &Res);
-              
+
 protected:
   /// UpdatedSearchState - Callback used when the search state changes.
   virtual void UpdatedSearchState(const changeset_ty &Changes,
                                   const changesetlist_ty &Sets) {}
 
-  /// ExecuteOneTest - Execute a single test predicate on the change set \arg S.
+  /// ExecuteOneTest - Execute a single test predicate on the change set \p S.
   virtual bool ExecuteOneTest(const changeset_ty &S) = 0;
+
+  DeltaAlgorithm& operator=(const DeltaAlgorithm&) = default;
 
 public:
   virtual ~DeltaAlgorithm();
 
-  /// Run - Minimize the set \arg Changes by executing \see ExecuteOneTest() on
+  /// Run - Minimize the set \p Changes by executing \see ExecuteOneTest() on
   /// subsets of changes and returning the smallest set which still satisfies
   /// the test predicate.
   changeset_ty Run(const changeset_ty &Changes);
@@ -88,4 +89,4 @@ public:
 
 } // end namespace llvm
 
-#endif
+#endif // LLVM_ADT_DELTAALGORITHM_H

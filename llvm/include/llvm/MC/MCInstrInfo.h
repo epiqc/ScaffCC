@@ -1,9 +1,8 @@
 //===-- llvm/MC/MCInstrInfo.h - Target Instruction Info ---------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -20,9 +19,7 @@
 namespace llvm {
 
 //---------------------------------------------------------------------------
-///
-/// MCInstrInfo - Interface to description of machine instruction set
-///
+/// Interface to description of machine instruction set.
 class MCInstrInfo {
   const MCInstrDesc *Desc;          // Raw array to allow static init'n
   const unsigned *InstrNameIndices; // Array for name indices in InstrNameData
@@ -30,8 +27,8 @@ class MCInstrInfo {
   unsigned NumOpcodes;              // Number of entries in the desc array
 
 public:
-  /// InitMCInstrInfo - Initialize MCInstrInfo, called by TableGen
-  /// auto-generated routines. *DO NOT USE*.
+  /// Initialize MCInstrInfo, called by TableGen auto-generated routines.
+  /// *DO NOT USE*.
   void InitMCInstrInfo(const MCInstrDesc *D, const unsigned *NI, const char *ND,
                        unsigned NO) {
     Desc = D;
@@ -42,18 +39,17 @@ public:
 
   unsigned getNumOpcodes() const { return NumOpcodes; }
 
-  /// get - Return the machine instruction descriptor that corresponds to the
+  /// Return the machine instruction descriptor that corresponds to the
   /// specified instruction opcode.
-  ///
   const MCInstrDesc &get(unsigned Opcode) const {
     assert(Opcode < NumOpcodes && "Invalid opcode!");
     return Desc[Opcode];
   }
 
-  /// getName - Returns the name for the instructions with the given opcode.
-  const char *getName(unsigned Opcode) const {
+  /// Returns the name for the instructions with the given opcode.
+  StringRef getName(unsigned Opcode) const {
     assert(Opcode < NumOpcodes && "Invalid opcode!");
-    return &InstrNameData[InstrNameIndices[Opcode]];
+    return StringRef(&InstrNameData[InstrNameIndices[Opcode]]);
   }
 };
 

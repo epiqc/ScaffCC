@@ -14,7 +14,7 @@ id objc_getClass(const char *s);
 - (int) instance_func0;
 @end
 
-@interface Derived: Object
+@interface Derived: Object // expected-note {{receiver is instance of class declared here}}
 + (int) class_func1;
 + (int) class_func2;
 + (int) class_func3;
@@ -35,7 +35,7 @@ id objc_getClass(const char *s);
 @implementation Derived
 + (int) class_func1
 {
-   int i = (size_t)[self class_func0];       // expected-warning {{class method '+class_func0' not found (return type defaults to 'id')}}
+   int i = (size_t)[self class_func0];       // expected-warning {{class method '+class_func0' not found (return type defaults to 'id'); did you mean '+class_func}}
    return i + (size_t)[super class_func0];   // expected-warning {{class method '+class_func0' not found (return type defaults to 'id')}}
 }
 + (int) class_func2
@@ -68,7 +68,7 @@ id objc_getClass(const char *s);
 }
 - (int) instance_func1
 {
-   int i = (size_t)[self instance_func0];     // expected-warning {{instance method '-instance_func0' not found (return type defaults to 'id')}}
+   int i = (size_t)[self instance_func0];     // expected-warning {{instance method '-instance_func0' not found (return type defaults to 'id'); did you mean}}
    return i + (size_t)[super instance_func0]; // expected-warning {{'Object' may not respond to 'instance_func0'}}
 }
 - (int) instance_func2
@@ -106,3 +106,18 @@ id objc_getClass(const char *s);
 }
 @end
 
+@class C;
+@interface A // expected-note {{receiver is instance of class declared here}}
+- (instancetype)initWithCoder:(A *)coder;
+@end
+
+@interface B : A
+@end
+
+@implementation B
+- (instancetype)initWithCoder:(C *)coder {
+  if (0 != (self = [super initWithCode:code])) // expected-error {{use of undeclared identifier 'code'}} expected-warning {{instance method '-initWithCode:' not found}}
+    return (void *)0;
+  return (void *)0;
+}
+@end

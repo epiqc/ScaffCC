@@ -13,7 +13,7 @@ namespace test0 {
   extern B f(); 
   B b1;
 
-  void func(const int ci, const char cc); // expected-note {{candidate function}}
+  void func(const int ci, const char cc);
   void func(const char ci, const B b); // expected-note {{candidate function}}
   void func(const B b, const int ci); // expected-note {{candidate function}}
 
@@ -64,4 +64,9 @@ namespace rdar8876150 {
   struct D : B, C { };
 
   bool f(D d) { return !d; } // expected-error{{ambiguous conversion from derived class 'rdar8876150::D' to base class 'rdar8876150::A':}}
+}
+
+namespace assignment {
+  struct A { operator short(); operator bool(); }; // expected-note 2{{candidate}}
+  void f(int n, A a) { n = a; } // expected-error{{ambiguous}}
 }

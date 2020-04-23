@@ -1,3 +1,6 @@
+// RUN: %clang_cc1 -fsyntax-only -verify -std=c++98 %s
+// RUN: %clang_cc1 -fsyntax-only -verify -std=c++11 %s
+// RUN: %clang_cc1 -fsyntax-only -verify -std=c++14 %s
 // RUN: %clang_cc1 -fsyntax-only -verify %s
 
 // C++'0x [class.friend] p1:
@@ -7,8 +10,8 @@
 //   special access rights to the friends, but they do not make the nominated
 //   friends members of the befriending class.
 
-struct S { static void f(); };
-S* g() { return 0; }
+struct S { static void f(); }; // expected-note 2 {{'S' declared here}}
+S* g() { return 0; } // expected-note 2 {{'g' declared here}}
 
 struct X {
   friend struct S;
@@ -19,8 +22,8 @@ void test1() {
   S s;
   g()->f();
   S::f();
-  X::g(); // expected-error{{no member named 'g' in 'X'}}
-  X::S x_s; // expected-error{{no member named 'S' in 'X'}}
+  X::g(); // expected-error{{no member named 'g' in 'X'; did you mean simply 'g'?}}
+  X::S x_s; // expected-error{{no type named 'S' in 'X'; did you mean simply 'S'?}}
   X x;
   x.g(); // expected-error{{no member named 'g' in 'X'}}
 }
@@ -36,24 +39,24 @@ namespace N {
     friend struct S2* g2();
   };
 
-  struct S2 { static void f2(); };
-  S2* g2() { return 0; }
+  struct S2 { static void f2(); }; // expected-note 2 {{'S2' declared here}}
+  S2* g2() { return 0; } // expected-note 2 {{'g2' declared here}}
 
   void test() {
     g()->f();
     S s;
     S::f();
-    X::g(); // expected-error{{no member named 'g' in 'N::X'}}
-    X::S x_s; // expected-error{{no member named 'S' in 'N::X'}}
+    X::g(); // expected-error{{no member named 'g' in 'N::X'; did you mean simply 'g'?}}
+    X::S x_s; // expected-error{{no type named 'S' in 'N::X'; did you mean simply 'S'?}}
     X x;
     x.g(); // expected-error{{no member named 'g' in 'N::X'}}
 
     g2();
     S2 s2;
-    ::g2(); // expected-error{{no member named 'g2' in the global namespace}}
-    ::S2 g_s2; // expected-error{{no member named 'S2' in the global namespace}}
-    X::g2(); // expected-error{{no member named 'g2' in 'N::X'}}
-    X::S2 x_s2; // expected-error{{no member named 'S2' in 'N::X'}}
+    ::g2(); // expected-error{{no member named 'g2' in the global namespace; did you mean simply 'g2'?}}
+    ::S2 g_s2; // expected-error{{no type named 'S2' in the global namespace; did you mean simply 'S2'?}}
+    X::g2(); // expected-error{{no member named 'g2' in 'N::X'; did you mean simply 'g2'?}}
+    X::S2 x_s2; // expected-error{{no type named 'S2' in 'N::X'; did you mean simply 'S2'?}}
     x.g2(); // expected-error{{no member named 'g2' in 'N::X'}}
   }
 }
@@ -64,6 +67,7 @@ namespace test0 {
   };
 
   class MemberFriend {
+  public:
     void test();
   };
 
@@ -214,9 +218,17 @@ namespace test6 {
   struct A {};
 
   struct B {
-    friend A::A();
+    friend
+#if __cplusplus >= 201103L
+      constexpr
+#endif
+      A::A();
     friend A::~A();
-    friend A &A::operator=(const A&);
+    friend
+#if __cplusplus >= 201402L
+      constexpr
+#endif
+      A &A::operator=(const A&);
   };
 }
 
@@ -231,7 +243,11 @@ namespace test7 {
   class A {
     friend void X<int>::foo();
     friend X<int>::X();
-    friend X<int>::X(const X&);
+    friend
+#if __cplusplus >= 201103L
+      constexpr
+#endif
+      X<int>::X(const X&);
 
   private:
     A(); // expected-note 2 {{declared private here}}
@@ -286,22 +302,22 @@ namespace test9 {
 
 // PR7230
 namespace test10 {
-  extern "C" void f(void);
-  extern "C" void g(void);
+  extern "C" void test10_f(void);
+  extern "C" void test10_g(void);
 
   namespace NS {
     class C {
       void foo(void); // expected-note {{declared private here}}
-      friend void test10::f(void);
+      friend void test10::test10_f(void);
     };
     static C* bar;
   }
 
-  void f(void) {
+  void test10_f(void) {
     NS::bar->foo();
   }
 
-  void g(void) {
+  void test10_g(void) {
     NS::bar->foo(); // expected-error {{private member}}
   }
 }
@@ -309,6 +325,7 @@ namespace test10 {
 // PR8705
 namespace test11 {
   class A {
+  public:
     void test0(int);
     void test1(int);
     void test2(int);
@@ -353,4 +370,20 @@ namespace PR9103 {
       base::foo();
     }
   };
+}
+
+// PR13642.  When computing the effective context, we were walking up
+// the DC chain for the canonical decl, which is unfortunate if that's
+// (e.g.) a friend declaration.
+namespace test14 {
+  class A {
+    class B { // expected-note {{implicitly declared private here}}
+      static int i;
+      friend void c();
+    };
+  };
+
+  void c() {
+    A::B::i = 5; // expected-error {{'B' is a private member of 'test14::A'}}
+  }
 }

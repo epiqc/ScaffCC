@@ -1,20 +1,18 @@
-(*===-- llvm_bitreader.ml - LLVM Ocaml Interface ----------------*- C++ -*-===*
+(*===-- llvm_bitreader.ml - LLVM OCaml Interface --------------*- OCaml -*-===*
  *
- *                     The LLVM Compiler Infrastructure
- *
- * This file is distributed under the University of Illinois Open Source
- * License. See LICENSE.TXT for details.
+ * Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+ * See https://llvm.org/LICENSE.txt for license information.
+ * SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
  *
  *===----------------------------------------------------------------------===*)
 
-
 exception Error of string
 
-external register_exns : exn -> unit = "llvm_register_bitreader_exns"
-let _ = register_exns (Error "")
+let () = Callback.register_exception "Llvm_bitreader.Error" (Error "")
 
-external get_module : Llvm.llcontext -> Llvm.llmemorybuffer -> Llvm.llmodule
-                    = "llvm_get_module"
-
-external parse_bitcode : Llvm.llcontext -> Llvm.llmemorybuffer -> Llvm.llmodule
-                       = "llvm_parse_bitcode"
+external get_module
+  : Llvm.llcontext -> Llvm.llmemorybuffer -> Llvm.llmodule
+  = "llvm_get_module"
+external parse_bitcode
+  : Llvm.llcontext -> Llvm.llmemorybuffer -> Llvm.llmodule
+  = "llvm_parse_bitcode"

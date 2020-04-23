@@ -1,7 +1,8 @@
+from __future__ import absolute_import
 import itertools
 
-import Util
-from ShCommands import Command, Pipeline, Seq
+import lit.util
+from lit.ShCommands import Command, GlobItem, Pipeline, Seq
 
 class ShLexer:
     def __init__(self, data, win32Escapes = False):
@@ -35,20 +36,22 @@ class ShLexer:
         if ('|' in chunk or '&' in chunk or 
             '<' in chunk or '>' in chunk or
             "'" in chunk or '"' in chunk or
-            '\\' in chunk):
+            ';' in chunk or '\\' in chunk):
             return None
         
         self.pos = self.pos - 1 + len(chunk)
-        return chunk
+        return GlobItem(chunk) if '*' in chunk or '?' in chunk else chunk
         
     def lex_arg_slow(self, c):
         if c in "'\"":
             str = self.lex_arg_quoted(c)
         else:
             str = c
+        unquoted_glob_char = False
+        quoted_glob_char = False
         while self.pos != self.end:
             c = self.look()
-            if c.isspace() or c in "|&":
+            if c.isspace() or c in "|&;":
                 break
             elif c in '><':
                 # This is an annoying case; we treat '2>' as a single token so
@@ -64,23 +67,39 @@ class ShLexer:
                 tok = self.lex_one_token()
                 assert isinstance(tok, tuple) and len(tok) == 1
                 return (tok[0], num)                    
-            elif c == '"':
+            elif c == '"' or c == "'":
                 self.eat()
-                str += self.lex_arg_quoted('"')
-            elif c == "'":
-                self.eat()
-                str += self.lex_arg_quoted("'")
+                quoted_arg = self.lex_arg_quoted(c)
+                if '*' in quoted_arg or '?' in quoted_arg:
+                    quoted_glob_char = True
+                str += quoted_arg
             elif not self.win32Escapes and c == '\\':
                 # Outside of a string, '\\' escapes everything.
                 self.eat()
                 if self.pos == self.end:
-                    Util.warning("escape at end of quoted argument in: %r" % 
-                                 self.data)
+                    lit.util.warning(
+                        "escape at end of quoted argument in: %r" % self.data)
                     return str
+                str += self.eat()
+            elif c in '*?':
+                unquoted_glob_char = True
                 str += self.eat()
             else:
                 str += self.eat()
-        return str
+        # If a quote character is present, lex_arg_quoted will remove the quotes
+        # and append the argument directly.  This causes a problem when the
+        # quoted portion contains a glob character, as the character will no
+        # longer be treated literally.  If glob characters occur *only* inside
+        # of quotes, then we can handle this by not globbing at all, and if
+        # glob characters occur *only* outside of quotes, we can still glob just
+        # fine.  But if a glob character occurs both inside and outside of
+        # quotes this presents a problem.  In practice this is such an obscure
+        # edge case that it doesn't seem worth the added complexity to support.
+        # By adding an assertion, it means some bot somewhere will catch this
+        # and flag the user of a non-portable test (which could almost certainly
+        # be re-written to work correctly without triggering this).
+        assert not (quoted_glob_char and unquoted_glob_char)
+        return GlobItem(str) if unquoted_glob_char else str
 
     def lex_arg_quoted(self, delim):
         str = ''
@@ -92,8 +111,8 @@ class ShLexer:
                 # Inside a '"' quoted string, '\\' only escapes the quote
                 # character and backslash, otherwise it is preserved.
                 if self.pos == self.end:
-                    Util.warning("escape at end of quoted argument in: %r" % 
-                                 self.data)
+                    lit.util.warning(
+                        "escape at end of quoted argument in: %r" % self.data)
                     return str
                 c = self.eat()
                 if c == '"': # 
@@ -104,7 +123,7 @@ class ShLexer:
                     str += '\\' + c
             else:
                 str += c
-        Util.warning("missing quote character in %r" % self.data)
+        lit.util.warning("missing quote character in %r" % self.data)
         return str
     
     def lex_arg_checked(self, c):
@@ -116,9 +135,11 @@ class ShLexer:
         reference = self.lex_arg_slow(c)
         if res is not None:
             if res != reference:
-                raise ValueError,"Fast path failure: %r != %r" % (res, reference)
+                raise ValueError("Fast path failure: %r != %r" % (
+                        res, reference))
             if self.pos != end:
-                raise ValueError,"Fast path failure: %r != %r" % (self.pos, end)
+                raise ValueError("Fast path failure: %r != %r" % (
+                        self.pos, end))
         return reference
         
     def lex_arg(self, c):
@@ -129,7 +150,7 @@ class ShLexer:
         lex_one_token - Lex a single 'sh' token. """
 
         c = self.eat()
-        if c in ';!':
+        if c == ';':
             return (c,)
         if c == '|':
             if self.maybe_eat('|'):
@@ -166,28 +187,28 @@ class ShLexer:
 ###
  
 class ShParser:
-    def __init__(self, data, win32Escapes = False):
+    def __init__(self, data, win32Escapes = False, pipefail = False):
         self.data = data
+        self.pipefail = pipefail
         self.tokens = ShLexer(data, win32Escapes = win32Escapes).lex()
     
     def lex(self):
-        try:
-            return self.tokens.next()
-        except StopIteration:
-            return None
+        for item in self.tokens:
+            return item
+        return None
     
     def look(self):
-        next = self.lex()
-        if next is not None:
-            self.tokens = itertools.chain([next], self.tokens)
-        return next
+        token = self.lex()
+        if token is not None:
+            self.tokens = itertools.chain([token], self.tokens)
+        return token
     
     def parse_command(self):
         tok = self.lex()
         if not tok:
-            raise ValueError,"empty command!"
+            raise ValueError("empty command!")
         if isinstance(tok, tuple):
-            raise ValueError,"syntax error near unexpected token %r" % tok[0]
+            raise ValueError("syntax error near unexpected token %r" % tok[0])
         
         args = [tok]
         redirects = []
@@ -199,7 +220,7 @@ class ShParser:
                 break
 
             # If this is an argument, just add it to the current command.
-            if isinstance(tok, str):
+            if isinstance(tok, (str, GlobItem)):
                 args.append(self.lex())
                 continue
 
@@ -212,22 +233,19 @@ class ShParser:
             op = self.lex()
             arg = self.lex()
             if not arg:
-                raise ValueError,"syntax error near token %r" % op[0]
+                raise ValueError("syntax error near token %r" % op[0])
             redirects.append((op, arg))
 
         return Command(args, redirects)
 
     def parse_pipeline(self):
         negate = False
-        if self.look() == ('!',):
-            self.lex()
-            negate = True
 
         commands = [self.parse_command()]
         while self.look() == ('|',):
             self.lex()
             commands.append(self.parse_command())
-        return Pipeline(commands, negate)
+        return Pipeline(commands, negate, self.pipefail)
             
     def parse(self):
         lhs = self.parse_pipeline()
@@ -237,117 +255,11 @@ class ShParser:
             assert isinstance(operator, tuple) and len(operator) == 1
 
             if not self.look():
-                raise ValueError, "missing argument to operator %r" % operator[0]
+                raise ValueError(
+                    "missing argument to operator %r" % operator[0])
             
             # FIXME: Operator precedence!!
             lhs = Seq(lhs, operator[0], self.parse_pipeline())
 
         return lhs
 
-###
-
-import unittest
-
-class TestShLexer(unittest.TestCase):
-    def lex(self, str, *args, **kwargs):
-        return list(ShLexer(str, *args, **kwargs).lex())
-
-    def test_basic(self):
-        self.assertEqual(self.lex('a|b>c&d<e'),
-                         ['a', ('|',), 'b', ('>',), 'c', ('&',), 'd', 
-                          ('<',), 'e'])
-
-    def test_redirection_tokens(self):
-        self.assertEqual(self.lex('a2>c'),
-                         ['a2', ('>',), 'c'])
-        self.assertEqual(self.lex('a 2>c'),
-                         ['a', ('>',2), 'c'])
-        
-    def test_quoting(self):
-        self.assertEqual(self.lex(""" 'a' """),
-                         ['a'])
-        self.assertEqual(self.lex(""" "hello\\"world" """),
-                         ['hello"world'])
-        self.assertEqual(self.lex(""" "hello\\'world" """),
-                         ["hello\\'world"])
-        self.assertEqual(self.lex(""" "hello\\\\world" """),
-                         ["hello\\world"])
-        self.assertEqual(self.lex(""" he"llo wo"rld """),
-                         ["hello world"])
-        self.assertEqual(self.lex(""" a\\ b a\\\\b """),
-                         ["a b", "a\\b"])
-        self.assertEqual(self.lex(""" "" "" """),
-                         ["", ""])
-        self.assertEqual(self.lex(""" a\\ b """, win32Escapes = True),
-                         ['a\\', 'b'])
-
-class TestShParse(unittest.TestCase):
-    def parse(self, str):
-        return ShParser(str).parse()
-
-    def test_basic(self):
-        self.assertEqual(self.parse('echo hello'),
-                         Pipeline([Command(['echo', 'hello'], [])], False))
-        self.assertEqual(self.parse('echo ""'),
-                         Pipeline([Command(['echo', ''], [])], False))
-        self.assertEqual(self.parse("""echo -DFOO='a'"""),
-                         Pipeline([Command(['echo', '-DFOO=a'], [])], False))
-        self.assertEqual(self.parse('echo -DFOO="a"'),
-                         Pipeline([Command(['echo', '-DFOO=a'], [])], False))
-
-    def test_redirection(self):
-        self.assertEqual(self.parse('echo hello > c'),
-                         Pipeline([Command(['echo', 'hello'], 
-                                           [((('>'),), 'c')])], False))
-        self.assertEqual(self.parse('echo hello > c >> d'),
-                         Pipeline([Command(['echo', 'hello'], [(('>',), 'c'),
-                                                     (('>>',), 'd')])], False))
-        self.assertEqual(self.parse('a 2>&1'),
-                         Pipeline([Command(['a'], [(('>&',2), '1')])], False))
-
-    def test_pipeline(self):
-        self.assertEqual(self.parse('a | b'),
-                         Pipeline([Command(['a'], []),
-                                   Command(['b'], [])],
-                                  False))
-
-        self.assertEqual(self.parse('a | b | c'),
-                         Pipeline([Command(['a'], []),
-                                   Command(['b'], []),
-                                   Command(['c'], [])],
-                                  False))
-
-        self.assertEqual(self.parse('! a'),
-                         Pipeline([Command(['a'], [])],
-                                  True))
-
-    def test_list(self):        
-        self.assertEqual(self.parse('a ; b'),
-                         Seq(Pipeline([Command(['a'], [])], False),
-                             ';',
-                             Pipeline([Command(['b'], [])], False)))
-
-        self.assertEqual(self.parse('a & b'),
-                         Seq(Pipeline([Command(['a'], [])], False),
-                             '&',
-                             Pipeline([Command(['b'], [])], False)))
-
-        self.assertEqual(self.parse('a && b'),
-                         Seq(Pipeline([Command(['a'], [])], False),
-                             '&&',
-                             Pipeline([Command(['b'], [])], False)))
-
-        self.assertEqual(self.parse('a || b'),
-                         Seq(Pipeline([Command(['a'], [])], False),
-                             '||',
-                             Pipeline([Command(['b'], [])], False)))
-
-        self.assertEqual(self.parse('a && b || c'),
-                         Seq(Seq(Pipeline([Command(['a'], [])], False),
-                                 '&&',
-                                 Pipeline([Command(['b'], [])], False)),
-                             '||',
-                             Pipeline([Command(['c'], [])], False)))
-
-if __name__ == '__main__':
-    unittest.main()

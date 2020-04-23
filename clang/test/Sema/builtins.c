@@ -1,8 +1,8 @@
-// RUN: %clang_cc1 %s -fsyntax-only -verify -pedantic -Wno-string-plus-int -triple=i686-apple-darwin9
+// RUN: %clang_cc1 %s -fsyntax-only -verify -pedantic -Wstrlcpy-strlcat-size -Wno-string-plus-int -triple=i686-apple-darwin9
 // This test needs to set the target because it uses __builtin_ia32_vec_ext_v4si
 
 int test1(float a, int b) {
-  return __builtin_isless(a, b);
+  return __builtin_isless(a, b); // expected-note {{declared here}}
 }
 int test2(int a, int b) {
   return __builtin_islessequal(a, b);  // expected-error {{floating point type}}
@@ -40,7 +40,7 @@ void test9(short v) {
 
   old = __sync_fetch_and_add();  // expected-error {{too few arguments to function call}}
   old = __sync_fetch_and_add(&old);  // expected-error {{too few arguments to function call}}
-  old = __sync_fetch_and_add((unsigned*)0, 42i); // expected-warning {{imaginary constants are an extension}}
+  old = __sync_fetch_and_add((unsigned*)0, 42i); // expected-warning {{imaginary constants are a GNU extension}}
 
   // PR7600: Pointers are implicitly casted to integers and back.
   void *old_ptr = __sync_val_compare_and_swap((void**)0, 0, 0);
@@ -51,6 +51,25 @@ void test9(short v) {
   }
 }
 
+// overloaded atomics should be declared only once.
+void test9_1(volatile int* ptr, int val) {
+  __sync_fetch_and_add_4(ptr, val);
+}
+void test9_2(volatile int* ptr, int val) {
+  __sync_fetch_and_add(ptr, val);
+}
+void test9_3(volatile int* ptr, int val) {
+  __sync_fetch_and_add_4(ptr, val);
+  __sync_fetch_and_add(ptr, val);
+  __sync_fetch_and_add(ptr, val);
+  __sync_fetch_and_add_4(ptr, val);
+  __sync_fetch_and_add_4(ptr, val);
+}
+
+void test9_4(volatile int* ptr, int val) {
+  // expected-warning@+1 {{the semantics of this intrinsic changed with GCC version 4.4 - the newer semantics are provided here}}
+  __sync_fetch_and_nand(ptr, val);
+}
 
 // rdar://7236819
 void test10(void) __attribute__((noreturn));
@@ -103,6 +122,14 @@ int test16() {
          __builtin_constant_p(1, 2); // expected-error {{too many arguments}}
 }
 
+// __builtin_constant_p cannot resolve non-constants as a file scoped array.
+int expr;
+char y[__builtin_constant_p(expr) ? -1 : 1]; // no warning, the builtin is false.
+
+// no warning, the builtin is false.
+struct foo { int a; };
+struct foo x = (struct foo) { __builtin_constant_p(42) ? 37 : 927 };
+
 const int test17_n = 0;
 const char test17_c[] = {1, 2, 3, 0};
 const char test17_d[] = {1, 2, 3, 4};
@@ -142,6 +169,7 @@ void test17() {
   F(&test17_d);
   F((struct Aggregate){0, 1});
   F((IntVector){0, 1, 2, 3});
+  F(test17);
 
   // Ensure that a technique used in glibc is handled correctly.
 #define OPT(...) (__builtin_constant_p(__VA_ARGS__) && strlen(__VA_ARGS__) < 4)
@@ -161,4 +189,134 @@ void test17() {
 #undef OPT
 #undef T
 #undef F
+}
+
+void test18() {
+  char src[1024];
+  char dst[2048];
+  size_t result;
+  void *ptr;
+
+  ptr = __builtin___memccpy_chk(dst, src, '\037', sizeof(src), sizeof(dst));
+  result = __builtin___strlcpy_chk(dst, src, sizeof(dst), sizeof(dst));
+  result = __builtin___strlcat_chk(dst, src, sizeof(dst), sizeof(dst));
+
+  ptr = __builtin___memccpy_chk(dst, src, '\037', sizeof(src));      // expected-error {{too few arguments to function call}}
+  ptr = __builtin___strlcpy_chk(dst, src, sizeof(dst), sizeof(dst)); // expected-warning {{incompatible integer to pointer conversion}}
+  ptr = __builtin___strlcat_chk(dst, src, sizeof(dst), sizeof(dst)); // expected-warning {{incompatible integer to pointer conversion}}
+}
+
+void no_ms_builtins() {
+  __assume(1); // expected-warning {{implicit declaration}}
+  __noop(1); // expected-warning {{implicit declaration}}
+  __debugbreak(); // expected-warning {{implicit declaration}}
+}
+
+void unavailable() {
+  __builtin_operator_new(0); // expected-error {{'__builtin_operator_new' is only available in C++}}
+  __builtin_operator_delete(0); // expected-error {{'__builtin_operator_delete' is only available in C++}}
+}
+
+// rdar://18259539
+size_t strlcpy(char * restrict dst, const char * restrict src, size_t size);
+size_t strlcat(char * restrict dst, const char * restrict src, size_t size);
+
+void Test19(void)
+{
+        static char b[40];
+        static char buf[20];
+
+        strlcpy(buf, b, sizeof(b)); // expected-warning {{size argument in 'strlcpy' call appears to be size of the source; expected the size of the destination}} \\
+                                    // expected-note {{change size argument to be the size of the destination}}
+        __builtin___strlcpy_chk(buf, b, sizeof(b), __builtin_object_size(buf, 0)); // expected-warning {{size argument in '__builtin___strlcpy_chk' call appears to be size of the source; expected the size of the destination}} \
+                                    // expected-note {{change size argument to be the size of the destination}} \
+				    // expected-warning {{'strlcpy' will always overflow; destination buffer has size 20, but size argument is 40}}
+
+        strlcat(buf, b, sizeof(b)); // expected-warning {{size argument in 'strlcat' call appears to be size of the source; expected the size of the destination}} \
+                                    // expected-note {{change size argument to be the size of the destination}}
+				    
+        __builtin___strlcat_chk(buf, b, sizeof(b), __builtin_object_size(buf, 0)); // expected-warning {{size argument in '__builtin___strlcat_chk' call appears to be size of the source; expected the size of the destination}} \
+                                                                                   // expected-note {{change size argument to be the size of the destination}} \
+				                                                   // expected-warning {{'strlcat' will always overflow; destination buffer has size 20, but size argument is 40}}
+}
+
+// rdar://11076881
+char * Test20(char *p, const char *in, unsigned n)
+{
+    static char buf[10];
+
+    __builtin___memcpy_chk (&buf[6], in, 5, __builtin_object_size (&buf[6], 0)); // expected-warning {{'memcpy' will always overflow; destination buffer has size 4, but size argument is 5}}
+
+    __builtin___memcpy_chk (p, "abcde", n, __builtin_object_size (p, 0));
+
+    __builtin___memcpy_chk (&buf[5], "abcde", 5, __builtin_object_size (&buf[5], 0));
+
+    __builtin___memcpy_chk (&buf[5], "abcde", n, __builtin_object_size (&buf[5], 0));
+
+    __builtin___memcpy_chk (&buf[6], "abcde", 5, __builtin_object_size (&buf[6], 0)); // expected-warning {{'memcpy' will always overflow; destination buffer has size 4, but size argument is 5}}
+
+    return buf;
+}
+
+typedef void (fn_t)(int);
+
+void test_builtin_launder(char *p, void *vp, const void *cvp,
+                          const volatile int *ip, float *restrict fp,
+                          fn_t *fn) {
+  __builtin_launder(); // expected-error {{too few arguments to function call, expected 1, have 0}}
+  __builtin_launder(p, p); // expected-error {{too many arguments to function call, expected 1, have 2}}
+  int x;
+  __builtin_launder(x); // expected-error {{non-pointer argument to '__builtin_launder' is not allowed}}
+  char *d = __builtin_launder(p);
+  __builtin_launder(vp);  // expected-error {{void pointer argument to '__builtin_launder' is not allowed}}
+  __builtin_launder(cvp); // expected-error {{void pointer argument to '__builtin_launder' is not allowed}}
+  const volatile int *id = __builtin_launder(ip);
+  int *id2 = __builtin_launder(ip); // expected-warning {{discards qualifiers}}
+  float *fd = __builtin_launder(fp);
+  __builtin_launder(fn); // expected-error {{function pointer argument to '__builtin_launder' is not allowed}}
+}
+
+void test21(const int *ptr) {
+  __sync_fetch_and_add(ptr, 1); // expected-error{{address argument to atomic builtin cannot be const-qualified ('const int *' invalid)}}
+  __atomic_fetch_add(ptr, 1, 0);  // expected-error {{address argument to atomic operation must be a pointer to non-const type ('const int *' invalid)}}
+}
+
+void test22(void) {
+  (void)__builtin_signbit(); // expected-error{{too few arguments to function call, expected 1, have 0}}
+  (void)__builtin_signbit(1.0, 2.0, 3.0); // expected-error{{too many arguments to function call, expected 1, have 3}}
+  (void)__builtin_signbit(1); // expected-error {{floating point classification requires argument of floating point type (passed in 'int')}}
+  (void)__builtin_signbit(1.0);
+  (void)__builtin_signbit(1.0f);
+  (void)__builtin_signbit(1.0L);
+
+  (void)__builtin_signbitf(); // expected-error{{too few arguments to function call, expected 1, have 0}}
+  (void)__builtin_signbitf(1.0, 2.0, 3.0); // expected-error{{too many arguments to function call, expected 1, have 3}}
+  (void)__builtin_signbitf(1);
+  (void)__builtin_signbitf(1.0);
+  (void)__builtin_signbitf(1.0f);
+  (void)__builtin_signbitf(1.0L);
+
+  (void)__builtin_signbitl(); // expected-error{{too few arguments to function call, expected 1, have 0}}
+  (void)__builtin_signbitl(1.0, 2.0, 3.0); // expected-error{{too many arguments to function call, expected 1, have 3}}
+  (void)__builtin_signbitl(1);
+  (void)__builtin_signbitl(1.0);
+  (void)__builtin_signbitl(1.0f);
+  (void)__builtin_signbitl(1.0L);
+}
+
+// rdar://43909200
+#define memcpy(x,y,z) __builtin___memcpy_chk(x,y,z, __builtin_object_size(x,0))
+#define my_memcpy(x,y,z) __builtin___memcpy_chk(x,y,z, __builtin_object_size(x,0))
+
+void test23() {
+  char src[1024];
+  char buf[10];
+  memcpy(buf, src, 11); // expected-warning{{'memcpy' will always overflow; destination buffer has size 10, but size argument is 11}}
+  my_memcpy(buf, src, 11); // expected-warning{{'memcpy' will always overflow; destination buffer has size 10, but size argument is 11}}
+}
+
+// Test that __builtin_is_constant_evaluated() is not allowed in C
+int test_cxx_builtin() {
+  // expected-error@+1 {{use of unknown builtin '__builtin_is_constant_evaluated'}}
+  return __builtin_is_constant_evaluated();
 }

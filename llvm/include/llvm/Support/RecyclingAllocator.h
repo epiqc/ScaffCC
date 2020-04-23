@@ -1,9 +1,8 @@
 //==- llvm/Support/RecyclingAllocator.h - Recycling Allocator ----*- C++ -*-==//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -22,8 +21,8 @@ namespace llvm {
 /// RecyclingAllocator - This class wraps an Allocator, adding the
 /// functionality of recycling deleted objects.
 ///
-template<class AllocatorType, class T,
-         size_t Size = sizeof(T), size_t Align = AlignOf<T>::Alignment>
+template <class AllocatorType, class T, size_t Size = sizeof(T),
+          size_t Align = alignof(T)>
 class RecyclingAllocator {
 private:
   /// Base - Implementation details.
@@ -51,15 +50,19 @@ public:
   template<class SubClass>
   void Deallocate(SubClass* E) { return Base.Deallocate(Allocator, E); }
 
-  void PrintStats() { Base.PrintStats(); }
+  void PrintStats() {
+    Allocator.PrintStats();
+    Base.PrintStats();
+  }
 };
 
 }
 
 template<class AllocatorType, class T, size_t Size, size_t Align>
-inline void *operator new(size_t,
+inline void *operator new(size_t size,
                           llvm::RecyclingAllocator<AllocatorType,
                                                    T, Size, Align> &Allocator) {
+  assert(size <= Size && "allocation size exceeded");
   return Allocator.Allocate();
 }
 

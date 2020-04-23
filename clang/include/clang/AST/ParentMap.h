@@ -1,9 +1,8 @@
 //===--- ParentMap.h - Mappings from Stmts to their Parents -----*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_CLANG_PARENTMAP_H
-#define LLVM_CLANG_PARENTMAP_H
+#ifndef LLVM_CLANG_AST_PARENTMAP_H
+#define LLVM_CLANG_AST_PARENTMAP_H
 
 namespace clang {
 class Stmt;
@@ -24,10 +23,15 @@ public:
   ParentMap(Stmt* ASTRoot);
   ~ParentMap();
 
-  /// \brief Adds and/or updates the parent/child-relations of the complete
+  /// Adds and/or updates the parent/child-relations of the complete
   /// stmt tree of S. All children of S including indirect descendants are
   /// visited and updated or inserted but not the parents of S.
   void addStmt(Stmt* S);
+
+  /// Manually sets the parent of \p S to \p Parent.
+  ///
+  /// If \p S is already in the map, this method will update the mapping.
+  void setParent(const Stmt *S, const Stmt *Parent);
 
   Stmt *getParent(Stmt*) const;
   Stmt *getParentIgnoreParens(Stmt *) const;
@@ -48,7 +52,7 @@ public:
   }
 
   bool hasParent(Stmt* S) const {
-    return getParent(S) != 0;
+    return getParent(S) != nullptr;
   }
 
   bool isConsumedExpr(Expr *E) const;

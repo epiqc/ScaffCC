@@ -1,9 +1,8 @@
-//===-- DependentDiagnostic.h - Dependently-generated diagnostics -*- C++ -*-=//
+//==- DependentDiagnostic.h - Dependently-generated diagnostics --*- C++ -*-==//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -15,14 +14,17 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_CLANG_AST_DEPENDENT_DIAGNOSTIC_H
-#define LLVM_CLANG_AST_DEPENDENT_DIAGNOSTIC_H
+#ifndef LLVM_CLANG_AST_DEPENDENTDIAGNOSTIC_H
+#define LLVM_CLANG_AST_DEPENDENTDIAGNOSTIC_H
 
-#include "clang/Basic/PartialDiagnostic.h"
-#include "clang/Basic/SourceLocation.h"
 #include "clang/AST/DeclBase.h"
 #include "clang/AST/DeclContextInternals.h"
 #include "clang/AST/Type.h"
+#include "clang/Basic/PartialDiagnostic.h"
+#include "clang/Basic/SourceLocation.h"
+#include "clang/Basic/Specifiers.h"
+#include <cassert>
+#include <iterator>
 
 namespace clang {
 
@@ -94,45 +96,42 @@ public:
   }
 
 private:
+  friend class DeclContext::ddiag_iterator;
+  friend class DependentStoredDeclsMap;
+
   DependentDiagnostic(const PartialDiagnostic &PDiag,
-                      PartialDiagnostic::Storage *Storage) 
+                      PartialDiagnostic::Storage *Storage)
     : Diag(PDiag, Storage) {}
-  
+
   static DependentDiagnostic *Create(ASTContext &Context,
                                      DeclContext *Parent,
                                      const PartialDiagnostic &PDiag);
 
-  friend class DependentStoredDeclsMap;
-  friend class DeclContext::ddiag_iterator;
   DependentDiagnostic *NextDiagnostic;
 
   PartialDiagnostic Diag;
 
-  union {
-    struct {
-      unsigned Loc;
-      unsigned Access : 2;
-      unsigned IsMember : 1;
-      NamedDecl *TargetDecl;
-      CXXRecordDecl *NamingClass;
-      void *BaseObjectType;
-    } AccessData;
-  };
+  struct {
+    unsigned Loc;
+    unsigned Access : 2;
+    unsigned IsMember : 1;
+    NamedDecl *TargetDecl;
+    CXXRecordDecl *NamingClass;
+    void *BaseObjectType;
+  } AccessData;
 };
-
-/// 
 
 /// An iterator over the dependent diagnostics in a dependent context.
 class DeclContext::ddiag_iterator {
 public:
-  ddiag_iterator() : Ptr(0) {}
+  ddiag_iterator() = default;
   explicit ddiag_iterator(DependentDiagnostic *Ptr) : Ptr(Ptr) {}
 
-  typedef DependentDiagnostic *value_type;
-  typedef DependentDiagnostic *reference;
-  typedef DependentDiagnostic *pointer;
-  typedef int difference_type;
-  typedef std::forward_iterator_tag iterator_category;
+  using value_type = DependentDiagnostic *;
+  using reference = DependentDiagnostic *;
+  using pointer = DependentDiagnostic *;
+  using difference_type = int;
+  using iterator_category = std::forward_iterator_tag;
 
   reference operator*() const { return Ptr; }
 
@@ -170,23 +169,22 @@ public:
   }
 
 private:
-  DependentDiagnostic *Ptr;
+  DependentDiagnostic *Ptr = nullptr;
 };
 
-inline DeclContext::ddiag_iterator DeclContext::ddiag_begin() const {
+inline DeclContext::ddiag_range DeclContext::ddiags() const {
   assert(isDependentContext()
          && "cannot iterate dependent diagnostics of non-dependent context");
   const DependentStoredDeclsMap *Map
     = static_cast<DependentStoredDeclsMap*>(getPrimaryContext()->getLookupPtr());
 
-  if (!Map) return ddiag_iterator();
-  return ddiag_iterator(Map->FirstDiagnostic);
+  if (!Map)
+    // Return an empty range using the always-end default constructor.
+    return ddiag_range(ddiag_iterator(), ddiag_iterator());
+
+  return ddiag_range(ddiag_iterator(Map->FirstDiagnostic), ddiag_iterator());
 }
 
-inline DeclContext::ddiag_iterator DeclContext::ddiag_end() const {
-  return ddiag_iterator();
-}
+} // namespace clang
 
-}
-
-#endif
+#endif // LLVM_CLANG_AST_DEPENDENTDIAGNOSTIC_H

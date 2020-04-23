@@ -1,9 +1,8 @@
 //===--- TextDiagnosticPrinter.cpp - Diagnostic Printer -------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -12,22 +11,20 @@
 //===----------------------------------------------------------------------===//
 
 #include "clang/Frontend/TextDiagnosticPrinter.h"
-#include "clang/Basic/FileManager.h"
+#include "clang/Basic/DiagnosticOptions.h"
 #include "clang/Basic/SourceManager.h"
-#include "clang/Frontend/DiagnosticOptions.h"
 #include "clang/Frontend/TextDiagnostic.h"
 #include "clang/Lex/Lexer.h"
-#include "llvm/Support/MemoryBuffer.h"
-#include "llvm/Support/raw_ostream.h"
-#include "llvm/Support/ErrorHandling.h"
 #include "llvm/ADT/SmallString.h"
+#include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/raw_ostream.h"
 #include <algorithm>
 using namespace clang;
 
 TextDiagnosticPrinter::TextDiagnosticPrinter(raw_ostream &os,
-                                             const DiagnosticOptions &diags,
+                                             DiagnosticOptions *diags,
                                              bool _OwnsOutputStream)
-  : OS(os), LangOpts(0), DiagOpts(&diags), SM(0),
+  : OS(os), DiagOpts(diags),
     OwnsOutputStream(_OwnsOutputStream) {
 }
 
@@ -38,15 +35,15 @@ TextDiagnosticPrinter::~TextDiagnosticPrinter() {
 
 void TextDiagnosticPrinter::BeginSourceFile(const LangOptions &LO,
                                             const Preprocessor *PP) {
-  LangOpts = &LO;
+  // Build the TextDiagnostic utility.
+  TextDiag.reset(new TextDiagnostic(OS, LO, &*DiagOpts));
 }
 
 void TextDiagnosticPrinter::EndSourceFile() {
-  LangOpts = 0;
-  TextDiag.reset(0);
+  TextDiag.reset();
 }
 
-/// \brief Print any diagnostic option information to a raw_ostream.
+/// Print any diagnostic option information to a raw_ostream.
 ///
 /// This implements all of the logic for adding diagnostic options to a message
 /// (via OS). Each relevant option is comma separated and all are enclosed in
@@ -79,19 +76,13 @@ static void printDiagnosticOptions(raw_ostream &OS,
       Started = true;
     }
 
-    // If the diagnostic is an extension diagnostic and not enabled by default
-    // then it must have been turned on with -pedantic.
-    bool EnabledByDefault;
-    if (DiagnosticIDs::isBuiltinExtensionDiag(Info.getID(),
-                                              EnabledByDefault) &&
-        !EnabledByDefault) {
-      OS << (Started ? "," : " [") << "-pedantic";
-      Started = true;
-    }
-
     StringRef Opt = DiagnosticIDs::getWarningOptionForDiag(Info.getID());
     if (!Opt.empty()) {
-      OS << (Started ? "," : " [") << "-W" << Opt;
+      OS << (Started ? "," : " [")
+         << (Level == DiagnosticsEngine::Remark ? "-R" : "-W") << Opt;
+      StringRef OptValue = Info.getDiags()->getFlagValue();
+      if (!OptValue.empty())
+        OS << "=" << OptValue;
       Started = true;
     }
   }
@@ -128,7 +119,7 @@ void TextDiagnosticPrinter::HandleDiagnostic(DiagnosticsEngine::Level Level,
   llvm::raw_svector_ostream DiagMessageStream(OutStr);
   printDiagnosticOptions(DiagMessageStream, Level, Info, *DiagOpts);
 
-  // Keeps track of the the starting position of the location
+  // Keeps track of the starting position of the location
   // information (e.g., "foo.c:10:4:") that precedes the error
   // message. We use this information to determine how long the
   // file+line+column number prefix is.
@@ -142,7 +133,8 @@ void TextDiagnosticPrinter::HandleDiagnostic(DiagnosticsEngine::Level Level,
   // diagnostics in a context that lacks language options, a source manager, or
   // other infrastructure necessary when emitting more rich diagnostics.
   if (!Info.getLocation().isValid()) {
-    TextDiagnostic::printDiagnosticLevel(OS, Level, DiagOpts->ShowColors);
+    TextDiagnostic::printDiagnosticLevel(OS, Level, DiagOpts->ShowColors,
+                                         DiagOpts->CLFallbackMode);
     TextDiagnostic::printDiagnosticMessage(OS, Level, DiagMessageStream.str(),
                                            OS.tell() - StartOfLocationInfo,
                                            DiagOpts->MessageLength,
@@ -152,27 +144,14 @@ void TextDiagnosticPrinter::HandleDiagnostic(DiagnosticsEngine::Level Level,
   }
 
   // Assert that the rest of our infrastructure is setup properly.
-  assert(LangOpts && "Unexpected diagnostic outside source file processing");
   assert(DiagOpts && "Unexpected diagnostic without options set");
   assert(Info.hasSourceManager() &&
          "Unexpected diagnostic with no source manager");
+  assert(TextDiag && "Unexpected diagnostic outside source file processing");
 
-  // Rebuild the TextDiagnostic utility if missing or the source manager has
-  // changed.
-  if (!TextDiag || SM != &Info.getSourceManager()) {
-    SM = &Info.getSourceManager();
-    TextDiag.reset(new TextDiagnostic(OS, *SM, *LangOpts, *DiagOpts));
-  }
-
-  TextDiag->emitDiagnostic(Info.getLocation(), Level, DiagMessageStream.str(),
-                           Info.getRanges(),
-                           llvm::makeArrayRef(Info.getFixItHints(),
-                                              Info.getNumFixItHints()));
+  TextDiag->emitDiagnostic(
+      FullSourceLoc(Info.getLocation(), Info.getSourceManager()), Level,
+      DiagMessageStream.str(), Info.getRanges(), Info.getFixItHints());
 
   OS.flush();
-}
-
-DiagnosticConsumer *
-TextDiagnosticPrinter::clone(DiagnosticsEngine &Diags) const {
-  return new TextDiagnosticPrinter(OS, *DiagOpts, /*OwnsOutputStream=*/false);
 }

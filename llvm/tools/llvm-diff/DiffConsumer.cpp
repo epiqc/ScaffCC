@@ -1,20 +1,18 @@
 //===-- DiffConsumer.cpp - Difference Consumer ------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
-// This files implements the the LLVM difference Consumer
+// This files implements the LLVM difference Consumer
 //
 //===----------------------------------------------------------------------===//
 
 #include "DiffConsumer.h"
-
-#include "llvm/Module.h"
-#include "llvm/Instructions.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 
 using namespace llvm;
@@ -196,17 +194,17 @@ void DiffConsumer::logd(const DiffLogBuilder &Log) {
     switch (Log.getLineKind(I)) {
     case DC_match:
       out << "  ";
-      Log.getLeft(I)->dump();
+      Log.getLeft(I)->print(dbgs()); dbgs() << '\n';
       //printValue(Log.getLeft(I), true);
       break;
     case DC_left:
       out << "< ";
-      Log.getLeft(I)->dump();
+      Log.getLeft(I)->print(dbgs()); dbgs() << '\n';
       //printValue(Log.getLeft(I), true);
       break;
     case DC_right:
       out << "> ";
-      Log.getRight(I)->dump();
+      Log.getRight(I)->print(dbgs()); dbgs() << '\n';
       //printValue(Log.getRight(I), false);
       break;
     }

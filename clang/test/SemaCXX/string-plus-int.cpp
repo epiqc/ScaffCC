@@ -31,36 +31,40 @@ void f(int index) {
   consume("foo" + 5);  // expected-warning {{adding 'int' to a string does not append to the string}} expected-note {{use array indexing to silence this warning}}
   consume("foo" + index);  // expected-warning {{adding 'int' to a string does not append to the string}} expected-note {{use array indexing to silence this warning}}
   consume("foo" + kMyEnum);  // expected-warning {{adding 'MyEnum' to a string does not append to the string}} expected-note {{use array indexing to silence this warning}}
+  consume("foo" + kMySmallEnum); // expected-warning {{adding 'MyEnum' to a string does not append to the string}} expected-note {{use array indexing to silence this warning}}
 
   consume(5 + "foo");  // expected-warning {{adding 'int' to a string does not append to the string}} expected-note {{use array indexing to silence this warning}}
   consume(index + "foo");  // expected-warning {{adding 'int' to a string does not append to the string}} expected-note {{use array indexing to silence this warning}}
   consume(kMyEnum + "foo");  // expected-warning {{adding 'MyEnum' to a string does not append to the string}} expected-note {{use array indexing to silence this warning}}
+  consume(kMySmallEnum + "foo"); // expected-warning {{adding 'MyEnum' to a string does not append to the string}} expected-note {{use array indexing to silence this warning}}
 
   // FIXME: suggest replacing with "foo"[5]
   consumeChar(*("foo" + 5));  // expected-warning {{adding 'int' to a string does not append to the string}} expected-note {{use array indexing to silence this warning}}
   consumeChar(*(5 + "foo"));  // expected-warning {{adding 'int' to a string does not append to the string}} expected-note {{use array indexing to silence this warning}}
 
   consume(L"foo" + 5);  // expected-warning {{adding 'int' to a string does not append to the string}} expected-note {{use array indexing to silence this warning}}
+  consume(L"foo" + 2); // expected-warning {{adding 'int' to a string does not append to the string}} expected-note {{use array indexing to silence this warning}}
+
+  consume("foo" + 3);  // expected-warning {{adding 'int' to a string does not append to the string}} expected-note {{use array indexing to silence this warning}}
+  consume("foo" + 4);  // expected-warning {{adding 'int' to a string does not append to the string}} expected-note {{use array indexing to silence this warning}}
+  consume("\pfoo" + 4);  // expected-warning {{adding 'int' to a string does not append to the string}} expected-note {{use array indexing to silence this warning}}
+
+  #define A "foo"
+  #define B "bar"
+  consume(A B + sizeof(A) - 1); // expected-warning {{to a string does not append to the string}} expected-note {{use array indexing to silence this warning}}
 
   // Should not warn.
   consume(&("foo"[3]));
   consume(&("foo"[index]));
   consume(&("foo"[kMyEnum]));
-  consume("foo" + kMySmallEnum);
-  consume(kMySmallEnum + "foo");
 
-  consume(L"foo" + 2);
-
-  consume("foo" + 3);  // Points at the \0
-  consume("foo" + 4);  // Points 1 past the \0, which is legal too.
-  consume("\pfoo" + 4);  // Pascal strings don't have a trailing \0, but they
-                         // have a leading length byte, so this is fine too.
 
   consume("foo" + kMyOperatorOverloadedEnum);
   consume(kMyOperatorOverloadedEnum + "foo");
-
-  #define A "foo"
-  #define B "bar"
-  consume(A B + sizeof(A) - 1);
 }
 
+template <typename T>
+void PR21848() {
+  (void)(sizeof(T) + ""); // expected-warning {{to a string does not append to the string}} expected-note {{use array indexing to silence this warning}}
+}
+template void PR21848<int>(); // expected-note {{in instantiation of function template specialization 'PR21848<int>' requested here}}

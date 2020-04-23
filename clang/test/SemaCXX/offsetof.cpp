@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -triple x86_64-apple-darwin10.0.0 -fsyntax-only -verify %s -Winvalid-offsetof
+// RUN: %clang_cc1 -triple x86_64-apple-darwin10.0.0 -fsyntax-only -verify %s -Winvalid-offsetof -std=c++98
 
 struct NonPOD {
   virtual void f();
@@ -73,3 +73,13 @@ struct LtoRCheck {
 };
 int ltor = __builtin_offsetof(struct LtoRCheck, a[LtoRCheck().f]); // \
   expected-error {{reference to non-static member function must be called}}
+
+namespace PR17578 {
+struct Base {
+  int Field;
+};
+struct Derived : virtual Base {
+  void Fun() { (void)__builtin_offsetof(Derived, Field); } // expected-warning {{offset of on non-POD type}} \
+                                                              expected-error {{invalid application of 'offsetof' to a field of a virtual base}}
+};
+}

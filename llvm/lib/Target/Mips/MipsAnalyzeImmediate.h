@@ -1,16 +1,16 @@
-//===-- MipsAnalyzeImmediate.h - Analyze Immediates ------------*- C++ -*--===//
+//===- MipsAnalyzeImmediate.h - Analyze Immediates -------------*- C++ -*--===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-#ifndef MIPS_ANALYZE_IMMEDIATE_H
-#define MIPS_ANALYZE_IMMEDIATE_H
+
+#ifndef LLVM_LIB_TARGET_MIPS_MIPSANALYZEIMMEDIATE_H
+#define LLVM_LIB_TARGET_MIPS_MIPSANALYZEIMMEDIATE_H
 
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/Support/DataTypes.h"
+#include <cstdint>
 
 namespace llvm {
 
@@ -18,33 +18,35 @@ namespace llvm {
   public:
     struct Inst {
       unsigned Opc, ImmOpnd;
+
       Inst(unsigned Opc, unsigned ImmOpnd);
     };
-    typedef SmallVector<Inst, 7 > InstSeq;
+    using InstSeq = SmallVector<Inst, 7>;
 
-    /// Analyze - Get an instrucion sequence to load immediate Imm. The last
+    /// Analyze - Get an instruction sequence to load immediate Imm. The last
     /// instruction in the sequence must be an ADDiu if LastInstrIsADDiu is
     /// true;
     const InstSeq &Analyze(uint64_t Imm, unsigned Size, bool LastInstrIsADDiu);
+
   private:
-    typedef SmallVector<InstSeq, 5> InstSeqLs;
+    using InstSeqLs = SmallVector<InstSeq, 5>;
 
     /// AddInstr - Add I to all instruction sequences in SeqLs.
     void AddInstr(InstSeqLs &SeqLs, const Inst &I);
 
-    /// GetInstSeqLsADDiu - Get instrucion sequences which end with an ADDiu to
+    /// GetInstSeqLsADDiu - Get instruction sequences which end with an ADDiu to
     /// load immediate Imm
     void GetInstSeqLsADDiu(uint64_t Imm, unsigned RemSize, InstSeqLs &SeqLs);
 
-    /// GetInstSeqLsORi - Get instrucion sequences which end with an ORi to
+    /// GetInstSeqLsORi - Get instrutcion sequences which end with an ORi to
     /// load immediate Imm
     void GetInstSeqLsORi(uint64_t Imm, unsigned RemSize, InstSeqLs &SeqLs);
 
-    /// GetInstSeqLsSLL - Get instrucion sequences which end with a SLL to
+    /// GetInstSeqLsSLL - Get instruction sequences which end with a SLL to
     /// load immediate Imm
     void GetInstSeqLsSLL(uint64_t Imm, unsigned RemSize, InstSeqLs &SeqLs);
 
-    /// GetInstSeqLs - Get instrucion sequences to load immediate Imm.
+    /// GetInstSeqLs - Get instruction sequences to load immediate Imm.
     void GetInstSeqLs(uint64_t Imm, unsigned RemSize, InstSeqLs &SeqLs);
 
     /// ReplaceADDiuSLLWithLUi - Replace an ADDiu & SLL pair with a LUi.
@@ -58,6 +60,7 @@ namespace llvm {
     unsigned ADDiu, ORi, SLL, LUi;
     InstSeq Insts;
   };
-}
 
-#endif
+} // end namespace llvm
+
+#endif // LLVM_LIB_TARGET_MIPS_MIPSANALYZEIMMEDIATE_H

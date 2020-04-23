@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -triple x86_64-unknown-unknown -fsyntax-only -fblocks -Wnull-arithmetic -verify -Wno-string-plus-int %s
+// RUN: %clang_cc1 -triple x86_64-unknown-unknown -fsyntax-only -fblocks -Wnull-arithmetic -verify -Wno-string-plus-int -Wno-tautological-pointer-compare %s
 #include <stddef.h>
 
 void f() {
@@ -71,8 +71,8 @@ void f() {
   b = a == NULL || a != NULL; // expected-warning 2{{comparison between NULL and non-pointer ('int' and NULL)}}
   b = NULL == a || NULL != a; // expected-warning 2{{comparison between NULL and non-pointer (NULL and 'int')}}
 
-  b = &a < NULL || NULL < &a || &a > NULL || NULL > &a;
-  b = &a <= NULL || NULL <= &a || &a >= NULL || NULL >= &a;
+  b = &a < NULL || NULL < &a || &a > NULL || NULL > &a; // expected-error 4{{ordered comparison between pointer and zero}}
+  b = &a <= NULL || NULL <= &a || &a >= NULL || NULL >= &a; // expected-error 4{{ordered comparison between pointer and zero}}
   b = &a == NULL || NULL == &a || &a != NULL || NULL != &a;
 
   b = 0 == a;
@@ -90,4 +90,6 @@ void f() {
   b = e == NULL || NULL == e || e != NULL || NULL != e;
   b = f == NULL || NULL == f || f != NULL || NULL != f;
   b = "f" == NULL || NULL == "f" || "f" != NULL || NULL != "f";
+
+  return NULL; // expected-error{{void function 'f' should not return a value}}
 }

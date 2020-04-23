@@ -1,10 +1,9 @@
 //===-- llvm/LinkTimeOptimizer.h - LTO Public C Interface -------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
-// 
 //===----------------------------------------------------------------------===//
 //
 // This header provides a C API to use the LLVM link time optimization
@@ -13,12 +12,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef __LTO_CAPI_H__
-#define __LTO_CAPI_H__
+#ifndef LLVM_C_LINKTIMEOPTIMIZER_H
+#define LLVM_C_LINKTIMEOPTIMIZER_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include "llvm-c/ExternC.h"
+
+LLVM_C_EXTERN_C_BEGIN
 
 /**
  * @defgroup LLVMCLinkTimeOptimizer Link Time Optimization
@@ -46,7 +45,7 @@ extern "C" {
     //  Added C-specific error codes
     LLVM_LTO_NULL_OBJECT
   } llvm_lto_status_t;
- 
+
   /// This provides C interface to initialize link time optimizer. This allows
   /// linker to use dlopen() interface to dynamically load LinkTimeOptimizer.
   /// extern "C" helps, because dlopen() interface uses name to find the symbol.
@@ -62,8 +61,6 @@ extern "C" {
  * @}
  */
 
-#ifdef __cplusplus
-}
-#endif
+  LLVM_C_EXTERN_C_END
 
 #endif

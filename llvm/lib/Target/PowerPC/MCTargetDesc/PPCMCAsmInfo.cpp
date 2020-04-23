@@ -1,9 +1,8 @@
 //===-- PPCMCAsmInfo.cpp - PPC asm properties -----------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -12,59 +11,54 @@
 //===----------------------------------------------------------------------===//
 
 #include "PPCMCAsmInfo.h"
+#include "llvm/ADT/Triple.h"
+
 using namespace llvm;
 
-void PPCMCAsmInfoDarwin::anchor() { }
+void PPCELFMCAsmInfo::anchor() { }
 
-PPCMCAsmInfoDarwin::PPCMCAsmInfoDarwin(bool is64Bit) {
-  if (is64Bit)
-    PointerSize = 8;
-  IsLittleEndian = false;
+PPCELFMCAsmInfo::PPCELFMCAsmInfo(bool is64Bit, const Triple& T) {
+  // FIXME: This is not always needed. For example, it is not needed in the
+  // v2 abi.
+  NeedsLocalForSize = true;
 
-  PCSymbol = ".";
-  CommentString = ";";
-  ExceptionsType = ExceptionHandling::DwarfCFI;
-
-  if (!is64Bit)
-    Data64bitsDirective = 0;      // We can't emit a 64-bit unit in PPC32 mode.
-
-  AssemblerDialect = 1;           // New-Style mnemonics.
-  SupportsDebugInformation= true; // Debug information.
-}
-
-void PPCLinuxMCAsmInfo::anchor() { }
-
-PPCLinuxMCAsmInfo::PPCLinuxMCAsmInfo(bool is64Bit) {
-  if (is64Bit)
-    PointerSize = 8;
-  IsLittleEndian = false;
+  if (is64Bit) {
+    CodePointerSize = CalleeSaveStackSlotSize = 8;
+  }
+  IsLittleEndian = T.getArch() == Triple::ppc64le;
 
   // ".comm align is in bytes but .align is pow-2."
   AlignmentIsInBytes = false;
 
   CommentString = "#";
-  GlobalPrefix = "";
-  PrivateGlobalPrefix = ".L";
-  WeakRefDirective = "\t.weak\t";
-  
+
   // Uses '.section' before '.bss' directive
-  UsesELFSectionDirectiveForBSS = true;  
+  UsesELFSectionDirectiveForBSS = true;
 
   // Debug Information
   SupportsDebugInformation = true;
 
-  PCSymbol = ".";
+  DollarIsPC = true;
 
   // Set up DWARF directives
-  HasLEB128 = true;  // Target asm supports leb128 directives (little-endian)
+  MinInstAlignment = 4;
 
   // Exceptions handling
-  if (!is64Bit)
-    ExceptionsType = ExceptionHandling::DwarfCFI;
-    
+  ExceptionsType = ExceptionHandling::DwarfCFI;
+
   ZeroDirective = "\t.space\t";
-  Data64bitsDirective = is64Bit ? "\t.quad\t" : 0;
-  LCOMMDirectiveType = LCOMM::NoAlignment;
-  AssemblerDialect = 0;           // Old-Style mnemonics.
+  Data64bitsDirective = is64Bit ? "\t.quad\t" : nullptr;
+  AssemblerDialect = 1;           // New-Style mnemonics.
+  LCOMMDirectiveAlignmentType = LCOMM::ByteAlignment;
+
+  UseIntegratedAssembler = true;
 }
 
+void PPCXCOFFMCAsmInfo::anchor() {}
+
+PPCXCOFFMCAsmInfo::PPCXCOFFMCAsmInfo(bool Is64Bit, const Triple &T) {
+  assert(!IsLittleEndian && "Little-endian XCOFF not supported.");
+  CodePointerSize = CalleeSaveStackSlotSize = Is64Bit ? 8 : 4;
+  ZeroDirective = "\t.space\t";
+  SymbolsHaveSMC = true;
+}

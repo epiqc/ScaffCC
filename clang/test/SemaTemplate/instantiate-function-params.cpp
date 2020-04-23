@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -fsyntax-only -verify %s
+// RUN: %clang_cc1 -triple i686-unknown-unknown -fsyntax-only -verify %s
 
 // PR6619
 template<bool C> struct if_c { };
@@ -7,12 +7,12 @@ template<typename T1> struct if_ {
 };
 template <class Model, void (Model::*)()> struct wrap_constraints { };
 template <class Model> 
-inline char has_constraints_(Model* ,  // expected-note 2{{while substituting deduced template arguments into function template 'has_constraints_' [with }} \
-                             // expected-note 3{{candidate template ignored}}
+inline char has_constraints_(Model* , // expected-note 3{{candidate template ignored}}
                                wrap_constraints<Model,&Model::constraints>* = 0); // expected-note 2{{in instantiation}}
 
 template <class Model> struct not_satisfied {
-  static const bool value = sizeof( has_constraints_((Model*)0)  == 1); // expected-error 3{{no matching function}}
+  static const bool value = sizeof( has_constraints_((Model*)0)  == 1); // expected-error 3{{no matching function}} \
+  // expected-note 2{{while substituting deduced template arguments into function template 'has_constraints_' [with }}
 };
 template <class ModelFn> struct requirement_;
 template <void(*)()> struct instantiate {
@@ -81,10 +81,21 @@ namespace InstantiateFunctionTypedef {
   template<typename T>
   struct X {
     typedef int functype(int, int);
-    functype func;
+    functype func1;
+    __attribute__((noreturn)) functype func2;
+
+    typedef int stdfunctype(int, int) __attribute__((stdcall));
+    __attribute__((stdcall)) functype stdfunc1;
+    stdfunctype stdfunc2;
+
+    __attribute__((pcs("aapcs"))) functype pcsfunc; // expected-warning {{'pcs' calling convention is not supported for this target}}
   };
 
   void f(X<int> x) {
-    (void)x.func(1, 2);
+    (void)x.func1(1, 2);
+    (void)x.func2(1, 2);
+    (void)x.stdfunc1(1, 2);
+    (void)x.stdfunc2(1, 2);
+    (void)x.pcsfunc(1, 2);
   }
 }

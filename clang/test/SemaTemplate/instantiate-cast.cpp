@@ -1,6 +1,13 @@
 // RUN: %clang_cc1 -fsyntax-only -verify %s
+// RUN: %clang_cc1 -fsyntax-only -verify -std=c++98 %s
+// RUN: %clang_cc1 -fsyntax-only -verify -std=c++11 %s
 
-struct A { int x; }; // expected-note 2 {{candidate constructor}}
+struct A { int x; };
+// expected-note@-1 {{candidate constructor (the implicit copy constructor) not viable: no known conversion from 'int' to 'const A' for 1st argument}}
+#if __cplusplus >= 201103L
+// expected-note@-3 {{candidate constructor (the implicit move constructor) not viable: no known conversion from 'int' to 'A' for 1st argument}}
+#endif
+// expected-note@-5 {{candidate constructor (the implicit default constructor) not viable: requires 0 arguments, but 1 was provided}}
 
 class Base { 
 public:
@@ -50,7 +57,7 @@ template struct StaticCast0<int, A>; // expected-note{{instantiation}}
 template<typename T, typename U>
 struct DynamicCast0 {
   void f(T t) {
-    (void)dynamic_cast<U>(t); // expected-error{{not a reference or pointer}}
+    (void)dynamic_cast<U>(t); // expected-error{{invalid target type 'A' for dynamic_cast; target type must be a reference or pointer type to a defined class}}
   }
 };
 

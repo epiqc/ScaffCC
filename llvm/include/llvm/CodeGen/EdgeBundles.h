@@ -1,9 +1,8 @@
 //===-------- EdgeBundles.h - Bundles of CFG edges --------------*- c++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -46,7 +45,7 @@ public:
   unsigned getNumBundles() const { return EC.getNumClasses(); }
 
   /// getBlocks - Return an array of blocks that are connected to Bundle.
-  ArrayRef<unsigned> getBlocks(unsigned Bundle) { return Blocks[Bundle]; }
+  ArrayRef<unsigned> getBlocks(unsigned Bundle) const { return Blocks[Bundle]; }
 
   /// getMachineFunction - Return the last machine function computed.
   const MachineFunction *getMachineFunction() const { return MF; }
@@ -55,14 +54,9 @@ public:
   void view() const;
 
 private:
-  virtual bool runOnMachineFunction(MachineFunction&);
-  virtual void getAnalysisUsage(AnalysisUsage&) const;
+  bool runOnMachineFunction(MachineFunction&) override;
+  void getAnalysisUsage(AnalysisUsage&) const override;
 };
-
-/// Specialize WriteGraph, the standard implementation won't work.
-raw_ostream &WriteGraph(raw_ostream &O, const EdgeBundles &G,
-                        bool ShortNames = false,
-                        const Twine &Title = "");
 
 } // end namespace llvm
 

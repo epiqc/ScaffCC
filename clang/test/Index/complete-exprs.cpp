@@ -58,7 +58,7 @@ namespace N {
 // CHECK-CC1: CXXConstructor:{TypedText string}{LeftParen (}{Placeholder const char *}{Comma , }{Placeholder int n}{RightParen )} (50)
 // CHECK-CC1: ClassTemplate:{TypedText vector}{LeftAngle <}{Placeholder typename T}{RightAngle >} (50)
 // CHECK-CC1: CXXConstructor:{TypedText vector}{LeftAngle <}{Placeholder typename T}{RightAngle >}{LeftParen (}{Placeholder const T &}{Comma , }{Placeholder unsigned int n}{RightParen )} (50)
-// CHECK-CC1: FunctionTemplate:{ResultType void}{TypedText vector}{LeftAngle <}{Placeholder typename T}{RightAngle >}{LeftParen (}{Placeholder InputIterator first}{Comma , }{Placeholder InputIterator last}{RightParen )} (50)
+// CHECK-CC1: FunctionTemplate:{TypedText vector}{LeftAngle <}{Placeholder typename T}{RightAngle >}{LeftParen (}{Placeholder InputIterator first}{Comma , }{Placeholder InputIterator last}{RightParen )} (50)
 
 // RUN: c-index-test -code-completion-at=%s:19:1 %s | FileCheck -check-prefix=CHECK-CC2 %s
 // RUN: env CINDEXTEST_EDITING=1 CINDEXTEST_COMPLETION_CACHING=1 c-index-test -code-completion-at=%s:19:1 %s | FileCheck -check-prefix=CHECK-CC2 %s
@@ -72,13 +72,13 @@ namespace N {
 // CHECK-CC3: FunctionDecl:{ResultType void}{TypedText g}{LeftParen (}{RightParen )} (50)
 // CHECK-CC3: ClassTemplate:{TypedText vector}{LeftAngle <}{Placeholder typename T}{RightAngle >} (50)
 // CHECK-CC3: CXXConstructor:{TypedText vector}{LeftAngle <}{Placeholder typename T}{RightAngle >}{LeftParen (}{Placeholder const T &}{Comma , }{Placeholder unsigned int n}{RightParen )} (50)
-// CHECK-CC3: FunctionTemplate:{ResultType void}{TypedText vector}{LeftAngle <}{Placeholder typename T}{RightAngle >}{LeftParen (}{Placeholder InputIterator first}{Comma , }{Placeholder InputIterator last}{RightParen )} (50)
+// CHECK-CC3: FunctionTemplate:{TypedText vector}{LeftAngle <}{Placeholder typename T}{RightAngle >}{LeftParen (}{Placeholder InputIterator first}{Comma , }{Placeholder InputIterator last}{RightParen )} (50)
 
 // RUN: c-index-test -code-completion-at=%s:34:1 %s -std=c++0x | FileCheck -check-prefix=CHECK-CC4 %s
 // CHECK-CC4: NotImplemented:{ResultType const X *}{TypedText this} (40)
 
 // RUN: c-index-test -code-completion-at=%s:43:14 %s | FileCheck -check-prefix=CHECK-CC5 %s
-// CHECK-CC5: FieldDecl:{ResultType int}{TypedText member} (8) (parent: ClassDecl 'N::C')
+// CHECK-CC5: FieldDecl:{ResultType int}{TypedText member} (8)
 // CHECK-CC5: ParmDecl:{ResultType int}{TypedText param} (8)
-// CHECK-CC5: StructDecl:{TypedText X} (50) (parent: TranslationUnit '(null)')
-// CHECK-CC5: VarDecl:{ResultType int}{TypedText x} (12) (parent: Namespace 'N')
+// CHECK-CC5: StructDecl:{TypedText X} (50)
+// CHECK-CC5: VarDecl:{ResultType int}{TypedText x} (12)

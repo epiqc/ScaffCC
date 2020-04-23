@@ -1,32 +1,25 @@
 /*===---- tgmath.h - Standard header for type generic math ----------------===*\
  *
- * Copyright (c) 2009 Howard Hinnant
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
+ * Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+ * See https://llvm.org/LICENSE.txt for license information.
+ * SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
  *
 \*===----------------------------------------------------------------------===*/
 
-#ifndef __TGMATH_H
-#define __TGMATH_H
+#ifndef __CLANG_TGMATH_H
+#define __CLANG_TGMATH_H
 
 /* C99 7.22 Type-generic math <tgmath.h>. */
 #include <math.h>
+
+/*
+ * Allow additional definitions and implementation-defined values on Apple
+ * platforms. This is done after #include <math.h> to avoid depcycle conflicts
+ * between libcxx and darwin in C++ modules builds.
+ */
+#if defined(__APPLE__) && __STDC_HOSTED__ && __has_include_next(<tgmath.h>)
+#  include_next <tgmath.h>
+#else
 
 /* C++ handles type genericity with overloading in math.h. */
 #ifndef __cplusplus
@@ -490,7 +483,7 @@ static double _Complex
 
 static long double _Complex
     _TG_ATTRS
-    __tg_pow(long double _Complex __x, long double _Complex __y) 
+    __tg_pow(long double _Complex __x, long double _Complex __y)
     {return cpowl(__x, __y);}
 
 #undef pow
@@ -1340,15 +1333,15 @@ static long double _Complex
 
 // creal
 
-static float _Complex
+static float
     _TG_ATTRS
     __tg_creal(float __x) {return __x;}
 
-static double _Complex
+static double
     _TG_ATTRS
     __tg_creal(double __x) {return __x;}
 
-static long double _Complex
+static long double
     _TG_ATTRS
     __tg_creal(long double __x) {return __x;}
 
@@ -1371,4 +1364,5 @@ static long double
 #undef _TG_ATTRS
 
 #endif /* __cplusplus */
-#endif /* __TGMATH_H */
+#endif /* __has_include_next */
+#endif /* __CLANG_TGMATH_H */

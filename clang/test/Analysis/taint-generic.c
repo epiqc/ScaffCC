@@ -1,10 +1,63 @@
-// RUN: %clang_cc1  -analyze -analyzer-checker=experimental.security.taint,core,experimental.security.ArrayBoundV2 -Wno-format-security -verify %s
+// RUN: %clang_analyze_cc1 -Wno-format-security -verify %s \
+// RUN:   -analyzer-checker=alpha.security.taint \
+// RUN:   -analyzer-checker=core \
+// RUN:   -analyzer-checker=alpha.security.ArrayBoundV2 \
+// RUN:   -analyzer-config \
+// RUN:     alpha.security.taint.TaintPropagation:Config=%S/Inputs/taint-generic-config.yaml
+
+// RUN: %clang_analyze_cc1 -Wno-format-security -verify %s \
+// RUN:   -DFILE_IS_STRUCT \
+// RUN:   -analyzer-checker=alpha.security.taint \
+// RUN:   -analyzer-checker=core \
+// RUN:   -analyzer-checker=alpha.security.ArrayBoundV2 \
+// RUN:   -analyzer-config \
+// RUN:     alpha.security.taint.TaintPropagation:Config=%S/Inputs/taint-generic-config.yaml
+
+// RUN: not %clang_analyze_cc1 -verify %s \
+// RUN:   -analyzer-checker=alpha.security.taint \
+// RUN:   -analyzer-config \
+// RUN:     alpha.security.taint.TaintPropagation:Config=justguessit \
+// RUN:   2>&1 | FileCheck %s -check-prefix=CHECK-INVALID-FILE
+
+// CHECK-INVALID-FILE: (frontend): invalid input for checker option
+// CHECK-INVALID-FILE-SAME:        'alpha.security.taint.TaintPropagation:Config',
+// CHECK-INVALID-FILE-SAME:        that expects a valid filename instead of
+// CHECK-INVALID-FILE-SAME:        'justguessit'
+
+// RUN: not %clang_analyze_cc1 -verify %s \
+// RUN:   -analyzer-checker=alpha.security.taint \
+// RUN:   -analyzer-config \
+// RUN:     alpha.security.taint.TaintPropagation:Config=%S/Inputs/taint-generic-config-ill-formed.yaml \
+// RUN:   2>&1 | FileCheck %s -check-prefix=CHECK-ILL-FORMED
+
+// CHECK-ILL-FORMED: (frontend): invalid input for checker option
+// CHECK-ILL-FORMED-SAME:        'alpha.security.taint.TaintPropagation:Config',
+// CHECK-ILL-FORMED-SAME:        that expects a valid yaml file: {{[Ii]}}nvalid argument
+
+// RUN: not %clang_analyze_cc1 -verify %s \
+// RUN:   -analyzer-checker=alpha.security.taint \
+// RUN:   -analyzer-config \
+// RUN:     alpha.security.taint.TaintPropagation:Config=%S/Inputs/taint-generic-config-invalid-arg.yaml \
+// RUN:   2>&1 | FileCheck %s -check-prefix=CHECK-INVALID-ARG
+
+// CHECK-INVALID-ARG: (frontend): invalid input for checker option
+// CHECK-INVALID-ARG-SAME:        'alpha.security.taint.TaintPropagation:Config',
+// CHECK-INVALID-ARG-SAME:        that expects an argument number for propagation
+// CHECK-INVALID-ARG-SAME:        rules greater or equal to -1
 
 int scanf(const char *restrict format, ...);
+char *gets(char *str);
 int getchar(void);
 
 typedef struct _FILE FILE;
+#ifdef FILE_IS_STRUCT
+extern struct _FILE *stdin;
+#else
 extern FILE *stdin;
+#endif
+
+#define bool _Bool
+
 int fscanf(FILE *restrict stream, const char *restrict format, ...);
 int sprintf(char *str, const char *format, ...);
 void setproctitle(const char *fmt, ...);
@@ -136,6 +189,12 @@ void testTaintSystemCall3() {
   system(buffern2); // expected-warning {{Untrusted data is passed to a system call}}
 }
 
+void testGets() {
+  char str[50];
+  gets(str);
+  system(str); // expected-warning {{Untrusted data is passed to a system call}}
+}
+
 void testTaintedBufferSize() {
   size_t ts;
   scanf("%zd", &ts);
@@ -169,6 +228,64 @@ void testSocket() {
   sock = socket(AF_LOCAL, SOCK_STREAM, 0);
   read(sock, buffer, 100);
   execl(buffer, "filename", 0); // no-warning
+
+  sock = socket(AF_INET, SOCK_STREAM, 0);
+  // References to both buffer and &buffer as an argument should taint the argument
+  read(sock, &buffer, 100);
+  execl(buffer, "filename", 0); // expected-warning {{Untrusted data is passed to a system call}}
+}
+
+void testStruct() {
+  struct {
+    char buf[16];
+    int length;
+  } tainted;
+
+  char buffer[16];
+  int sock;
+
+  sock = socket(AF_INET, SOCK_STREAM, 0);
+  read(sock, &tainted, sizeof(tainted));
+  __builtin_memcpy(buffer, tainted.buf, tainted.length); // expected-warning {{Untrusted data is used to specify the buffer size}}
+}
+
+void testStructArray() {
+  struct {
+    int length;
+  } tainted[4];
+
+  char dstbuf[16], srcbuf[16];
+  int sock;
+
+  sock = socket(AF_INET, SOCK_STREAM, 0);
+  __builtin_memset(srcbuf, 0, sizeof(srcbuf));
+
+  read(sock, &tainted[0], sizeof(tainted));
+  __builtin_memcpy(dstbuf, srcbuf, tainted[0].length); // expected-warning {{Untrusted data is used to specify the buffer size}}
+
+  __builtin_memset(&tainted, 0, sizeof(tainted));
+  read(sock, &tainted, sizeof(tainted));
+  __builtin_memcpy(dstbuf, srcbuf, tainted[0].length); // expected-warning {{Untrusted data is used to specify the buffer size}}
+
+  __builtin_memset(&tainted, 0, sizeof(tainted));
+  // If we taint element 1, we should not raise an alert on taint for element 0 or element 2
+  read(sock, &tainted[1], sizeof(tainted));
+  __builtin_memcpy(dstbuf, srcbuf, tainted[0].length); // no-warning
+  __builtin_memcpy(dstbuf, srcbuf, tainted[2].length); // no-warning
+}
+
+void testUnion() {
+  union {
+    int x;
+    char y[4];
+  } tainted;
+
+  char buffer[4];
+
+  int sock = socket(AF_INET, SOCK_STREAM, 0);
+  read(sock, &tainted.y, sizeof(tainted.y));
+  // FIXME: overlapping regions aren't detected by isTainted yet
+  __builtin_memcpy(buffer, tainted.y, tainted.x);
 }
 
 int testDivByZero() {
@@ -182,4 +299,94 @@ void testTaintedVLASize() {
   int x;
   scanf("%d", &x);
   int vla[x]; // expected-warning{{Declared variable-length array (VLA) has tainted size}}
+}
+
+// This computation used to take a very long time.
+#define longcmp(a,b,c) { \
+  a -= c;  a ^= c;  c += b; b -= a;  b ^= (a<<6) | (a >> (32-b));  a += c; c -= b;  c ^= b;  b += a; \
+  a -= c;  a ^= c;  c += b; b -= a;  b ^= a;  a += c; c -= b;  c ^= b;  b += a; }
+
+unsigned radar11369570_hanging(const unsigned char *arr, int l) {
+  unsigned a, b, c;
+  a = b = c = 0x9899e3 + l;
+  while (l >= 6) {
+    unsigned t;
+    scanf("%d", &t);
+    a += b;
+    a ^= a;
+    a += (arr[3] + ((unsigned) arr[2] << 8) + ((unsigned) arr[1] << 16) + ((unsigned) arr[0] << 24));
+    longcmp(a, t, c);
+    l -= 12;
+  }
+  return 5/a; // expected-warning {{Division by a tainted value, possibly zero}}
+}
+
+// Check that we do not assert of the following code.
+int SymSymExprWithDiffTypes(void* p) {
+  int i;
+  scanf("%d", &i);
+  int j = (i % (int)(long)p);
+  return 5/j; // expected-warning {{Division by a tainted value, possibly zero}}
+}
+
+
+void constraintManagerShouldTreatAsOpaque(int rhs) {
+  int i;
+  scanf("%d", &i);
+  // This comparison used to hit an assertion in the constraint manager,
+  // which didn't handle NonLoc sym-sym comparisons.
+  if (i < rhs)
+    return;
+  if (i < rhs)
+    *(volatile int *) 0; // no-warning
+}
+
+
+// Test configuration
+int mySource1();
+void mySource2(int*);
+void myScanf(const char*, ...);
+int myPropagator(int, int*);
+int mySnprintf(char*, size_t, const char*, ...);
+bool isOutOfRange(const int*);
+void mySink(int, int, int);
+
+void testConfigurationSources1() {
+  int x = mySource1();
+  Buffer[x] = 1; // expected-warning {{Out of bound memory access }}
+}
+
+void testConfigurationSources2() {
+  int x;
+  mySource2(&x);
+  Buffer[x] = 1; // expected-warning {{Out of bound memory access }}
+}
+
+void testConfigurationSources3() {
+  int x, y;
+  myScanf("%d %d", &x, &y);
+  Buffer[y] = 1; // expected-warning {{Out of bound memory access }}
+}
+
+void testConfigurationPropagation() {
+  int x = mySource1();
+  int y;
+  myPropagator(x, &y);
+  Buffer[y] = 1; // expected-warning {{Out of bound memory access }}
+}
+
+void testConfigurationFilter() {
+  int x = mySource1();
+  if (isOutOfRange(&x)) // the filter function
+    return;
+  Buffer[x] = 1; // no-warning
+}
+
+void testConfigurationSinks() {
+  int x = mySource1();
+  mySink(x, 1, 2);
+  // expected-warning@-1 {{Untrusted data is passed to a user-defined sink}}
+  mySink(1, x, 2); // no-warning
+  mySink(1, 2, x);
+  // expected-warning@-1 {{Untrusted data is passed to a user-defined sink}}
 }

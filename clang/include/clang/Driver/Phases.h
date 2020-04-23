@@ -1,14 +1,13 @@
 //===--- Phases.h - Transformations on Driver Types -------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CLANG_DRIVER_PHASES_H_
-#define CLANG_DRIVER_PHASES_H_
+#ifndef LLVM_CLANG_DRIVER_PHASES_H
+#define LLVM_CLANG_DRIVER_PHASES_H
 
 namespace clang {
 namespace driver {
@@ -19,8 +18,14 @@ namespace phases {
     Preprocess,
     Precompile,
     Compile,
+    Backend,
     Assemble,
-    Link
+    Link,
+    IfsMerge,
+  };
+
+  enum {
+    MaxNumberOfPhases = Link + 1
   };
 
   const char *getPhaseName(ID Id);

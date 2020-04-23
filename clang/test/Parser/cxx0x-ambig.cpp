@@ -25,6 +25,9 @@ namespace final {
     struct T final : S {}; // expected-error {{base 'S' is marked 'final'}}
     struct T bar : S {}; // expected-error {{expected ';' after top level declarator}} expected-error {{expected unqualified-id}}
   }
+  // _Alignas isn't allowed in the places where alignas is. We used to
+  // assert on this.
+  struct U final _Alignas(4) {}; // expected-error 3{{}} expected-note {{}}
 }
 
 // enum versus bitfield mess.
@@ -35,8 +38,8 @@ namespace bitfield {
     constexpr T() {}
     constexpr T(int) {}
     constexpr T(T, T, T, T) {}
-    constexpr T operator=(T) { return *this; }
-    constexpr operator int() { return 4; }
+    constexpr T operator=(T) const { return *this; }
+    constexpr operator int() const { return 4; }
   };
   constexpr T a, b, c, d;
 
@@ -45,7 +48,7 @@ namespace bitfield {
   };
   // This could be a bit-field.
   struct S2 {
-    enum E : T { a = 1, b = 2, c = 3, 4 }; // expected-error {{non-integral type}} expected-error {{expected '}'}} expected-note {{to match}}
+    enum E : T { a = 1, b = 2, c = 3, 4 }; // expected-error {{non-integral type}} expected-error {{expected identifier}}
   };
   struct S3 {
     enum E : int { a = 1, b = 2, c = 3, d }; // ok, defines an enum
@@ -57,15 +60,15 @@ namespace bitfield {
   // This could be a bit-field, but would be ill-formed due to the anonymous
   // member being initialized.
   struct S5 {
-    enum E : int { a = 1 } { b = 2 }; // expected-error {{expected member name}}
+    enum E : int { a = 1 } { b = 2 }; // expected-error {{expected ';' after enum}} expected-error {{expected member name}}
   };
   // This could be a bit-field.
   struct S6 {
-    enum E : int { 1 }; // expected-error {{expected '}'}} expected-note {{to match}}
+    enum E : int { 1 }; // expected-error {{expected identifier}}
   };
 
   struct U {
-    constexpr operator T() { return T(); } // expected-note 2{{candidate}}
+    constexpr operator T() const { return T(); } // expected-note 2{{candidate}}
   };
   // This could be a bit-field.
   struct S7 {
@@ -85,7 +88,7 @@ namespace trailing_return {
 
   struct S {
     S(int);
-    S *operator()() const;
+    S *operator()(...) const;
     int n;
   };
 
@@ -94,7 +97,9 @@ namespace trailing_return {
       // This parses as a function declaration, but DR1223 makes the presence of
       // 'auto' be used for disambiguation.
       S(a)()->n; // ok, expression; expected-warning{{expression result unused}}
+      S(a)(int())->n; // ok, expression; expected-warning{{expression result unused}}
       auto(a)()->n; // ok, function declaration
+      auto(b)(int())->n; // ok, function declaration
       using T = decltype(a);
       using T = auto() -> n;
     }
@@ -104,11 +109,11 @@ namespace trailing_return {
 namespace ellipsis {
   template<typename...T>
   struct S {
-    void e(S::S());
-    void f(S(...args[sizeof(T)])); // expected-note {{here}}
-    void f(S(...args)[sizeof(T)]); // expected-error {{redeclared}} expected-note {{here}}
+    void e(S::S()); // expected-error {{is a constructor name}}
+    void f(S(...args[sizeof(T)])); // expected-note {{here}} expected-note {{here}}
+    void f(S(...args)[sizeof(T)]); // expected-error {{redeclared}}
     void f(S ...args[sizeof(T)]); // expected-error {{redeclared}}
-    void g(S(...[sizeof(T)])); // expected-note {{here}}
+    void g(S(...[sizeof(T)])); // expected-note {{here}} expected-warning {{ISO C++11 requires a parenthesized pack declaration to have a name}}
     void g(S(...)[sizeof(T)]); // expected-error {{function cannot return array type}}
     void g(S ...[sizeof(T)]); // expected-error {{redeclared}}
     void h(T(...)); // function type, expected-error {{unexpanded parameter pack}}
@@ -123,5 +128,50 @@ namespace ellipsis {
     void j(T(T...)); // expected-error {{unexpanded parameter pack}}
     void k(int(...)(T)); // expected-error {{cannot return function type}}
     void k(int ...(T));
+    void l(int(&...)(T)); // expected-warning {{ISO C++11 requires a parenthesized pack declaration to have a name}}
+    void l(int(*...)(T)); // expected-warning {{ISO C++11 requires a parenthesized pack declaration to have a name}}
+    void l(int(S<int>::*...)(T)); // expected-warning {{ISO C++11 requires a parenthesized pack declaration to have a name}}
   };
+
+  struct CtorSink {
+    template <typename ...T> constexpr CtorSink(T &&...t) { }
+    constexpr operator int() const { return 42; }
+  };
+
+  template <unsigned ...N> struct UnsignedTmplArgSink;
+
+  template <typename ...T>
+  void foo(int x, T ...t) {
+    // Have a variety of cases where the syntax is technically unambiguous, but hinges on careful treatment of ellipses.
+    CtorSink(t ...), x; // ok, expression; expected-warning 2{{expression result unused}}
+
+    int x0(CtorSink(t ...)); // ok, declares object x0
+    int *p0 = &x0;
+    (void)p0;
+
+    CtorSink x1(int(t) ..., int(x)); // ok, declares object x1
+    CtorSink *p1 = &x1;
+    (void)p1;
+
+    UnsignedTmplArgSink<T(CtorSink(t ...)) ...> *t0; // ok
+    UnsignedTmplArgSink<((T *)0, 42u) ...> **t0p = &t0;
+  }
+
+  template void foo(int, int, int); // expected-note {{in instantiation of function template specialization 'ellipsis::foo<int, int>' requested here}}
+}
+
+namespace braced_init_list {
+  struct X {
+    void foo() {}
+  };
+
+  void (*pf1)() {};
+  void (X::*pmf1)() {&X::foo};
+  void (X::*pmf2)() = {&X::foo};
+
+  void test() {
+    void (*pf2)() {};
+    void (X::*pmf3)() {&X::foo};
+    void (X::*pmf4)() = {&X::foo};
+  }
 }

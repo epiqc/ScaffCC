@@ -1,9 +1,8 @@
 //==- HexagonRegisterInfo.h - Hexagon Register Information Impl --*- C++ -*-==//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -12,77 +11,78 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef HexagonREGISTERINFO_H
-#define HexagonREGISTERINFO_H
+#ifndef LLVM_LIB_TARGET_HEXAGON_HEXAGONREGISTERINFO_H
+#define LLVM_LIB_TARGET_HEXAGON_HEXAGONREGISTERINFO_H
 
-#include "llvm/Target/TargetRegisterInfo.h"
-#include "llvm/MC/MachineLocation.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
 
 #define GET_REGINFO_HEADER
 #include "HexagonGenRegisterInfo.inc"
 
-//
-//  We try not to hard code the reserved registers in our code,
-//  so the following two macros were defined. However, there
-//  are still a few places that R11 and R10 are hard wired.
-//  See below. If, in the future, we decided to change the reserved
-//  register. Don't forget changing the following places.
-//
-//  1. the "Defs" set of STriw_pred in HexagonInstrInfo.td
-//  2. the "Defs" set of LDri_pred in HexagonInstrInfo.td
-//  3. the definition of "IntRegs" in HexagonRegisterInfo.td
-//  4. the definition of "DoubleRegs" in HexagonRegisterInfo.td
-//
-#define HEXAGON_RESERVED_REG_1 Hexagon::R10
-#define HEXAGON_RESERVED_REG_2 Hexagon::R11
-
 namespace llvm {
 
-class HexagonSubtarget;
-class HexagonInstrInfo;
-class Type;
+namespace Hexagon {
+  // Generic (pseudo) subreg indices for use with getHexagonSubRegIndex.
+  enum { ps_sub_lo = 0, ps_sub_hi = 1 };
+}
 
-struct HexagonRegisterInfo : public HexagonGenRegisterInfo {
-  HexagonSubtarget &Subtarget;
-  const HexagonInstrInfo &TII;
-
-  HexagonRegisterInfo(HexagonSubtarget &st, const HexagonInstrInfo &tii);
+class HexagonRegisterInfo : public HexagonGenRegisterInfo {
+public:
+  HexagonRegisterInfo(unsigned HwMode);
 
   /// Code Generation virtual methods...
-  const uint16_t *getCalleeSavedRegs(const MachineFunction *MF = 0) const;
+  const MCPhysReg *getCalleeSavedRegs(const MachineFunction *MF)
+        const override;
+  const uint32_t *getCallPreservedMask(const MachineFunction &MF,
+        CallingConv::ID) const override;
 
-  const TargetRegisterClass* const* getCalleeSavedRegClasses(
-                                     const MachineFunction *MF = 0) const;
+  BitVector getReservedRegs(const MachineFunction &MF) const override;
 
-  BitVector getReservedRegs(const MachineFunction &MF) const;
+  void eliminateFrameIndex(MachineBasicBlock::iterator II, int SPAdj,
+        unsigned FIOperandNum, RegScavenger *RS = nullptr) const override;
 
-  void eliminateCallFramePseudoInstr(MachineFunction &MF,
-                                     MachineBasicBlock &MBB,
-                                     MachineBasicBlock::iterator I) const;
-
-  void eliminateFrameIndex(MachineBasicBlock::iterator II,
-                           int SPAdj, RegScavenger *RS = NULL) const;
-
-  /// determineFrameLayout - Determine the size of the frame and maximum call
-  /// frame size.
-  void determineFrameLayout(MachineFunction &MF) const;
-
-  /// requiresRegisterScavenging - returns true since we may need scavenging for
-  /// a temporary register when generating hardware loop instructions.
-  bool requiresRegisterScavenging(const MachineFunction &MF) const {
+  /// Returns true since we may need scavenging for a temporary register
+  /// when generating hardware loop instructions.
+  bool requiresRegisterScavenging(const MachineFunction &MF) const override {
     return true;
   }
 
+  /// Returns true. Spill code for predicate registers might need an extra
+  /// register.
+  bool requiresFrameIndexScavenging(const MachineFunction &MF) const override {
+    return true;
+  }
+
+  /// Returns true if the frame pointer is valid.
+  bool useFPForScavengingIndex(const MachineFunction &MF) const override;
+
+  bool trackLivenessAfterRegAlloc(const MachineFunction &MF) const override {
+    return true;
+  }
+
+  bool shouldCoalesce(MachineInstr *MI, const TargetRegisterClass *SrcRC,
+        unsigned SubReg, const TargetRegisterClass *DstRC, unsigned DstSubReg,
+        const TargetRegisterClass *NewRC, LiveIntervals &LIS) const override;
+
   // Debug information queries.
   unsigned getRARegister() const;
-  unsigned getFrameRegister(const MachineFunction &MF) const;
+  Register getFrameRegister(const MachineFunction &MF) const override;
   unsigned getFrameRegister() const;
-  void getInitialFrameState(std::vector<MachineMove> &Moves) const;
   unsigned getStackRegister() const;
 
-  // Exception handling queries.
-  unsigned getEHExceptionRegister() const;
-  unsigned getEHHandlerRegister() const;
+  unsigned getHexagonSubRegIndex(const TargetRegisterClass &RC,
+        unsigned GenIdx) const;
+
+  const MCPhysReg *getCallerSavedRegs(const MachineFunction *MF,
+        const TargetRegisterClass *RC) const;
+
+  unsigned getFirstCallerSavedNonParamReg() const;
+
+  const TargetRegisterClass *
+  getPointerRegClass(const MachineFunction &MF,
+                     unsigned Kind = 0) const override;
+
+  bool isEHReturnCalleeSaveReg(unsigned Reg) const;
 };
 
 } // end namespace llvm

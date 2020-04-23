@@ -1,10 +1,19 @@
 #include "llvm/Support/Locale.h"
-#include "llvm/Config/config.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/Support/Unicode.h"
 
-#ifdef __APPLE__
-#include "LocaleXlocale.inc"
-#elif LLVM_ON_WIN32
-#include "LocaleWindows.inc"
-#else
-#include "LocaleGeneric.inc"
-#endif
+namespace llvm {
+namespace sys {
+namespace locale {
+
+int columnWidth(StringRef Text) {
+  return llvm::sys::unicode::columnWidthUTF8(Text);
+}
+
+bool isPrint(int UCS) {
+  return llvm::sys::unicode::isPrintable(UCS);
+}
+
+} // namespace locale
+} // namespace sys
+} // namespace llvm

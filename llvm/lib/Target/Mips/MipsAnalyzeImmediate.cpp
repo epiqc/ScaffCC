@@ -1,14 +1,17 @@
-//===-- MipsAnalyzeImmediate.cpp - Analyze Immediates ---------------------===//
+//===- MipsAnalyzeImmediate.cpp - Analyze Immediates ----------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
+
 #include "MipsAnalyzeImmediate.h"
 #include "Mips.h"
 #include "llvm/Support/MathExtras.h"
+#include <cassert>
+#include <cstdint>
+#include <iterator>
 
 using namespace llvm;
 
@@ -40,7 +43,7 @@ void MipsAnalyzeImmediate::GetInstSeqLsORi(uint64_t Imm, unsigned RemSize,
 
 void MipsAnalyzeImmediate::GetInstSeqLsSLL(uint64_t Imm, unsigned RemSize,
                                            InstSeqLs &SeqLs) {
-  unsigned Shamt = CountTrailingZeros_64(Imm);
+  unsigned Shamt = countTrailingZeros(Imm);
   GetInstSeqLs(Imm >> Shamt, RemSize - Shamt, SeqLs);
   AddInstr(SeqLs, Inst(SLL, Shamt));
 }
@@ -72,7 +75,8 @@ void MipsAnalyzeImmediate::GetInstSeqLs(uint64_t Imm, unsigned RemSize,
   if (Imm & 0x8000) {
     InstSeqLs SeqLsORi;
     GetInstSeqLsORi(Imm, RemSize, SeqLsORi);
-    SeqLs.insert(SeqLs.end(), SeqLsORi.begin(), SeqLsORi.end());
+    SeqLs.append(std::make_move_iterator(SeqLsORi.begin()),
+                 std::make_move_iterator(SeqLsORi.end()));
   }
 }
 
@@ -91,7 +95,7 @@ void MipsAnalyzeImmediate::ReplaceADDiuSLLWithLUi(InstSeq &Seq) {
 
   // Sign-extend and shift operand of ADDiu and see if it still fits in 16-bit.
   int64_t Imm = SignExtend64<16>(Seq[0].ImmOpnd);
-  int64_t ShiftedImm = Imm << (Seq[1].ImmOpnd - 16);
+  int64_t ShiftedImm = (uint64_t)Imm << (Seq[1].ImmOpnd - 16);
 
   if (!isInt<16>(ShiftedImm))
     return;

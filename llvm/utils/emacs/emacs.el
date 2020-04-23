@@ -1,39 +1,32 @@
 ;; LLVM coding style guidelines in emacs
 ;; Maintainer: LLVM Team, http://llvm.org/
-;; Modified:   2009-07-28
 
-;; Max 80 cols per line, indent by two spaces, no tabs.
-;; Apparently, this does not affect tabs in Makefiles.
-(custom-set-variables
-  '(fill-column 80)
-  '(c++-indent-level 2)
-  '(c-basic-offset 2)
-  '(indent-tabs-mode nil))
+(defun llvm-lineup-statement (langelem)
+  (let ((in-assign (c-lineup-assignments langelem)))
+    (if (not in-assign)
+        '++
+      (aset in-assign 0
+            (+ (aref in-assign 0)
+               (* 2 c-basic-offset)))
+      in-assign)))
 
-
-;; Alternative to setting the global style.  Only files with "llvm" in
-;; their names will automatically set to the llvm.org coding style.
+;; Add a cc-mode style for editing LLVM C and C++ code
 (c-add-style "llvm.org"
-             '((fill-column . 80)
+             '("gnu"
+	       (fill-column . 80)
 	       (c++-indent-level . 2)
 	       (c-basic-offset . 2)
 	       (indent-tabs-mode . nil)
-               (c-offsets-alist . ((innamespace 0)))))
+	       (c-offsets-alist . ((arglist-intro . ++)
+				   (innamespace . 0)
+				   (member-init-intro . ++)
+				   (statement-cont . llvm-lineup-statement)))))
 
-(add-hook 'c-mode-hook
+;; Files with "llvm" in their names will automatically be set to the
+;; llvm.org coding style.
+(add-hook 'c-mode-common-hook
 	  (function
 	   (lambda nil 
 	     (if (string-match "llvm" buffer-file-name)
 		 (progn
-		   (c-set-style "llvm.org")
-		   )
-	       ))))
-
-(add-hook 'c++-mode-hook
-	  (function
-	   (lambda nil 
-	     (if (string-match "llvm" buffer-file-name)
-		 (progn
-		   (c-set-style "llvm.org")
-		   )
-	       ))))
+		   (c-set-style "llvm.org"))))))

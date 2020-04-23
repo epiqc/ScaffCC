@@ -1,9 +1,8 @@
 //===-- XCoreRegisterInfo.h - XCore Register Information Impl ---*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,10 +10,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef XCOREREGISTERINFO_H
-#define XCOREREGISTERINFO_H
+#ifndef LLVM_LIB_TARGET_XCORE_XCOREREGISTERINFO_H
+#define LLVM_LIB_TARGET_XCORE_XCOREREGISTERINFO_H
 
-#include "llvm/Target/TargetRegisterInfo.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
 
 #define GET_REGINFO_HEADER
 #include "XCoreGenRegisterInfo.inc"
@@ -24,43 +23,27 @@ namespace llvm {
 class TargetInstrInfo;
 
 struct XCoreRegisterInfo : public XCoreGenRegisterInfo {
-private:
-  const TargetInstrInfo &TII;
-
-  void loadConstant(MachineBasicBlock &MBB,
-                  MachineBasicBlock::iterator I,
-                  unsigned DstReg, int64_t Value, DebugLoc dl) const;
-
-  void storeToStack(MachineBasicBlock &MBB,
-                  MachineBasicBlock::iterator I,
-                  unsigned SrcReg, int Offset, DebugLoc dl) const;
-
-  void loadFromStack(MachineBasicBlock &MBB,
-                  MachineBasicBlock::iterator I,
-                  unsigned DstReg, int Offset, DebugLoc dl) const;
-
 public:
-  XCoreRegisterInfo(const TargetInstrInfo &tii);
+  XCoreRegisterInfo();
 
   /// Code Generation virtual methods...
 
-  const uint16_t *getCalleeSavedRegs(const MachineFunction *MF = 0) const;
+  const MCPhysReg *getCalleeSavedRegs(const MachineFunction *MF) const override;
 
-  BitVector getReservedRegs(const MachineFunction &MF) const;
-  
-  bool requiresRegisterScavenging(const MachineFunction &MF) const;
+  BitVector getReservedRegs(const MachineFunction &MF) const override;
 
-  bool useFPForScavengingIndex(const MachineFunction &MF) const;
+  bool requiresRegisterScavenging(const MachineFunction &MF) const override;
 
-  void eliminateCallFramePseudoInstr(MachineFunction &MF,
-                                     MachineBasicBlock &MBB,
-                                     MachineBasicBlock::iterator I) const;
+  bool trackLivenessAfterRegAlloc(const MachineFunction &MF) const override;
+
+  bool useFPForScavengingIndex(const MachineFunction &MF) const override;
 
   void eliminateFrameIndex(MachineBasicBlock::iterator II,
-                           int SPAdj, RegScavenger *RS = NULL) const;
+                           int SPAdj, unsigned FIOperandNum,
+                           RegScavenger *RS = nullptr) const override;
 
   // Debug information queries.
-  unsigned getFrameRegister(const MachineFunction &MF) const;
+  Register getFrameRegister(const MachineFunction &MF) const override;
 
   //! Return whether to emit frame moves
   static bool needsFrameMoves(const MachineFunction &MF);

@@ -15,8 +15,9 @@ class Foo {
   virtual Foo(double); // expected-error{{constructor cannot be declared 'virtual'}}
   Foo(long) const; // expected-error{{'const' qualifier is not allowed on a constructor}}
   
-  int Foo(int, int); // expected-error{{constructor cannot have a return type}} \
-  // expected-error{{member 'Foo' has the same name as its class}}
+  int Foo(int, int); // expected-error{{constructor cannot have a return type}}
+
+  volatile Foo(float); // expected-error{{constructor cannot have a return type}}
 };
 
 Foo::Foo(const Foo&) { }
@@ -85,3 +86,14 @@ A::S::operator int() { return 1; }
 
 A::S::~S() {}
 
+namespace PR38286 {
+  // FIXME: It'd be nice to give more consistent diagnostics for these cases
+  // (but they're all failing for somewhat different reasons...).
+  template<typename> struct A;
+  template<typename T> A<T>::A() {} // expected-error {{incomplete type 'A' named in nested name specifier}}
+  /*FIXME: needed to recover properly from previous error*/;
+  template<typename> struct B;
+  template<typename T> void B<T>::f() {} // expected-error {{out-of-line definition of 'f' from class 'B<type-parameter-0-0>'}}
+  template<typename> struct C;
+  template<typename T> C<T>::~C() {} // expected-error {{no type named 'C' in 'C<type-parameter-0-0>'}}
+}

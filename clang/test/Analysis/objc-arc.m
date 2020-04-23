@@ -1,4 +1,5 @@
-// RUN: %clang_cc1 -triple x86_64-apple-darwin10 -analyze -analyzer-checker=core,osx.cocoa.RetainCount,deadcode -analyzer-store=region -verify -fblocks  -analyzer-opt-analyze-nested-blocks -fobjc-arc %s
+// RUN: %clang_analyze_cc1 -triple x86_64-apple-darwin10 -analyzer-checker=core,osx.cocoa.RetainCount,deadcode -verify -fblocks -analyzer-opt-analyze-nested-blocks -fobjc-arc -analyzer-output=plist-multi-file -analyzer-config deadcode.DeadStores:ShowFixIts=true -o %t.plist %s
+// RUN: %normalize_plist <%t.plist | diff -ub %S/Inputs/expected-plists/objc-arc.m.plist -
 
 typedef signed char BOOL;
 typedef struct _NSZone NSZone;
@@ -122,7 +123,7 @@ void rdar9424882() {
 typedef const void *CFTypeRef;
 typedef const struct __CFString *CFStringRef;
 
-@interface NSString
+@interface NSString : NSObject
 - (id) self;
 @end
 
@@ -137,7 +138,7 @@ NSString *CreateNSString();
 void from_cf() {
   id obj1 = (__bridge_transfer id)CFCreateSomething(); // expected-warning{{never read}}
   id obj2 = (__bridge_transfer NSString*)CFCreateString();
-  [obj2 self]; // Add a use, to show we can use the object after it has been transfered.
+  [obj2 self]; // Add a use, to show we can use the object after it has been transferred.
   id obj3 = (__bridge id)CFGetSomething();
   [obj3 self]; // Add a use, to show we can use the object after it has been bridged.
   id obj4 = (__bridge NSString*)CFGetString(); // expected-warning{{never read}}
@@ -218,3 +219,43 @@ void rdar11059275_negative() {
   (void) o;
 }
 
+__attribute__((ns_returns_retained)) id rdar14061675_helper() {
+  return [[NSObject alloc] init];
+}
+
+id rdar14061675() {
+  // ARC produces an implicit cast here. We need to make sure the combination
+  // of that and the inlined call don't produce a spurious edge cycle.
+  id result = rdar14061675_helper();
+  *(volatile int *)0 = 1; // expected-warning{{Dereference of null pointer}}
+  return result;
+}
+
+typedef const void * CFTypeRef;
+typedef const struct __CFString * CFStringRef;
+typedef const struct __CFAllocator * CFAllocatorRef;
+extern const CFAllocatorRef kCFAllocatorDefault;
+
+extern CFTypeRef CFRetain(CFTypeRef cf);
+extern void CFRelease(CFTypeRef cf);
+
+
+void check_bridge_retained_cast() {
+    NSString *nsStr = [[NSString alloc] init];
+    CFStringRef cfStr = (__bridge_retained CFStringRef)nsStr;
+    CFRelease(cfStr); // no-warning
+}
+
+@interface A;
+@end
+
+void check_bridge_to_non_cocoa(CFStringRef s) {
+  A *a = (__bridge_transfer A *) s; // no-crash
+}
+
+struct B;
+
+struct B * check_bridge_to_non_cf() {
+  NSString *s = [[NSString alloc] init];
+  return (__bridge struct B*) s;
+}

@@ -220,3 +220,57 @@ typedef long long __m256i __attribute__((__vector_size__(32)));
 void t26 (__m256i *p) {
   __asm__ volatile("vmovaps  %0, %%ymm0" :: "m" (*(__m256i*)p) : "ymm0");
 }
+
+// Check to make sure the inline asm non-standard dialect attribute _not_ is
+// emitted.
+void t27(void) {
+  asm volatile("nop");
+// CHECK: @t27
+// CHECK: call void asm sideeffect "nop"
+// CHECK-NOT: ia_nsdialect
+// CHECK: ret void
+}
+
+// Check handling of '*' and '#' constraint modifiers.
+void t28(void)
+{
+  asm volatile ("/* %0 */" : : "i#*X,*r" (1));
+// CHECK: @t28
+// CHECK: call void asm sideeffect "/* $0 */", "i|r,~{dirflag},~{fpsr},~{flags}"(i32 1)
+}
+
+static unsigned t29_var[1];
+
+void t29(void) {
+  asm volatile("movl %%eax, %0"
+               :
+               : "m"(t29_var));
+  // CHECK: @t29
+  // CHECK: call void asm sideeffect "movl %eax, $0", "*m,~{dirflag},~{fpsr},~{flags}"([1 x i32]* @t29_var)
+}
+
+void t30(int len) {
+  __asm__ volatile(""
+                   : "+&&rm"(len));
+  // CHECK: @t30
+  // CHECK: call void asm sideeffect "", "=*&rm,0,~{dirflag},~{fpsr},~{flags}"
+}
+
+void t31(int len) {
+  __asm__ volatile(""
+                   : "+%%rm"(len), "+rm"(len));
+  // CHECK: @t31
+  // CHECK: call void asm sideeffect "", "=*%rm,=*rm,0,1,~{dirflag},~{fpsr},~{flags}"
+}
+
+// CHECK: @t32
+int t32(int cond)
+{
+  asm goto("testl %0, %0; jne %l1;" :: "r"(cond)::label_true, loop);
+  // CHECK: callbr void asm sideeffect "testl $0, $0; jne ${1:l};", "r,X,X,~{dirflag},~{fpsr},~{flags}"(i32 %0, i8* blockaddress(@t32, %label_true), i8* blockaddress(@t32, %loop)) #1
+  return 0;
+loop:
+  return 0;
+label_true:
+  return 1;
+}

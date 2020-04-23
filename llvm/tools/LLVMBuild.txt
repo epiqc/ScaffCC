@@ -1,9 +1,8 @@
 ;===- ./tools/LLVMBuild.txt ------------------------------------*- Conf -*--===;
 ;
-;                     The LLVM Compiler Infrastructure
-;
-; This file is distributed under the University of Illinois Open Source
-; License. See LICENSE.TXT for details.
+; Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+; See https://llvm.org/LICENSE.txt for license information.
+; SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 ;
 ;===------------------------------------------------------------------------===;
 ;
@@ -16,7 +15,47 @@
 ;===------------------------------------------------------------------------===;
 
 [common]
-subdirectories = bugpoint llc lli llvm-ar llvm-as llvm-bcanalyzer llvm-cov llvm-diff llvm-dis llvm-dwarfdump llvm-extract llvm-ld llvm-link llvm-mc llvm-nm llvm-objdump llvm-prof llvm-ranlib llvm-rtdyld llvm-size llvm-stub macho-dump opt
+subdirectories =
+ bugpoint
+ dsymutil
+ llc
+ lli
+ llvm-ar
+ llvm-as
+ llvm-bcanalyzer
+ llvm-cat
+ llvm-cfi-verify
+ llvm-cov
+ llvm-cvtres
+ llvm-diff
+ llvm-dis
+ llvm-dwarfdump
+ llvm-dwp
+ llvm-elfabi
+ llvm-ifs
+ llvm-exegesis
+ llvm-extract
+ llvm-jitlistener
+ llvm-jitlink
+ llvm-link
+ llvm-lto
+ llvm-mc
+ llvm-mca
+ llvm-modextract
+ llvm-mt
+ llvm-nm
+ llvm-objcopy
+ llvm-objdump
+ llvm-pdbutil
+ llvm-profdata
+ llvm-rc
+ llvm-reduce
+ llvm-rtdyld
+ llvm-size
+ llvm-split
+ llvm-undname
+ opt
+ verify-uselistorder
 
 [component_0]
 type = Group

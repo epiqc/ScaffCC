@@ -1,4 +1,4 @@
-// RUN: %clang --analyze %s -o %t
+// RUN: %clang_analyze_cc1 %s -o %t
 
 // Tests that some specific checkers are enabled by default.
 
@@ -11,7 +11,7 @@ id foo(int x) {
     title = @"bar";
     break;
   default:
-    title = "@baz";
+    title = @"baz";
     break;
   }
   return title;

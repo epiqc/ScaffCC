@@ -18,3 +18,7 @@ void g(void) {
   s->x = 1;
   s->z = 2;
 }
+
+int PR17762(struct simple c) {
+  return c->i; // expected-error {{member reference type 'struct simple' is not a pointer; did you mean to use '.'?}}
+}

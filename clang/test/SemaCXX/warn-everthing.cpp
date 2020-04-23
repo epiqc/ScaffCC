@@ -9,5 +9,6 @@ public:
 };
 
 void testPR12271() { // expected-warning {{no previous prototype for function 'testPR12271'}}
-  PR12271 a[1][1]; // expected-warning {{unused variable 'a'}}
+// expected-note@-1{{declare 'static' if the function is not intended to be used outside of this translation unit}}
+  PR12271 a[1][1];
 }

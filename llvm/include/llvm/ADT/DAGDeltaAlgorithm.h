@@ -1,16 +1,16 @@
-//===--- DAGDeltaAlgorithm.h - A DAG Minimization Algorithm ----*- C++ -*--===//
+//===- DAGDeltaAlgorithm.h - A DAG Minimization Algorithm ------*- C++ -*--===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_ADT_DAGDELTAALGORITHM_H
 #define LLVM_ADT_DAGDELTAALGORITHM_H
 
-#include <vector>
 #include <set>
+#include <utility>
+#include <vector>
 
 namespace llvm {
 
@@ -37,28 +37,30 @@ namespace llvm {
 /// should satisfy.
 class DAGDeltaAlgorithm {
   virtual void anchor();
+
 public:
-  typedef unsigned change_ty;
-  typedef std::pair<change_ty, change_ty> edge_ty;
+  using change_ty = unsigned;
+  using edge_ty = std::pair<change_ty, change_ty>;
 
   // FIXME: Use a decent data structure.
-  typedef std::set<change_ty> changeset_ty;
-  typedef std::vector<changeset_ty> changesetlist_ty;
+  using changeset_ty = std::set<change_ty>;
+  using changesetlist_ty = std::vector<changeset_ty>;
 
 public:
-  virtual ~DAGDeltaAlgorithm() {}
+  virtual ~DAGDeltaAlgorithm() = default;
 
-  /// Run - Minimize the DAG formed by the \arg Changes vertices and the \arg
-  /// Dependencies edges by executing \see ExecuteOneTest() on subsets of
+  /// Run - Minimize the DAG formed by the \p Changes vertices and the
+  /// \p Dependencies edges by executing \see ExecuteOneTest() on subsets of
   /// changes and returning the smallest set which still satisfies the test
-  /// predicate and the input \arg Dependencies.
+  /// predicate and the input \p Dependencies.
   ///
   /// \param Changes The list of changes.
   ///
   /// \param Dependencies The list of dependencies amongst changes. For each
-  /// (x,y) in \arg Dependencies, both x and y must be in \arg Changes. The
-  /// minimization algorithm guarantees that for each tested changed set S, x
-  /// \in S implies y \in S. It is an error to have cyclic dependencies.
+  /// (x,y) in \p Dependencies, both x and y must be in \p Changes. The
+  /// minimization algorithm guarantees that for each tested changed set S,
+  /// \f$ x \in S \f$ implies \f$ y \in S \f$. It is an error to have cyclic
+  /// dependencies.
   changeset_ty Run(const changeset_ty &Changes,
                    const std::vector<edge_ty> &Dependencies);
 
@@ -67,10 +69,10 @@ public:
                                   const changesetlist_ty &Sets,
                                   const changeset_ty &Required) {}
 
-  /// ExecuteOneTest - Execute a single test predicate on the change set \arg S.
+  /// ExecuteOneTest - Execute a single test predicate on the change set \p S.
   virtual bool ExecuteOneTest(const changeset_ty &S) = 0;
 };
 
 } // end namespace llvm
 
-#endif
+#endif // LLVM_ADT_DAGDELTAALGORITHM_H

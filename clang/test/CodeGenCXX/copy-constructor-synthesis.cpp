@@ -21,7 +21,7 @@ struct P {
 };
 
 
-// CHECK: define linkonce_odr void @_ZN1XC1ERKS_(%struct.X* %this, %struct.X*) unnamed_addr
+// CHECK-LABEL: define linkonce_odr void @_ZN1XC1ERKS_(%struct.X* %this, %struct.X* dereferenceable({{[0-9]+}}) %0) unnamed_addr
 struct X  : M, N, P { // ...
   X() : f1(1.0), d1(2.0), i1(3), name("HELLO"), bf1(0xff), bf2(0xabcd),
         au_i1(1234), au1_4("MASKED") {}
@@ -136,7 +136,17 @@ void f(B b1) {
   B b2 = b1;
 }
 
-// CHECK: define linkonce_odr void @_ZN6PR66281BC2ERKS0_(%"struct.PR6628::B"* %this, %"struct.PR6628::B"*) unnamed_addr
+// CHECK:    define linkonce_odr dereferenceable({{[0-9]+}}) [[A:%.*]]* @_ZN12rdar138169401AaSERKS0_(
+// CHECK:      [[THIS:%.*]] = load [[A]]*, [[A]]**
+// CHECK-NEXT: [[T0:%.*]] = getelementptr inbounds [[A]], [[A]]* [[THIS]], i32 0, i32 1
+// CHECK-NEXT: [[OTHER:%.*]] = load [[A]]*, [[A]]**
+// CHECK-NEXT: [[T2:%.*]] = getelementptr inbounds [[A]], [[A]]* [[OTHER]], i32 0, i32 1
+// CHECK-NEXT: [[T4:%.*]] = bitcast i16* [[T0]] to i8*
+// CHECK-NEXT: [[T5:%.*]] = bitcast i16* [[T2]] to i8*
+// CHECK-NEXT: call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 8 [[T4]], i8* align 8 [[T5]], i64 8, i1 false)
+// CHECK-NEXT: ret [[A]]* [[THIS]]
+
+// CHECK-LABEL: define linkonce_odr void @_ZN6PR66281BC2ERKS0_(%"struct.PR6628::B"* %this, %"struct.PR6628::B"* dereferenceable({{[0-9]+}}) %0) unnamed_addr
 // CHECK: call void @_ZN6PR66281TC1Ev
 // CHECK: call void @_ZN6PR66281TC1Ev
 // CHECK: call void @_ZN6PR66281AC2ERKS0_RKNS_1TES5_
@@ -152,5 +162,32 @@ void f(B b1) {
 // CHECK: call void @_ZN6PR66281AC1ERKS0_RKNS_1TES5_
 // CHECK: call void @_ZN6PR66281TD1Ev
 // CHECK: call void @_ZN6PR66281TD1Ev
+
+// CHECK-LABEL:    define linkonce_odr void @_ZN12rdar138169401AC2ERKS0_(
+// CHECK:      [[THIS:%.*]] = load [[A]]*, [[A]]**
+// CHECK-NEXT: [[T0:%.*]] = bitcast [[A]]* [[THIS]] to i32 (...)***
+// CHECK-NEXT: store i32 (...)** bitcast (i8** getelementptr inbounds ({ [4 x i8*] }, { [4 x i8*] }* @_ZTVN12rdar138169401AE, i32 0, inrange i32 0, i32 2) to i32 (...)**), i32 (...)*** [[T0]]
+// CHECK-NEXT: [[T0:%.*]] = getelementptr inbounds [[A]], [[A]]* [[THIS]], i32 0, i32 1
+// CHECK-NEXT: [[OTHER:%.*]] = load [[A]]*, [[A]]**
+// CHECK-NEXT: [[T2:%.*]] = getelementptr inbounds [[A]], [[A]]* [[OTHER]], i32 0, i32 1
+// CHECK-NEXT: [[T4:%.*]] = bitcast i16* [[T0]] to i8*
+// CHECK-NEXT: [[T5:%.*]] = bitcast i16* [[T2]] to i8*
+// CHECK-NEXT: call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 8 [[T4]], i8* align 8 [[T5]], i64 8, i1 false)
+// CHECK-NEXT: ret void
 }
 
+// rdar://13816940
+// Test above because things get weirdly re-ordered.
+namespace rdar13816940 {
+  struct A {
+    virtual ~A();
+    unsigned short a : 1;
+    unsigned short : 15;
+    unsigned other;
+  };
+
+  void test(A &a) {
+    A x = a; // force copy constructor into existence
+    x = a; // also force the copy assignment operator
+  }
+}

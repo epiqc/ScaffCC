@@ -1,21 +1,18 @@
-//===-- MCAsmParserExtension.cpp - Asm Parser Hooks -----------------------===//
+//===- MCAsmParserExtension.cpp - Asm Parser Hooks ------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
 #include "llvm/MC/MCParser/MCAsmParserExtension.h"
+
 using namespace llvm;
 
-MCAsmParserExtension::MCAsmParserExtension() :
-  BracketExpressionsSupported(false) {
-}
+MCAsmParserExtension::MCAsmParserExtension() = default;
 
-MCAsmParserExtension::~MCAsmParserExtension() {
-}
+MCAsmParserExtension::~MCAsmParserExtension() = default;
 
 void MCAsmParserExtension::Initialize(MCAsmParser &Parser) {
   this->Parser = &Parser;

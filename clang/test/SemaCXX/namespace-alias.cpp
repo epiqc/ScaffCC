@@ -35,12 +35,12 @@ namespace H {
   namespace A2 { }
 
   // These all point to A1.
-  namespace B = A1; // expected-note {{previous definition is here}}
+  namespace B = A1;
   namespace B = A1;
   namespace C = B;
-  namespace B = C;
+  namespace B = C; // expected-note {{previously defined as an alias for 'A1'}}
 
-  namespace B = A2; // expected-error {{redefinition of 'B' as different kind of symbol}}
+  namespace B = A2; // expected-error {{redefinition of 'B' as an alias for a different namespace}}
 }
 
 namespace I { 
@@ -124,4 +124,47 @@ namespace PR7014 {
   using namespace X;
 
   namespace Y = X::Y;
+}
+
+namespace PR25731 {
+  void f() {
+    namespace X = PR25731;
+    namespace X = PR25731;
+    X::f();
+  }
+}
+
+namespace MultipleUnambiguousLookupResults {
+  namespace A { int y; }
+  namespace B {
+    namespace X { int x; }
+    namespace Y = A;
+    namespace Z = A; // expected-note {{candidate}}
+  }
+  namespace C {
+    namespace X = B::X;
+    namespace Y = A;
+    namespace Z = X; // expected-note {{candidate}}
+  }
+  using namespace B;
+  using namespace C;
+  int x1 = X::x; // ok, unambiguous
+  int y1 = Y::y; // ok, unambiguous
+  int z1 = Z::x; // expected-error {{ambiguous}}
+
+  namespace X = C::X;
+  namespace Y = A;
+  int x2 = X::x; // ok, unambiguous
+  int y2 = Y::y; // ok, unambiguous
+}
+
+namespace RedeclOfNonNamespace {
+  int a; // expected-note {{previous}}
+  namespace X { int b; }
+  using X::b; // expected-note {{previous}}
+  namespace c {} // expected-note {{previous}}
+
+  namespace a = X; // expected-error {{different kind}}
+  namespace b = X; // expected-error {{different kind}}
+  namespace c = X; // expected-error-re {{redefinition of 'c'{{$}}}}
 }

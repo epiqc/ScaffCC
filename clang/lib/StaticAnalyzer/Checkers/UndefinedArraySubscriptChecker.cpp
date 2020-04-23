@@ -1,9 +1,8 @@
 //===--- UndefinedArraySubscriptChecker.h ----------------------*- C++ -*--===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -12,11 +11,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "ClangSACheckers.h"
+#include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
+#include "clang/AST/DeclCXX.h"
+#include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
 #include "clang/StaticAnalyzer/Core/Checker.h"
 #include "clang/StaticAnalyzer/Core/CheckerManager.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
-#include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
 
 using namespace clang;
 using namespace ento;
@@ -24,32 +24,44 @@ using namespace ento;
 namespace {
 class UndefinedArraySubscriptChecker
   : public Checker< check::PreStmt<ArraySubscriptExpr> > {
-  mutable OwningPtr<BugType> BT;
+  mutable std::unique_ptr<BugType> BT;
 
 public:
   void checkPreStmt(const ArraySubscriptExpr *A, CheckerContext &C) const;
 };
 } // end anonymous namespace
 
-void 
+void
 UndefinedArraySubscriptChecker::checkPreStmt(const ArraySubscriptExpr *A,
                                              CheckerContext &C) const {
-  if (C.getState()->getSVal(A->getIdx(), C.getLocationContext()).isUndef()) {
-    if (ExplodedNode *N = C.generateSink()) {
-      if (!BT)
-        BT.reset(new BuiltinBug("Array subscript is undefined"));
+  const Expr *Index = A->getIdx();
+  if (!C.getSVal(Index).isUndef())
+    return;
 
-      // Generate a report for this bug.
-      BugReport *R = new BugReport(*BT, BT->getName(), N);
-      R->addRange(A->getIdx()->getSourceRange());
-      R->addVisitor(bugreporter::getTrackNullOrUndefValueVisitor(N,
-                                                                 A->getIdx(),
-                                                                 R));
-      C.EmitReport(R);
-    }
-  }
+  // Sema generates anonymous array variables for copying array struct fields.
+  // Don't warn if we're in an implicitly-generated constructor.
+  const Decl *D = C.getLocationContext()->getDecl();
+  if (const CXXConstructorDecl *Ctor = dyn_cast<CXXConstructorDecl>(D))
+    if (Ctor->isDefaulted())
+      return;
+
+  ExplodedNode *N = C.generateErrorNode();
+  if (!N)
+    return;
+  if (!BT)
+    BT.reset(new BuiltinBug(this, "Array subscript is undefined"));
+
+  // Generate a report for this bug.
+  auto R = std::make_unique<PathSensitiveBugReport>(*BT, BT->getDescription(), N);
+  R->addRange(A->getIdx()->getSourceRange());
+  bugreporter::trackExpressionValue(N, A->getIdx(), *R);
+  C.emitReport(std::move(R));
 }
 
 void ento::registerUndefinedArraySubscriptChecker(CheckerManager &mgr) {
   mgr.registerChecker<UndefinedArraySubscriptChecker>();
+}
+
+bool ento::shouldRegisterUndefinedArraySubscriptChecker(const LangOptions &LO) {
+  return true;
 }

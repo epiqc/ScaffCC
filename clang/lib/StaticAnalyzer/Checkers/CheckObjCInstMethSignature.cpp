@@ -1,9 +1,8 @@
-//=- CheckObjCInstMethodRetTy.cpp - Check ObjC method signatures -*- C++ -*-==//
+//===-- CheckObjCInstMethSignature.cpp - Check ObjC method signatures -----===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,14 +12,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "ClangSACheckers.h"
-#include "clang/StaticAnalyzer/Core/Checker.h"
-#include "clang/StaticAnalyzer/Core/BugReporter/PathDiagnostic.h"
-#include "clang/StaticAnalyzer/Core/BugReporter/BugReporter.h"
+#include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
+#include "clang/Analysis/PathDiagnostic.h"
+#include "clang/AST/ASTContext.h"
 #include "clang/AST/DeclObjC.h"
 #include "clang/AST/Type.h"
-#include "clang/AST/ASTContext.h"
-
+#include "clang/StaticAnalyzer/Core/BugReporter/BugReporter.h"
+#include "clang/StaticAnalyzer/Core/Checker.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -41,10 +39,11 @@ static bool AreTypesCompatible(QualType Derived, QualType Ancestor,
 static void CompareReturnTypes(const ObjCMethodDecl *MethDerived,
                                const ObjCMethodDecl *MethAncestor,
                                BugReporter &BR, ASTContext &Ctx,
-                               const ObjCImplementationDecl *ID) {
+                               const ObjCImplementationDecl *ID,
+                               const CheckerBase *Checker) {
 
-  QualType ResDerived  = MethDerived->getResultType();
-  QualType ResAncestor = MethAncestor->getResultType();
+  QualType ResDerived = MethDerived->getReturnType();
+  QualType ResAncestor = MethAncestor->getReturnType();
 
   if (!AreTypesCompatible(ResDerived, ResAncestor, Ctx)) {
     std::string sbuf;
@@ -54,9 +53,9 @@ static void CompareReturnTypes(const ObjCMethodDecl *MethDerived,
        << *MethDerived->getClassInterface()
        << "', which is derived from class '"
        << *MethAncestor->getClassInterface()
-       << "', defines the instance method '"
-       << MethDerived->getSelector().getAsString()
-       << "' whose return type is '"
+       << "', defines the instance method '";
+    MethDerived->getSelector().print(os);
+    os << "' whose return type is '"
        << ResDerived.getAsString()
        << "'.  A method with the same name (same selector) is also defined in "
           "class '"
@@ -70,15 +69,15 @@ static void CompareReturnTypes(const ObjCMethodDecl *MethDerived,
       PathDiagnosticLocation::createBegin(MethDerived,
                                           BR.getSourceManager());
 
-    BR.EmitBasicReport(MethDerived,
-                       "Incompatible instance method return type",
-                       categories::CoreFoundationObjectiveC,
-                       os.str(), MethDLoc);
+    BR.EmitBasicReport(
+        MethDerived, Checker, "Incompatible instance method return type",
+        categories::CoreFoundationObjectiveC, os.str(), MethDLoc);
   }
 }
 
 static void CheckObjCInstMethSignature(const ObjCImplementationDecl *ID,
-                                       BugReporter& BR) {
+                                       BugReporter &BR,
+                                       const CheckerBase *Checker) {
 
   const ObjCInterfaceDecl *D = ID->getClassInterface();
   const ObjCInterfaceDecl *C = D->getSuperClass();
@@ -93,10 +92,7 @@ static void CheckObjCInstMethSignature(const ObjCImplementationDecl *ID,
   MapTy IMeths;
   unsigned NumMethods = 0;
 
-  for (ObjCImplementationDecl::instmeth_iterator I=ID->instmeth_begin(),
-       E=ID->instmeth_end(); I!=E; ++I) {
-
-    ObjCMethodDecl *M = *I;
+  for (auto *M : ID->instance_methods()) {
     IMeths[M->getSelector()] = M;
     ++NumMethods;
   }
@@ -104,22 +100,19 @@ static void CheckObjCInstMethSignature(const ObjCImplementationDecl *ID,
   // Now recurse the class hierarchy chain looking for methods with the
   // same signatures.
   while (C && NumMethods) {
-    for (ObjCInterfaceDecl::instmeth_iterator I=C->instmeth_begin(),
-         E=C->instmeth_end(); I!=E; ++I) {
-
-      ObjCMethodDecl *M = *I;
+    for (const auto *M : C->instance_methods()) {
       Selector S = M->getSelector();
 
       MapTy::iterator MI = IMeths.find(S);
 
-      if (MI == IMeths.end() || MI->second == 0)
+      if (MI == IMeths.end() || MI->second == nullptr)
         continue;
 
       --NumMethods;
       ObjCMethodDecl *MethDerived = MI->second;
-      MI->second = 0;
+      MI->second = nullptr;
 
-      CompareReturnTypes(MethDerived, M, BR, Ctx, ID);
+      CompareReturnTypes(MethDerived, M, BR, Ctx, ID, Checker);
     }
 
     C = C->getSuperClass();
@@ -136,11 +129,15 @@ class ObjCMethSigsChecker : public Checker<
 public:
   void checkASTDecl(const ObjCImplementationDecl *D, AnalysisManager& mgr,
                     BugReporter &BR) const {
-    CheckObjCInstMethSignature(D, BR);
+    CheckObjCInstMethSignature(D, BR, this);
   }
 };
 }
 
 void ento::registerObjCMethSigsChecker(CheckerManager &mgr) {
   mgr.registerChecker<ObjCMethSigsChecker>();
+}
+
+bool ento::shouldRegisterObjCMethSigsChecker(const LangOptions &LO) {
+  return true;
 }

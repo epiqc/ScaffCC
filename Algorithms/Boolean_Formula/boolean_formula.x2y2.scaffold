@@ -28,7 +28,7 @@
 const double PI = 3.141592654;
 
 // Swaps 2 qubit states
-module Swap (qbit q1[1], qbit q2[1]){
+scaff_module Swap (qbit q1[1], qbit q2[1]){
     CNOT ( q1[0],q2[0]);
     CNOT ( q2[0],q1[0]);
     CNOT ( q1[0],q2[0]);
@@ -36,14 +36,14 @@ module Swap (qbit q1[1], qbit q2[1]){
 
 
 /*------------------Some helper functions borrowed from GSE implementation--------------------------*/
-module controlledRz(qbit target[1], qbit control[1], double theta){
+scaff_module controlledRz(qbit target[1], qbit control[1], double theta){
 	Rz(target[0],-1*theta/2);
 	CNOT(control[0],target[0]);
 	Rz(target[0],theta/2);
 	CNOT(control[0],target[0]);
 }
 
-module ctrlH(qbit *target, qbit *ctrl) {
+scaff_module ctrlH(qbit *target, qbit *ctrl) {
     S(*ctrl);
     Rz(*target,pi);
     Rz(*target,-pi/4);
@@ -54,14 +54,14 @@ module ctrlH(qbit *target, qbit *ctrl) {
     Rz(*target,-pi/2);
 }
 
-module ControlledRotationPiMinus (qbit target[1], qbit control[1], int j){
+scaff_module ControlledRotationPiMinus (qbit target[1], qbit control[1], int j){
     int k;
     double power =1.0;
     power=pow(2, j);
     controlledRz (target, control, - (3*PI) / (2*power));
 }
 
-module inverseQFT (qbit* topregister, int length_topregister){
+scaff_module inverseQFT (qbit* topregister, int length_topregister){
     int i,j;
     for (i =0;i<length_topregister;i++){
         H(topregister [i]);
@@ -75,14 +75,14 @@ module inverseQFT (qbit* topregister, int length_topregister){
 }
 
 //Negative control CNOT; This implementation can change to a primitive if the underlying technology supports negative-controlled NOT
-/*module NCNOT( qbit ctrl[1],qbit target[1]){
+/*scaff_module NCNOT( qbit ctrl[1],qbit target[1]){
     X(ctrl[0]);
     CNOT( ctrl[0],target[0]);
     X(ctrl[0]);
 }
 
 //n-control Toffoli; n>2
-module nToffoli( int length_in, qbit* in,qbit target[1]){
+scaff_module nToffoli( int length_in, qbit* in,qbit target[1]){
     //This should not lead to a compile error as long as the values are set in compile time.
     qbit ancilla[length_in-2];
     int i;
@@ -99,7 +99,7 @@ module nToffoli( int length_in, qbit* in,qbit target[1]){
     }
 }
 
-module AND(qbit target[1], qbit* in, int length_in){
+scaff_module AND(qbit target[1], qbit* in, int length_in){
     PrepZ(target[0],0);
     
     if (length_in == 1){
@@ -111,13 +111,13 @@ module AND(qbit target[1], qbit* in, int length_in){
     }
 }
 
-module NAND(qbit target[1], qbit* in, int length_in){
+scaff_module NAND(qbit target[1], qbit* in, int length_in){
     AND (&target[0], in, length_in);
     X(target[0]);
 }
 
 
-module NOR(qbit target[1], qbit* in, int length_in){
+scaff_module NOR(qbit target[1], qbit* in, int length_in){
     int i;
     
     for(i=0; i<length_in; i++){ //forall
@@ -131,7 +131,7 @@ module NOR(qbit target[1], qbit* in, int length_in){
     }
 }
 
-module OR(qbit target[1], qbit* in, int length_in){
+scaff_module OR(qbit target[1], qbit* in, int length_in){
     NOR(&target[0], in, length_in);
     X(target[0]);
 }
@@ -141,7 +141,7 @@ module OR(qbit target[1], qbit* in, int length_in){
 /* Progress status: done */
 /* Classical implementation: No */
 /* begin ctqg
-module C_TESTPOS(qbit ctrl[1], int pos, qbit bitmap[s], qbit maskmap[s], qbit newmap[s]){
+scaff_module C_TESTPOS(qbit ctrl[1], int pos, qbit bitmap[s], qbit maskmap[s], qbit newmap[s]){
     //pos is a compile-time constant, so no mux is needed to be implemented explicitly
     
     //No need to create a new ancilla each time; garbage collector will take care of "local" ancilla
@@ -155,7 +155,7 @@ module C_TESTPOS(qbit ctrl[1], int pos, qbit bitmap[s], qbit maskmap[s], qbit ne
     
 }
 // end ctqg */
-module C_TESTPOS(qbit ctrl[1], int pos, qbit bitmap[s], qbit maskmap[s], qbit newmap[s]){
+scaff_module C_TESTPOS(qbit ctrl[1], int pos, qbit bitmap[s], qbit maskmap[s], qbit newmap[s]){
 	qbit I00[1];
 	qbit I11[1];
 	qbit I1g[3];
@@ -200,7 +200,7 @@ module C_TESTPOS(qbit ctrl[1], int pos, qbit bitmap[s], qbit maskmap[s], qbit ne
 
 /* IARPA - GFI Algorithm 12 */
 /* Classical implementation: No */
-/*module FLOOD_FILL(qbit bitmap[s], qbit maskmap[s]){
+/*scaff_module FLOOD_FILL(qbit bitmap[s], qbit maskmap[s]){
 //-------------Part 1: Initialization---------------
     qbit stale[1];
     qbit ancilla[4];
@@ -273,7 +273,7 @@ module C_TESTPOS(qbit ctrl[1], int pos, qbit bitmap[s], qbit maskmap[s], qbit ne
 /* IARPA - GFI Algorithm 11 */
 /* Progress status: done */
 /* Classical implementation: No */
-/*module CHECKWIN_RED(qbit redboard[s], qbit outcome[1]){
+/*scaff_module CHECKWIN_RED(qbit redboard[s], qbit outcome[1]){
     int index0;
     qbit blueboard[s];
     //qbit outcome[1];
@@ -299,7 +299,7 @@ module C_TESTPOS(qbit ctrl[1], int pos, qbit bitmap[s], qbit maskmap[s], qbit ne
 /* IARPA - GFI Algorithm 10 */
 /* Progress status: done */
 /* Classical implementation: No */
-/*module HEX(qbit pos[width], qbit init_r[s], qbit init_b[s], qbit redState[1]){
+/*scaff_module HEX(qbit pos[width], qbit init_r[s], qbit init_b[s], qbit redState[1]){
     qbit redboard[s];
     qbit blueboard[s];
     qbit player[1];
@@ -412,7 +412,7 @@ module C_TESTPOS(qbit ctrl[1], int pos, qbit bitmap[s], qbit maskmap[s], qbit ne
 /* IARPA - GFI Algorithm 9; Type -M; */
 /* Progress status: done */
 /* Classical implementation: No */
-/*module C_SHIFT_MINUS_M(qbit ctrl[1], qbit register1[width], int w){
+/*scaff_module C_SHIFT_MINUS_M(qbit ctrl[1], qbit register1[width], int w){
     int index0;
     for(index0=0; index0<w+m; index0++){ //forall
         Toffoli( register1[index0], ctrl[0],register1[index0-m]);
@@ -423,7 +423,7 @@ module C_TESTPOS(qbit ctrl[1], int pos, qbit bitmap[s], qbit maskmap[s], qbit ne
 /* IARPA - GFI Algorithm 9; Type +M; */
 /* Progress status: done */
 /* Classical implementation: No */
-/*module C_SHIFT_PLUS_M(qbit ctrl[1], qbit register1[width], int w){
+/*scaff_module C_SHIFT_PLUS_M(qbit ctrl[1], qbit register1[width], int w){
     int index0;
     for(index0=w-1; index0>=m; index0--){ //forall
         Toffoli( register1[index0], ctrl[0],register1[index0-m]);
@@ -434,7 +434,7 @@ module C_TESTPOS(qbit ctrl[1], int pos, qbit bitmap[s], qbit maskmap[s], qbit ne
 
 /* IARPA - GFI Algorithm 8 */
 /* Progress status: done */
-/*module C_TOCHILD(qbit ctrl[1], qbit pos[width], qbit dir[m], int w){
+/*scaff_module C_TOCHILD(qbit ctrl[1], qbit pos[width], qbit dir[m], int w){
     C_SHIFT_PLUS_M(&ctrl[0], pos, m);
     int qubit;
     for(qubit=0; qubit<m; qubit++){ //forall
@@ -448,7 +448,7 @@ module C_TESTPOS(qbit ctrl[1], int pos, qbit bitmap[s], qbit maskmap[s], qbit ne
 /* IARPA - GFI Algorithm 7 */
 /* Progress status: done */
 /* Classical implementation: No */
-/*module C_TOPARENT(qbit ctrl[1], qbit pos[width], qbit dir[m], int w){
+/*scaff_module C_TOPARENT(qbit ctrl[1], qbit pos[width], qbit dir[m], int w){
     int qubit;
     for(qubit=0; qubit<m; qubit++){ //forall
         Toffoli( dir[qubit], ctrl[0],pos[qubit]);
@@ -464,7 +464,7 @@ module C_TESTPOS(qbit ctrl[1], int pos, qbit bitmap[s], qbit maskmap[s], qbit ne
 /* Progress status: done */
 /* Classical implementation: No */
 /* begin ctqg
-module C_UNDO_ORACLE(qbit ctrl[1], qbit pos[width], qbit leaf[1], qbit paraleaf[1], qbit binary[1], qbit height1[1], qbit r[1], qbit rp[1], qbit rpp[1], qbit dir[m], qbit init_r[s], qbit init_b[s]){
+scaff_module C_UNDO_ORACLE(qbit ctrl[1], qbit pos[width], qbit leaf[1], qbit paraleaf[1], qbit binary[1], qbit height1[1], qbit r[1], qbit rp[1], qbit rpp[1], qbit dir[m], qbit init_r[s], qbit init_b[s]){
     int i;
     qbit redState[1];
     qbit nToffAnc[1];
@@ -519,7 +519,7 @@ module C_UNDO_ORACLE(qbit ctrl[1], qbit pos[width], qbit leaf[1], qbit paraleaf[
     // end ctqg
 }
 end ctqg */
-module C_UNDO_ORACLE(qbit ctrl[1], qbit pos[width], qbit leaf[1], qbit paraleaf[1], qbit binary[1], qbit height1[1], qbit r[1], qbit rp[1], qbit rpp[1], qbit dir[m], qbit init_r[s], qbit init_b[s]){
+scaff_module C_UNDO_ORACLE(qbit ctrl[1], qbit pos[width], qbit leaf[1], qbit paraleaf[1], qbit binary[1], qbit height1[1], qbit r[1], qbit rp[1], qbit rpp[1], qbit dir[m], qbit init_r[s], qbit init_b[s]){
 	qbit I00[20];
 	qbit I0g[22];
 	qbit I11[11];
@@ -7747,9 +7747,9 @@ module C_UNDO_ORACLE(qbit ctrl[1], qbit pos[width], qbit leaf[1], qbit paraleaf[
 /* IARPA - GFI Algorithm 5 */
 /* Progress status: done */
 /* Classical implementation: No */
-//module C_WALK(qbit ctrl[1], qstruct B_qstruct b){
+//scaff_module C_WALK(qbit ctrl[1], qstruct B_qstruct b){
 // ctqg
-module C_WALK(qbit ctrl[1], qbit pos[width], qbit leaf[1], qbit paraleaf[1], qbit binary[1], qbit height1[1], qbit r[1], qbit rp[1], qbit rpp[1], qbit dir[m]){
+scaff_module C_WALK(qbit ctrl[1], qbit pos[width], qbit leaf[1], qbit paraleaf[1], qbit binary[1], qbit height1[1], qbit r[1], qbit rp[1], qbit rpp[1], qbit dir[m]){
 	qbit I00[12];
 	qbit I11[2];
 	qbit I1g[8];
@@ -9429,9 +9429,9 @@ module C_WALK(qbit ctrl[1], qbit pos[width], qbit leaf[1], qbit paraleaf[1], qbi
 /* IARPA - GFI Algorithm 4 */
 /* Progress status: finished */
 /* Classical implementation: No */
-//module C_DIFFUSE(qbit ctrl[1], qstruct Work_qstruct work, qbit dir[m]){
+//scaff_module C_DIFFUSE(qbit ctrl[1], qstruct Work_qstruct work, qbit dir[m]){
 // begin ctqg
-module C_DIFFUSE(qbit ctrl[1], qbit leaf[1], qbit paraleaf[1], qbit binary[1], qbit height1[1], qbit r[1], qbit rp[1], qbit rpp[1], qbit dir[m]){
+scaff_module C_DIFFUSE(qbit ctrl[1], qbit leaf[1], qbit paraleaf[1], qbit binary[1], qbit height1[1], qbit r[1], qbit rp[1], qbit rpp[1], qbit dir[m]){
     int qubit;
     
     /* Relace:
@@ -9496,7 +9496,7 @@ module C_DIFFUSE(qbit ctrl[1], qbit leaf[1], qbit paraleaf[1], qbit binary[1], q
 /* Progress status: done */
 /* Classical implementation: No */
 /* begin ctqg
-module C_ORACLE(qbit ctrl[1], qbit pos[width], qbit leaf[1], qbit paraleaf[1], qbit binary[1], qbit height1[1], qbit r[1], qbit rp[1], qbit rpp[1], qbit init_r[s], qbit init_b[s]){
+scaff_module C_ORACLE(qbit ctrl[1], qbit pos[width], qbit leaf[1], qbit paraleaf[1], qbit binary[1], qbit height1[1], qbit r[1], qbit rp[1], qbit rpp[1], qbit init_r[s], qbit init_b[s]){
     int i;
     qbit ancilla[1];
     qbit hex[1];
@@ -9532,7 +9532,7 @@ module C_ORACLE(qbit ctrl[1], qbit pos[width], qbit leaf[1], qbit paraleaf[1], q
 // end ctqg
 }
 end ctqg */
-module C_ORACLE(qbit ctrl[1], qbit pos[width], qbit leaf[1], qbit paraleaf[1], qbit binary[1], qbit height1[1], qbit r[1], qbit rp[1], qbit rpp[1], qbit init_r[s], qbit init_b[s]){
+scaff_module C_ORACLE(qbit ctrl[1], qbit pos[width], qbit leaf[1], qbit paraleaf[1], qbit binary[1], qbit height1[1], qbit r[1], qbit rp[1], qbit rpp[1], qbit init_r[s], qbit init_b[s]){
 	qbit I00[20];
 	qbit I0g[21];
 	qbit I11[7];
@@ -22255,8 +22255,8 @@ module C_ORACLE(qbit ctrl[1], qbit pos[width], qbit leaf[1], qbit paraleaf[1], q
 /* IARPA - GFI Algorithm 2 */
 /* Progress status: done */
 /* Classical implementation: No */
-//module EXP_U(int power, qbit ctrl[1], qstruct B_qstruct b, qbit init_r[s], qbit init_b[s]){
-module EXP_U(int power, qbit ctrl[1], qbit pos[width], qbit leaf[1], qbit paraleaf[1], qbit binary[1], qbit height1[1], qbit r[1], qbit rp[1], qbit rpp[1], qbit dir[m], qbit init_r[s], qbit init_b[s]){
+//scaff_module EXP_U(int power, qbit ctrl[1], qstruct B_qstruct b, qbit init_r[s], qbit init_b[s]){
+scaff_module EXP_U(int power, qbit ctrl[1], qbit pos[width], qbit leaf[1], qbit paraleaf[1], qbit binary[1], qbit height1[1], qbit r[1], qbit rp[1], qbit rpp[1], qbit dir[m], qbit init_r[s], qbit init_b[s]){
     //it is assumed that int is 32-bit and power<=6*31; according to GFI, power<=189 is enough.
     //extra code added to support repetition of 2^189 times; all of these codes will dissappear after compilation
     

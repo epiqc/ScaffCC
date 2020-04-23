@@ -1,7 +1,12 @@
-// RUN: %clang_cc1 -pedantic -Wall -Wno-comment -verify -fcxx-exceptions -x c++ %s
-// RUN: cp %s %t
-// RUN: not %clang_cc1 -pedantic -Wall -Wno-comment -fcxx-exceptions -fixit -x c++ %t
-// RUN: %clang_cc1 -fsyntax-only -pedantic -Wall -Werror -Wno-comment -fcxx-exceptions -x c++ %t
+// RUN: %clang_cc1 -pedantic -Wall -Wno-comment -verify -fcxx-exceptions -x c++ -std=c++98 %s
+// RUN: cp %s %t-98
+// RUN: not %clang_cc1 -pedantic -Wall -Wno-comment -fcxx-exceptions -fixit -x c++ -std=c++98 %t-98
+// RUN: %clang_cc1 -fsyntax-only -pedantic -Wall -Werror -Wno-comment -fcxx-exceptions -x c++ -std=c++98 %t-98
+// RUN: not %clang_cc1 -fsyntax-only -fdiagnostics-parseable-fixits -x c++ -std=c++11 %s 2>&1 | FileCheck %s
+// RUN: %clang_cc1 -pedantic -Wall -Wno-comment -verify -fcxx-exceptions -x c++ -std=c++11 %s
+// RUN: cp %s %t-11
+// RUN: not %clang_cc1 -pedantic -Wall -Wno-comment -fcxx-exceptions -fixit -x c++ -std=c++11 %t-11
+// RUN: %clang_cc1 -fsyntax-only -pedantic -Wall -Werror -Wno-comment -fcxx-exceptions -x c++ -std=c++11 %t-11
 
 /* This is a test of the various code modification hints that are
    provided as part of warning or extension diagnostics. All of the
@@ -18,9 +23,13 @@ virtual void C1::f() { } // expected-error{{'virtual' can only be specified insi
 
 static void C1::g() { } // expected-error{{'static' can only be specified inside the class definition}}
 
-template<int Value> struct CT { }; // expected-note{{previous use is here}}
+template<int Value> struct CT { template<typename> struct Inner; }; // expected-note{{previous use is here}}
 
+// FIXME: In C++11 this gets 'expected unqualified-id' which fixit can't fix.
+// Probably parses as `CT<10> > 2 > ct;` rather than `CT<(10 >> 2)> ct;`.
+#if __cplusplus < 201103L
 CT<10 >> 2> ct; // expected-warning{{require parentheses}}
+#endif
 
 class C3 {
 public:
@@ -31,6 +40,8 @@ struct CT<0> { }; // expected-error{{'template<>'}}
 
 template<> union CT<1> { }; // expected-error{{tag type}}
 
+struct CT<2>::Inner<int> { }; // expected-error 2{{'template<>'}}
+
 // Access declarations
 class A {
 protected:
@@ -38,11 +49,15 @@ protected:
 };
 
 class B : public A {
+#if __cplusplus >= 201103L
+  A::foo; // expected-error{{ISO C++11 does not allow access declarations}}
+#else
   A::foo; // expected-warning{{access declarations are deprecated}}
+#endif
 };
 
 void f() throw(); // expected-note{{previous}}
-void f(); // expected-warning{{missing exception specification}}
+void f(); // expected-error{{missing exception specification}}
 
 namespace rdar7853795 {
   struct A {
@@ -54,7 +69,7 @@ namespace rdar7853795 {
 }
 
 namespace rdar7796492 {
-  class A { int x, y; A(); };
+  struct A { int x, y; A(); };
 
   A::A()
     : x(1) y(2) { // expected-error{{missing ',' between base or member initializers}}
@@ -64,7 +79,7 @@ namespace rdar7796492 {
 
 // extra qualification on member
 class C {
-  int C::foo(); // expected-warning {{extra qualification}}
+  int C::foo(); // expected-error {{extra qualification}}
 };
 
 namespace rdar8488464 {
@@ -201,6 +216,207 @@ template<class T> typedef Mystery<T>::type getMysteriousThing() { // \
 }
 
 template<template<typename> Foo, // expected-error {{template template parameter requires 'class' after the parameter list}}
-         template<typename> typename Bar, // expected-error {{template template parameter requires 'class' after the parameter list}}
+         template<typename> typename Bar, // expected-warning {{template template parameter using 'typename' is a C++17 extension}}
          template<typename> struct Baz> // expected-error {{template template parameter requires 'class' after the parameter list}}
 void func();
+
+namespace ShadowedTagType {
+class Foo {
+ public:
+  enum Bar { X, Y };
+  void SetBar(Bar bar);
+  Bar Bar(); // expected-note 2 {{enum 'Bar' is hidden by a non-type declaration of 'Bar' here}}
+ private:
+  Bar bar_; // expected-error {{must use 'enum' tag to refer to type 'Bar' in this scope}}
+};
+void Foo::SetBar(Bar bar) { bar_ = bar; } // expected-error {{must use 'enum' tag to refer to type 'Bar' in this scope}}
+}
+
+#define NULL __null
+char c = NULL; // expected-warning {{implicit conversion of NULL constant to 'char'}}
+double dbl = NULL; // expected-warning {{implicit conversion of NULL constant to 'double'}}
+
+namespace arrow_suggest {
+
+template <typename T>
+class wrapped_ptr {
+ public:
+  wrapped_ptr(T* ptr) : ptr_(ptr) {}
+  T* operator->() { return ptr_; }
+ private:
+  T *ptr_;
+};
+
+class Worker {
+ public:
+  void DoSomething();
+};
+
+void test() {
+  wrapped_ptr<Worker> worker(new Worker);
+  worker.DoSomething(); // expected-error {{no member named 'DoSomething' in 'arrow_suggest::wrapped_ptr<arrow_suggest::Worker>'; did you mean to use '->' instead of '.'?}}
+}
+
+} // namespace arrow_suggest
+
+// Make sure fixing namespace-qualified identifiers functions properly with
+// namespace-aware typo correction/
+namespace redecl_typo {
+namespace Foo {
+  void BeEvil(); // expected-note {{'BeEvil' declared here}}
+}
+namespace Bar {
+  namespace Foo {
+    bool isGood(); // expected-note {{'Bar::Foo::isGood' declared here}}
+    void beEvil();
+  }
+}
+bool Foo::isGood() { // expected-error {{out-of-line definition of 'isGood' does not match any declaration in namespace 'redecl_typo::Foo'; did you mean 'Bar::Foo::isGood'?}}
+  return true;
+}
+void Foo::beEvil() {} // expected-error {{out-of-line definition of 'beEvil' does not match any declaration in namespace 'redecl_typo::Foo'; did you mean 'BeEvil'?}}
+}
+
+// Test behavior when a template-id is ended by a token which starts with '>'.
+namespace greatergreater {
+  template<typename T> struct S { S(); S(T); };
+  void f(S<int>=0); // expected-error {{a space is required between a right angle bracket and an equals sign (use '> =')}}
+
+  // FIXME: The fix-its here overlap so -fixit mode can't apply the second one.
+  //void f(S<S<int>>=S<int>());
+
+  struct Shr {
+    template<typename T> Shr(T);
+    template<typename T> void operator >>=(T);
+  };
+
+  template<template<typename>> struct TemplateTemplateParam; // expected-error {{requires 'class'}}
+
+  template<typename T> void t();
+  void g() {
+    void (*p)() = &t<int>;
+    (void)(&t<int>==p); // expected-error {{use '> ='}}
+    (void)(&t<int>>=p); // expected-error {{use '> >'}}
+#if __cplusplus < 201103L
+    (void)(&t<S<int>>>=p); // expected-error {{use '> >'}}
+    (Shr)&t<S<int>>>>=p; // expected-error {{use '> >'}}
+#endif
+
+    // FIXME: We correct this to '&t<int> > >= p;' not '&t<int> >>= p;'
+    //(Shr)&t<int>>>=p;
+
+    // FIXME: The fix-its here overlap.
+    //(void)(&t<S<int>>==p);
+  }
+}
+
+class foo {
+  static void test() {
+    (void)&i; // expected-error{{must explicitly qualify name of member function when taking its address}}
+  }
+  int i();
+};
+
+namespace dtor_fixit {
+  class foo {
+    ~bar() { }  // expected-error {{expected the class name after '~' to name a destructor}}
+    // CHECK: fix-it:"{{.*}}":{[[@LINE-1]]:6-[[@LINE-1]]:9}:"foo"
+  };
+
+  class bar {
+    ~bar();
+  };
+  ~bar::bar() {} // expected-error {{'~' in destructor name should be after nested name specifier}}
+  // CHECK: fix-it:"{{.*}}":{[[@LINE-1]]:3-[[@LINE-1]]:4}:""
+  // CHECK: fix-it:"{{.*}}":{[[@LINE-2]]:9-[[@LINE-2]]:9}:"~"
+}
+
+namespace PR5066 {
+  template<typename T> struct X {};
+  X<int *p> x; // expected-error {{type-id cannot have a name}}
+}
+
+namespace PR5898 {
+  class A {
+  public:
+    const char *str();
+  };
+  const char* foo(A &x)
+  {
+    return x.str.();  // expected-error {{unexpected '.' in function call; perhaps remove the '.'?}}
+  }
+  bool bar(A x, const char *y) {
+    return foo->(x) == y;  // expected-error {{unexpected '->' in function call; perhaps remove the '->'?}}
+  }
+}
+
+namespace PR15045 {
+  class Cl0 {
+  public:
+    int a;
+  };
+
+  int f() {
+    Cl0 c;
+    return c->a;  // expected-error {{member reference type 'PR15045::Cl0' is not a pointer; did you mean to use '.'?}}
+  }
+}
+
+namespace curly_after_base_clause {
+struct A { void f(); };
+struct B : A // expected-error{{expected '{' after base class list}}
+  // CHECK: fix-it:"{{.*}}":{[[@LINE-1]]:13-[[@LINE-1]]:13}:" {"
+  int i;
+};
+struct C : A // expected-error{{expected '{' after base class list}}
+  // CHECK: fix-it:"{{.*}}":{[[@LINE-1]]:13-[[@LINE-1]]:13}:" {"
+  using A::f;
+};
+struct D : A // expected-error{{expected '{' after base class list}}
+  // CHECK: fix-it:"{{.*}}":{[[@LINE-1]]:13-[[@LINE-1]]:13}:" {"
+    protected:
+};
+struct E : A  // expected-error{{expected '{' after base class list}}
+  // CHECK: fix-it:"{{.*}}":{[[@LINE-1]]:13-[[@LINE-1]]:13}:" {"
+  template<typename T> struct inner { };
+};
+struct F : A  // expected-error{{expected '{' after base class list}}
+  // CHECK: fix-it:"{{.*}}":{[[@LINE-1]]:13-[[@LINE-1]]:13}:" {"
+  F() { }
+};
+#if __cplusplus >= 201103L
+struct G : A  // expected-error{{expected '{' after base class list}}
+  // CHECK: fix-it:"{{.*}}":{[[@LINE-1]]:13-[[@LINE-1]]:13}:" {"
+  constexpr G(int) { }
+};
+struct H : A  // expected-error{{expected '{' after base class list}}
+  // CHECK: fix-it:"{{.*}}":{[[@LINE-1]]:13-[[@LINE-1]]:13}:" {"
+  static_assert(true, "");
+};
+#endif
+}
+
+struct conversion_operator {
+  conversion_operator::* const operator int(); // expected-error {{put the complete type after 'operator'}}
+  // CHECK: fix-it:"{{.*}}":{[[@LINE-1]]:3-[[@LINE-1]]:32}:""
+  // CHECK: fix-it:"{{.*}}":{[[@LINE-2]]:44-[[@LINE-2]]:44}:" conversion_operator::* const"
+};
+
+struct const_zero_init {
+  int a;
+};
+const const_zero_init czi; // expected-error {{default initialization of an object of const type 'const const_zero_init'}}
+// CHECK: fix-it:"{{.*}}":{[[@LINE-1]]:26-[[@LINE-1]]:26}:"{}"
+int use_czi = czi.a;
+
+namespace dotPointerDestructor {
+
+struct Bar {
+  ~Bar();
+};
+
+void bar(Bar *o) {
+  o.~Bar(); // expected-error {{member reference type 'dotPointerDestructor::Bar *' is a pointer; did you mean to use '->'}}
+}  // CHECK: fix-it:"{{.*}}":{[[@LINE-1]]:4-[[@LINE-1]]:5}:"->"
+
+}

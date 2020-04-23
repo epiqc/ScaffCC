@@ -1,147 +1,142 @@
 //===-- llvm/Support/Threading.cpp- Control multithreading mode --*- C++ -*-==//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
-// This file implements llvm_start_multithreaded() and friends.
+// This file defines helper functions for running LLVM in a multi-threaded
+// environment.
 //
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Support/Threading.h"
-#include "llvm/Support/Atomic.h"
-#include "llvm/Support/Mutex.h"
+#include "llvm/ADT/Optional.h"
 #include "llvm/Config/config.h"
+#include "llvm/Support/Host.h"
+
 #include <cassert>
+#include <errno.h>
+#include <stdlib.h>
+#include <string.h>
 
 using namespace llvm;
 
-static bool multithreaded_mode = false;
+//===----------------------------------------------------------------------===//
+//=== WARNING: Implementation here must contain only TRULY operating system
+//===          independent code.
+//===----------------------------------------------------------------------===//
 
-static sys::Mutex* global_lock = 0;
-
-bool llvm::llvm_start_multithreaded() {
+bool llvm::llvm_is_multithreaded() {
 #if LLVM_ENABLE_THREADS != 0
-  assert(!multithreaded_mode && "Already multithreaded!");
-  multithreaded_mode = true;
-  global_lock = new sys::Mutex(true);
-
-  // We fence here to ensure that all initialization is complete BEFORE we
-  // return from llvm_start_multithreaded().
-  sys::MemoryFence();
   return true;
 #else
   return false;
 #endif
 }
 
-void llvm::llvm_stop_multithreaded() {
-#if LLVM_ENABLE_THREADS != 0
-  assert(multithreaded_mode && "Not currently multithreaded!");
-
-  // We fence here to insure that all threaded operations are complete BEFORE we
-  // return from llvm_stop_multithreaded().
-  sys::MemoryFence();
-
-  multithreaded_mode = false;
-  delete global_lock;
-#endif
+#if LLVM_ENABLE_THREADS == 0 ||                                                \
+    (!defined(_WIN32) && !defined(HAVE_PTHREAD_H))
+// Support for non-Win32, non-pthread implementation.
+void llvm::llvm_execute_on_thread(void (*Fn)(void *), void *UserData,
+                                  llvm::Optional<unsigned> StackSizeInBytes) {
+  (void)StackSizeInBytes;
+  Fn(UserData);
 }
 
-bool llvm::llvm_is_multithreaded() {
-  return multithreaded_mode;
-}
+unsigned llvm::heavyweight_hardware_concurrency() { return 1; }
 
-void llvm::llvm_acquire_global_lock() {
-  if (multithreaded_mode) global_lock->acquire();
-}
+unsigned llvm::hardware_concurrency() { return 1; }
 
-void llvm::llvm_release_global_lock() {
-  if (multithreaded_mode) global_lock->release();
-}
+uint64_t llvm::get_threadid() { return 0; }
 
-#if LLVM_ENABLE_THREADS != 0 && defined(HAVE_PTHREAD_H)
-#include <pthread.h>
+uint32_t llvm::get_max_thread_name_length() { return 0; }
 
-struct ThreadInfo {
-  void (*UserFn)(void *);
-  void *UserData;
-};
-static void *ExecuteOnThread_Dispatch(void *Arg) {
-  ThreadInfo *TI = reinterpret_cast<ThreadInfo*>(Arg);
-  TI->UserFn(TI->UserData);
-  return 0;
-}
+void llvm::set_thread_name(const Twine &Name) {}
 
-void llvm::llvm_execute_on_thread(void (*Fn)(void*), void *UserData,
-                                  unsigned RequestedStackSize) {
-  ThreadInfo Info = { Fn, UserData };
-  pthread_attr_t Attr;
-  pthread_t Thread;
+void llvm::get_thread_name(SmallVectorImpl<char> &Name) { Name.clear(); }
 
-  // Construct the attributes object.
-  if (::pthread_attr_init(&Attr) != 0)
-    return;
-
-  // Set the requested stack size, if given.
-  if (RequestedStackSize != 0) {
-    if (::pthread_attr_setstacksize(&Attr, RequestedStackSize) != 0)
-      goto error;
-  }
-
-  // Construct and execute the thread.
-  if (::pthread_create(&Thread, &Attr, ExecuteOnThread_Dispatch, &Info) != 0)
-    goto error;
-
-  // Wait for the thread and clean up.
-  ::pthread_join(Thread, 0);
-
- error:
-  ::pthread_attr_destroy(&Attr);
-}
-#elif LLVM_ENABLE_THREADS!=0 && defined(LLVM_ON_WIN32)
-#include "Windows/Windows.h"
-#include <process.h>
-
-struct ThreadInfo {
-  void (*func)(void*);
-  void *param;
-};
-
-static unsigned __stdcall ThreadCallback(void *param) {
-  struct ThreadInfo *info = reinterpret_cast<struct ThreadInfo *>(param);
-  info->func(info->param);
-
-  return 0;
-}
-
-void llvm::llvm_execute_on_thread(void (*Fn)(void*), void *UserData,
-                                  unsigned RequestedStackSize) {
-  struct ThreadInfo param = { Fn, UserData };
-
-  HANDLE hThread = (HANDLE)::_beginthreadex(NULL,
-                                            RequestedStackSize, ThreadCallback,
-                                            &param, 0, NULL);
-
-  if (hThread) {
-    // We actually don't care whether the wait succeeds or fails, in
-    // the same way we don't care whether the pthread_join call succeeds
-    // or fails.  There's not much we could do if this were to fail. But
-    // on success, this call will wait until the thread finishes executing
-    // before returning.
-    (void)::WaitForSingleObject(hThread, INFINITE);
-    ::CloseHandle(hThread);
-  }
+#if LLVM_ENABLE_THREADS == 0
+void llvm::llvm_execute_on_thread_async(
+    llvm::unique_function<void()> Func,
+    llvm::Optional<unsigned> StackSizeInBytes) {
+  (void)Func;
+  (void)StackSizeInBytes;
+  report_fatal_error("Spawning a detached thread doesn't make sense with no "
+                     "threading support");
 }
 #else
 // Support for non-Win32, non-pthread implementation.
-void llvm::llvm_execute_on_thread(void (*Fn)(void*), void *UserData,
-                                  unsigned RequestedStackSize) {
-  (void) RequestedStackSize;
-  Fn(UserData);
+void llvm::llvm_execute_on_thread_async(
+    llvm::unique_function<void()> Func,
+    llvm::Optional<unsigned> StackSizeInBytes) {
+  (void)StackSizeInBytes;
+  std::thread(std::move(Func)).detach();
+}
+#endif
+
+#else
+
+#include <thread>
+unsigned llvm::heavyweight_hardware_concurrency() {
+  // Since we can't get here unless LLVM_ENABLE_THREADS == 1, it is safe to use
+  // `std::thread` directly instead of `llvm::thread` (and indeed, doing so
+  // allows us to not define `thread` in the llvm namespace, which conflicts
+  // with some platforms such as FreeBSD whose headers also define a struct
+  // called `thread` in the global namespace which can cause ambiguity due to
+  // ADL.
+  int NumPhysical = sys::getHostNumPhysicalCores();
+  if (NumPhysical == -1)
+    return std::thread::hardware_concurrency();
+  return NumPhysical;
+}
+
+unsigned llvm::hardware_concurrency() {
+#if defined(HAVE_SCHED_GETAFFINITY) && defined(HAVE_CPU_COUNT)
+  cpu_set_t Set;
+  if (sched_getaffinity(0, sizeof(Set), &Set))
+    return CPU_COUNT(&Set);
+#endif
+  // Guard against std::thread::hardware_concurrency() returning 0.
+  if (unsigned Val = std::thread::hardware_concurrency())
+    return Val;
+  return 1;
+}
+
+namespace {
+struct SyncThreadInfo {
+  void (*UserFn)(void *);
+  void *UserData;
+};
+
+using AsyncThreadInfo = llvm::unique_function<void()>;
+
+enum class JoiningPolicy { Join, Detach };
+} // namespace
+
+// Include the platform-specific parts of this class.
+#ifdef LLVM_ON_UNIX
+#include "Unix/Threading.inc"
+#endif
+#ifdef _WIN32
+#include "Windows/Threading.inc"
+#endif
+
+void llvm::llvm_execute_on_thread(void (*Fn)(void *), void *UserData,
+                                  llvm::Optional<unsigned> StackSizeInBytes) {
+
+  SyncThreadInfo Info = {Fn, UserData};
+  llvm_execute_on_thread_impl(threadFuncSync, &Info, StackSizeInBytes,
+                              JoiningPolicy::Join);
+}
+
+void llvm::llvm_execute_on_thread_async(
+    llvm::unique_function<void()> Func,
+    llvm::Optional<unsigned> StackSizeInBytes) {
+  llvm_execute_on_thread_impl(&threadFuncAsync,
+                              new AsyncThreadInfo(std::move(Func)),
+                              StackSizeInBytes, JoiningPolicy::Detach);
 }
 
 #endif

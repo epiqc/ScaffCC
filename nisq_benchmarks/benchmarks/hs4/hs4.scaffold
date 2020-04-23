@@ -1,0 +1,45 @@
+
+int main() {
+
+qbit q[4];
+cbit c[4];
+
+for (int i=0; i < 4; i++) {
+    H(q[i]);
+}
+
+X(q[0]);
+X(q[2]);
+
+H(q[1]);
+H(q[3]);
+
+CNOT(q[0], q[1]);
+CNOT(q[2], q[3]);
+
+H(q[1]);
+H(q[3]);
+
+X(q[0]);
+X(q[2]);
+
+for (int i=0; i < 4; i++) {
+    H(q[i]);
+}
+
+H(q[1]);
+H(q[3]);
+CNOT(q[0], q[1]);
+CNOT(q[2], q[3]);
+H(q[1]);
+H(q[3]);
+for (int i=0; i < 4; i++) {
+    H(q[i]);
+}
+
+c[0] = MeasZ(q[0]);
+c[1] = MeasZ(q[1]);
+c[2] = MeasZ(q[2]);
+c[3] = MeasZ(q[3]);
+
+}

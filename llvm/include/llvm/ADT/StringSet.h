@@ -1,9 +1,8 @@
-//===--- StringSet.h - The LLVM Compiler Driver -----------------*- C++ -*-===//
+//===- StringSet.h - The LLVM Compiler Driver -------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open
-// Source License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -15,24 +14,45 @@
 #define LLVM_ADT_STRINGSET_H
 
 #include "llvm/ADT/StringMap.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/Support/Allocator.h"
+#include <cassert>
+#include <initializer_list>
+#include <utility>
 
 namespace llvm {
 
-  /// StringSet - A wrapper for StringMap that provides set-like
-  /// functionality.  Only insert() and count() methods are used by my
-  /// code.
-  template <class AllocatorTy = llvm::MallocAllocator>
-  class StringSet : public llvm::StringMap<char, AllocatorTy> {
-    typedef llvm::StringMap<char, AllocatorTy> base;
+  /// StringSet - A wrapper for StringMap that provides set-like functionality.
+  template <class AllocatorTy = MallocAllocator>
+  class StringSet : public StringMap<NoneType, AllocatorTy> {
+    using base = StringMap<NoneType, AllocatorTy>;
+
   public:
-    bool insert(StringRef InLang) {
-      assert(!InLang.empty());
-      const char *KeyStart = InLang.data();
-      const char *KeyEnd = KeyStart + InLang.size();
-      return base::insert(llvm::StringMapEntry<char>::
-                          Create(KeyStart, KeyEnd, base::getAllocator(), '+'));
+    StringSet() = default;
+    StringSet(std::initializer_list<StringRef> S) {
+      for (StringRef X : S)
+        insert(X);
+    }
+    explicit StringSet(AllocatorTy A) : base(A) {}
+
+    std::pair<typename base::iterator, bool> insert(StringRef Key) {
+      assert(!Key.empty());
+      return base::insert(std::make_pair(Key, None));
+    }
+
+    template <typename InputIt>
+    void insert(const InputIt &Begin, const InputIt &End) {
+      for (auto It = Begin; It != End; ++It)
+        base::insert(std::make_pair(*It, None));
+    }
+
+    template <typename ValueTy>
+    std::pair<typename base::iterator, bool>
+    insert(const StringMapEntry<ValueTy> &MapEntry) {
+      return insert(MapEntry.getKey());
     }
   };
-}
+
+} // end namespace llvm
 
 #endif // LLVM_ADT_STRINGSET_H

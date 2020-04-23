@@ -10,5 +10,4 @@
 // test/Sema/complex-init-list.c.
 
 // Basic testcase
-// (No pedantic warning is necessary because _Complex is not part of C++.)
-_Complex float valid1 = { 1.0f, 2.0f };
+_Complex float valid1 = { 1.0f, 2.0f }; // expected-warning {{'_Complex' is a C99 extension}}

@@ -19,7 +19,7 @@ bool test_elab(S1 *s1, struct S2 *s2, struct S3 *s3) {
 namespace NS {
   class X {
   public:
-    void test_elab2(struct S4 *s4);
+    void test_elab2(struct S4 *s4); // expected-note{{'NS::S4' declared here}}
   };
 
   void X::test_elab2(S4 *s4) { } // expected-note{{passing argument to parameter 's4' here}}
@@ -35,8 +35,7 @@ namespace NS {
 }
 
 void test_S5_scope() {
-  S4 *s4; // expected-error{{use of undeclared identifier 'S4'}} \
-  // expected-error{{use of undeclared identifier 's4'}}
+  S4 *s4; // expected-error{{unknown type name 'S4'; did you mean 'NS::S4'?}}
 }
 
 int test_funcparam_scope(struct S5 * s5) {
@@ -45,4 +44,20 @@ int test_funcparam_scope(struct S5 * s5) {
   return 0;
 }
 
+namespace test5 {
+  struct A {
+    class __attribute__((visibility("hidden"))) B {};
 
+    void test(class __attribute__((visibility("hidden"), noreturn)) B b) { // expected-warning {{'noreturn' attribute only applies to functions and methods}}
+    }
+  };
+}
+
+namespace test6 {
+struct C {
+  template <typename> friend struct A; // expected-note {{'A' declared here}}
+};
+struct B {
+  struct A *p; // expected-error {{implicit declaration introduced by elaborated type conflicts with a template of the same name}}
+};
+}

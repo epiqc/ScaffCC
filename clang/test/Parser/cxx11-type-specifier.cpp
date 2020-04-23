@@ -15,6 +15,10 @@ void f() {
 
   // These parse as type definitions, not as type references with braced
   // initializers. Sad but true...
-  (void) new struct S {}; // expected-error{{'S' can not be defined in a type specifier}}
-  (void) new enum E { e }; // expected-error{{'E' can not be defined in a type specifier}}
+  (void) new struct S {}; // expected-error{{'S' cannot be defined in a type specifier}}
+  (void) new enum E { e }; // expected-error{{'E' cannot be defined in a type specifier}}
 }
+
+// And for trailing-type-specifier-seq
+
+auto f() -> unknown; // expected-error{{unknown type name 'unknown'}}

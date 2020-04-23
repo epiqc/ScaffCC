@@ -1,9 +1,8 @@
 //===- AsmWriterInst.h - Classes encapsulating a printable inst -----------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -14,6 +13,7 @@
 #include "AsmWriterInst.h"
 #include "CodeGenTarget.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/TableGen/Error.h"
 #include "llvm/TableGen/Record.h"
 
 using namespace llvm;
@@ -25,39 +25,35 @@ static bool isIdentChar(char C) {
   C == '_';
 }
 
-std::string AsmWriterOperand::getCode() const {
+std::string AsmWriterOperand::getCode(bool PassSubtarget) const {
   if (OperandType == isLiteralTextOperand) {
     if (Str.size() == 1)
-      return "O << '" + Str + "'; ";
-    return "O << \"" + Str + "\"; ";
+      return "O << '" + Str + "';";
+    return "O << \"" + Str + "\";";
   }
-  
+
   if (OperandType == isLiteralStatementOperand)
     return Str;
-  
+
   std::string Result = Str + "(MI";
   if (MIOpNo != ~0U)
     Result += ", " + utostr(MIOpNo);
+  if (PassSubtarget)
+    Result += ", STI";
   Result += ", O";
   if (!MiModifier.empty())
     Result += ", \"" + MiModifier + '"';
-  return Result + "); ";
+  return Result + ");";
 }
 
 /// ParseAsmString - Parse the specified Instruction's AsmString into this
 /// AsmWriterInst.
 ///
-AsmWriterInst::AsmWriterInst(const CodeGenInstruction &CGI,
-                             unsigned Variant,
-                             int FirstOperandColumn,
-                             int OperandSpacing) {
-  this->CGI = &CGI;
-  
-  // This is the number of tabs we've seen if we're doing columnar layout.
-  unsigned CurColumn = 0;
-  
-  
-  // NOTE: Any extensions to this code need to be mirrored in the 
+AsmWriterInst::AsmWriterInst(const CodeGenInstruction &CGI, unsigned CGIIndex,
+                             unsigned Variant)
+    : CGI(&CGI), CGIIndex(CGIIndex) {
+
+  // NOTE: Any extensions to this code need to be mirrored in the
   // AsmPrinter::printInlineAsm code that executes as compile time (assuming
   // that inline asm strings should also get the new feature)!
   std::string AsmString = CGI.FlattenAsmStringVariants(CGI.AsmString, Variant);
@@ -66,7 +62,7 @@ AsmWriterInst::AsmWriterInst(const CodeGenInstruction &CGI,
     std::string::size_type DollarPos =
       AsmString.find_first_of("$\\", LastEmitted);
     if (DollarPos == std::string::npos) DollarPos = AsmString.size();
-    
+
     // Emit a constant string fragment.
     if (DollarPos != LastEmitted) {
       for (; LastEmitted != DollarPos; ++LastEmitted)
@@ -75,20 +71,7 @@ AsmWriterInst::AsmWriterInst(const CodeGenInstruction &CGI,
             AddLiteralString("\\n");
             break;
           case '\t':
-            // If the asm writer is not using a columnar layout, \t is not
-            // magic.
-            if (FirstOperandColumn == -1 || OperandSpacing == -1) {
-              AddLiteralString("\\t");
-            } else {
-              // We recognize a tab as an operand delimeter.
-              unsigned DestColumn = FirstOperandColumn + 
-              CurColumn++ * OperandSpacing;
-              Operands.push_back(
-                AsmWriterOperand(
-                  "O.PadToColumn(" +
-                  utostr(DestColumn) + ");\n",
-                  AsmWriterOperand::isLiteralStatementOperand));
-            }
+            AddLiteralString("\\t");
             break;
           case '"':
             AddLiteralString("\\\"");
@@ -105,26 +88,15 @@ AsmWriterInst::AsmWriterInst(const CodeGenInstruction &CGI,
         if (AsmString[DollarPos+1] == 'n') {
           AddLiteralString("\\n");
         } else if (AsmString[DollarPos+1] == 't') {
-          // If the asm writer is not using a columnar layout, \t is not
-          // magic.
-          if (FirstOperandColumn == -1 || OperandSpacing == -1) {
-            AddLiteralString("\\t");
-            break;
-          }
-          
-          // We recognize a tab as an operand delimeter.
-          unsigned DestColumn = FirstOperandColumn + 
-          CurColumn++ * OperandSpacing;
-          Operands.push_back(
-            AsmWriterOperand("O.PadToColumn(" + utostr(DestColumn) + ");\n",
-                             AsmWriterOperand::isLiteralStatementOperand));
-          break;
-        } else if (std::string("${|}\\").find(AsmString[DollarPos+1]) 
+          AddLiteralString("\\t");
+        } else if (std::string("${|}\\").find(AsmString[DollarPos+1])
                    != std::string::npos) {
           AddLiteralString(std::string(1, AsmString[DollarPos+1]));
         } else {
-          throw "Non-supported escaped character found in instruction '" +
-          CGI.TheDef->getName() + "'!";
+          PrintFatalError(
+              CGI.TheDef->getLoc(),
+              "Non-supported escaped character found in instruction '" +
+                  CGI.TheDef->getName() + "'!");
         }
         LastEmitted = DollarPos+2;
         continue;
@@ -136,7 +108,7 @@ AsmWriterInst::AsmWriterInst(const CodeGenInstruction &CGI,
     } else {
       // Get the name of the variable.
       std::string::size_type VarEnd = DollarPos+1;
-      
+
       // handle ${foo}bar as $foo by detecting whether the character following
       // the dollar sign is a curly brace.  If so, advance VarEnd and DollarPos
       // so the variable name does not contain the leading curly brace.
@@ -146,71 +118,74 @@ AsmWriterInst::AsmWriterInst(const CodeGenInstruction &CGI,
         ++DollarPos;
         ++VarEnd;
       }
-      
+
       while (VarEnd < AsmString.size() && isIdentChar(AsmString[VarEnd]))
         ++VarEnd;
-      std::string VarName(AsmString.begin()+DollarPos+1,
-                          AsmString.begin()+VarEnd);
-      
+      StringRef VarName(AsmString.data()+DollarPos+1, VarEnd-DollarPos-1);
+
       // Modifier - Support ${foo:modifier} syntax, where "modifier" is passed
       // into printOperand.  Also support ${:feature}, which is passed into
       // PrintSpecial.
       std::string Modifier;
-      
+
       // In order to avoid starting the next string at the terminating curly
       // brace, advance the end position past it if we found an opening curly
       // brace.
       if (hasCurlyBraces) {
         if (VarEnd >= AsmString.size())
-          throw "Reached end of string before terminating curly brace in '"
-          + CGI.TheDef->getName() + "'";
-        
+          PrintFatalError(
+              CGI.TheDef->getLoc(),
+              "Reached end of string before terminating curly brace in '" +
+                  CGI.TheDef->getName() + "'");
+
         // Look for a modifier string.
         if (AsmString[VarEnd] == ':') {
           ++VarEnd;
           if (VarEnd >= AsmString.size())
-            throw "Reached end of string before terminating curly brace in '"
-            + CGI.TheDef->getName() + "'";
-          
-          unsigned ModifierStart = VarEnd;
+            PrintFatalError(
+                CGI.TheDef->getLoc(),
+                "Reached end of string before terminating curly brace in '" +
+                    CGI.TheDef->getName() + "'");
+
+          std::string::size_type ModifierStart = VarEnd;
           while (VarEnd < AsmString.size() && isIdentChar(AsmString[VarEnd]))
             ++VarEnd;
           Modifier = std::string(AsmString.begin()+ModifierStart,
                                  AsmString.begin()+VarEnd);
           if (Modifier.empty())
-            throw "Bad operand modifier name in '"+ CGI.TheDef->getName() + "'";
+            PrintFatalError(CGI.TheDef->getLoc(),
+                            "Bad operand modifier name in '" +
+                                CGI.TheDef->getName() + "'");
         }
-        
+
         if (AsmString[VarEnd] != '}')
-          throw "Variable name beginning with '{' did not end with '}' in '"
-          + CGI.TheDef->getName() + "'";
+          PrintFatalError(
+              CGI.TheDef->getLoc(),
+              "Variable name beginning with '{' did not end with '}' in '" +
+                  CGI.TheDef->getName() + "'");
         ++VarEnd;
       }
       if (VarName.empty() && Modifier.empty())
-        throw "Stray '$' in '" + CGI.TheDef->getName() +
-        "' asm string, maybe you want $$?";
-      
+        PrintFatalError(CGI.TheDef->getLoc(),
+                        "Stray '$' in '" + CGI.TheDef->getName() +
+                            "' asm string, maybe you want $$?");
+
       if (VarName.empty()) {
         // Just a modifier, pass this into PrintSpecial.
-        Operands.push_back(AsmWriterOperand("PrintSpecial", 
-                                            ~0U, 
-                                            ~0U, 
-                                            Modifier));
+        Operands.emplace_back("PrintSpecial", ~0U, Modifier);
       } else {
         // Otherwise, normal operand.
         unsigned OpNo = CGI.Operands.getOperandNamed(VarName);
         CGIOperandList::OperandInfo OpInfo = CGI.Operands[OpNo];
-        
+
         unsigned MIOp = OpInfo.MIOperandNo;
-        Operands.push_back(AsmWriterOperand(OpInfo.PrinterMethodName, 
-                                            OpNo, MIOp, Modifier));
+        Operands.emplace_back(OpInfo.PrinterMethodName, MIOp, Modifier);
       }
       LastEmitted = VarEnd;
     }
   }
-  
-  Operands.push_back(AsmWriterOperand("return;",
-    AsmWriterOperand::isLiteralStatementOperand));
+
+  Operands.emplace_back("return;", AsmWriterOperand::isLiteralStatementOperand);
 }
 
 /// MatchesAllButOneOp - If this instruction is exactly identical to the
@@ -219,14 +194,13 @@ AsmWriterInst::AsmWriterInst(const CodeGenInstruction &CGI,
 /// if the instructions are identical return ~0.
 unsigned AsmWriterInst::MatchesAllButOneOp(const AsmWriterInst &Other)const{
   if (Operands.size() != Other.Operands.size()) return ~1;
-  
+
   unsigned MismatchOperand = ~0U;
   for (unsigned i = 0, e = Operands.size(); i != e; ++i) {
     if (Operands[i] != Other.Operands[i]) {
       if (MismatchOperand != ~0U)  // Already have one mismatch?
         return ~1U;
-      else
-        MismatchOperand = i;
+      MismatchOperand = i;
     }
   }
   return MismatchOperand;

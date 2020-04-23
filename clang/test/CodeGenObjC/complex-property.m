@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -triple x86_64-apple-darwin10  -emit-llvm -o - %s | FileCheck -check-prefix LP64 %s
+// RUN: %clang_cc1 -triple x86_64-apple-darwin10  -emit-llvm -o - %s | FileCheck -check-prefix CHECK-LP64 %s
 // rdar: // 7351147
 
 @interface A
@@ -13,8 +13,8 @@ void f0(A *a) {
   a.y += a1;
 }
 
-// CHECK-LP64: internal global [13 x i8] c"COMPLEX_PROP
-// CHECK-LP64: internal global [17 x i8] c"setCOMPLEX_PROP
+// CHECK-LP64: private unnamed_addr constant [13 x i8] c"COMPLEX_PROP
+// CHECK-LP64: private unnamed_addr constant [17 x i8] c"setCOMPLEX_PROP
 
 // rdar: // 7351147
 @interface B

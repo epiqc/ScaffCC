@@ -2,9 +2,8 @@
 
 set(LLVM_LINK_COMPONENTS support)
 
-set(LLVM_USED_LIBS clangBasic)
-
 add_clang_library(clangLex
+  DependencyDirectivesSourceMinimizer.cpp
   HeaderMap.cpp
   HeaderSearch.cpp
   Lexer.cpp
@@ -14,11 +13,11 @@ add_clang_library(clangLex
   ModuleMap.cpp
   PPCaching.cpp
   PPCallbacks.cpp
+  PPConditionalDirectiveRecord.cpp
   PPDirectives.cpp
   PPExpressions.cpp
   PPLexerChange.cpp
   PPMacroExpansion.cpp
-  PTHLexer.cpp
   Pragma.cpp
   PreprocessingRecord.cpp
   Preprocessor.cpp
@@ -26,6 +25,7 @@ add_clang_library(clangLex
   ScratchBuffer.cpp
   TokenConcatenation.cpp
   TokenLexer.cpp
-  )
 
-add_dependencies(clangLex ClangDiagnosticLex ClangAttrSpellings)
+  LINK_LIBS
+  clangBasic
+  )

@@ -1,218 +1,729 @@
 //===- llvm-readobj.cpp - Dump contents of an Object File -----------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
-// This program is a utility that works like traditional Unix "readelf",
-// except that it can handle any type of object file recognized by lib/Object.
+// This is a tool similar to readelf, except it works on multiple object file
+// formats. The main purpose of this tool is to provide detailed output suitable
+// for FileCheck.
 //
-// It makes use of the generic ObjectFile interface.
+// Flags should be similar to readelf where supported, but the output format
+// does not need to be identical. The point is to not make users learn yet
+// another set of flags.
 //
-// Caution: This utility is new, experimental, unsupported, and incomplete.
+// Output should be specialized for each format where appropriate.
 //
 //===----------------------------------------------------------------------===//
 
+#include "llvm-readobj.h"
+#include "Error.h"
+#include "ObjDumper.h"
+#include "WindowsResourceDumper.h"
+#include "llvm/DebugInfo/CodeView/GlobalTypeTableBuilder.h"
+#include "llvm/DebugInfo/CodeView/MergingTypeTableBuilder.h"
+#include "llvm/Object/Archive.h"
+#include "llvm/Object/COFFImportFile.h"
+#include "llvm/Object/MachOUniversal.h"
 #include "llvm/Object/ObjectFile.h"
-#include "llvm/Object/ELF.h"
-#include "llvm/Analysis/Verifier.h"
-#include "llvm/ADT/Triple.h"
-#include "llvm/Support/Format.h"
+#include "llvm/Object/WindowsResource.h"
+#include "llvm/Support/Casting.h"
 #include "llvm/Support/CommandLine.h"
-#include "llvm/Support/PrettyStackTrace.h"
+#include "llvm/Support/DataTypes.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/Signals.h"
-#include "llvm/Support/FormattedStream.h"
+#include "llvm/Support/FileSystem.h"
+#include "llvm/Support/FormatVariadic.h"
+#include "llvm/Support/InitLLVM.h"
+#include "llvm/Support/Path.h"
+#include "llvm/Support/ScopedPrinter.h"
+#include "llvm/Support/TargetRegistry.h"
+#include "llvm/Support/WithColor.h"
 
 using namespace llvm;
 using namespace llvm::object;
 
-static cl::opt<std::string>
-InputFilename(cl::Positional, cl::desc("<input object>"), cl::init(""));
+namespace opts {
+  cl::list<std::string> InputFilenames(cl::Positional,
+    cl::desc("<input object files>"),
+    cl::ZeroOrMore);
 
-void DumpSymbolHeader() {
-  outs() << format("  %-32s", (const char*)"Name")
-         << format("  %-4s", (const char*)"Type")
-         << format("  %-16s", (const char*)"Address")
-         << format("  %-16s", (const char*)"Size")
-         << format("  %-16s", (const char*)"FileOffset")
-         << format("  %-26s", (const char*)"Flags")
-         << "\n";
+  // --all, -a
+  cl::opt<bool>
+      All("all",
+          cl::desc("Equivalent to setting: --file-headers, --program-headers, "
+                   "--section-headers, --symbols, --relocations, "
+                   "--dynamic-table, --notes, --version-info, --unwind, "
+                   "--section-groups and --elf-hash-histogram."));
+  cl::alias AllShort("a", cl::desc("Alias for --all"), cl::aliasopt(All));
+
+  // --dependent-libraries
+  cl::opt<bool>
+      DependentLibraries("dependent-libraries",
+                         cl::desc("Display the dependent libraries section"));
+
+  // --headers -e
+  cl::opt<bool>
+      Headers("headers",
+          cl::desc("Equivalent to setting: --file-headers, --program-headers, "
+                   "--section-headers"));
+  cl::alias HeadersShort("e", cl::desc("Alias for --headers"),
+     cl::aliasopt(Headers));
+
+  // --wide, -W
+  cl::opt<bool>
+      WideOutput("wide", cl::desc("Ignored for compatibility with GNU readelf"),
+                 cl::Hidden);
+  cl::alias WideOutputShort("W",
+    cl::desc("Alias for --wide"),
+    cl::aliasopt(WideOutput));
+
+  // --file-headers, --file-header, -h
+  cl::opt<bool> FileHeaders("file-headers",
+    cl::desc("Display file headers "));
+  cl::alias FileHeadersShort("h", cl::desc("Alias for --file-headers"),
+                             cl::aliasopt(FileHeaders), cl::NotHidden);
+  cl::alias FileHeadersSingular("file-header",
+                                cl::desc("Alias for --file-headers"),
+                                cl::aliasopt(FileHeaders));
+
+  // --section-headers, --sections, -S
+  // Also -s in llvm-readobj mode.
+  cl::opt<bool> SectionHeaders("section-headers",
+                               cl::desc("Display all section headers."));
+  cl::alias SectionsShortUpper("S", cl::desc("Alias for --section-headers"),
+                               cl::aliasopt(SectionHeaders), cl::NotHidden);
+  cl::alias SectionHeadersAlias("sections",
+                                cl::desc("Alias for --section-headers"),
+                                cl::aliasopt(SectionHeaders), cl::NotHidden);
+
+  // --section-relocations
+  // Also --sr in llvm-readobj mode.
+  cl::opt<bool> SectionRelocations("section-relocations",
+    cl::desc("Display relocations for each section shown."));
+
+  // --section-symbols
+  // Also --st in llvm-readobj mode.
+  cl::opt<bool> SectionSymbols("section-symbols",
+    cl::desc("Display symbols for each section shown."));
+
+  // --section-data
+  // Also --sd in llvm-readobj mode.
+  cl::opt<bool> SectionData("section-data",
+    cl::desc("Display section data for each section shown."));
+
+  // --section-mapping
+  cl::opt<cl::boolOrDefault>
+      SectionMapping("section-mapping",
+                     cl::desc("Display the section to segment mapping."));
+
+  // --relocations, --relocs, -r
+  cl::opt<bool> Relocations("relocations",
+    cl::desc("Display the relocation entries in the file"));
+  cl::alias RelocationsShort("r", cl::desc("Alias for --relocations"),
+                             cl::aliasopt(Relocations), cl::NotHidden);
+  cl::alias RelocationsGNU("relocs", cl::desc("Alias for --relocations"),
+                           cl::aliasopt(Relocations));
+
+  // --notes, -n
+  cl::opt<bool> Notes("notes", cl::desc("Display the ELF notes in the file"));
+  cl::alias NotesShort("n", cl::desc("Alias for --notes"), cl::aliasopt(Notes));
+
+  // --dyn-relocations
+  cl::opt<bool> DynRelocs("dyn-relocations",
+    cl::desc("Display the dynamic relocation entries in the file"));
+
+  // --symbols
+  // Also -s in llvm-readelf mode, or -t in llvm-readobj mode.
+  cl::opt<bool>
+      Symbols("symbols",
+              cl::desc("Display the symbol table. Also display the dynamic "
+                       "symbol table when using GNU output style for ELF"));
+  cl::alias SymbolsGNU("syms", cl::desc("Alias for --symbols"),
+                       cl::aliasopt(Symbols));
+
+  // --dyn-symbols, --dyn-syms
+  // Also --dt in llvm-readobj mode.
+  cl::opt<bool> DynamicSymbols("dyn-symbols",
+    cl::desc("Display the dynamic symbol table"));
+  cl::alias DynSymsGNU("dyn-syms", cl::desc("Alias for --dyn-symbols"),
+                       cl::aliasopt(DynamicSymbols));
+
+  // --hash-symbols
+  cl::opt<bool> HashSymbols(
+      "hash-symbols",
+      cl::desc("Display the dynamic symbols derived from the hash section"));
+
+  // --unwind, -u
+  cl::opt<bool> UnwindInfo("unwind",
+    cl::desc("Display unwind information"));
+  cl::alias UnwindInfoShort("u",
+    cl::desc("Alias for --unwind"),
+    cl::aliasopt(UnwindInfo));
+
+  // --dynamic-table, --dynamic, -d
+  cl::opt<bool> DynamicTable("dynamic-table",
+    cl::desc("Display the ELF .dynamic section table"));
+  cl::alias DynamicTableShort("d", cl::desc("Alias for --dynamic-table"),
+                              cl::aliasopt(DynamicTable), cl::NotHidden);
+  cl::alias DynamicTableAlias("dynamic", cl::desc("Alias for --dynamic-table"),
+                              cl::aliasopt(DynamicTable));
+
+  // --needed-libs
+  cl::opt<bool> NeededLibraries("needed-libs",
+    cl::desc("Display the needed libraries"));
+
+  // --program-headers, --segments, -l
+  cl::opt<bool> ProgramHeaders("program-headers",
+    cl::desc("Display ELF program headers"));
+  cl::alias ProgramHeadersShort("l", cl::desc("Alias for --program-headers"),
+                                cl::aliasopt(ProgramHeaders), cl::NotHidden);
+  cl::alias SegmentsAlias("segments", cl::desc("Alias for --program-headers"),
+                          cl::aliasopt(ProgramHeaders));
+
+  // --string-dump, -p
+  cl::list<std::string> StringDump("string-dump", cl::desc("<number|name>"),
+                                   cl::ZeroOrMore);
+  cl::alias StringDumpShort("p", cl::desc("Alias for --string-dump"),
+                            cl::aliasopt(StringDump), cl::Prefix);
+
+  // --hex-dump, -x
+  cl::list<std::string> HexDump("hex-dump", cl::desc("<number|name>"),
+                                cl::ZeroOrMore);
+  cl::alias HexDumpShort("x", cl::desc("Alias for --hex-dump"),
+                         cl::aliasopt(HexDump), cl::Prefix);
+
+  // --demangle, -C
+  cl::opt<bool> Demangle("demangle",
+                         cl::desc("Demangle symbol names in output"));
+  cl::alias DemangleShort("C", cl::desc("Alias for --demangle"),
+                          cl::aliasopt(Demangle), cl::NotHidden);
+
+  // --hash-table
+  cl::opt<bool> HashTable("hash-table",
+    cl::desc("Display ELF hash table"));
+
+  // --gnu-hash-table
+  cl::opt<bool> GnuHashTable("gnu-hash-table",
+    cl::desc("Display ELF .gnu.hash section"));
+
+  // --expand-relocs
+  cl::opt<bool> ExpandRelocs("expand-relocs",
+    cl::desc("Expand each shown relocation to multiple lines"));
+
+  // --raw-relr
+  cl::opt<bool> RawRelr("raw-relr",
+    cl::desc("Do not decode relocations in SHT_RELR section, display raw contents"));
+
+  // --codeview
+  cl::opt<bool> CodeView("codeview",
+                         cl::desc("Display CodeView debug information"));
+
+  // --codeview-merged-types
+  cl::opt<bool>
+      CodeViewMergedTypes("codeview-merged-types",
+                          cl::desc("Display the merged CodeView type stream"));
+
+  // --codeview-ghash
+  cl::opt<bool> CodeViewEnableGHash(
+      "codeview-ghash",
+      cl::desc(
+          "Enable global hashing for CodeView type stream de-duplication"));
+
+  // --codeview-subsection-bytes
+  cl::opt<bool> CodeViewSubsectionBytes(
+      "codeview-subsection-bytes",
+      cl::desc("Dump raw contents of codeview debug sections and records"));
+
+  // --arch-specific
+  cl::opt<bool> ArchSpecificInfo("arch-specific",
+                              cl::desc("Displays architecture-specific information, if there is any."));
+  cl::alias ArchSpecifcInfoShort("A", cl::desc("Alias for --arch-specific"),
+                                 cl::aliasopt(ArchSpecificInfo), cl::NotHidden);
+
+  // --coff-imports
+  cl::opt<bool>
+  COFFImports("coff-imports", cl::desc("Display the PE/COFF import table"));
+
+  // --coff-exports
+  cl::opt<bool>
+  COFFExports("coff-exports", cl::desc("Display the PE/COFF export table"));
+
+  // --coff-directives
+  cl::opt<bool>
+  COFFDirectives("coff-directives",
+                 cl::desc("Display the PE/COFF .drectve section"));
+
+  // --coff-basereloc
+  cl::opt<bool>
+  COFFBaseRelocs("coff-basereloc",
+                 cl::desc("Display the PE/COFF .reloc section"));
+
+  // --coff-debug-directory
+  cl::opt<bool>
+  COFFDebugDirectory("coff-debug-directory",
+                     cl::desc("Display the PE/COFF debug directory"));
+
+  // --coff-resources
+  cl::opt<bool> COFFResources("coff-resources",
+                              cl::desc("Display the PE/COFF .rsrc section"));
+
+  // --coff-load-config
+  cl::opt<bool>
+  COFFLoadConfig("coff-load-config",
+                 cl::desc("Display the PE/COFF load config"));
+
+  // --elf-linker-options
+  cl::opt<bool>
+  ELFLinkerOptions("elf-linker-options",
+                   cl::desc("Display the ELF .linker-options section"));
+
+  // --macho-data-in-code
+  cl::opt<bool>
+  MachODataInCode("macho-data-in-code",
+                  cl::desc("Display MachO Data in Code command"));
+
+  // --macho-indirect-symbols
+  cl::opt<bool>
+  MachOIndirectSymbols("macho-indirect-symbols",
+                  cl::desc("Display MachO indirect symbols"));
+
+  // --macho-linker-options
+  cl::opt<bool>
+  MachOLinkerOptions("macho-linker-options",
+                  cl::desc("Display MachO linker options"));
+
+  // --macho-segment
+  cl::opt<bool>
+  MachOSegment("macho-segment",
+                  cl::desc("Display MachO Segment command"));
+
+  // --macho-version-min
+  cl::opt<bool>
+  MachOVersionMin("macho-version-min",
+                  cl::desc("Display MachO version min command"));
+
+  // --macho-dysymtab
+  cl::opt<bool>
+  MachODysymtab("macho-dysymtab",
+                  cl::desc("Display MachO Dysymtab command"));
+
+  // --stackmap
+  cl::opt<bool>
+  PrintStackMap("stackmap",
+                cl::desc("Display contents of stackmap section"));
+
+  // --stack-sizes
+  cl::opt<bool>
+      PrintStackSizes("stack-sizes",
+                      cl::desc("Display contents of all stack sizes sections"));
+
+  // --version-info, -V
+  cl::opt<bool>
+      VersionInfo("version-info",
+                  cl::desc("Display ELF version sections (if present)"));
+  cl::alias VersionInfoShort("V", cl::desc("Alias for -version-info"),
+                             cl::aliasopt(VersionInfo));
+
+  // --elf-section-groups, --section-groups, -g
+  cl::opt<bool> SectionGroups("elf-section-groups",
+                              cl::desc("Display ELF section group contents"));
+  cl::alias SectionGroupsAlias("section-groups",
+                               cl::desc("Alias for -elf-sections-groups"),
+                               cl::aliasopt(SectionGroups));
+  cl::alias SectionGroupsShort("g", cl::desc("Alias for -elf-sections-groups"),
+                               cl::aliasopt(SectionGroups));
+
+  // --elf-hash-histogram, --histogram, -I
+  cl::opt<bool> HashHistogram(
+      "elf-hash-histogram",
+      cl::desc("Display bucket list histogram for hash sections"));
+  cl::alias HashHistogramShort("I", cl::desc("Alias for -elf-hash-histogram"),
+                               cl::aliasopt(HashHistogram));
+  cl::alias HistogramAlias("histogram",
+                           cl::desc("Alias for --elf-hash-histogram"),
+                           cl::aliasopt(HashHistogram));
+
+  // --elf-cg-profile
+  cl::opt<bool> CGProfile("elf-cg-profile", cl::desc("Display callgraph profile section"));
+
+  // -addrsig
+  cl::opt<bool> Addrsig("addrsig",
+                        cl::desc("Display address-significance table"));
+
+  // -elf-output-style
+  cl::opt<OutputStyleTy>
+      Output("elf-output-style", cl::desc("Specify ELF dump style"),
+             cl::values(clEnumVal(LLVM, "LLVM default style"),
+                        clEnumVal(GNU, "GNU readelf style")),
+             cl::init(LLVM));
+
+  cl::extrahelp
+      HelpResponse("\nPass @FILE as argument to read options from FILE.\n");
+} // namespace opts
+
+static StringRef ToolName;
+
+namespace llvm {
+
+LLVM_ATTRIBUTE_NORETURN static void error(Twine Msg) {
+  // Flush the standard output to print the error at a
+  // proper place.
+  fouts().flush();
+  WithColor::error(errs(), ToolName) << Msg << "\n";
+  exit(1);
 }
 
-const char *GetTypeStr(SymbolRef::Type Type) {
-  switch (Type) {
-  case SymbolRef::ST_Unknown: return "?";
-  case SymbolRef::ST_Data: return "DATA";
-  case SymbolRef::ST_Debug: return "DBG";
-  case SymbolRef::ST_File: return "FILE";
-  case SymbolRef::ST_Function: return "FUNC";
-  case SymbolRef::ST_Other: return "-";
+LLVM_ATTRIBUTE_NORETURN void reportError(Error Err, StringRef Input) {
+  assert(Err);
+  if (Input == "-")
+    Input = "<stdin>";
+  handleAllErrors(createFileError(Input, std::move(Err)),
+                  [&](const ErrorInfoBase &EI) { error(EI.message()); });
+  llvm_unreachable("error() call should never return");
+}
+
+void reportWarning(Error Err, StringRef Input) {
+  assert(Err);
+  if (Input == "-")
+    Input = "<stdin>";
+
+  // Flush the standard output to print the warning at a
+  // proper place.
+  fouts().flush();
+  handleAllErrors(
+      createFileError(Input, std::move(Err)), [&](const ErrorInfoBase &EI) {
+        WithColor::warning(errs(), ToolName) << EI.message() << "\n";
+      });
+}
+
+} // namespace llvm
+
+namespace {
+struct ReadObjTypeTableBuilder {
+  ReadObjTypeTableBuilder()
+      : Allocator(), IDTable(Allocator), TypeTable(Allocator),
+        GlobalIDTable(Allocator), GlobalTypeTable(Allocator) {}
+
+  llvm::BumpPtrAllocator Allocator;
+  llvm::codeview::MergingTypeTableBuilder IDTable;
+  llvm::codeview::MergingTypeTableBuilder TypeTable;
+  llvm::codeview::GlobalTypeTableBuilder GlobalIDTable;
+  llvm::codeview::GlobalTypeTableBuilder GlobalTypeTable;
+  std::vector<OwningBinary<Binary>> Binaries;
+};
+} // namespace
+static ReadObjTypeTableBuilder CVTypes;
+
+/// Creates an format-specific object file dumper.
+static std::error_code createDumper(const ObjectFile *Obj,
+                                    ScopedPrinter &Writer,
+                                    std::unique_ptr<ObjDumper> &Result) {
+  if (!Obj)
+    return readobj_error::unsupported_file_format;
+
+  if (Obj->isCOFF())
+    return createCOFFDumper(Obj, Writer, Result);
+  if (Obj->isELF())
+    return createELFDumper(Obj, Writer, Result);
+  if (Obj->isMachO())
+    return createMachODumper(Obj, Writer, Result);
+  if (Obj->isWasm())
+    return createWasmDumper(Obj, Writer, Result);
+  if (Obj->isXCOFF())
+    return createXCOFFDumper(Obj, Writer, Result);
+
+  return readobj_error::unsupported_obj_file_format;
+}
+
+/// Dumps the specified object file.
+static void dumpObject(const ObjectFile *Obj, ScopedPrinter &Writer,
+                       const Archive *A = nullptr) {
+  std::string FileStr =
+          A ? Twine(A->getFileName() + "(" + Obj->getFileName() + ")").str()
+            : Obj->getFileName().str();
+
+  std::unique_ptr<ObjDumper> Dumper;
+  if (std::error_code EC = createDumper(Obj, Writer, Dumper))
+    reportError(errorCodeToError(EC), FileStr);
+
+  if (opts::Output == opts::LLVM || opts::InputFilenames.size() > 1 || A) {
+    Writer.startLine() << "\n";
+    Writer.printString("File", FileStr);
   }
-  return "INV";
-}
-
-std::string GetFlagStr(uint32_t Flags) {
-  std::string result;
-  if (Flags & SymbolRef::SF_Undefined)
-    result += "undef,";
-  if (Flags & SymbolRef::SF_Global)
-    result += "global,";
-  if (Flags & SymbolRef::SF_Weak)
-    result += "weak,";
-  if (Flags & SymbolRef::SF_Absolute)
-    result += "absolute,";
-  if (Flags & SymbolRef::SF_ThreadLocal)
-    result += "threadlocal,";
-  if (Flags & SymbolRef::SF_Common)
-    result += "common,";
-  if (Flags & SymbolRef::SF_FormatSpecific)
-    result += "formatspecific,";
-
-  // Remove trailing comma
-  if (result.size() > 0) {
-    result.erase(result.size() - 1);
+  if (opts::Output == opts::LLVM) {
+    Writer.printString("Format", Obj->getFileFormatName());
+    Writer.printString("Arch", Triple::getArchTypeName(
+                                   (llvm::Triple::ArchType)Obj->getArch()));
+    Writer.printString("AddressSize",
+                       formatv("{0}bit", 8 * Obj->getBytesInAddress()));
+    Dumper->printLoadName();
   }
-  return result;
+
+  if (opts::FileHeaders)
+    Dumper->printFileHeaders();
+  if (opts::SectionHeaders)
+    Dumper->printSectionHeaders();
+  if (opts::Relocations)
+    Dumper->printRelocations();
+  if (opts::DynRelocs)
+    Dumper->printDynamicRelocations();
+  if (opts::Symbols || opts::DynamicSymbols)
+    Dumper->printSymbols(opts::Symbols, opts::DynamicSymbols);
+  if (opts::HashSymbols)
+    Dumper->printHashSymbols();
+  if (opts::UnwindInfo)
+    Dumper->printUnwindInfo();
+  if (opts::DynamicTable)
+    Dumper->printDynamicTable();
+  if (opts::NeededLibraries)
+    Dumper->printNeededLibraries();
+  if (opts::ProgramHeaders || opts::SectionMapping == cl::BOU_TRUE)
+    Dumper->printProgramHeaders(opts::ProgramHeaders, opts::SectionMapping);
+  if (!opts::StringDump.empty())
+    Dumper->printSectionsAsString(Obj, opts::StringDump);
+  if (!opts::HexDump.empty())
+    Dumper->printSectionsAsHex(Obj, opts::HexDump);
+  if (opts::HashTable)
+    Dumper->printHashTable();
+  if (opts::GnuHashTable)
+    Dumper->printGnuHashTable();
+  if (opts::VersionInfo)
+    Dumper->printVersionInfo();
+  if (Obj->isELF()) {
+    if (opts::DependentLibraries)
+      Dumper->printDependentLibs();
+    if (opts::ELFLinkerOptions)
+      Dumper->printELFLinkerOptions();
+    if (opts::ArchSpecificInfo)
+      Dumper->printArchSpecificInfo();
+    if (opts::SectionGroups)
+      Dumper->printGroupSections();
+    if (opts::HashHistogram)
+      Dumper->printHashHistogram();
+    if (opts::CGProfile)
+      Dumper->printCGProfile();
+    if (opts::Addrsig)
+      Dumper->printAddrsig();
+    if (opts::Notes)
+      Dumper->printNotes();
+  }
+  if (Obj->isCOFF()) {
+    if (opts::COFFImports)
+      Dumper->printCOFFImports();
+    if (opts::COFFExports)
+      Dumper->printCOFFExports();
+    if (opts::COFFDirectives)
+      Dumper->printCOFFDirectives();
+    if (opts::COFFBaseRelocs)
+      Dumper->printCOFFBaseReloc();
+    if (opts::COFFDebugDirectory)
+      Dumper->printCOFFDebugDirectory();
+    if (opts::COFFResources)
+      Dumper->printCOFFResources();
+    if (opts::COFFLoadConfig)
+      Dumper->printCOFFLoadConfig();
+    if (opts::Addrsig)
+      Dumper->printAddrsig();
+    if (opts::CodeView)
+      Dumper->printCodeViewDebugInfo();
+    if (opts::CodeViewMergedTypes)
+      Dumper->mergeCodeViewTypes(CVTypes.IDTable, CVTypes.TypeTable,
+                                 CVTypes.GlobalIDTable, CVTypes.GlobalTypeTable,
+                                 opts::CodeViewEnableGHash);
+  }
+  if (Obj->isMachO()) {
+    if (opts::MachODataInCode)
+      Dumper->printMachODataInCode();
+    if (opts::MachOIndirectSymbols)
+      Dumper->printMachOIndirectSymbols();
+    if (opts::MachOLinkerOptions)
+      Dumper->printMachOLinkerOptions();
+    if (opts::MachOSegment)
+      Dumper->printMachOSegment();
+    if (opts::MachOVersionMin)
+      Dumper->printMachOVersionMin();
+    if (opts::MachODysymtab)
+      Dumper->printMachODysymtab();
+  }
+  if (opts::PrintStackMap)
+    Dumper->printStackMap();
+  if (opts::PrintStackSizes)
+    Dumper->printStackSizes();
 }
 
-void DumpSymbol(const SymbolRef &Sym, const ObjectFile *obj, bool IsDynamic) {
-    StringRef Name;
-    SymbolRef::Type Type;
-    uint32_t Flags;
-    uint64_t Address;
-    uint64_t Size;
-    uint64_t FileOffset;
-    Sym.getName(Name);
-    Sym.getAddress(Address);
-    Sym.getSize(Size);
-    Sym.getFileOffset(FileOffset);
-    Sym.getType(Type);
-    Sym.getFlags(Flags);
-    std::string FullName = Name;
-
-    // If this is a dynamic symbol from an ELF object, append
-    // the symbol's version to the name.
-    if (IsDynamic && obj->isELF()) {
-      StringRef Version;
-      bool IsDefault;
-      GetELFSymbolVersion(obj, Sym, Version, IsDefault);
-      if (!Version.empty()) {
-        FullName += (IsDefault ? "@@" : "@");
-        FullName += Version;
-      }
+/// Dumps each object file in \a Arc;
+static void dumpArchive(const Archive *Arc, ScopedPrinter &Writer) {
+  Error Err = Error::success();
+  for (auto &Child : Arc->children(Err)) {
+    Expected<std::unique_ptr<Binary>> ChildOrErr = Child.getAsBinary();
+    if (!ChildOrErr) {
+      if (auto E = isNotObjectErrorInvalidFileType(ChildOrErr.takeError()))
+        reportError(std::move(E), Arc->getFileName());
+      continue;
     }
+    if (ObjectFile *Obj = dyn_cast<ObjectFile>(&*ChildOrErr.get()))
+      dumpObject(Obj, Writer, Arc);
+    else if (COFFImportFile *Imp = dyn_cast<COFFImportFile>(&*ChildOrErr.get()))
+      dumpCOFFImportFile(Imp, Writer);
+    else
+      reportError(errorCodeToError(readobj_error::unrecognized_file_format),
+                  Arc->getFileName());
+  }
+  if (Err)
+    reportError(std::move(Err), Arc->getFileName());
+}
 
-    // format() can't handle StringRefs
-    outs() << format("  %-32s", FullName.c_str())
-           << format("  %-4s", GetTypeStr(Type))
-           << format("  %16" PRIx64, Address)
-           << format("  %16" PRIx64, Size)
-           << format("  %16" PRIx64, FileOffset)
-           << "  " << GetFlagStr(Flags)
-           << "\n";
+/// Dumps each object file in \a MachO Universal Binary;
+static void dumpMachOUniversalBinary(const MachOUniversalBinary *UBinary,
+                                     ScopedPrinter &Writer) {
+  for (const MachOUniversalBinary::ObjectForArch &Obj : UBinary->objects()) {
+    Expected<std::unique_ptr<MachOObjectFile>> ObjOrErr = Obj.getAsObjectFile();
+    if (ObjOrErr)
+      dumpObject(&*ObjOrErr.get(), Writer);
+    else if (auto E = isNotObjectErrorInvalidFileType(ObjOrErr.takeError()))
+      reportError(ObjOrErr.takeError(), UBinary->getFileName());
+    else if (Expected<std::unique_ptr<Archive>> AOrErr = Obj.getAsArchive())
+      dumpArchive(&*AOrErr.get(), Writer);
+  }
+}
+
+/// Dumps \a WinRes, Windows Resource (.res) file;
+static void dumpWindowsResourceFile(WindowsResource *WinRes,
+                                    ScopedPrinter &Printer) {
+  WindowsRes::Dumper Dumper(WinRes, Printer);
+  if (auto Err = Dumper.printData())
+    reportError(std::move(Err), WinRes->getFileName());
 }
 
 
-// Iterate through the normal symbols in the ObjectFile
-void DumpSymbols(const ObjectFile *obj) {
-  error_code ec;
-  uint32_t count = 0;
-  outs() << "Symbols:\n";
-  symbol_iterator it = obj->begin_symbols();
-  symbol_iterator ie = obj->end_symbols();
-  while (it != ie) {
-    DumpSymbol(*it, obj, false);
-    it.increment(ec);
-    if (ec)
-      report_fatal_error("Symbol iteration failed");
-    ++count;
-  }
-  outs() << "  Total: " << count << "\n\n";
+/// Opens \a File and dumps it.
+static void dumpInput(StringRef File, ScopedPrinter &Writer) {
+  // Attempt to open the binary.
+  Expected<OwningBinary<Binary>> BinaryOrErr = createBinary(File);
+  if (!BinaryOrErr)
+    reportError(BinaryOrErr.takeError(), File);
+  Binary &Binary = *BinaryOrErr.get().getBinary();
+
+  if (Archive *Arc = dyn_cast<Archive>(&Binary))
+    dumpArchive(Arc, Writer);
+  else if (MachOUniversalBinary *UBinary =
+               dyn_cast<MachOUniversalBinary>(&Binary))
+    dumpMachOUniversalBinary(UBinary, Writer);
+  else if (ObjectFile *Obj = dyn_cast<ObjectFile>(&Binary))
+    dumpObject(Obj, Writer);
+  else if (COFFImportFile *Import = dyn_cast<COFFImportFile>(&Binary))
+    dumpCOFFImportFile(Import, Writer);
+  else if (WindowsResource *WinRes = dyn_cast<WindowsResource>(&Binary))
+    dumpWindowsResourceFile(WinRes, Writer);
+  else
+    reportError(errorCodeToError(readobj_error::unrecognized_file_format),
+                File);
+
+  CVTypes.Binaries.push_back(std::move(*BinaryOrErr));
 }
 
-// Iterate through the dynamic symbols in the ObjectFile.
-void DumpDynamicSymbols(const ObjectFile *obj) {
-  error_code ec;
-  uint32_t count = 0;
-  outs() << "Dynamic Symbols:\n";
-  symbol_iterator it = obj->begin_dynamic_symbols();
-  symbol_iterator ie = obj->end_dynamic_symbols();
-  while (it != ie) {
-    DumpSymbol(*it, obj, true);
-    it.increment(ec);
-    if (ec)
-      report_fatal_error("Symbol iteration failed");
-    ++count;
-  }
-  outs() << "  Total: " << count << "\n\n";
+/// Registers aliases that should only be allowed by readobj.
+static void registerReadobjAliases() {
+  // -s has meant --sections for a very long time in llvm-readobj despite
+  // meaning --symbols in readelf.
+  static cl::alias SectionsShort("s", cl::desc("Alias for --section-headers"),
+                                 cl::aliasopt(opts::SectionHeaders),
+                                 cl::NotHidden);
+
+  // Only register -t in llvm-readobj, as readelf reserves it for
+  // --section-details (not implemented yet).
+  static cl::alias SymbolsShort("t", cl::desc("Alias for --symbols"),
+                                cl::aliasopt(opts::Symbols), cl::NotHidden);
+
+  // The following two-letter aliases are only provided for readobj, as readelf
+  // allows single-letter args to be grouped together.
+  static cl::alias SectionRelocationsShort(
+      "sr", cl::desc("Alias for --section-relocations"),
+      cl::aliasopt(opts::SectionRelocations));
+  static cl::alias SectionDataShort("sd", cl::desc("Alias for --section-data"),
+                                    cl::aliasopt(opts::SectionData));
+  static cl::alias SectionSymbolsShort("st",
+                                       cl::desc("Alias for --section-symbols"),
+                                       cl::aliasopt(opts::SectionSymbols));
+  static cl::alias DynamicSymbolsShort("dt",
+                                       cl::desc("Alias for --dyn-symbols"),
+                                       cl::aliasopt(opts::DynamicSymbols));
 }
 
-void DumpLibrary(const LibraryRef &lib) {
-  StringRef path;
-  lib.getPath(path);
-  outs() << "  " << path << "\n";
+/// Registers aliases that should only be allowed by readelf.
+static void registerReadelfAliases() {
+  // -s is here because for readobj it means --sections.
+  static cl::alias SymbolsShort("s", cl::desc("Alias for --symbols"),
+                                cl::aliasopt(opts::Symbols), cl::NotHidden,
+                                cl::Grouping);
+
+  // Allow all single letter flags to be grouped together.
+  for (auto &OptEntry : cl::getRegisteredOptions()) {
+    StringRef ArgName = OptEntry.getKey();
+    cl::Option *Option = OptEntry.getValue();
+    if (ArgName.size() == 1)
+      apply(Option, cl::Grouping);
+  }
 }
 
-// Iterate through needed libraries
-void DumpLibrariesNeeded(const ObjectFile *obj) {
-  error_code ec;
-  uint32_t count = 0;
-  library_iterator it = obj->begin_libraries_needed();
-  library_iterator ie = obj->end_libraries_needed();
-  outs() << "Libraries needed:\n";
-  while (it != ie) {
-    DumpLibrary(*it);
-    it.increment(ec);
-    if (ec)
-      report_fatal_error("Needed libraries iteration failed");
-    ++count;
-  }
-  outs() << "  Total: " << count << "\n\n";
-}
+int main(int argc, const char *argv[]) {
+  InitLLVM X(argc, argv);
+  ToolName = argv[0];
 
-void DumpHeaders(const ObjectFile *obj) {
-  outs() << "File Format : " << obj->getFileFormatName() << "\n";
-  outs() << "Arch        : "
-         << Triple::getArchTypeName((llvm::Triple::ArchType)obj->getArch())
-         << "\n";
-  outs() << "Address Size: " << (8*obj->getBytesInAddress()) << " bits\n";
-  outs() << "Load Name   : " << obj->getLoadName() << "\n";
-  outs() << "\n";
-}
+  // Register the target printer for --version.
+  cl::AddExtraVersionPrinter(TargetRegistry::printRegisteredTargetsForVersion);
 
-int main(int argc, char** argv) {
-  error_code ec;
-  sys::PrintStackTraceOnErrorSignal();
-  PrettyStackTraceProgram X(argc, argv);
-
-  cl::ParseCommandLineOptions(argc, argv,
-                              "LLVM Object Reader\n");
-
-  if (InputFilename.empty()) {
-    errs() << "Please specify an input filename\n";
-    return 1;
+  if (sys::path::stem(argv[0]).contains("readelf")) {
+    opts::Output = opts::GNU;
+    registerReadelfAliases();
+  } else {
+    registerReadobjAliases();
   }
 
-  // Open the object file
-  OwningPtr<MemoryBuffer> File;
-  if (MemoryBuffer::getFile(InputFilename, File)) {
-    errs() << InputFilename << ": Open failed\n";
-    return 1;
+  cl::ParseCommandLineOptions(argc, argv, "LLVM Object Reader\n");
+
+  if (opts::All) {
+    opts::FileHeaders = true;
+    opts::ProgramHeaders = true;
+    opts::SectionHeaders = true;
+    opts::Symbols = true;
+    opts::Relocations = true;
+    opts::DynamicTable = true;
+    opts::Notes = true;
+    opts::VersionInfo = true;
+    opts::UnwindInfo = true;
+    opts::SectionGroups = true;
+    opts::HashHistogram = true;
+    if (opts::Output == opts::LLVM) {
+      opts::Addrsig = true;
+      opts::PrintStackSizes = true;
+    }
   }
 
-  ObjectFile *obj = ObjectFile::createObjectFile(File.take());
-  if (!obj) {
-    errs() << InputFilename << ": Object type not recognized\n";
+  if (opts::Headers) {
+    opts::FileHeaders = true;
+    opts::ProgramHeaders = true;
+    opts::SectionHeaders = true;
   }
 
-  DumpHeaders(obj);
-  DumpSymbols(obj);
-  DumpDynamicSymbols(obj);
-  DumpLibrariesNeeded(obj);
+  // Default to stdin if no filename is specified.
+  if (opts::InputFilenames.empty())
+    opts::InputFilenames.push_back("-");
+
+  ScopedPrinter Writer(fouts());
+  for (const std::string &I : opts::InputFilenames)
+    dumpInput(I, Writer);
+
+  if (opts::CodeViewMergedTypes) {
+    if (opts::CodeViewEnableGHash)
+      dumpCodeViewMergedTypes(Writer, CVTypes.GlobalIDTable.records(),
+                              CVTypes.GlobalTypeTable.records());
+    else
+      dumpCodeViewMergedTypes(Writer, CVTypes.IDTable.records(),
+                              CVTypes.TypeTable.records());
+  }
+
   return 0;
 }
-

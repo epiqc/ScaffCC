@@ -47,3 +47,19 @@ struct C; // expected-note{{forward declaration}}
 void test_incomplete_object_call(C& c) {
   c(); // expected-error{{incomplete type in call to object of type}}
 }
+
+void test_incomplete_object_dtor(C *p) {
+  p.~C(); // expected-error{{member reference type 'C *' is a pointer; did you mean to use '->'?}}
+}
+
+namespace pr18542 {
+  struct X {
+    int count;
+    template<typename CharT> class basic_istream;
+    template<typename CharT>
+      void basic_istream<CharT>::read() { // expected-error{{out-of-line definition of 'read' from class 'basic_istream<CharT>' without definition}}
+        count = 0;
+      }
+  };
+}
+

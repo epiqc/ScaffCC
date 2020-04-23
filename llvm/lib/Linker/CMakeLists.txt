@@ -1,6 +1,10 @@
-add_llvm_library(LLVMLinker
-  LinkArchives.cpp
-  LinkItems.cpp
+add_llvm_component_library(LLVMLinker
+  IRMover.cpp
   LinkModules.cpp
-  Linker.cpp
+
+  ADDITIONAL_HEADER_DIRS
+  ${LLVM_MAIN_INCLUDE_DIR}/llvm/Linker
+
+  DEPENDS
+  intrinsics_gen
   )

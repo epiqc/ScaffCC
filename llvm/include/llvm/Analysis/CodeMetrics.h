@@ -1,9 +1,8 @@
 //===- CodeMetrics.h - Code cost measurements -------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -16,78 +15,81 @@
 #define LLVM_ANALYSIS_CODEMETRICS_H
 
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/SmallPtrSet.h"
 
 namespace llvm {
-  class BasicBlock;
-  class Function;
-  class Instruction;
-  class TargetData;
-  class Value;
+class AssumptionCache;
+class BasicBlock;
+class Loop;
+class Function;
+class Instruction;
+class DataLayout;
+class TargetTransformInfo;
+class Value;
 
-  /// \brief Check whether an instruction is likely to be "free" when lowered.
-  bool isInstructionFree(const Instruction *I, const TargetData *TD = 0);
+/// Utility to calculate the size and a few similar metrics for a set
+/// of basic blocks.
+struct CodeMetrics {
+  /// True if this function contains a call to setjmp or other functions
+  /// with attribute "returns twice" without having the attribute itself.
+  bool exposesReturnsTwice = false;
 
-  /// \brief Check whether a call will lower to something small.
+  /// True if this function calls itself.
+  bool isRecursive = false;
+
+  /// True if this function cannot be duplicated.
   ///
-  /// This tests checks whether calls to this function will lower to something
-  /// significantly cheaper than a traditional call, often a single
-  /// instruction.
-  bool callIsSmall(const Function *F);
+  /// True if this function contains one or more indirect branches, or it contains
+  /// one or more 'noduplicate' instructions.
+  bool notDuplicatable = false;
 
-  /// \brief Utility to calculate the size and a few similar metrics for a set
-  /// of basic blocks.
-  struct CodeMetrics {
-    /// \brief True if this function contains a call to setjmp or other functions
-    /// with attribute "returns twice" without having the attribute itself.
-    bool exposesReturnsTwice;
+  /// True if this function contains a call to a convergent function.
+  bool convergent = false;
 
-    /// \brief True if this function calls itself.
-    bool isRecursive;
+  /// True if this function calls alloca (in the C sense).
+  bool usesDynamicAlloca = false;
 
-    /// \brief True if this function contains one or more indirect branches.
-    bool containsIndirectBr;
+  /// Number of instructions in the analyzed blocks.
+  unsigned NumInsts = false;
 
-    /// \brief True if this function calls alloca (in the C sense).
-    bool usesDynamicAlloca;
+  /// Number of analyzed blocks.
+  unsigned NumBlocks = false;
 
-    /// \brief Number of instructions in the analyzed blocks.
-    unsigned NumInsts;
+  /// Keeps track of basic block code size estimates.
+  DenseMap<const BasicBlock *, unsigned> NumBBInsts;
 
-    /// \brief Number of analyzed blocks.
-    unsigned NumBlocks;
+  /// Keep track of the number of calls to 'big' functions.
+  unsigned NumCalls = false;
 
-    /// \brief Keeps track of basic block code size estimates.
-    DenseMap<const BasicBlock *, unsigned> NumBBInsts;
+  /// The number of calls to internal functions with a single caller.
+  ///
+  /// These are likely targets for future inlining, likely exposed by
+  /// interleaved devirtualization.
+  unsigned NumInlineCandidates = 0;
 
-    /// \brief Keep track of the number of calls to 'big' functions.
-    unsigned NumCalls;
+  /// How many instructions produce vector values.
+  ///
+  /// The inliner is more aggressive with inlining vector kernels.
+  unsigned NumVectorInsts = 0;
 
-    /// \brief The number of calls to internal functions with a single caller.
-    ///
-    /// These are likely targets for future inlining, likely exposed by
-    /// interleaved devirtualization.
-    unsigned NumInlineCandidates;
+  /// How many 'ret' instructions the blocks contain.
+  unsigned NumRets = 0;
 
-    /// \brief How many instructions produce vector values.
-    ///
-    /// The inliner is more aggressive with inlining vector kernels.
-    unsigned NumVectorInsts;
+  /// Add information about a block to the current state.
+  void analyzeBasicBlock(const BasicBlock *BB, const TargetTransformInfo &TTI,
+                         const SmallPtrSetImpl<const Value*> &EphValues);
 
-    /// \brief How many 'ret' instructions the blocks contain.
-    unsigned NumRets;
+  /// Collect a loop's ephemeral values (those used only by an assume
+  /// or similar intrinsics in the loop).
+  static void collectEphemeralValues(const Loop *L, AssumptionCache *AC,
+                                     SmallPtrSetImpl<const Value *> &EphValues);
 
-    CodeMetrics() : exposesReturnsTwice(false), isRecursive(false),
-                    containsIndirectBr(false), usesDynamicAlloca(false),
-                    NumInsts(0), NumBlocks(0), NumCalls(0),
-                    NumInlineCandidates(0), NumVectorInsts(0),
-                    NumRets(0) {}
+  /// Collect a functions's ephemeral values (those used only by an
+  /// assume or similar intrinsics in the function).
+  static void collectEphemeralValues(const Function *L, AssumptionCache *AC,
+                                     SmallPtrSetImpl<const Value *> &EphValues);
+};
 
-    /// \brief Add information about a block to the current state.
-    void analyzeBasicBlock(const BasicBlock *BB, const TargetData *TD = 0);
-
-    /// \brief Add information about a function to the current state.
-    void analyzeFunction(Function *F, const TargetData *TD = 0);
-  };
 }
 
 #endif

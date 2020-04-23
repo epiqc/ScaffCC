@@ -6,16 +6,18 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <cstring>
+#include <cstdlib>
 #include "llvm/Pass.h"
-#include "llvm/Module.h"
-#include "llvm/Function.h"
-#include "llvm/BasicBlock.h"
-#include "llvm/Instruction.h"
-#include "llvm/Constants.h"
-#include "llvm/Intrinsics.h"
-#include "llvm/Support/InstVisitor.h" 
+#include "llvm/IR/Module.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Instruction.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/InstVisitor.h" 
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/LLVMContext.h"
+#include "llvm/IR/LLVMContext.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 
 using namespace llvm;
@@ -55,17 +57,17 @@ namespace {
     static char ID;  // Pass identification, replacement for typeid
 
     //external instrumentation function
-    Function* qasmGate; 
-    Function* qasmQbitDecl; 
-    Function* qasmCbitDecl; 
-    Function* qasmResSum; 
-    Function* memoize; 
-    Function* qasmInitialize; 
-    Function* exit_scope;
+    FunctionCallee qasmGate; 
+    FunctionCallee qasmQbitDecl; 
+    FunctionCallee qasmCbitDecl; 
+    FunctionCallee qasmResSum; 
+    FunctionCallee memoize; 
+    FunctionCallee qasmInitialize; 
+    FunctionCallee exit_scope;
 
     RTResourceEst_Mem() : ModulePass(ID) {  }
 
-    void instrumentInst(Function* F, Instruction* pInst, int intParam, bool toDel){
+    void instrumentInst(FunctionCallee F, Instruction* pInst, int intParam, bool toDel){
       SmallVector<Value*,16> call_args;
       Value* intArg = ConstantInt::get(Type::getInt32Ty(pInst->getContext()),intParam);	
       call_args.push_back(intArg);
@@ -127,12 +129,12 @@ namespace {
         
         Constant *StrConstant = ConstantDataArray::getString(CI->getContext(), CF->getName());           
         ArrayType* strTy = cast<ArrayType>(StrConstant->getType());
-        AllocaInst* strAlloc = new AllocaInst(strTy,"",(Instruction*)CI);
-        new StoreInst(StrConstant,strAlloc,"",(Instruction*)CI);	  	  
+        AllocaInst* strAlloc = new AllocaInst(strTy,0,"",(Instruction*)CI);
+        new StoreInst(StrConstant,strAlloc,false,(Instruction*)CI);	  	  
         Value* Idx[2];	  
         Idx[0] = Constant::getNullValue(Type::getInt32Ty(CI->getContext()));  
         Idx[1] = ConstantInt::get(Type::getInt32Ty(CI->getContext()),0);
-        GetElementPtrInst* strPtr = GetElementPtrInst::Create(strAlloc, Idx, "", (Instruction*)CI);
+        GetElementPtrInst* strPtr = GetElementPtrInst::Create(strTy, strAlloc, Idx, "", (Instruction*)CI);
         
         vector<uint32_t> valueOfInt;
         unsigned num_ints = 0;
@@ -152,18 +154,18 @@ namespace {
 
         Constant *IntArrayConstant = ConstantDataArray::get(CI->getContext(), ArrayRef<uint32_t>(valueOfInt));
         ArrayType *intArrTy = cast<ArrayType>(IntArrayConstant->getType());
-        AllocaInst *intArrAlloc = new AllocaInst(intArrTy,"",(Instruction*)CI);
-        new StoreInst(IntArrayConstant,intArrAlloc,"",(Instruction*)CI);
+        AllocaInst *intArrAlloc = new AllocaInst(intArrTy,0,"",(Instruction*)CI);
+        new StoreInst(IntArrayConstant,intArrAlloc,false,(Instruction*)CI);
         GetElementPtrInst* intArrPtr = GetElementPtrInst::CreateInBounds(intArrAlloc, Idx, "", (Instruction*)CI);
 
         Constant *DoubleArrayConstant = ConstantDataArray::get(CI->getContext(), ArrayRef<double>(valueOfDouble));
         ArrayType *doubleArrTy = cast<ArrayType>(DoubleArrayConstant->getType());
-        AllocaInst *doubleArrAlloc = new AllocaInst(doubleArrTy,"",(Instruction*)CI);
-        new StoreInst(DoubleArrayConstant,doubleArrAlloc,"",(Instruction*)CI);	  	  
+        AllocaInst *doubleArrAlloc = new AllocaInst(doubleArrTy,0,"",(Instruction*)CI);
+        new StoreInst(DoubleArrayConstant,doubleArrAlloc,false,(Instruction*)CI);	  	  
         GetElementPtrInst* doubleArrPtr = GetElementPtrInst::CreateInBounds(doubleArrAlloc, Idx, "", (Instruction*)CI);
         
-        Constant *IntNumConstant = ConstantInt::get(Type::getInt32Ty(getGlobalContext()) , num_ints, false);       
-        Constant *DoubleNumConstant = ConstantInt::get(Type::getInt32Ty(getGlobalContext()) , num_doubles);          
+        Constant *IntNumConstant = ConstantInt::get(Type::getInt32Ty(CI->getContext()) , num_ints, false);       
+        Constant *DoubleNumConstant = ConstantInt::get(Type::getInt32Ty(CI->getContext()) , num_doubles);          
 
         vectCallArgs.push_back(cast<Value>(strPtr));
         vectCallArgs.push_back(cast<Value>(intArrPtr));
@@ -214,11 +216,11 @@ namespace {
       // insert initialization and termination functions in "main"
       if(F.getName() == "main"){
         BasicBlock* BB_last = &(F.back());
-        TerminatorInst *BBTerm = BB_last->getTerminator();
+        Instruction *BBTerm = BB_last->getTerminator();
         CallInst::Create(qasmResSum, "",(Instruction*)BBTerm);	
 
         BasicBlock* BB_first = &(F.front());
-        BasicBlock::iterator BBiter = BB_first->getFirstNonPHI();
+        Instruction *BBiter = BB_first->getFirstNonPHI();
         while(isa<AllocaInst>(BBiter))
           ++BBiter;
         CallInst::Create(qasmInitialize, "", (Instruction*)&(*BBiter));
@@ -236,34 +238,46 @@ namespace {
       }
       if(!F.isDeclaration() && isQuantumModule){
         BasicBlock* BB_last = &(F.back());
-        TerminatorInst *BBTerm = BB_last->getTerminator();
+        Instruction *BBTerm = BB_last->getTerminator();
         CallInst::Create(exit_scope, "",(Instruction*)BBTerm);	
       }
     }
     
     bool runOnModule(Module &M) {
+      const char *debug_val = getenv("DEBUG_RUNTIMEFREQUENCYEST_MEMOIZED");
+      if(debug_val){
+        if(!strncmp(debug_val, "1", 1)) debugMemoInstrumentation = true;
+        else debugMemoInstrumentation = false;
+      }
+
+      debug_val = getenv("DEBUG_SCAFFOLD");
+      if(debug_val && !debugMemoInstrumentation){
+        if(!strncmp(debug_val, "1", 1)) debugMemoInstrumentation = true;
+        else debugMemoInstrumentation = false;
+      }
+
       // void qasm_qbit_decl (int)
-      qasmQbitDecl = cast<Function>(M.getOrInsertFunction("qasm_qbit_decl", 
+      qasmQbitDecl = M.getOrInsertFunction("qasm_qbit_decl", 
                                     Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), 
-                                    (Type*)0));
+                                    (Type*)0);
       
       // void qasm_cbit_decl (int)
-      qasmCbitDecl = cast<Function>(M.getOrInsertFunction("qasm_cbit_decl", 
+      qasmCbitDecl = M.getOrInsertFunction("qasm_cbit_decl", 
                                     Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), 
-                                    (Type*)0));
+                                    (Type*)0);
 
       // void exit_scope ()      
-      exit_scope = cast<Function>(M.getOrInsertFunction("exit_scope", Type::getVoidTy(M.getContext()), (Type*)0));
+      exit_scope = M.getOrInsertFunction("exit_scope", Type::getVoidTy(M.getContext()), (Type*)0);
 
       //void initialize ()
-      qasmInitialize = cast<Function>(M.getOrInsertFunction("qasm_initialize", Type::getVoidTy(M.getContext()), (Type*)0));
+      qasmInitialize = M.getOrInsertFunction("qasm_initialize", Type::getVoidTy(M.getContext()), (Type*)0);
       
       //void qasm_resource_summary ()
-      qasmResSum = cast<Function>(M.getOrInsertFunction("qasm_resource_summary", Type::getVoidTy(M.getContext()), (Type*)0));
+      qasmResSum = M.getOrInsertFunction("qasm_resource_summary", Type::getVoidTy(M.getContext()), (Type*)0);
 
       // void qasmGate (int gate_id)      
-      qasmGate = cast<Function>(M.getOrInsertFunction("qasm_gate", 
-            Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), (Type*)0));      
+      qasmGate = M.getOrInsertFunction("qasm_gate", 
+            Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), (Type*)0);      
 
 
       // int memoize (char*, int*, unsigned, double*, unsigned)
@@ -275,7 +289,7 @@ namespace {
       vectParamTypes2.push_back(Type::getInt32Ty(M.getContext()));
       ArrayRef<Type*> Param_Types2(vectParamTypes2);
       Type* Result_Type2 = Type::getInt32Ty(M.getContext());
-      memoize = cast<Function> (  
+      memoize =  
           M.getOrInsertFunction(
             "memoize",                          /* Name of Function */
             FunctionType::get(                  /* Type of Function */
@@ -283,8 +297,7 @@ namespace {
               Param_Types2,                     /* Params */
               false                             /* isVarArg */
               )
-            )
-          );
+            );
       
       // iterate over instructions to instrument
       for (Module::iterator F = M.begin(); F != M.end(); ++F) {

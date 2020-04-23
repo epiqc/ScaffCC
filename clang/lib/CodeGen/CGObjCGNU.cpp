@@ -1,9 +1,8 @@
 //===------- CGObjCGNU.cpp - Emit LLVM Code from ASTs for a Module --------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -14,93 +13,96 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "CGObjCRuntime.h"
-#include "CodeGenModule.h"
-#include "CodeGenFunction.h"
+#include "CGCXXABI.h"
 #include "CGCleanup.h"
+#include "CGObjCRuntime.h"
+#include "CodeGenFunction.h"
+#include "CodeGenModule.h"
 #include "clang/AST/ASTContext.h"
+#include "clang/AST/Attr.h"
 #include "clang/AST/Decl.h"
 #include "clang/AST/DeclObjC.h"
 #include "clang/AST/RecordLayout.h"
 #include "clang/AST/StmtObjC.h"
-#include "clang/Basic/SourceManager.h"
 #include "clang/Basic/FileManager.h"
-
-#include "llvm/Intrinsics.h"
-#include "llvm/Module.h"
-#include "llvm/LLVMContext.h"
+#include "clang/Basic/SourceManager.h"
+#include "clang/CodeGen/ConstantInitBuilder.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringMap.h"
-#include "llvm/Support/CallSite.h"
+#include "llvm/IR/DataLayout.h"
+#include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/Module.h"
 #include "llvm/Support/Compiler.h"
-#include "llvm/Target/TargetData.h"
-
-#include <cstdarg>
-
+#include "llvm/Support/ConvertUTF.h"
+#include <cctype>
 
 using namespace clang;
 using namespace CodeGen;
 
-
 namespace {
+
+std::string SymbolNameForMethod( StringRef ClassName,
+     StringRef CategoryName, const Selector MethodName,
+    bool isClassMethod) {
+  std::string MethodNameColonStripped = MethodName.getAsString();
+  std::replace(MethodNameColonStripped.begin(), MethodNameColonStripped.end(),
+      ':', '_');
+  return (Twine(isClassMethod ? "_c_" : "_i_") + ClassName + "_" +
+    CategoryName + "_" + MethodNameColonStripped).str();
+}
+
 /// Class that lazily initialises the runtime function.  Avoids inserting the
 /// types and the function declaration into a module if they're not used, and
 /// avoids constructing the type more than once if it's used more than once.
 class LazyRuntimeFunction {
   CodeGenModule *CGM;
-  std::vector<llvm::Type*> ArgTys;
+  llvm::FunctionType *FTy;
   const char *FunctionName;
-  llvm::Constant *Function;
-  public:
-    /// Constructor leaves this class uninitialized, because it is intended to
-    /// be used as a field in another class and not all of the types that are
-    /// used as arguments will necessarily be available at construction time.
-    LazyRuntimeFunction() : CGM(0), FunctionName(0), Function(0) {}
+  llvm::FunctionCallee Function;
 
-    /// Initialises the lazy function with the name, return type, and the types
-    /// of the arguments.
-    END_WITH_NULL
-    void init(CodeGenModule *Mod, const char *name,
-        llvm::Type *RetTy, ...) {
-       CGM =Mod;
-       FunctionName = name;
-       Function = 0;
-       ArgTys.clear();
-       va_list Args;
-       va_start(Args, RetTy);
-         while (llvm::Type *ArgTy = va_arg(Args, llvm::Type*))
-           ArgTys.push_back(ArgTy);
-       va_end(Args);
-       // Push the return type on at the end so we can pop it off easily
-       ArgTys.push_back(RetTy);
-   }
-   /// Overloaded cast operator, allows the class to be implicitly cast to an
-   /// LLVM constant.
-   operator llvm::Constant*() {
-     if (!Function) {
-       if (0 == FunctionName) return 0;
-       // We put the return type on the end of the vector, so pop it back off
-       llvm::Type *RetTy = ArgTys.back();
-       ArgTys.pop_back();
-       llvm::FunctionType *FTy = llvm::FunctionType::get(RetTy, ArgTys, false);
-       Function =
-         cast<llvm::Constant>(CGM->CreateRuntimeFunction(FTy, FunctionName));
-       // We won't need to use the types again, so we may as well clean up the
-       // vector now
-       ArgTys.resize(0);
-     }
-     return Function;
-   }
-   operator llvm::Function*() {
-     return cast<llvm::Function>((llvm::Constant*)*this);
-   }
+public:
+  /// Constructor leaves this class uninitialized, because it is intended to
+  /// be used as a field in another class and not all of the types that are
+  /// used as arguments will necessarily be available at construction time.
+  LazyRuntimeFunction()
+      : CGM(nullptr), FunctionName(nullptr), Function(nullptr) {}
 
+  /// Initialises the lazy function with the name, return type, and the types
+  /// of the arguments.
+  template <typename... Tys>
+  void init(CodeGenModule *Mod, const char *name, llvm::Type *RetTy,
+            Tys *... Types) {
+    CGM = Mod;
+    FunctionName = name;
+    Function = nullptr;
+    if(sizeof...(Tys)) {
+      SmallVector<llvm::Type *, 8> ArgTys({Types...});
+      FTy = llvm::FunctionType::get(RetTy, ArgTys, false);
+    }
+    else {
+      FTy = llvm::FunctionType::get(RetTy, None, false);
+    }
+  }
+
+  llvm::FunctionType *getType() { return FTy; }
+
+  /// Overloaded cast operator, allows the class to be implicitly cast to an
+  /// LLVM constant.
+  operator llvm::FunctionCallee() {
+    if (!Function) {
+      if (!FunctionName)
+        return nullptr;
+      Function = CGM->CreateRuntimeFunction(FTy, FunctionName);
+    }
+    return Function;
+  }
 };
 
 
 /// GNU Objective-C runtime code generation.  This class implements the parts of
-/// Objective-C support that are specific to the GNU family of runtimes (GCC and
-/// GNUstep).
+/// Objective-C support that are specific to the GNU family of runtimes (GCC,
+/// GNUstep and ObjFW).
 class CGObjCGNU : public CGObjCRuntime {
 protected:
   /// The LLVM module into which output is inserted
@@ -109,7 +111,7 @@ protected:
   /// contains the receiver (object) and the expected class.
   llvm::StructType *ObjCSuperTy;
   /// struct objc_super*.  The type of the argument to the superclass message
-  /// lookup functions.  
+  /// lookup functions.
   llvm::PointerType *PtrToObjCSuperTy;
   /// LLVM type for selectors.  Opaque pointer (i8*) unless a header declaring
   /// SEL is included in a header somewhere, in which case it will be whatever
@@ -121,6 +123,10 @@ protected:
   /// Pointer to i8 - LLVM type of char*, for all of the places where the
   /// runtime needs to deal with C strings.
   llvm::PointerType *PtrToInt8Ty;
+  /// struct objc_protocol type
+  llvm::StructType *ProtocolTy;
+  /// Protocol * type.
+  llvm::PointerType *ProtocolPtrTy;
   /// Instance Method Pointer type.  This is a pointer to a function that takes,
   /// at a minimum, an object and a selector, and is the generic type for
   /// Objective-C methods.  Due to differences between variadic / non-variadic
@@ -150,7 +156,7 @@ protected:
   llvm::IntegerType *LongTy;
   /// LLVM type for C size_t.  Used in various runtime data structures.
   llvm::IntegerType *SizeTy;
-  /// LLVM type for C intptr_t.  
+  /// LLVM type for C intptr_t.
   llvm::IntegerType *IntPtrTy;
   /// LLVM type for C ptrdiff_t.  Mainly used in property accessor functions.
   llvm::IntegerType *PtrDiffTy;
@@ -163,81 +169,177 @@ protected:
   llvm::IntegerType *Int32Ty;
   /// 64-bit integer type, to save us needing to look it up every time it's used.
   llvm::IntegerType *Int64Ty;
+  /// The type of struct objc_property.
+  llvm::StructType *PropertyMetadataTy;
   /// Metadata kind used to tie method lookups to message sends.  The GNUstep
   /// runtime provides some LLVM passes that can use this to do things like
   /// automatic IMP caching and speculative inlining.
   unsigned msgSendMDKind;
+  /// Does the current target use SEH-based exceptions? False implies
+  /// Itanium-style DWARF unwinding.
+  bool usesSEHExceptions;
+
+  /// Helper to check if we are targeting a specific runtime version or later.
+  bool isRuntime(ObjCRuntime::Kind kind, unsigned major, unsigned minor=0) {
+    const ObjCRuntime &R = CGM.getLangOpts().ObjCRuntime;
+    return (R.getKind() == kind) &&
+      (R.getVersion() >= VersionTuple(major, minor));
+  }
+
+  std::string ManglePublicSymbol(StringRef Name) {
+    return (StringRef(CGM.getTriple().isOSBinFormatCOFF() ? "$_" : "._") + Name).str();
+  }
+
+  std::string SymbolForProtocol(Twine Name) {
+    return (ManglePublicSymbol("OBJC_PROTOCOL_") + Name).str();
+  }
+
+  std::string SymbolForProtocolRef(StringRef Name) {
+    return (ManglePublicSymbol("OBJC_REF_PROTOCOL_") + Name).str();
+  }
+
+
   /// Helper function that generates a constant string and returns a pointer to
   /// the start of the string.  The result of this function can be used anywhere
-  /// where the C code specifies const char*.  
-  llvm::Constant *MakeConstantString(const std::string &Str,
-                                     const std::string &Name="") {
-    llvm::Constant *ConstStr = CGM.GetAddrOfConstantCString(Str, Name.c_str());
-    return llvm::ConstantExpr::getGetElementPtr(ConstStr, Zeros);
+  /// where the C code specifies const char*.
+  llvm::Constant *MakeConstantString(StringRef Str, const char *Name = "") {
+    ConstantAddress Array = CGM.GetAddrOfConstantCString(Str, Name);
+    return llvm::ConstantExpr::getGetElementPtr(Array.getElementType(),
+                                                Array.getPointer(), Zeros);
   }
+
   /// Emits a linkonce_odr string, whose name is the prefix followed by the
   /// string value.  This allows the linker to combine the strings between
   /// different modules.  Used for EH typeinfo names, selector strings, and a
   /// few other things.
   llvm::Constant *ExportUniqueString(const std::string &Str,
-                                     const std::string prefix) {
+                                     const std::string &prefix,
+                                     bool Private=false) {
     std::string name = prefix + Str;
-    llvm::Constant *ConstStr = TheModule.getGlobalVariable(name);
+    auto *ConstStr = TheModule.getGlobalVariable(name);
     if (!ConstStr) {
       llvm::Constant *value = llvm::ConstantDataArray::getString(VMContext,Str);
-      ConstStr = new llvm::GlobalVariable(TheModule, value->getType(), true,
-              llvm::GlobalValue::LinkOnceODRLinkage, value, prefix + Str);
+      auto *GV = new llvm::GlobalVariable(TheModule, value->getType(), true,
+              llvm::GlobalValue::LinkOnceODRLinkage, value, name);
+      GV->setComdat(TheModule.getOrInsertComdat(name));
+      if (Private)
+        GV->setVisibility(llvm::GlobalValue::HiddenVisibility);
+      ConstStr = GV;
     }
-    return llvm::ConstantExpr::getGetElementPtr(ConstStr, Zeros);
+    return llvm::ConstantExpr::getGetElementPtr(ConstStr->getValueType(),
+                                                ConstStr, Zeros);
   }
-  /// Generates a global structure, initialized by the elements in the vector.
-  /// The element types must match the types of the structure elements in the
-  /// first argument.
-  llvm::GlobalVariable *MakeGlobal(llvm::StructType *Ty,
-                                   llvm::ArrayRef<llvm::Constant*> V,
-                                   StringRef Name="",
-                                   llvm::GlobalValue::LinkageTypes linkage
-                                         =llvm::GlobalValue::InternalLinkage) {
-    llvm::Constant *C = llvm::ConstantStruct::get(Ty, V);
-    return new llvm::GlobalVariable(TheModule, Ty, false,
-        linkage, C, Name);
+
+  /// Returns a property name and encoding string.
+  llvm::Constant *MakePropertyEncodingString(const ObjCPropertyDecl *PD,
+                                             const Decl *Container) {
+    assert(!isRuntime(ObjCRuntime::GNUstep, 2));
+    if (isRuntime(ObjCRuntime::GNUstep, 1, 6)) {
+      std::string NameAndAttributes;
+      std::string TypeStr =
+        CGM.getContext().getObjCEncodingForPropertyDecl(PD, Container);
+      NameAndAttributes += '\0';
+      NameAndAttributes += TypeStr.length() + 3;
+      NameAndAttributes += TypeStr;
+      NameAndAttributes += '\0';
+      NameAndAttributes += PD->getNameAsString();
+      return MakeConstantString(NameAndAttributes);
+    }
+    return MakeConstantString(PD->getNameAsString());
   }
-  /// Generates a global array.  The vector must contain the same number of
-  /// elements that the array type declares, of the type specified as the array
-  /// element type.
-  llvm::GlobalVariable *MakeGlobal(llvm::ArrayType *Ty,
-                                   llvm::ArrayRef<llvm::Constant*> V,
-                                   StringRef Name="",
-                                   llvm::GlobalValue::LinkageTypes linkage
-                                         =llvm::GlobalValue::InternalLinkage) {
-    llvm::Constant *C = llvm::ConstantArray::get(Ty, V);
-    return new llvm::GlobalVariable(TheModule, Ty, false,
-                                    linkage, C, Name);
+
+  /// Push the property attributes into two structure fields.
+  void PushPropertyAttributes(ConstantStructBuilder &Fields,
+      const ObjCPropertyDecl *property, bool isSynthesized=true, bool
+      isDynamic=true) {
+    int attrs = property->getPropertyAttributes();
+    // For read-only properties, clear the copy and retain flags
+    if (attrs & ObjCPropertyDecl::OBJC_PR_readonly) {
+      attrs &= ~ObjCPropertyDecl::OBJC_PR_copy;
+      attrs &= ~ObjCPropertyDecl::OBJC_PR_retain;
+      attrs &= ~ObjCPropertyDecl::OBJC_PR_weak;
+      attrs &= ~ObjCPropertyDecl::OBJC_PR_strong;
+    }
+    // The first flags field has the same attribute values as clang uses internally
+    Fields.addInt(Int8Ty, attrs & 0xff);
+    attrs >>= 8;
+    attrs <<= 2;
+    // For protocol properties, synthesized and dynamic have no meaning, so we
+    // reuse these flags to indicate that this is a protocol property (both set
+    // has no meaning, as a property can't be both synthesized and dynamic)
+    attrs |= isSynthesized ? (1<<0) : 0;
+    attrs |= isDynamic ? (1<<1) : 0;
+    // The second field is the next four fields left shifted by two, with the
+    // low bit set to indicate whether the field is synthesized or dynamic.
+    Fields.addInt(Int8Ty, attrs & 0xff);
+    // Two padding fields
+    Fields.addInt(Int8Ty, 0);
+    Fields.addInt(Int8Ty, 0);
   }
-  /// Generates a global array, inferring the array type from the specified
-  /// element type and the size of the initialiser.  
-  llvm::GlobalVariable *MakeGlobalArray(llvm::Type *Ty,
-                                        llvm::ArrayRef<llvm::Constant*> V,
-                                        StringRef Name="",
-                                        llvm::GlobalValue::LinkageTypes linkage
-                                         =llvm::GlobalValue::InternalLinkage) {
-    llvm::ArrayType *ArrayTy = llvm::ArrayType::get(Ty, V.size());
-    return MakeGlobal(ArrayTy, V, Name, linkage);
+
+  virtual llvm::Constant *GenerateCategoryProtocolList(const
+      ObjCCategoryDecl *OCD);
+  virtual ConstantArrayBuilder PushPropertyListHeader(ConstantStructBuilder &Fields,
+      int count) {
+      // int count;
+      Fields.addInt(IntTy, count);
+      // int size; (only in GNUstep v2 ABI.
+      if (isRuntime(ObjCRuntime::GNUstep, 2)) {
+        llvm::DataLayout td(&TheModule);
+        Fields.addInt(IntTy, td.getTypeSizeInBits(PropertyMetadataTy) /
+            CGM.getContext().getCharWidth());
+      }
+      // struct objc_property_list *next;
+      Fields.add(NULLPtr);
+      // struct objc_property properties[]
+      return Fields.beginArray(PropertyMetadataTy);
   }
+  virtual void PushProperty(ConstantArrayBuilder &PropertiesArray,
+            const ObjCPropertyDecl *property,
+            const Decl *OCD,
+            bool isSynthesized=true, bool
+            isDynamic=true) {
+    auto Fields = PropertiesArray.beginStruct(PropertyMetadataTy);
+    ASTContext &Context = CGM.getContext();
+    Fields.add(MakePropertyEncodingString(property, OCD));
+    PushPropertyAttributes(Fields, property, isSynthesized, isDynamic);
+    auto addPropertyMethod = [&](const ObjCMethodDecl *accessor) {
+      if (accessor) {
+        std::string TypeStr = Context.getObjCEncodingForMethodDecl(accessor);
+        llvm::Constant *TypeEncoding = MakeConstantString(TypeStr);
+        Fields.add(MakeConstantString(accessor->getSelector().getAsString()));
+        Fields.add(TypeEncoding);
+      } else {
+        Fields.add(NULLPtr);
+        Fields.add(NULLPtr);
+      }
+    };
+    addPropertyMethod(property->getGetterMethodDecl());
+    addPropertyMethod(property->getSetterMethodDecl());
+    Fields.finishAndAddTo(PropertiesArray);
+  }
+
   /// Ensures that the value has the required type, by inserting a bitcast if
   /// required.  This function lets us avoid inserting bitcasts that are
   /// redundant.
-  llvm::Value* EnforceType(CGBuilderTy B, llvm::Value *V, llvm::Type *Ty){
+  llvm::Value* EnforceType(CGBuilderTy &B, llvm::Value *V, llvm::Type *Ty) {
     if (V->getType() == Ty) return V;
     return B.CreateBitCast(V, Ty);
   }
+  Address EnforceType(CGBuilderTy &B, Address V, llvm::Type *Ty) {
+    if (V.getType() == Ty) return V;
+    return B.CreateBitCast(V, Ty);
+  }
+
   // Some zeros used for GEPs in lots of places.
   llvm::Constant *Zeros[2];
   /// Null pointer value.  Mainly used as a terminator in various arrays.
   llvm::Constant *NULLPtr;
   /// LLVM context.
   llvm::LLVMContext &VMContext;
-private:
+
+protected:
+
   /// Placeholder for the class.  Lots of things refer to the class before we've
   /// actually emitted it.  We use this alias as a placeholder, and then replace
   /// it with a pointer to the class structure before finally emitting the
@@ -282,7 +384,7 @@ private:
   /// Runtime functions used for memory management in GC mode.  Note that clang
   /// supports code generation for calling these functions, but neither GNU
   /// runtime actually supports this API properly yet.
-  LazyRuntimeFunction IvarAssignFn, StrongCastAssignFn, MemMoveFn, WeakReadFn, 
+  LazyRuntimeFunction IvarAssignFn, StrongCastAssignFn, MemMoveFn, WeakReadFn,
     WeakAssignFn, GlobalAssignFn;
 
   typedef std::pair<std::string, std::string> ClassAliasPair;
@@ -292,8 +394,8 @@ private:
 protected:
   /// Function used for throwing Objective-C exceptions.
   LazyRuntimeFunction ExceptionThrowFn;
-  /// Function used for rethrowing exceptions, used at the end of @finally or
-  /// @synchronize blocks.
+  /// Function used for rethrowing exceptions, used at the end of \@finally or
+  /// \@synchronize blocks.
   LazyRuntimeFunction ExceptionReThrowFn;
   /// Function called when entering a catch function.  This is required for
   /// differentiating Objective-C exceptions and foreign exceptions.
@@ -301,13 +403,12 @@ protected:
   /// Function called when exiting from a catch block.  Used to do exception
   /// cleanup.
   LazyRuntimeFunction ExitCatchFn;
-  /// Function called when entering an @synchronize block.  Acquires the lock.
+  /// Function called when entering an \@synchronize block.  Acquires the lock.
   LazyRuntimeFunction SyncEnterFn;
-  /// Function called when exiting an @synchronize block.  Releases the lock.
+  /// Function called when exiting an \@synchronize block.  Releases the lock.
   LazyRuntimeFunction SyncExitFn;
 
 private:
-
   /// Function called if fast enumeration detects that the collection is
   /// modified during the update.
   LazyRuntimeFunction EnumerationMutationFn;
@@ -322,6 +423,7 @@ private:
   /// Function used for non-object declared property setters.
   LazyRuntimeFunction SetStructPropertyFn;
 
+protected:
   /// The version of the runtime that this class targets.  Must match the
   /// version in the runtime.
   int RuntimeVersion;
@@ -332,41 +434,51 @@ private:
   /// Objective-C 1 property structures when targeting the GCC runtime or it
   /// will abort.
   const int ProtocolVersion;
-private:
+  /// The version of the class ABI.  This value is used in the class structure
+  /// and indicates how various fields should be interpreted.
+  const int ClassABIVersion;
   /// Generates an instance variable list structure.  This is a structure
   /// containing a size and an array of structures containing instance variable
   /// metadata.  This is used purely for introspection in the fragile ABI.  In
   /// the non-fragile ABI, it's used for instance variable fixup.
-  llvm::Constant *GenerateIvarList(ArrayRef<llvm::Constant *> IvarNames,
-                                   ArrayRef<llvm::Constant *> IvarTypes,
-                                   ArrayRef<llvm::Constant *> IvarOffsets);
+  virtual llvm::Constant *GenerateIvarList(ArrayRef<llvm::Constant *> IvarNames,
+                             ArrayRef<llvm::Constant *> IvarTypes,
+                             ArrayRef<llvm::Constant *> IvarOffsets,
+                             ArrayRef<llvm::Constant *> IvarAlign,
+                             ArrayRef<Qualifiers::ObjCLifetime> IvarOwnership);
+
   /// Generates a method list structure.  This is a structure containing a size
   /// and an array of structures containing method metadata.
   ///
   /// This structure is used by both classes and categories, and contains a next
   /// pointer allowing them to be chained together in a linked list.
-  llvm::Constant *GenerateMethodList(const StringRef &ClassName,
-      const StringRef &CategoryName,
-      ArrayRef<Selector> MethodSels,
-      ArrayRef<llvm::Constant *> MethodTypes,
+  llvm::Constant *GenerateMethodList(StringRef ClassName,
+      StringRef CategoryName,
+      ArrayRef<const ObjCMethodDecl*> Methods,
       bool isClassMethodList);
-  /// Emits an empty protocol.  This is used for @protocol() where no protocol
+
+  /// Emits an empty protocol.  This is used for \@protocol() where no protocol
   /// is found.  The runtime will (hopefully) fix up the pointer to refer to the
   /// real protocol.
-  llvm::Constant *GenerateEmptyProtocol(const std::string &ProtocolName);
+  virtual llvm::Constant *GenerateEmptyProtocol(StringRef ProtocolName);
+
   /// Generates a list of property metadata structures.  This follows the same
   /// pattern as method and instance variable metadata lists.
-  llvm::Constant *GeneratePropertyList(const ObjCImplementationDecl *OID,
-        SmallVectorImpl<Selector> &InstanceMethodSels,
-        SmallVectorImpl<llvm::Constant*> &InstanceMethodTypes);
+  llvm::Constant *GeneratePropertyList(const Decl *Container,
+      const ObjCContainerDecl *OCD,
+      bool isClassProperty=false,
+      bool protocolOptionalProperties=false);
+
   /// Generates a list of referenced protocols.  Classes, categories, and
   /// protocols all use this structure.
   llvm::Constant *GenerateProtocolList(ArrayRef<std::string> Protocols);
+
   /// To ensure that all protocols are seen by the runtime, we add a category on
   /// a class defined in the runtime, declaring no methods, but adopting the
   /// protocols.  This is a horribly ugly hack, but it allows us to collect all
   /// of the protocols without changing the ABI.
-  void GenerateProtocolHolderCategory(void);
+  void GenerateProtocolHolderCategory();
+
   /// Generates a class structure.
   llvm::Constant *GenerateClassStructure(
       llvm::Constant *MetaClass,
@@ -383,43 +495,73 @@ private:
       llvm::Constant *StrongIvarBitmap,
       llvm::Constant *WeakIvarBitmap,
       bool isMeta=false);
+
   /// Generates a method list.  This is used by protocols to define the required
   /// and optional methods.
-  llvm::Constant *GenerateProtocolMethodList(
-      ArrayRef<llvm::Constant *> MethodNames,
-      ArrayRef<llvm::Constant *> MethodTypes);
+  virtual llvm::Constant *GenerateProtocolMethodList(
+      ArrayRef<const ObjCMethodDecl*> Methods);
+  /// Emits optional and required method lists.
+  template<class T>
+  void EmitProtocolMethodList(T &&Methods, llvm::Constant *&Required,
+      llvm::Constant *&Optional) {
+    SmallVector<const ObjCMethodDecl*, 16> RequiredMethods;
+    SmallVector<const ObjCMethodDecl*, 16> OptionalMethods;
+    for (const auto *I : Methods)
+      if (I->isOptional())
+        OptionalMethods.push_back(I);
+      else
+        RequiredMethods.push_back(I);
+    Required = GenerateProtocolMethodList(RequiredMethods);
+    Optional = GenerateProtocolMethodList(OptionalMethods);
+  }
+
   /// Returns a selector with the specified type encoding.  An empty string is
   /// used to return an untyped selector (with the types field set to NULL).
-  llvm::Value *GetSelector(CGBuilderTy &Builder, Selector Sel,
-    const std::string &TypeEncoding, bool lval);
+  virtual llvm::Value *GetTypedSelector(CodeGenFunction &CGF, Selector Sel,
+                                        const std::string &TypeEncoding);
+
+  /// Returns the name of ivar offset variables.  In the GNUstep v1 ABI, this
+  /// contains the class and ivar names, in the v2 ABI this contains the type
+  /// encoding as well.
+  virtual std::string GetIVarOffsetVariableName(const ObjCInterfaceDecl *ID,
+                                                const ObjCIvarDecl *Ivar) {
+    const std::string Name = "__objc_ivar_offset_" + ID->getNameAsString()
+      + '.' + Ivar->getNameAsString();
+    return Name;
+  }
   /// Returns the variable used to store the offset of an instance variable.
   llvm::GlobalVariable *ObjCIvarOffsetVariable(const ObjCInterfaceDecl *ID,
       const ObjCIvarDecl *Ivar);
   /// Emits a reference to a class.  This allows the linker to object if there
   /// is no class of the matching name.
   void EmitClassRef(const std::string &className);
+
   /// Emits a pointer to the named class
-  llvm::Value *GetClassNamed(CGBuilderTy &Builder, const std::string &Name,
-                             bool isWeak);
-protected:
+  virtual llvm::Value *GetClassNamed(CodeGenFunction &CGF,
+                                     const std::string &Name, bool isWeak);
+
   /// Looks up the method for sending a message to the specified object.  This
   /// mechanism differs between the GCC and GNU runtimes, so this method must be
   /// overridden in subclasses.
   virtual llvm::Value *LookupIMP(CodeGenFunction &CGF,
                                  llvm::Value *&Receiver,
                                  llvm::Value *cmd,
-                                 llvm::MDNode *node) = 0;
+                                 llvm::MDNode *node,
+                                 MessageSendInfo &MSI) = 0;
+
   /// Looks up the method for sending a message to a superclass.  This
   /// mechanism differs between the GCC and GNU runtimes, so this method must
   /// be overridden in subclasses.
   virtual llvm::Value *LookupIMPSuper(CodeGenFunction &CGF,
-                                      llvm::Value *ObjCSuper,
-                                      llvm::Value *cmd) = 0;
+                                      Address ObjCSuper,
+                                      llvm::Value *cmd,
+                                      MessageSendInfo &MSI) = 0;
+
   /// Libobjc2 uses a bitfield representation where small(ish) bitfields are
   /// stored in a 64-bit value with the low bit set to 1 and the remaining 63
   /// bits set to their values, LSB first, while larger ones are stored in a
   /// structure of this / form:
-  /// 
+  ///
   /// struct { int32_t length; int32_t values[length]; };
   ///
   /// The values in the array are stored in host-endian format, with the least
@@ -427,98 +569,106 @@ protected:
   /// a bitfield with the 64th bit set will be (int64_t)&{ 2, [0, 1<<31] },
   /// while a bitfield / with the 63rd bit set will be 1<<64.
   llvm::Constant *MakeBitField(ArrayRef<bool> bits);
+
 public:
   CGObjCGNU(CodeGenModule &cgm, unsigned runtimeABIVersion,
-      unsigned protocolClassVersion);
+      unsigned protocolClassVersion, unsigned classABI=1);
 
-  virtual llvm::Constant *GenerateConstantString(const StringLiteral *);
+  ConstantAddress GenerateConstantString(const StringLiteral *) override;
 
-  virtual RValue
-  GenerateMessageSend(CodeGenFunction &CGF,
-                      ReturnValueSlot Return,
-                      QualType ResultType,
-                      Selector Sel,
-                      llvm::Value *Receiver,
-                      const CallArgList &CallArgs,
+  RValue
+  GenerateMessageSend(CodeGenFunction &CGF, ReturnValueSlot Return,
+                      QualType ResultType, Selector Sel,
+                      llvm::Value *Receiver, const CallArgList &CallArgs,
                       const ObjCInterfaceDecl *Class,
-                      const ObjCMethodDecl *Method);
-  virtual RValue
-  GenerateMessageSendSuper(CodeGenFunction &CGF,
-                           ReturnValueSlot Return,
-                           QualType ResultType,
-                           Selector Sel,
+                      const ObjCMethodDecl *Method) override;
+  RValue
+  GenerateMessageSendSuper(CodeGenFunction &CGF, ReturnValueSlot Return,
+                           QualType ResultType, Selector Sel,
                            const ObjCInterfaceDecl *Class,
-                           bool isCategoryImpl,
-                           llvm::Value *Receiver,
-                           bool IsClassMessage,
-                           const CallArgList &CallArgs,
-                           const ObjCMethodDecl *Method);
-  virtual llvm::Value *GetClass(CGBuilderTy &Builder,
-                                const ObjCInterfaceDecl *OID);
-  virtual llvm::Value *GetSelector(CGBuilderTy &Builder, Selector Sel,
-                                   bool lval = false);
-  virtual llvm::Value *GetSelector(CGBuilderTy &Builder, const ObjCMethodDecl
-      *Method);
-  virtual llvm::Constant *GetEHType(QualType T);
+                           bool isCategoryImpl, llvm::Value *Receiver,
+                           bool IsClassMessage, const CallArgList &CallArgs,
+                           const ObjCMethodDecl *Method) override;
+  llvm::Value *GetClass(CodeGenFunction &CGF,
+                        const ObjCInterfaceDecl *OID) override;
+  llvm::Value *GetSelector(CodeGenFunction &CGF, Selector Sel) override;
+  Address GetAddrOfSelector(CodeGenFunction &CGF, Selector Sel) override;
+  llvm::Value *GetSelector(CodeGenFunction &CGF,
+                           const ObjCMethodDecl *Method) override;
+  virtual llvm::Constant *GetConstantSelector(Selector Sel,
+                                              const std::string &TypeEncoding) {
+    llvm_unreachable("Runtime unable to generate constant selector");
+  }
+  llvm::Constant *GetConstantSelector(const ObjCMethodDecl *M) {
+    return GetConstantSelector(M->getSelector(),
+        CGM.getContext().getObjCEncodingForMethodDecl(M));
+  }
+  llvm::Constant *GetEHType(QualType T) override;
 
-  virtual llvm::Function *GenerateMethod(const ObjCMethodDecl *OMD,
-                                         const ObjCContainerDecl *CD);
-  virtual void GenerateCategory(const ObjCCategoryImplDecl *CMD);
-  virtual void GenerateClass(const ObjCImplementationDecl *ClassDecl);
-  virtual void RegisterAlias(const ObjCCompatibleAliasDecl *OAD);
-  virtual llvm::Value *GenerateProtocolRef(CGBuilderTy &Builder,
-                                           const ObjCProtocolDecl *PD);
-  virtual void GenerateProtocol(const ObjCProtocolDecl *PD);
-  virtual llvm::Function *ModuleInitFunction();
-  virtual llvm::Constant *GetPropertyGetFunction();
-  virtual llvm::Constant *GetPropertySetFunction();
-  virtual llvm::Constant *GetOptimizedPropertySetFunction(bool atomic, 
-                                                          bool copy);
-  virtual llvm::Constant *GetSetStructFunction();
-  virtual llvm::Constant *GetCppAtomicObjectFunction();
-  virtual llvm::Constant *GetGetStructFunction();
-  virtual llvm::Constant *EnumerationMutationFunction();
+  llvm::Function *GenerateMethod(const ObjCMethodDecl *OMD,
+                                 const ObjCContainerDecl *CD) override;
+  void GenerateDirectMethodPrologue(CodeGenFunction &CGF, llvm::Function *Fn,
+                                    const ObjCMethodDecl *OMD,
+                                    const ObjCContainerDecl *CD) override;
+  void GenerateCategory(const ObjCCategoryImplDecl *CMD) override;
+  void GenerateClass(const ObjCImplementationDecl *ClassDecl) override;
+  void RegisterAlias(const ObjCCompatibleAliasDecl *OAD) override;
+  llvm::Value *GenerateProtocolRef(CodeGenFunction &CGF,
+                                   const ObjCProtocolDecl *PD) override;
+  void GenerateProtocol(const ObjCProtocolDecl *PD) override;
+  llvm::Function *ModuleInitFunction() override;
+  llvm::FunctionCallee GetPropertyGetFunction() override;
+  llvm::FunctionCallee GetPropertySetFunction() override;
+  llvm::FunctionCallee GetOptimizedPropertySetFunction(bool atomic,
+                                                       bool copy) override;
+  llvm::FunctionCallee GetSetStructFunction() override;
+  llvm::FunctionCallee GetGetStructFunction() override;
+  llvm::FunctionCallee GetCppAtomicObjectGetFunction() override;
+  llvm::FunctionCallee GetCppAtomicObjectSetFunction() override;
+  llvm::FunctionCallee EnumerationMutationFunction() override;
 
-  virtual void EmitTryStmt(CodeGenFunction &CGF,
-                           const ObjCAtTryStmt &S);
-  virtual void EmitSynchronizedStmt(CodeGenFunction &CGF,
-                                    const ObjCAtSynchronizedStmt &S);
-  virtual void EmitThrowStmt(CodeGenFunction &CGF,
-                             const ObjCAtThrowStmt &S);
-  virtual llvm::Value * EmitObjCWeakRead(CodeGenFunction &CGF,
-                                         llvm::Value *AddrWeakObj);
-  virtual void EmitObjCWeakAssign(CodeGenFunction &CGF,
-                                  llvm::Value *src, llvm::Value *dst);
-  virtual void EmitObjCGlobalAssign(CodeGenFunction &CGF,
-                                    llvm::Value *src, llvm::Value *dest,
-                                    bool threadlocal=false);
-  virtual void EmitObjCIvarAssign(CodeGenFunction &CGF,
-                                    llvm::Value *src, llvm::Value *dest,
-                                    llvm::Value *ivarOffset);
-  virtual void EmitObjCStrongCastAssign(CodeGenFunction &CGF,
-                                        llvm::Value *src, llvm::Value *dest);
-  virtual void EmitGCMemmoveCollectable(CodeGenFunction &CGF,
-                                        llvm::Value *DestPtr,
-                                        llvm::Value *SrcPtr,
-                                        llvm::Value *Size);
-  virtual LValue EmitObjCValueForIvar(CodeGenFunction &CGF,
-                                      QualType ObjectTy,
-                                      llvm::Value *BaseValue,
-                                      const ObjCIvarDecl *Ivar,
-                                      unsigned CVRQualifiers);
-  virtual llvm::Value *EmitIvarOffset(CodeGenFunction &CGF,
-                                      const ObjCInterfaceDecl *Interface,
-                                      const ObjCIvarDecl *Ivar);
-  virtual llvm::Value *EmitNSAutoreleasePoolClassRef(CGBuilderTy &Builder);
-  virtual llvm::Constant *BuildGCBlockLayout(CodeGenModule &CGM,
-                                             const CGBlockInfo &blockInfo) {
+  void EmitTryStmt(CodeGenFunction &CGF,
+                   const ObjCAtTryStmt &S) override;
+  void EmitSynchronizedStmt(CodeGenFunction &CGF,
+                            const ObjCAtSynchronizedStmt &S) override;
+  void EmitThrowStmt(CodeGenFunction &CGF,
+                     const ObjCAtThrowStmt &S,
+                     bool ClearInsertionPoint=true) override;
+  llvm::Value * EmitObjCWeakRead(CodeGenFunction &CGF,
+                                 Address AddrWeakObj) override;
+  void EmitObjCWeakAssign(CodeGenFunction &CGF,
+                          llvm::Value *src, Address dst) override;
+  void EmitObjCGlobalAssign(CodeGenFunction &CGF,
+                            llvm::Value *src, Address dest,
+                            bool threadlocal=false) override;
+  void EmitObjCIvarAssign(CodeGenFunction &CGF, llvm::Value *src,
+                          Address dest, llvm::Value *ivarOffset) override;
+  void EmitObjCStrongCastAssign(CodeGenFunction &CGF,
+                                llvm::Value *src, Address dest) override;
+  void EmitGCMemmoveCollectable(CodeGenFunction &CGF, Address DestPtr,
+                                Address SrcPtr,
+                                llvm::Value *Size) override;
+  LValue EmitObjCValueForIvar(CodeGenFunction &CGF, QualType ObjectTy,
+                              llvm::Value *BaseValue, const ObjCIvarDecl *Ivar,
+                              unsigned CVRQualifiers) override;
+  llvm::Value *EmitIvarOffset(CodeGenFunction &CGF,
+                              const ObjCInterfaceDecl *Interface,
+                              const ObjCIvarDecl *Ivar) override;
+  llvm::Value *EmitNSAutoreleasePoolClassRef(CodeGenFunction &CGF) override;
+  llvm::Constant *BuildGCBlockLayout(CodeGenModule &CGM,
+                                     const CGBlockInfo &blockInfo) override {
     return NULLPtr;
   }
-  
-  virtual llvm::GlobalVariable *GetClassGlobal(const std::string &Name) {
-    return 0;
+  llvm::Constant *BuildRCBlockLayout(CodeGenModule &CGM,
+                                     const CGBlockInfo &blockInfo) override {
+    return NULLPtr;
+  }
+
+  llvm::Constant *BuildByrefLayout(CodeGenModule &CGM, QualType T) override {
+    return NULLPtr;
   }
 };
+
 /// Class representing the legacy GCC Objective-C ABI.  This is the default when
 /// -fobjc-nonfragile-abi is not specified.
 ///
@@ -535,36 +685,38 @@ class CGObjCGCC : public CGObjCGNU {
   /// structure describing the receiver and the class, and a selector as
   /// arguments.  Returns the IMP for the corresponding method.
   LazyRuntimeFunction MsgLookupSuperFn;
+
 protected:
-  virtual llvm::Value *LookupIMP(CodeGenFunction &CGF,
-                                 llvm::Value *&Receiver,
-                                 llvm::Value *cmd,
-                                 llvm::MDNode *node) {
+  llvm::Value *LookupIMP(CodeGenFunction &CGF, llvm::Value *&Receiver,
+                         llvm::Value *cmd, llvm::MDNode *node,
+                         MessageSendInfo &MSI) override {
     CGBuilderTy &Builder = CGF.Builder;
     llvm::Value *args[] = {
             EnforceType(Builder, Receiver, IdTy),
             EnforceType(Builder, cmd, SelectorTy) };
-    llvm::CallSite imp = CGF.EmitCallOrInvoke(MsgLookupFn, args);
+    llvm::CallBase *imp = CGF.EmitRuntimeCallOrInvoke(MsgLookupFn, args);
     imp->setMetadata(msgSendMDKind, node);
-    return imp.getInstruction();
+    return imp;
   }
-  virtual llvm::Value *LookupIMPSuper(CodeGenFunction &CGF,
-                                      llvm::Value *ObjCSuper,
-                                      llvm::Value *cmd) {
-      CGBuilderTy &Builder = CGF.Builder;
-      llvm::Value *lookupArgs[] = {EnforceType(Builder, ObjCSuper,
-          PtrToObjCSuperTy), cmd};
-      return Builder.CreateCall(MsgLookupSuperFn, lookupArgs);
-    }
-  public:
-    CGObjCGCC(CodeGenModule &Mod) : CGObjCGNU(Mod, 8, 2) {
-      // IMP objc_msg_lookup(id, SEL);
-      MsgLookupFn.init(&CGM, "objc_msg_lookup", IMPTy, IdTy, SelectorTy, NULL);
-      // IMP objc_msg_lookup_super(struct objc_super*, SEL);
-      MsgLookupSuperFn.init(&CGM, "objc_msg_lookup_super", IMPTy,
-              PtrToObjCSuperTy, SelectorTy, NULL);
-    }
+
+  llvm::Value *LookupIMPSuper(CodeGenFunction &CGF, Address ObjCSuper,
+                              llvm::Value *cmd, MessageSendInfo &MSI) override {
+    CGBuilderTy &Builder = CGF.Builder;
+    llvm::Value *lookupArgs[] = {EnforceType(Builder, ObjCSuper,
+        PtrToObjCSuperTy).getPointer(), cmd};
+    return CGF.EmitNounwindRuntimeCall(MsgLookupSuperFn, lookupArgs);
+  }
+
+public:
+  CGObjCGCC(CodeGenModule &Mod) : CGObjCGNU(Mod, 8, 2) {
+    // IMP objc_msg_lookup(id, SEL);
+    MsgLookupFn.init(&CGM, "objc_msg_lookup", IMPTy, IdTy, SelectorTy);
+    // IMP objc_msg_lookup_super(struct objc_super*, SEL);
+    MsgLookupSuperFn.init(&CGM, "objc_msg_lookup_super", IMPTy,
+                          PtrToObjCSuperTy, SelectorTy);
+  }
 };
+
 /// Class used when targeting the new GNUstep runtime ABI.
 class CGObjCGNUstep : public CGObjCGNU {
     /// The slot lookup function.  Returns a pointer to a cacheable structure
@@ -575,19 +727,37 @@ class CGObjCGNUstep : public CGObjCGNU {
     /// arguments.  Returns the slot for the corresponding method.  Superclass
     /// message lookup rarely changes, so this is a good caching opportunity.
     LazyRuntimeFunction SlotLookupSuperFn;
+    /// Specialised function for setting atomic retain properties
+    LazyRuntimeFunction SetPropertyAtomic;
+    /// Specialised function for setting atomic copy properties
+    LazyRuntimeFunction SetPropertyAtomicCopy;
+    /// Specialised function for setting nonatomic retain properties
+    LazyRuntimeFunction SetPropertyNonAtomic;
+    /// Specialised function for setting nonatomic copy properties
+    LazyRuntimeFunction SetPropertyNonAtomicCopy;
+    /// Function to perform atomic copies of C++ objects with nontrivial copy
+    /// constructors from Objective-C ivars.
+    LazyRuntimeFunction CxxAtomicObjectGetFn;
+    /// Function to perform atomic copies of C++ objects with nontrivial copy
+    /// constructors to Objective-C ivars.
+    LazyRuntimeFunction CxxAtomicObjectSetFn;
     /// Type of an slot structure pointer.  This is returned by the various
     /// lookup functions.
     llvm::Type *SlotTy;
+
+  public:
+    llvm::Constant *GetEHType(QualType T) override;
+
   protected:
-    virtual llvm::Value *LookupIMP(CodeGenFunction &CGF,
-                                   llvm::Value *&Receiver,
-                                   llvm::Value *cmd,
-                                   llvm::MDNode *node) {
+    llvm::Value *LookupIMP(CodeGenFunction &CGF, llvm::Value *&Receiver,
+                           llvm::Value *cmd, llvm::MDNode *node,
+                           MessageSendInfo &MSI) override {
       CGBuilderTy &Builder = CGF.Builder;
-      llvm::Function *LookupFn = SlotLookupFn;
+      llvm::FunctionCallee LookupFn = SlotLookupFn;
 
       // Store the receiver on the stack so that we can reload it later
-      llvm::Value *ReceiverPtr = CGF.CreateTempAlloca(Receiver->getType());
+      Address ReceiverPtr =
+        CGF.CreateTempAlloca(Receiver->getType(), CGF.getPointerAlign());
       Builder.CreateStore(Receiver, ReceiverPtr);
 
       llvm::Value *self;
@@ -599,62 +769,1335 @@ class CGObjCGNUstep : public CGObjCGNU {
       }
 
       // The lookup function is guaranteed not to capture the receiver pointer.
-      LookupFn->setDoesNotCapture(1);
+      if (auto *LookupFn2 = dyn_cast<llvm::Function>(LookupFn.getCallee()))
+        LookupFn2->addParamAttr(0, llvm::Attribute::NoCapture);
 
       llvm::Value *args[] = {
-              EnforceType(Builder, ReceiverPtr, PtrToIdTy),
+              EnforceType(Builder, ReceiverPtr.getPointer(), PtrToIdTy),
               EnforceType(Builder, cmd, SelectorTy),
               EnforceType(Builder, self, IdTy) };
-      llvm::CallSite slot = CGF.EmitCallOrInvoke(LookupFn, args);
-      slot.setOnlyReadsMemory();
+      llvm::CallBase *slot = CGF.EmitRuntimeCallOrInvoke(LookupFn, args);
+      slot->setOnlyReadsMemory();
       slot->setMetadata(msgSendMDKind, node);
 
       // Load the imp from the slot
-      llvm::Value *imp =
-        Builder.CreateLoad(Builder.CreateStructGEP(slot.getInstruction(), 4));
+      llvm::Value *imp = Builder.CreateAlignedLoad(
+          Builder.CreateStructGEP(nullptr, slot, 4), CGF.getPointerAlign());
 
       // The lookup function may have changed the receiver, so make sure we use
       // the new one.
       Receiver = Builder.CreateLoad(ReceiverPtr, true);
       return imp;
     }
-    virtual llvm::Value *LookupIMPSuper(CodeGenFunction &CGF,
-                                        llvm::Value *ObjCSuper,
-                                        llvm::Value *cmd) {
-      CGBuilderTy &Builder = CGF.Builder;
-      llvm::Value *lookupArgs[] = {ObjCSuper, cmd};
 
-      llvm::CallInst *slot = Builder.CreateCall(SlotLookupSuperFn, lookupArgs);
+    llvm::Value *LookupIMPSuper(CodeGenFunction &CGF, Address ObjCSuper,
+                                llvm::Value *cmd,
+                                MessageSendInfo &MSI) override {
+      CGBuilderTy &Builder = CGF.Builder;
+      llvm::Value *lookupArgs[] = {ObjCSuper.getPointer(), cmd};
+
+      llvm::CallInst *slot =
+        CGF.EmitNounwindRuntimeCall(SlotLookupSuperFn, lookupArgs);
       slot->setOnlyReadsMemory();
 
-      return Builder.CreateLoad(Builder.CreateStructGEP(slot, 4));
+      return Builder.CreateAlignedLoad(Builder.CreateStructGEP(nullptr, slot, 4),
+                                       CGF.getPointerAlign());
     }
+
   public:
-    CGObjCGNUstep(CodeGenModule &Mod) : CGObjCGNU(Mod, 9, 3) {
-      llvm::StructType *SlotStructTy = llvm::StructType::get(PtrTy,
-          PtrTy, PtrTy, IntTy, IMPTy, NULL);
+    CGObjCGNUstep(CodeGenModule &Mod) : CGObjCGNUstep(Mod, 9, 3, 1) {}
+    CGObjCGNUstep(CodeGenModule &Mod, unsigned ABI, unsigned ProtocolABI,
+        unsigned ClassABI) :
+      CGObjCGNU(Mod, ABI, ProtocolABI, ClassABI) {
+      const ObjCRuntime &R = CGM.getLangOpts().ObjCRuntime;
+
+      llvm::StructType *SlotStructTy =
+          llvm::StructType::get(PtrTy, PtrTy, PtrTy, IntTy, IMPTy);
       SlotTy = llvm::PointerType::getUnqual(SlotStructTy);
       // Slot_t objc_msg_lookup_sender(id *receiver, SEL selector, id sender);
       SlotLookupFn.init(&CGM, "objc_msg_lookup_sender", SlotTy, PtrToIdTy,
-          SelectorTy, IdTy, NULL);
-      // Slot_t objc_msg_lookup_super(struct objc_super*, SEL);
+                        SelectorTy, IdTy);
+      // Slot_t objc_slot_lookup_super(struct objc_super*, SEL);
       SlotLookupSuperFn.init(&CGM, "objc_slot_lookup_super", SlotTy,
-              PtrToObjCSuperTy, SelectorTy, NULL);
+                             PtrToObjCSuperTy, SelectorTy);
       // If we're in ObjC++ mode, then we want to make 
-      if (CGM.getLangOpts().CPlusPlus) {
+      if (usesSEHExceptions) {
+          llvm::Type *VoidTy = llvm::Type::getVoidTy(VMContext);
+          // void objc_exception_rethrow(void)
+          ExceptionReThrowFn.init(&CGM, "objc_exception_rethrow", VoidTy);
+      } else if (CGM.getLangOpts().CPlusPlus) {
         llvm::Type *VoidTy = llvm::Type::getVoidTy(VMContext);
         // void *__cxa_begin_catch(void *e)
-        EnterCatchFn.init(&CGM, "__cxa_begin_catch", PtrTy, PtrTy, NULL);
+        EnterCatchFn.init(&CGM, "__cxa_begin_catch", PtrTy, PtrTy);
         // void __cxa_end_catch(void)
-        ExitCatchFn.init(&CGM, "__cxa_end_catch", VoidTy, NULL);
+        ExitCatchFn.init(&CGM, "__cxa_end_catch", VoidTy);
         // void _Unwind_Resume_or_Rethrow(void*)
-        ExceptionReThrowFn.init(&CGM, "_Unwind_Resume_or_Rethrow", VoidTy, PtrTy, NULL);
+        ExceptionReThrowFn.init(&CGM, "_Unwind_Resume_or_Rethrow", VoidTy,
+                                PtrTy);
+      } else if (R.getVersion() >= VersionTuple(1, 7)) {
+        llvm::Type *VoidTy = llvm::Type::getVoidTy(VMContext);
+        // id objc_begin_catch(void *e)
+        EnterCatchFn.init(&CGM, "objc_begin_catch", IdTy, PtrTy);
+        // void objc_end_catch(void)
+        ExitCatchFn.init(&CGM, "objc_end_catch", VoidTy);
+        // void _Unwind_Resume_or_Rethrow(void*)
+        ExceptionReThrowFn.init(&CGM, "objc_exception_rethrow", VoidTy, PtrTy);
       }
+      llvm::Type *VoidTy = llvm::Type::getVoidTy(VMContext);
+      SetPropertyAtomic.init(&CGM, "objc_setProperty_atomic", VoidTy, IdTy,
+                             SelectorTy, IdTy, PtrDiffTy);
+      SetPropertyAtomicCopy.init(&CGM, "objc_setProperty_atomic_copy", VoidTy,
+                                 IdTy, SelectorTy, IdTy, PtrDiffTy);
+      SetPropertyNonAtomic.init(&CGM, "objc_setProperty_nonatomic", VoidTy,
+                                IdTy, SelectorTy, IdTy, PtrDiffTy);
+      SetPropertyNonAtomicCopy.init(&CGM, "objc_setProperty_nonatomic_copy",
+                                    VoidTy, IdTy, SelectorTy, IdTy, PtrDiffTy);
+      // void objc_setCppObjectAtomic(void *dest, const void *src, void
+      // *helper);
+      CxxAtomicObjectSetFn.init(&CGM, "objc_setCppObjectAtomic", VoidTy, PtrTy,
+                                PtrTy, PtrTy);
+      // void objc_getCppObjectAtomic(void *dest, const void *src, void
+      // *helper);
+      CxxAtomicObjectGetFn.init(&CGM, "objc_getCppObjectAtomic", VoidTy, PtrTy,
+                                PtrTy, PtrTy);
+    }
+
+    llvm::FunctionCallee GetCppAtomicObjectGetFunction() override {
+      // The optimised functions were added in version 1.7 of the GNUstep
+      // runtime.
+      assert (CGM.getLangOpts().ObjCRuntime.getVersion() >=
+          VersionTuple(1, 7));
+      return CxxAtomicObjectGetFn;
+    }
+
+    llvm::FunctionCallee GetCppAtomicObjectSetFunction() override {
+      // The optimised functions were added in version 1.7 of the GNUstep
+      // runtime.
+      assert (CGM.getLangOpts().ObjCRuntime.getVersion() >=
+          VersionTuple(1, 7));
+      return CxxAtomicObjectSetFn;
+    }
+
+    llvm::FunctionCallee GetOptimizedPropertySetFunction(bool atomic,
+                                                         bool copy) override {
+      // The optimised property functions omit the GC check, and so are not
+      // safe to use in GC mode.  The standard functions are fast in GC mode,
+      // so there is less advantage in using them.
+      assert ((CGM.getLangOpts().getGC() == LangOptions::NonGC));
+      // The optimised functions were added in version 1.7 of the GNUstep
+      // runtime.
+      assert (CGM.getLangOpts().ObjCRuntime.getVersion() >=
+          VersionTuple(1, 7));
+
+      if (atomic) {
+        if (copy) return SetPropertyAtomicCopy;
+        return SetPropertyAtomic;
+      }
+
+      return copy ? SetPropertyNonAtomicCopy : SetPropertyNonAtomic;
     }
 };
 
-} // end anonymous namespace
+/// GNUstep Objective-C ABI version 2 implementation.
+/// This is the ABI that provides a clean break with the legacy GCC ABI and
+/// cleans up a number of things that were added to work around 1980s linkers.
+class CGObjCGNUstep2 : public CGObjCGNUstep {
+  enum SectionKind
+  {
+    SelectorSection = 0,
+    ClassSection,
+    ClassReferenceSection,
+    CategorySection,
+    ProtocolSection,
+    ProtocolReferenceSection,
+    ClassAliasSection,
+    ConstantStringSection
+  };
+  static const char *const SectionsBaseNames[8];
+  static const char *const PECOFFSectionsBaseNames[8];
+  template<SectionKind K>
+  std::string sectionName() {
+    if (CGM.getTriple().isOSBinFormatCOFF()) {
+      std::string name(PECOFFSectionsBaseNames[K]);
+      name += "$m";
+      return name;
+    }
+    return SectionsBaseNames[K];
+  }
+  /// The GCC ABI superclass message lookup function.  Takes a pointer to a
+  /// structure describing the receiver and the class, and a selector as
+  /// arguments.  Returns the IMP for the corresponding method.
+  LazyRuntimeFunction MsgLookupSuperFn;
+  /// A flag indicating if we've emitted at least one protocol.
+  /// If we haven't, then we need to emit an empty protocol, to ensure that the
+  /// __start__objc_protocols and __stop__objc_protocols sections exist.
+  bool EmittedProtocol = false;
+  /// A flag indicating if we've emitted at least one protocol reference.
+  /// If we haven't, then we need to emit an empty protocol, to ensure that the
+  /// __start__objc_protocol_refs and __stop__objc_protocol_refs sections
+  /// exist.
+  bool EmittedProtocolRef = false;
+  /// A flag indicating if we've emitted at least one class.
+  /// If we haven't, then we need to emit an empty protocol, to ensure that the
+  /// __start__objc_classes and __stop__objc_classes sections / exist.
+  bool EmittedClass = false;
+  /// Generate the name of a symbol for a reference to a class.  Accesses to
+  /// classes should be indirected via this.
 
+  typedef std::pair<std::string, std::pair<llvm::Constant*, int>> EarlyInitPair;
+  std::vector<EarlyInitPair> EarlyInitList;
+
+  std::string SymbolForClassRef(StringRef Name, bool isWeak) {
+    if (isWeak)
+      return (ManglePublicSymbol("OBJC_WEAK_REF_CLASS_") + Name).str();
+    else
+      return (ManglePublicSymbol("OBJC_REF_CLASS_") + Name).str();
+  }
+  /// Generate the name of a class symbol.
+  std::string SymbolForClass(StringRef Name) {
+    return (ManglePublicSymbol("OBJC_CLASS_") + Name).str();
+  }
+  void CallRuntimeFunction(CGBuilderTy &B, StringRef FunctionName,
+      ArrayRef<llvm::Value*> Args) {
+    SmallVector<llvm::Type *,8> Types;
+    for (auto *Arg : Args)
+      Types.push_back(Arg->getType());
+    llvm::FunctionType *FT = llvm::FunctionType::get(B.getVoidTy(), Types,
+        false);
+    llvm::FunctionCallee Fn = CGM.CreateRuntimeFunction(FT, FunctionName);
+    B.CreateCall(Fn, Args);
+  }
+
+  ConstantAddress GenerateConstantString(const StringLiteral *SL) override {
+
+    auto Str = SL->getString();
+    CharUnits Align = CGM.getPointerAlign();
+
+    // Look for an existing one
+    llvm::StringMap<llvm::Constant*>::iterator old = ObjCStrings.find(Str);
+    if (old != ObjCStrings.end())
+      return ConstantAddress(old->getValue(), Align);
+
+    bool isNonASCII = SL->containsNonAscii();
+
+    auto LiteralLength = SL->getLength();
+
+    if ((CGM.getTarget().getPointerWidth(0) == 64) &&
+        (LiteralLength < 9) && !isNonASCII) {
+      // Tiny strings are only used on 64-bit platforms.  They store 8 7-bit
+      // ASCII characters in the high 56 bits, followed by a 4-bit length and a
+      // 3-bit tag (which is always 4).
+      uint64_t str = 0;
+      // Fill in the characters
+      for (unsigned i=0 ; i<LiteralLength ; i++)
+        str |= ((uint64_t)SL->getCodeUnit(i)) << ((64 - 4 - 3) - (i*7));
+      // Fill in the length
+      str |= LiteralLength << 3;
+      // Set the tag
+      str |= 4;
+      auto *ObjCStr = llvm::ConstantExpr::getIntToPtr(
+          llvm::ConstantInt::get(Int64Ty, str), IdTy);
+      ObjCStrings[Str] = ObjCStr;
+      return ConstantAddress(ObjCStr, Align);
+    }
+
+    StringRef StringClass = CGM.getLangOpts().ObjCConstantStringClass;
+
+    if (StringClass.empty()) StringClass = "NSConstantString";
+
+    std::string Sym = SymbolForClass(StringClass);
+
+    llvm::Constant *isa = TheModule.getNamedGlobal(Sym);
+
+    if (!isa) {
+      isa = new llvm::GlobalVariable(TheModule, IdTy, /* isConstant */false,
+              llvm::GlobalValue::ExternalLinkage, nullptr, Sym);
+      if (CGM.getTriple().isOSBinFormatCOFF()) {
+        cast<llvm::GlobalValue>(isa)->setDLLStorageClass(llvm::GlobalValue::DLLImportStorageClass);
+      }
+    } else if (isa->getType() != PtrToIdTy)
+      isa = llvm::ConstantExpr::getBitCast(isa, PtrToIdTy);
+
+    //  struct
+    //  {
+    //    Class isa;
+    //    uint32_t flags;
+    //    uint32_t length; // Number of codepoints
+    //    uint32_t size; // Number of bytes
+    //    uint32_t hash;
+    //    const char *data;
+    //  };
+
+    ConstantInitBuilder Builder(CGM);
+    auto Fields = Builder.beginStruct();
+    if (!CGM.getTriple().isOSBinFormatCOFF()) {
+      Fields.add(isa);
+    } else {
+      Fields.addNullPointer(PtrTy);
+    }
+    // For now, all non-ASCII strings are represented as UTF-16.  As such, the
+    // number of bytes is simply double the number of UTF-16 codepoints.  In
+    // ASCII strings, the number of bytes is equal to the number of non-ASCII
+    // codepoints.
+    if (isNonASCII) {
+      unsigned NumU8CodeUnits = Str.size();
+      // A UTF-16 representation of a unicode string contains at most the same
+      // number of code units as a UTF-8 representation.  Allocate that much
+      // space, plus one for the final null character.
+      SmallVector<llvm::UTF16, 128> ToBuf(NumU8CodeUnits + 1);
+      const llvm::UTF8 *FromPtr = (const llvm::UTF8 *)Str.data();
+      llvm::UTF16 *ToPtr = &ToBuf[0];
+      (void)llvm::ConvertUTF8toUTF16(&FromPtr, FromPtr + NumU8CodeUnits,
+          &ToPtr, ToPtr + NumU8CodeUnits, llvm::strictConversion);
+      uint32_t StringLength = ToPtr - &ToBuf[0];
+      // Add null terminator
+      *ToPtr = 0;
+      // Flags: 2 indicates UTF-16 encoding
+      Fields.addInt(Int32Ty, 2);
+      // Number of UTF-16 codepoints
+      Fields.addInt(Int32Ty, StringLength);
+      // Number of bytes
+      Fields.addInt(Int32Ty, StringLength * 2);
+      // Hash.  Not currently initialised by the compiler.
+      Fields.addInt(Int32Ty, 0);
+      // pointer to the data string.
+      auto Arr = llvm::makeArrayRef(&ToBuf[0], ToPtr+1);
+      auto *C = llvm::ConstantDataArray::get(VMContext, Arr);
+      auto *Buffer = new llvm::GlobalVariable(TheModule, C->getType(),
+          /*isConstant=*/true, llvm::GlobalValue::PrivateLinkage, C, ".str");
+      Buffer->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
+      Fields.add(Buffer);
+    } else {
+      // Flags: 0 indicates ASCII encoding
+      Fields.addInt(Int32Ty, 0);
+      // Number of UTF-16 codepoints, each ASCII byte is a UTF-16 codepoint
+      Fields.addInt(Int32Ty, Str.size());
+      // Number of bytes
+      Fields.addInt(Int32Ty, Str.size());
+      // Hash.  Not currently initialised by the compiler.
+      Fields.addInt(Int32Ty, 0);
+      // Data pointer
+      Fields.add(MakeConstantString(Str));
+    }
+    std::string StringName;
+    bool isNamed = !isNonASCII;
+    if (isNamed) {
+      StringName = ".objc_str_";
+      for (int i=0,e=Str.size() ; i<e ; ++i) {
+        unsigned char c = Str[i];
+        if (isalnum(c))
+          StringName += c;
+        else if (c == ' ')
+          StringName += '_';
+        else {
+          isNamed = false;
+          break;
+        }
+      }
+    }
+    auto *ObjCStrGV =
+      Fields.finishAndCreateGlobal(
+          isNamed ? StringRef(StringName) : ".objc_string",
+          Align, false, isNamed ? llvm::GlobalValue::LinkOnceODRLinkage
+                                : llvm::GlobalValue::PrivateLinkage);
+    ObjCStrGV->setSection(sectionName<ConstantStringSection>());
+    if (isNamed) {
+      ObjCStrGV->setComdat(TheModule.getOrInsertComdat(StringName));
+      ObjCStrGV->setVisibility(llvm::GlobalValue::HiddenVisibility);
+    }
+    if (CGM.getTriple().isOSBinFormatCOFF()) {
+      std::pair<llvm::Constant*, int> v{ObjCStrGV, 0};
+      EarlyInitList.emplace_back(Sym, v);
+    }
+    llvm::Constant *ObjCStr = llvm::ConstantExpr::getBitCast(ObjCStrGV, IdTy);
+    ObjCStrings[Str] = ObjCStr;
+    ConstantStrings.push_back(ObjCStr);
+    return ConstantAddress(ObjCStr, Align);
+  }
+
+  void PushProperty(ConstantArrayBuilder &PropertiesArray,
+            const ObjCPropertyDecl *property,
+            const Decl *OCD,
+            bool isSynthesized=true, bool
+            isDynamic=true) override {
+    // struct objc_property
+    // {
+    //   const char *name;
+    //   const char *attributes;
+    //   const char *type;
+    //   SEL getter;
+    //   SEL setter;
+    // };
+    auto Fields = PropertiesArray.beginStruct(PropertyMetadataTy);
+    ASTContext &Context = CGM.getContext();
+    Fields.add(MakeConstantString(property->getNameAsString()));
+    std::string TypeStr =
+      CGM.getContext().getObjCEncodingForPropertyDecl(property, OCD);
+    Fields.add(MakeConstantString(TypeStr));
+    std::string typeStr;
+    Context.getObjCEncodingForType(property->getType(), typeStr);
+    Fields.add(MakeConstantString(typeStr));
+    auto addPropertyMethod = [&](const ObjCMethodDecl *accessor) {
+      if (accessor) {
+        std::string TypeStr = Context.getObjCEncodingForMethodDecl(accessor);
+        Fields.add(GetConstantSelector(accessor->getSelector(), TypeStr));
+      } else {
+        Fields.add(NULLPtr);
+      }
+    };
+    addPropertyMethod(property->getGetterMethodDecl());
+    addPropertyMethod(property->getSetterMethodDecl());
+    Fields.finishAndAddTo(PropertiesArray);
+  }
+
+  llvm::Constant *
+  GenerateProtocolMethodList(ArrayRef<const ObjCMethodDecl*> Methods) override {
+    // struct objc_protocol_method_description
+    // {
+    //   SEL selector;
+    //   const char *types;
+    // };
+    llvm::StructType *ObjCMethodDescTy =
+      llvm::StructType::get(CGM.getLLVMContext(),
+          { PtrToInt8Ty, PtrToInt8Ty });
+    ASTContext &Context = CGM.getContext();
+    ConstantInitBuilder Builder(CGM);
+    // struct objc_protocol_method_description_list
+    // {
+    //   int count;
+    //   int size;
+    //   struct objc_protocol_method_description methods[];
+    // };
+    auto MethodList = Builder.beginStruct();
+    // int count;
+    MethodList.addInt(IntTy, Methods.size());
+    // int size; // sizeof(struct objc_method_description)
+    llvm::DataLayout td(&TheModule);
+    MethodList.addInt(IntTy, td.getTypeSizeInBits(ObjCMethodDescTy) /
+        CGM.getContext().getCharWidth());
+    // struct objc_method_description[]
+    auto MethodArray = MethodList.beginArray(ObjCMethodDescTy);
+    for (auto *M : Methods) {
+      auto Method = MethodArray.beginStruct(ObjCMethodDescTy);
+      Method.add(CGObjCGNU::GetConstantSelector(M));
+      Method.add(GetTypeString(Context.getObjCEncodingForMethodDecl(M, true)));
+      Method.finishAndAddTo(MethodArray);
+    }
+    MethodArray.finishAndAddTo(MethodList);
+    return MethodList.finishAndCreateGlobal(".objc_protocol_method_list",
+                                            CGM.getPointerAlign());
+  }
+  llvm::Constant *GenerateCategoryProtocolList(const ObjCCategoryDecl *OCD)
+    override {
+    SmallVector<llvm::Constant*, 16> Protocols;
+    for (const auto *PI : OCD->getReferencedProtocols())
+      Protocols.push_back(
+          llvm::ConstantExpr::getBitCast(GenerateProtocolRef(PI),
+            ProtocolPtrTy));
+    return GenerateProtocolList(Protocols);
+  }
+
+  llvm::Value *LookupIMPSuper(CodeGenFunction &CGF, Address ObjCSuper,
+                              llvm::Value *cmd, MessageSendInfo &MSI) override {
+    // Don't access the slot unless we're trying to cache the result.
+    CGBuilderTy &Builder = CGF.Builder;
+    llvm::Value *lookupArgs[] = {CGObjCGNU::EnforceType(Builder, ObjCSuper,
+        PtrToObjCSuperTy).getPointer(), cmd};
+    return CGF.EmitNounwindRuntimeCall(MsgLookupSuperFn, lookupArgs);
+  }
+
+  llvm::GlobalVariable *GetClassVar(StringRef Name, bool isWeak=false) {
+    std::string SymbolName = SymbolForClassRef(Name, isWeak);
+    auto *ClassSymbol = TheModule.getNamedGlobal(SymbolName);
+    if (ClassSymbol)
+      return ClassSymbol;
+    ClassSymbol = new llvm::GlobalVariable(TheModule,
+        IdTy, false, llvm::GlobalValue::ExternalLinkage,
+        nullptr, SymbolName);
+    // If this is a weak symbol, then we are creating a valid definition for
+    // the symbol, pointing to a weak definition of the real class pointer.  If
+    // this is not a weak reference, then we are expecting another compilation
+    // unit to provide the real indirection symbol.
+    if (isWeak)
+      ClassSymbol->setInitializer(new llvm::GlobalVariable(TheModule,
+          Int8Ty, false, llvm::GlobalValue::ExternalWeakLinkage,
+          nullptr, SymbolForClass(Name)));
+    else {
+      if (CGM.getTriple().isOSBinFormatCOFF()) {
+        IdentifierInfo &II = CGM.getContext().Idents.get(Name);
+        TranslationUnitDecl *TUDecl = CGM.getContext().getTranslationUnitDecl();
+        DeclContext *DC = TranslationUnitDecl::castToDeclContext(TUDecl);
+
+        const ObjCInterfaceDecl *OID = nullptr;
+        for (const auto &Result : DC->lookup(&II))
+          if ((OID = dyn_cast<ObjCInterfaceDecl>(Result)))
+            break;
+
+        // The first Interface we find may be a @class,
+        // which should only be treated as the source of
+        // truth in the absence of a true declaration.
+        assert(OID && "Failed to find ObjCInterfaceDecl");
+        const ObjCInterfaceDecl *OIDDef = OID->getDefinition();
+        if (OIDDef != nullptr)
+          OID = OIDDef;
+
+        auto Storage = llvm::GlobalValue::DefaultStorageClass;
+        if (OID->hasAttr<DLLImportAttr>())
+          Storage = llvm::GlobalValue::DLLImportStorageClass;
+        else if (OID->hasAttr<DLLExportAttr>())
+          Storage = llvm::GlobalValue::DLLExportStorageClass;
+
+        cast<llvm::GlobalValue>(ClassSymbol)->setDLLStorageClass(Storage);
+      }
+    }
+    assert(ClassSymbol->getName() == SymbolName);
+    return ClassSymbol;
+  }
+  llvm::Value *GetClassNamed(CodeGenFunction &CGF,
+                             const std::string &Name,
+                             bool isWeak) override {
+    return CGF.Builder.CreateLoad(Address(GetClassVar(Name, isWeak),
+          CGM.getPointerAlign()));
+  }
+  int32_t FlagsForOwnership(Qualifiers::ObjCLifetime Ownership) {
+    // typedef enum {
+    //   ownership_invalid = 0,
+    //   ownership_strong  = 1,
+    //   ownership_weak    = 2,
+    //   ownership_unsafe  = 3
+    // } ivar_ownership;
+    int Flag;
+    switch (Ownership) {
+      case Qualifiers::OCL_Strong:
+          Flag = 1;
+          break;
+      case Qualifiers::OCL_Weak:
+          Flag = 2;
+          break;
+      case Qualifiers::OCL_ExplicitNone:
+          Flag = 3;
+          break;
+      case Qualifiers::OCL_None:
+      case Qualifiers::OCL_Autoreleasing:
+        assert(Ownership != Qualifiers::OCL_Autoreleasing);
+        Flag = 0;
+    }
+    return Flag;
+  }
+  llvm::Constant *GenerateIvarList(ArrayRef<llvm::Constant *> IvarNames,
+                   ArrayRef<llvm::Constant *> IvarTypes,
+                   ArrayRef<llvm::Constant *> IvarOffsets,
+                   ArrayRef<llvm::Constant *> IvarAlign,
+                   ArrayRef<Qualifiers::ObjCLifetime> IvarOwnership) override {
+    llvm_unreachable("Method should not be called!");
+  }
+
+  llvm::Constant *GenerateEmptyProtocol(StringRef ProtocolName) override {
+    std::string Name = SymbolForProtocol(ProtocolName);
+    auto *GV = TheModule.getGlobalVariable(Name);
+    if (!GV) {
+      // Emit a placeholder symbol.
+      GV = new llvm::GlobalVariable(TheModule, ProtocolTy, false,
+          llvm::GlobalValue::ExternalLinkage, nullptr, Name);
+      GV->setAlignment(CGM.getPointerAlign().getAsAlign());
+    }
+    return llvm::ConstantExpr::getBitCast(GV, ProtocolPtrTy);
+  }
+
+  /// Existing protocol references.
+  llvm::StringMap<llvm::Constant*> ExistingProtocolRefs;
+
+  llvm::Value *GenerateProtocolRef(CodeGenFunction &CGF,
+                                   const ObjCProtocolDecl *PD) override {
+    auto Name = PD->getNameAsString();
+    auto *&Ref = ExistingProtocolRefs[Name];
+    if (!Ref) {
+      auto *&Protocol = ExistingProtocols[Name];
+      if (!Protocol)
+        Protocol = GenerateProtocolRef(PD);
+      std::string RefName = SymbolForProtocolRef(Name);
+      assert(!TheModule.getGlobalVariable(RefName));
+      // Emit a reference symbol.
+      auto GV = new llvm::GlobalVariable(TheModule, ProtocolPtrTy,
+          false, llvm::GlobalValue::LinkOnceODRLinkage,
+          llvm::ConstantExpr::getBitCast(Protocol, ProtocolPtrTy), RefName);
+      GV->setComdat(TheModule.getOrInsertComdat(RefName));
+      GV->setSection(sectionName<ProtocolReferenceSection>());
+      GV->setAlignment(CGM.getPointerAlign().getAsAlign());
+      Ref = GV;
+    }
+    EmittedProtocolRef = true;
+    return CGF.Builder.CreateAlignedLoad(Ref, CGM.getPointerAlign());
+  }
+
+  llvm::Constant *GenerateProtocolList(ArrayRef<llvm::Constant*> Protocols) {
+    llvm::ArrayType *ProtocolArrayTy = llvm::ArrayType::get(ProtocolPtrTy,
+        Protocols.size());
+    llvm::Constant * ProtocolArray = llvm::ConstantArray::get(ProtocolArrayTy,
+        Protocols);
+    ConstantInitBuilder builder(CGM);
+    auto ProtocolBuilder = builder.beginStruct();
+    ProtocolBuilder.addNullPointer(PtrTy);
+    ProtocolBuilder.addInt(SizeTy, Protocols.size());
+    ProtocolBuilder.add(ProtocolArray);
+    return ProtocolBuilder.finishAndCreateGlobal(".objc_protocol_list",
+        CGM.getPointerAlign(), false, llvm::GlobalValue::InternalLinkage);
+  }
+
+  void GenerateProtocol(const ObjCProtocolDecl *PD) override {
+    // Do nothing - we only emit referenced protocols.
+  }
+  llvm::Constant *GenerateProtocolRef(const ObjCProtocolDecl *PD) {
+    std::string ProtocolName = PD->getNameAsString();
+    auto *&Protocol = ExistingProtocols[ProtocolName];
+    if (Protocol)
+      return Protocol;
+
+    EmittedProtocol = true;
+
+    auto SymName = SymbolForProtocol(ProtocolName);
+    auto *OldGV = TheModule.getGlobalVariable(SymName);
+
+    // Use the protocol definition, if there is one.
+    if (const ObjCProtocolDecl *Def = PD->getDefinition())
+      PD = Def;
+    else {
+      // If there is no definition, then create an external linkage symbol and
+      // hope that someone else fills it in for us (and fail to link if they
+      // don't).
+      assert(!OldGV);
+      Protocol = new llvm::GlobalVariable(TheModule, ProtocolTy,
+        /*isConstant*/false,
+        llvm::GlobalValue::ExternalLinkage, nullptr, SymName);
+      return Protocol;
+    }
+
+    SmallVector<llvm::Constant*, 16> Protocols;
+    for (const auto *PI : PD->protocols())
+      Protocols.push_back(
+          llvm::ConstantExpr::getBitCast(GenerateProtocolRef(PI),
+            ProtocolPtrTy));
+    llvm::Constant *ProtocolList = GenerateProtocolList(Protocols);
+
+    // Collect information about methods
+    llvm::Constant *InstanceMethodList, *OptionalInstanceMethodList;
+    llvm::Constant *ClassMethodList, *OptionalClassMethodList;
+    EmitProtocolMethodList(PD->instance_methods(), InstanceMethodList,
+        OptionalInstanceMethodList);
+    EmitProtocolMethodList(PD->class_methods(), ClassMethodList,
+        OptionalClassMethodList);
+
+    // The isa pointer must be set to a magic number so the runtime knows it's
+    // the correct layout.
+    ConstantInitBuilder builder(CGM);
+    auto ProtocolBuilder = builder.beginStruct();
+    ProtocolBuilder.add(llvm::ConstantExpr::getIntToPtr(
+          llvm::ConstantInt::get(Int32Ty, ProtocolVersion), IdTy));
+    ProtocolBuilder.add(MakeConstantString(ProtocolName));
+    ProtocolBuilder.add(ProtocolList);
+    ProtocolBuilder.add(InstanceMethodList);
+    ProtocolBuilder.add(ClassMethodList);
+    ProtocolBuilder.add(OptionalInstanceMethodList);
+    ProtocolBuilder.add(OptionalClassMethodList);
+    // Required instance properties
+    ProtocolBuilder.add(GeneratePropertyList(nullptr, PD, false, false));
+    // Optional instance properties
+    ProtocolBuilder.add(GeneratePropertyList(nullptr, PD, false, true));
+    // Required class properties
+    ProtocolBuilder.add(GeneratePropertyList(nullptr, PD, true, false));
+    // Optional class properties
+    ProtocolBuilder.add(GeneratePropertyList(nullptr, PD, true, true));
+
+    auto *GV = ProtocolBuilder.finishAndCreateGlobal(SymName,
+        CGM.getPointerAlign(), false, llvm::GlobalValue::ExternalLinkage);
+    GV->setSection(sectionName<ProtocolSection>());
+    GV->setComdat(TheModule.getOrInsertComdat(SymName));
+    if (OldGV) {
+      OldGV->replaceAllUsesWith(llvm::ConstantExpr::getBitCast(GV,
+            OldGV->getType()));
+      OldGV->removeFromParent();
+      GV->setName(SymName);
+    }
+    Protocol = GV;
+    return GV;
+  }
+  llvm::Constant *EnforceType(llvm::Constant *Val, llvm::Type *Ty) {
+    if (Val->getType() == Ty)
+      return Val;
+    return llvm::ConstantExpr::getBitCast(Val, Ty);
+  }
+  llvm::Value *GetTypedSelector(CodeGenFunction &CGF, Selector Sel,
+                                const std::string &TypeEncoding) override {
+    return GetConstantSelector(Sel, TypeEncoding);
+  }
+  llvm::Constant  *GetTypeString(llvm::StringRef TypeEncoding) {
+    if (TypeEncoding.empty())
+      return NULLPtr;
+    std::string MangledTypes = TypeEncoding;
+    std::replace(MangledTypes.begin(), MangledTypes.end(),
+      '@', '\1');
+    std::string TypesVarName = ".objc_sel_types_" + MangledTypes;
+    auto *TypesGlobal = TheModule.getGlobalVariable(TypesVarName);
+    if (!TypesGlobal) {
+      llvm::Constant *Init = llvm::ConstantDataArray::getString(VMContext,
+          TypeEncoding);
+      auto *GV = new llvm::GlobalVariable(TheModule, Init->getType(),
+          true, llvm::GlobalValue::LinkOnceODRLinkage, Init, TypesVarName);
+      GV->setComdat(TheModule.getOrInsertComdat(TypesVarName));
+      GV->setVisibility(llvm::GlobalValue::HiddenVisibility);
+      TypesGlobal = GV;
+    }
+    return llvm::ConstantExpr::getGetElementPtr(TypesGlobal->getValueType(),
+        TypesGlobal, Zeros);
+  }
+  llvm::Constant *GetConstantSelector(Selector Sel,
+                                      const std::string &TypeEncoding) override {
+    // @ is used as a special character in symbol names (used for symbol
+    // versioning), so mangle the name to not include it.  Replace it with a
+    // character that is not a valid type encoding character (and, being
+    // non-printable, never will be!)
+    std::string MangledTypes = TypeEncoding;
+    std::replace(MangledTypes.begin(), MangledTypes.end(),
+      '@', '\1');
+    auto SelVarName = (StringRef(".objc_selector_") + Sel.getAsString() + "_" +
+      MangledTypes).str();
+    if (auto *GV = TheModule.getNamedGlobal(SelVarName))
+      return EnforceType(GV, SelectorTy);
+    ConstantInitBuilder builder(CGM);
+    auto SelBuilder = builder.beginStruct();
+    SelBuilder.add(ExportUniqueString(Sel.getAsString(), ".objc_sel_name_",
+          true));
+    SelBuilder.add(GetTypeString(TypeEncoding));
+    auto *GV = SelBuilder.finishAndCreateGlobal(SelVarName,
+        CGM.getPointerAlign(), false, llvm::GlobalValue::LinkOnceODRLinkage);
+    GV->setComdat(TheModule.getOrInsertComdat(SelVarName));
+    GV->setVisibility(llvm::GlobalValue::HiddenVisibility);
+    GV->setSection(sectionName<SelectorSection>());
+    auto *SelVal = EnforceType(GV, SelectorTy);
+    return SelVal;
+  }
+  llvm::StructType *emptyStruct = nullptr;
+
+  /// Return pointers to the start and end of a section.  On ELF platforms, we
+  /// use the __start_ and __stop_ symbols that GNU-compatible linkers will set
+  /// to the start and end of section names, as long as those section names are
+  /// valid identifiers and the symbols are referenced but not defined.  On
+  /// Windows, we use the fact that MSVC-compatible linkers will lexically sort
+  /// by subsections and place everything that we want to reference in a middle
+  /// subsection and then insert zero-sized symbols in subsections a and z.
+  std::pair<llvm::Constant*,llvm::Constant*>
+  GetSectionBounds(StringRef Section) {
+    if (CGM.getTriple().isOSBinFormatCOFF()) {
+      if (emptyStruct == nullptr) {
+        emptyStruct = llvm::StructType::create(VMContext, ".objc_section_sentinel");
+        emptyStruct->setBody({}, /*isPacked*/true);
+      }
+      auto ZeroInit = llvm::Constant::getNullValue(emptyStruct);
+      auto Sym = [&](StringRef Prefix, StringRef SecSuffix) {
+        auto *Sym = new llvm::GlobalVariable(TheModule, emptyStruct,
+            /*isConstant*/false,
+            llvm::GlobalValue::LinkOnceODRLinkage, ZeroInit, Prefix +
+            Section);
+        Sym->setVisibility(llvm::GlobalValue::HiddenVisibility);
+        Sym->setSection((Section + SecSuffix).str());
+        Sym->setComdat(TheModule.getOrInsertComdat((Prefix +
+            Section).str()));
+        Sym->setAlignment(CGM.getPointerAlign().getAsAlign());
+        return Sym;
+      };
+      return { Sym("__start_", "$a"), Sym("__stop", "$z") };
+    }
+    auto *Start = new llvm::GlobalVariable(TheModule, PtrTy,
+        /*isConstant*/false,
+        llvm::GlobalValue::ExternalLinkage, nullptr, StringRef("__start_") +
+        Section);
+    Start->setVisibility(llvm::GlobalValue::HiddenVisibility);
+    auto *Stop = new llvm::GlobalVariable(TheModule, PtrTy,
+        /*isConstant*/false,
+        llvm::GlobalValue::ExternalLinkage, nullptr, StringRef("__stop_") +
+        Section);
+    Stop->setVisibility(llvm::GlobalValue::HiddenVisibility);
+    return { Start, Stop };
+  }
+  CatchTypeInfo getCatchAllTypeInfo() override {
+    return CGM.getCXXABI().getCatchAllTypeInfo();
+  }
+  llvm::Function *ModuleInitFunction() override {
+    llvm::Function *LoadFunction = llvm::Function::Create(
+      llvm::FunctionType::get(llvm::Type::getVoidTy(VMContext), false),
+      llvm::GlobalValue::LinkOnceODRLinkage, ".objcv2_load_function",
+      &TheModule);
+    LoadFunction->setVisibility(llvm::GlobalValue::HiddenVisibility);
+    LoadFunction->setComdat(TheModule.getOrInsertComdat(".objcv2_load_function"));
+
+    llvm::BasicBlock *EntryBB =
+        llvm::BasicBlock::Create(VMContext, "entry", LoadFunction);
+    CGBuilderTy B(CGM, VMContext);
+    B.SetInsertPoint(EntryBB);
+    ConstantInitBuilder builder(CGM);
+    auto InitStructBuilder = builder.beginStruct();
+    InitStructBuilder.addInt(Int64Ty, 0);
+    auto &sectionVec = CGM.getTriple().isOSBinFormatCOFF() ? PECOFFSectionsBaseNames : SectionsBaseNames;
+    for (auto *s : sectionVec) {
+      auto bounds = GetSectionBounds(s);
+      InitStructBuilder.add(bounds.first);
+      InitStructBuilder.add(bounds.second);
+    }
+    auto *InitStruct = InitStructBuilder.finishAndCreateGlobal(".objc_init",
+        CGM.getPointerAlign(), false, llvm::GlobalValue::LinkOnceODRLinkage);
+    InitStruct->setVisibility(llvm::GlobalValue::HiddenVisibility);
+    InitStruct->setComdat(TheModule.getOrInsertComdat(".objc_init"));
+
+    CallRuntimeFunction(B, "__objc_load", {InitStruct});;
+    B.CreateRetVoid();
+    // Make sure that the optimisers don't delete this function.
+    CGM.addCompilerUsedGlobal(LoadFunction);
+    // FIXME: Currently ELF only!
+    // We have to do this by hand, rather than with @llvm.ctors, so that the
+    // linker can remove the duplicate invocations.
+    auto *InitVar = new llvm::GlobalVariable(TheModule, LoadFunction->getType(),
+        /*isConstant*/true, llvm::GlobalValue::LinkOnceAnyLinkage,
+        LoadFunction, ".objc_ctor");
+    // Check that this hasn't been renamed.  This shouldn't happen, because
+    // this function should be called precisely once.
+    assert(InitVar->getName() == ".objc_ctor");
+    // In Windows, initialisers are sorted by the suffix.  XCL is for library
+    // initialisers, which run before user initialisers.  We are running
+    // Objective-C loads at the end of library load.  This means +load methods
+    // will run before any other static constructors, but that static
+    // constructors can see a fully initialised Objective-C state.
+    if (CGM.getTriple().isOSBinFormatCOFF())
+        InitVar->setSection(".CRT$XCLz");
+    else
+    {
+      if (CGM.getCodeGenOpts().UseInitArray)
+        InitVar->setSection(".init_array");
+      else
+        InitVar->setSection(".ctors");
+    }
+    InitVar->setVisibility(llvm::GlobalValue::HiddenVisibility);
+    InitVar->setComdat(TheModule.getOrInsertComdat(".objc_ctor"));
+    CGM.addUsedGlobal(InitVar);
+    for (auto *C : Categories) {
+      auto *Cat = cast<llvm::GlobalVariable>(C->stripPointerCasts());
+      Cat->setSection(sectionName<CategorySection>());
+      CGM.addUsedGlobal(Cat);
+    }
+    auto createNullGlobal = [&](StringRef Name, ArrayRef<llvm::Constant*> Init,
+        StringRef Section) {
+      auto nullBuilder = builder.beginStruct();
+      for (auto *F : Init)
+        nullBuilder.add(F);
+      auto GV = nullBuilder.finishAndCreateGlobal(Name, CGM.getPointerAlign(),
+          false, llvm::GlobalValue::LinkOnceODRLinkage);
+      GV->setSection(Section);
+      GV->setComdat(TheModule.getOrInsertComdat(Name));
+      GV->setVisibility(llvm::GlobalValue::HiddenVisibility);
+      CGM.addUsedGlobal(GV);
+      return GV;
+    };
+    for (auto clsAlias : ClassAliases)
+      createNullGlobal(std::string(".objc_class_alias") +
+          clsAlias.second, { MakeConstantString(clsAlias.second),
+          GetClassVar(clsAlias.first) }, sectionName<ClassAliasSection>());
+    // On ELF platforms, add a null value for each special section so that we
+    // can always guarantee that the _start and _stop symbols will exist and be
+    // meaningful.  This is not required on COFF platforms, where our start and
+    // stop symbols will create the section.
+    if (!CGM.getTriple().isOSBinFormatCOFF()) {
+      createNullGlobal(".objc_null_selector", {NULLPtr, NULLPtr},
+          sectionName<SelectorSection>());
+      if (Categories.empty())
+        createNullGlobal(".objc_null_category", {NULLPtr, NULLPtr,
+                      NULLPtr, NULLPtr, NULLPtr, NULLPtr, NULLPtr},
+            sectionName<CategorySection>());
+      if (!EmittedClass) {
+        createNullGlobal(".objc_null_cls_init_ref", NULLPtr,
+            sectionName<ClassSection>());
+        createNullGlobal(".objc_null_class_ref", { NULLPtr, NULLPtr },
+            sectionName<ClassReferenceSection>());
+      }
+      if (!EmittedProtocol)
+        createNullGlobal(".objc_null_protocol", {NULLPtr, NULLPtr, NULLPtr,
+            NULLPtr, NULLPtr, NULLPtr, NULLPtr, NULLPtr, NULLPtr, NULLPtr,
+            NULLPtr}, sectionName<ProtocolSection>());
+      if (!EmittedProtocolRef)
+        createNullGlobal(".objc_null_protocol_ref", {NULLPtr},
+            sectionName<ProtocolReferenceSection>());
+      if (ClassAliases.empty())
+        createNullGlobal(".objc_null_class_alias", { NULLPtr, NULLPtr },
+            sectionName<ClassAliasSection>());
+      if (ConstantStrings.empty()) {
+        auto i32Zero = llvm::ConstantInt::get(Int32Ty, 0);
+        createNullGlobal(".objc_null_constant_string", { NULLPtr, i32Zero,
+            i32Zero, i32Zero, i32Zero, NULLPtr },
+            sectionName<ConstantStringSection>());
+      }
+    }
+    ConstantStrings.clear();
+    Categories.clear();
+    Classes.clear();
+
+    if (EarlyInitList.size() > 0) {
+      auto *Init = llvm::Function::Create(llvm::FunctionType::get(CGM.VoidTy,
+            {}), llvm::GlobalValue::InternalLinkage, ".objc_early_init",
+          &CGM.getModule());
+      llvm::IRBuilder<> b(llvm::BasicBlock::Create(CGM.getLLVMContext(), "entry",
+            Init));
+      for (const auto &lateInit : EarlyInitList) {
+        auto *global = TheModule.getGlobalVariable(lateInit.first);
+        if (global) {
+          b.CreateAlignedStore(global,
+              b.CreateStructGEP(lateInit.second.first, lateInit.second.second), CGM.getPointerAlign().getQuantity());
+        }
+      }
+      b.CreateRetVoid();
+      // We can't use the normal LLVM global initialisation array, because we
+      // need to specify that this runs early in library initialisation.
+      auto *InitVar = new llvm::GlobalVariable(CGM.getModule(), Init->getType(), 
+          /*isConstant*/true, llvm::GlobalValue::InternalLinkage,
+          Init, ".objc_early_init_ptr");
+      InitVar->setSection(".CRT$XCLb");
+      CGM.addUsedGlobal(InitVar);
+    }
+    return nullptr;
+  }
+  /// In the v2 ABI, ivar offset variables use the type encoding in their name
+  /// to trigger linker failures if the types don't match.
+  std::string GetIVarOffsetVariableName(const ObjCInterfaceDecl *ID,
+                                        const ObjCIvarDecl *Ivar) override {
+    std::string TypeEncoding;
+    CGM.getContext().getObjCEncodingForType(Ivar->getType(), TypeEncoding);
+    // Prevent the @ from being interpreted as a symbol version.
+    std::replace(TypeEncoding.begin(), TypeEncoding.end(),
+      '@', '\1');
+    const std::string Name = "__objc_ivar_offset_" + ID->getNameAsString()
+      + '.' + Ivar->getNameAsString() + '.' + TypeEncoding;
+    return Name;
+  }
+  llvm::Value *EmitIvarOffset(CodeGenFunction &CGF,
+                              const ObjCInterfaceDecl *Interface,
+                              const ObjCIvarDecl *Ivar) override {
+    const std::string Name = GetIVarOffsetVariableName(Ivar->getContainingInterface(), Ivar);
+    llvm::GlobalVariable *IvarOffsetPointer = TheModule.getNamedGlobal(Name);
+    if (!IvarOffsetPointer)
+      IvarOffsetPointer = new llvm::GlobalVariable(TheModule, IntTy, false,
+              llvm::GlobalValue::ExternalLinkage, nullptr, Name);
+    CharUnits Align = CGM.getIntAlign();
+    llvm::Value *Offset = CGF.Builder.CreateAlignedLoad(IvarOffsetPointer, Align);
+    if (Offset->getType() != PtrDiffTy)
+      Offset = CGF.Builder.CreateZExtOrBitCast(Offset, PtrDiffTy);
+    return Offset;
+  }
+  void GenerateClass(const ObjCImplementationDecl *OID) override {
+    ASTContext &Context = CGM.getContext();
+    bool IsCOFF = CGM.getTriple().isOSBinFormatCOFF();
+
+    // Get the class name
+    ObjCInterfaceDecl *classDecl =
+        const_cast<ObjCInterfaceDecl *>(OID->getClassInterface());
+    std::string className = classDecl->getNameAsString();
+    auto *classNameConstant = MakeConstantString(className);
+
+    ConstantInitBuilder builder(CGM);
+    auto metaclassFields = builder.beginStruct();
+    // struct objc_class *isa;
+    metaclassFields.addNullPointer(PtrTy);
+    // struct objc_class *super_class;
+    metaclassFields.addNullPointer(PtrTy);
+    // const char *name;
+    metaclassFields.add(classNameConstant);
+    // long version;
+    metaclassFields.addInt(LongTy, 0);
+    // unsigned long info;
+    // objc_class_flag_meta
+    metaclassFields.addInt(LongTy, 1);
+    // long instance_size;
+    // Setting this to zero is consistent with the older ABI, but it might be
+    // more sensible to set this to sizeof(struct objc_class)
+    metaclassFields.addInt(LongTy, 0);
+    // struct objc_ivar_list *ivars;
+    metaclassFields.addNullPointer(PtrTy);
+    // struct objc_method_list *methods
+    // FIXME: Almost identical code is copied and pasted below for the
+    // class, but refactoring it cleanly requires C++14 generic lambdas.
+    if (OID->classmeth_begin() == OID->classmeth_end())
+      metaclassFields.addNullPointer(PtrTy);
+    else {
+      SmallVector<ObjCMethodDecl*, 16> ClassMethods;
+      ClassMethods.insert(ClassMethods.begin(), OID->classmeth_begin(),
+          OID->classmeth_end());
+      metaclassFields.addBitCast(
+              GenerateMethodList(className, "", ClassMethods, true),
+              PtrTy);
+    }
+    // void *dtable;
+    metaclassFields.addNullPointer(PtrTy);
+    // IMP cxx_construct;
+    metaclassFields.addNullPointer(PtrTy);
+    // IMP cxx_destruct;
+    metaclassFields.addNullPointer(PtrTy);
+    // struct objc_class *subclass_list
+    metaclassFields.addNullPointer(PtrTy);
+    // struct objc_class *sibling_class
+    metaclassFields.addNullPointer(PtrTy);
+    // struct objc_protocol_list *protocols;
+    metaclassFields.addNullPointer(PtrTy);
+    // struct reference_list *extra_data;
+    metaclassFields.addNullPointer(PtrTy);
+    // long abi_version;
+    metaclassFields.addInt(LongTy, 0);
+    // struct objc_property_list *properties
+    metaclassFields.add(GeneratePropertyList(OID, classDecl, /*isClassProperty*/true));
+
+    auto *metaclass = metaclassFields.finishAndCreateGlobal(
+        ManglePublicSymbol("OBJC_METACLASS_") + className,
+        CGM.getPointerAlign());
+
+    auto classFields = builder.beginStruct();
+    // struct objc_class *isa;
+    classFields.add(metaclass);
+    // struct objc_class *super_class;
+    // Get the superclass name.
+    const ObjCInterfaceDecl * SuperClassDecl =
+      OID->getClassInterface()->getSuperClass();
+    llvm::Constant *SuperClass = nullptr;
+    if (SuperClassDecl) {
+      auto SuperClassName = SymbolForClass(SuperClassDecl->getNameAsString());
+      SuperClass = TheModule.getNamedGlobal(SuperClassName);
+      if (!SuperClass)
+      {
+        SuperClass = new llvm::GlobalVariable(TheModule, PtrTy, false,
+            llvm::GlobalValue::ExternalLinkage, nullptr, SuperClassName);
+        if (IsCOFF) {
+          auto Storage = llvm::GlobalValue::DefaultStorageClass;
+          if (SuperClassDecl->hasAttr<DLLImportAttr>())
+            Storage = llvm::GlobalValue::DLLImportStorageClass;
+          else if (SuperClassDecl->hasAttr<DLLExportAttr>())
+            Storage = llvm::GlobalValue::DLLExportStorageClass;
+
+          cast<llvm::GlobalValue>(SuperClass)->setDLLStorageClass(Storage);
+        }
+      }
+      if (!IsCOFF)
+        classFields.add(llvm::ConstantExpr::getBitCast(SuperClass, PtrTy));
+      else
+        classFields.addNullPointer(PtrTy);
+    } else
+      classFields.addNullPointer(PtrTy);
+    // const char *name;
+    classFields.add(classNameConstant);
+    // long version;
+    classFields.addInt(LongTy, 0);
+    // unsigned long info;
+    // !objc_class_flag_meta
+    classFields.addInt(LongTy, 0);
+    // long instance_size;
+    int superInstanceSize = !SuperClassDecl ? 0 :
+      Context.getASTObjCInterfaceLayout(SuperClassDecl).getSize().getQuantity();
+    // Instance size is negative for classes that have not yet had their ivar
+    // layout calculated.
+    classFields.addInt(LongTy,
+      0 - (Context.getASTObjCImplementationLayout(OID).getSize().getQuantity() -
+      superInstanceSize));
+
+    if (classDecl->all_declared_ivar_begin() == nullptr)
+      classFields.addNullPointer(PtrTy);
+    else {
+      int ivar_count = 0;
+      for (const ObjCIvarDecl *IVD = classDecl->all_declared_ivar_begin(); IVD;
+           IVD = IVD->getNextIvar()) ivar_count++;
+      llvm::DataLayout td(&TheModule);
+      // struct objc_ivar_list *ivars;
+      ConstantInitBuilder b(CGM);
+      auto ivarListBuilder = b.beginStruct();
+      // int count;
+      ivarListBuilder.addInt(IntTy, ivar_count);
+      // size_t size;
+      llvm::StructType *ObjCIvarTy = llvm::StructType::get(
+        PtrToInt8Ty,
+        PtrToInt8Ty,
+        PtrToInt8Ty,
+        Int32Ty,
+        Int32Ty);
+      ivarListBuilder.addInt(SizeTy, td.getTypeSizeInBits(ObjCIvarTy) /
+          CGM.getContext().getCharWidth());
+      // struct objc_ivar ivars[]
+      auto ivarArrayBuilder = ivarListBuilder.beginArray();
+      for (const ObjCIvarDecl *IVD = classDecl->all_declared_ivar_begin(); IVD;
+           IVD = IVD->getNextIvar()) {
+        auto ivarTy = IVD->getType();
+        auto ivarBuilder = ivarArrayBuilder.beginStruct();
+        // const char *name;
+        ivarBuilder.add(MakeConstantString(IVD->getNameAsString()));
+        // const char *type;
+        std::string TypeStr;
+        //Context.getObjCEncodingForType(ivarTy, TypeStr, IVD, true);
+        Context.getObjCEncodingForMethodParameter(Decl::OBJC_TQ_None, ivarTy, TypeStr, true);
+        ivarBuilder.add(MakeConstantString(TypeStr));
+        // int *offset;
+        uint64_t BaseOffset = ComputeIvarBaseOffset(CGM, OID, IVD);
+        uint64_t Offset = BaseOffset - superInstanceSize;
+        llvm::Constant *OffsetValue = llvm::ConstantInt::get(IntTy, Offset);
+        std::string OffsetName = GetIVarOffsetVariableName(classDecl, IVD);
+        llvm::GlobalVariable *OffsetVar = TheModule.getGlobalVariable(OffsetName);
+        if (OffsetVar)
+          OffsetVar->setInitializer(OffsetValue);
+        else
+          OffsetVar = new llvm::GlobalVariable(TheModule, IntTy,
+            false, llvm::GlobalValue::ExternalLinkage,
+            OffsetValue, OffsetName);
+        auto ivarVisibility =
+            (IVD->getAccessControl() == ObjCIvarDecl::Private ||
+             IVD->getAccessControl() == ObjCIvarDecl::Package ||
+             classDecl->getVisibility() == HiddenVisibility) ?
+                    llvm::GlobalValue::HiddenVisibility :
+                    llvm::GlobalValue::DefaultVisibility;
+        OffsetVar->setVisibility(ivarVisibility);
+        ivarBuilder.add(OffsetVar);
+        // Ivar size
+        ivarBuilder.addInt(Int32Ty,
+            CGM.getContext().getTypeSizeInChars(ivarTy).getQuantity());
+        // Alignment will be stored as a base-2 log of the alignment.
+        unsigned align =
+            llvm::Log2_32(Context.getTypeAlignInChars(ivarTy).getQuantity());
+        // Objects that require more than 2^64-byte alignment should be impossible!
+        assert(align < 64);
+        // uint32_t flags;
+        // Bits 0-1 are ownership.
+        // Bit 2 indicates an extended type encoding
+        // Bits 3-8 contain log2(aligment)
+        ivarBuilder.addInt(Int32Ty,
+            (align << 3) | (1<<2) |
+            FlagsForOwnership(ivarTy.getQualifiers().getObjCLifetime()));
+        ivarBuilder.finishAndAddTo(ivarArrayBuilder);
+      }
+      ivarArrayBuilder.finishAndAddTo(ivarListBuilder);
+      auto ivarList = ivarListBuilder.finishAndCreateGlobal(".objc_ivar_list",
+          CGM.getPointerAlign(), /*constant*/ false,
+          llvm::GlobalValue::PrivateLinkage);
+      classFields.add(ivarList);
+    }
+    // struct objc_method_list *methods
+    SmallVector<const ObjCMethodDecl*, 16> InstanceMethods;
+    InstanceMethods.insert(InstanceMethods.begin(), OID->instmeth_begin(),
+        OID->instmeth_end());
+    for (auto *propImpl : OID->property_impls())
+      if (propImpl->getPropertyImplementation() ==
+          ObjCPropertyImplDecl::Synthesize) {
+        auto addIfExists = [&](const ObjCMethodDecl *OMD) {
+          if (OMD && OMD->hasBody())
+            InstanceMethods.push_back(OMD);
+        };
+        addIfExists(propImpl->getGetterMethodDecl());
+        addIfExists(propImpl->getSetterMethodDecl());
+      }
+
+    if (InstanceMethods.size() == 0)
+      classFields.addNullPointer(PtrTy);
+    else
+      classFields.addBitCast(
+              GenerateMethodList(className, "", InstanceMethods, false),
+              PtrTy);
+    // void *dtable;
+    classFields.addNullPointer(PtrTy);
+    // IMP cxx_construct;
+    classFields.addNullPointer(PtrTy);
+    // IMP cxx_destruct;
+    classFields.addNullPointer(PtrTy);
+    // struct objc_class *subclass_list
+    classFields.addNullPointer(PtrTy);
+    // struct objc_class *sibling_class
+    classFields.addNullPointer(PtrTy);
+    // struct objc_protocol_list *protocols;
+    SmallVector<llvm::Constant*, 16> Protocols;
+    for (const auto *I : classDecl->protocols())
+      Protocols.push_back(
+          llvm::ConstantExpr::getBitCast(GenerateProtocolRef(I),
+            ProtocolPtrTy));
+    if (Protocols.empty())
+      classFields.addNullPointer(PtrTy);
+    else
+      classFields.add(GenerateProtocolList(Protocols));
+    // struct reference_list *extra_data;
+    classFields.addNullPointer(PtrTy);
+    // long abi_version;
+    classFields.addInt(LongTy, 0);
+    // struct objc_property_list *properties
+    classFields.add(GeneratePropertyList(OID, classDecl));
+
+    auto *classStruct =
+      classFields.finishAndCreateGlobal(SymbolForClass(className),
+        CGM.getPointerAlign(), false, llvm::GlobalValue::ExternalLinkage);
+
+    auto *classRefSymbol = GetClassVar(className);
+    classRefSymbol->setSection(sectionName<ClassReferenceSection>());
+    classRefSymbol->setInitializer(llvm::ConstantExpr::getBitCast(classStruct, IdTy));
+
+    if (IsCOFF) {
+      // we can't import a class struct.
+      if (OID->getClassInterface()->hasAttr<DLLExportAttr>()) {
+        cast<llvm::GlobalValue>(classStruct)->setDLLStorageClass(llvm::GlobalValue::DLLExportStorageClass);
+        cast<llvm::GlobalValue>(classRefSymbol)->setDLLStorageClass(llvm::GlobalValue::DLLExportStorageClass);
+      }
+
+      if (SuperClass) {
+        std::pair<llvm::Constant*, int> v{classStruct, 1};
+        EarlyInitList.emplace_back(SuperClass->getName(), std::move(v));
+      }
+
+    }
+
+
+    // Resolve the class aliases, if they exist.
+    // FIXME: Class pointer aliases shouldn't exist!
+    if (ClassPtrAlias) {
+      ClassPtrAlias->replaceAllUsesWith(
+          llvm::ConstantExpr::getBitCast(classStruct, IdTy));
+      ClassPtrAlias->eraseFromParent();
+      ClassPtrAlias = nullptr;
+    }
+    if (auto Placeholder =
+        TheModule.getNamedGlobal(SymbolForClass(className)))
+      if (Placeholder != classStruct) {
+        Placeholder->replaceAllUsesWith(
+            llvm::ConstantExpr::getBitCast(classStruct, Placeholder->getType()));
+        Placeholder->eraseFromParent();
+        classStruct->setName(SymbolForClass(className));
+      }
+    if (MetaClassPtrAlias) {
+      MetaClassPtrAlias->replaceAllUsesWith(
+          llvm::ConstantExpr::getBitCast(metaclass, IdTy));
+      MetaClassPtrAlias->eraseFromParent();
+      MetaClassPtrAlias = nullptr;
+    }
+    assert(classStruct->getName() == SymbolForClass(className));
+
+    auto classInitRef = new llvm::GlobalVariable(TheModule,
+        classStruct->getType(), false, llvm::GlobalValue::ExternalLinkage,
+        classStruct, ManglePublicSymbol("OBJC_INIT_CLASS_") + className);
+    classInitRef->setSection(sectionName<ClassSection>());
+    CGM.addUsedGlobal(classInitRef);
+
+    EmittedClass = true;
+  }
+  public:
+    CGObjCGNUstep2(CodeGenModule &Mod) : CGObjCGNUstep(Mod, 10, 4, 2) {
+      MsgLookupSuperFn.init(&CGM, "objc_msg_lookup_super", IMPTy,
+                            PtrToObjCSuperTy, SelectorTy);
+      // struct objc_property
+      // {
+      //   const char *name;
+      //   const char *attributes;
+      //   const char *type;
+      //   SEL getter;
+      //   SEL setter;
+      // }
+      PropertyMetadataTy =
+        llvm::StructType::get(CGM.getLLVMContext(),
+            { PtrToInt8Ty, PtrToInt8Ty, PtrToInt8Ty, PtrToInt8Ty, PtrToInt8Ty });
+    }
+
+};
+
+const char *const CGObjCGNUstep2::SectionsBaseNames[8] =
+{
+"__objc_selectors",
+"__objc_classes",
+"__objc_class_refs",
+"__objc_cats",
+"__objc_protocols",
+"__objc_protocol_refs",
+"__objc_class_aliases",
+"__objc_constant_string"
+};
+
+const char *const CGObjCGNUstep2::PECOFFSectionsBaseNames[8] =
+{
+".objcrt$SEL",
+".objcrt$CLS",
+".objcrt$CLR",
+".objcrt$CAT",
+".objcrt$PCL",
+".objcrt$PCR",
+".objcrt$CAL",
+".objcrt$STR"
+};
+
+/// Support for the ObjFW runtime.
+class CGObjCObjFW: public CGObjCGNU {
+protected:
+  /// The GCC ABI message lookup function.  Returns an IMP pointing to the
+  /// method implementation for this message.
+  LazyRuntimeFunction MsgLookupFn;
+  /// stret lookup function.  While this does not seem to make sense at the
+  /// first look, this is required to call the correct forwarding function.
+  LazyRuntimeFunction MsgLookupFnSRet;
+  /// The GCC ABI superclass message lookup function.  Takes a pointer to a
+  /// structure describing the receiver and the class, and a selector as
+  /// arguments.  Returns the IMP for the corresponding method.
+  LazyRuntimeFunction MsgLookupSuperFn, MsgLookupSuperFnSRet;
+
+  llvm::Value *LookupIMP(CodeGenFunction &CGF, llvm::Value *&Receiver,
+                         llvm::Value *cmd, llvm::MDNode *node,
+                         MessageSendInfo &MSI) override {
+    CGBuilderTy &Builder = CGF.Builder;
+    llvm::Value *args[] = {
+            EnforceType(Builder, Receiver, IdTy),
+            EnforceType(Builder, cmd, SelectorTy) };
+
+    llvm::CallBase *imp;
+    if (CGM.ReturnTypeUsesSRet(MSI.CallInfo))
+      imp = CGF.EmitRuntimeCallOrInvoke(MsgLookupFnSRet, args);
+    else
+      imp = CGF.EmitRuntimeCallOrInvoke(MsgLookupFn, args);
+
+    imp->setMetadata(msgSendMDKind, node);
+    return imp;
+  }
+
+  llvm::Value *LookupIMPSuper(CodeGenFunction &CGF, Address ObjCSuper,
+                              llvm::Value *cmd, MessageSendInfo &MSI) override {
+    CGBuilderTy &Builder = CGF.Builder;
+    llvm::Value *lookupArgs[] = {
+        EnforceType(Builder, ObjCSuper.getPointer(), PtrToObjCSuperTy), cmd,
+    };
+
+    if (CGM.ReturnTypeUsesSRet(MSI.CallInfo))
+      return CGF.EmitNounwindRuntimeCall(MsgLookupSuperFnSRet, lookupArgs);
+    else
+      return CGF.EmitNounwindRuntimeCall(MsgLookupSuperFn, lookupArgs);
+  }
+
+  llvm::Value *GetClassNamed(CodeGenFunction &CGF, const std::string &Name,
+                             bool isWeak) override {
+    if (isWeak)
+      return CGObjCGNU::GetClassNamed(CGF, Name, isWeak);
+
+    EmitClassRef(Name);
+    std::string SymbolName = "_OBJC_CLASS_" + Name;
+    llvm::GlobalVariable *ClassSymbol = TheModule.getGlobalVariable(SymbolName);
+    if (!ClassSymbol)
+      ClassSymbol = new llvm::GlobalVariable(TheModule, LongTy, false,
+                                             llvm::GlobalValue::ExternalLinkage,
+                                             nullptr, SymbolName);
+    return ClassSymbol;
+  }
+
+public:
+  CGObjCObjFW(CodeGenModule &Mod): CGObjCGNU(Mod, 9, 3) {
+    // IMP objc_msg_lookup(id, SEL);
+    MsgLookupFn.init(&CGM, "objc_msg_lookup", IMPTy, IdTy, SelectorTy);
+    MsgLookupFnSRet.init(&CGM, "objc_msg_lookup_stret", IMPTy, IdTy,
+                         SelectorTy);
+    // IMP objc_msg_lookup_super(struct objc_super*, SEL);
+    MsgLookupSuperFn.init(&CGM, "objc_msg_lookup_super", IMPTy,
+                          PtrToObjCSuperTy, SelectorTy);
+    MsgLookupSuperFnSRet.init(&CGM, "objc_msg_lookup_super_stret", IMPTy,
+                              PtrToObjCSuperTy, SelectorTy);
+  }
+};
+} // end anonymous namespace
 
 /// Emits a reference to a dummy variable which is emitted with each class.
 /// This ensures that a linker error will be generated when trying to link
@@ -668,29 +2111,23 @@ void CGObjCGNU::EmitClassRef(const std::string &className) {
   llvm::GlobalVariable *ClassSymbol = TheModule.getGlobalVariable(symbolName);
   if (!ClassSymbol) {
     ClassSymbol = new llvm::GlobalVariable(TheModule, LongTy, false,
-        llvm::GlobalValue::ExternalLinkage, 0, symbolName);
+                                           llvm::GlobalValue::ExternalLinkage,
+                                           nullptr, symbolName);
   }
   new llvm::GlobalVariable(TheModule, ClassSymbol->getType(), true,
     llvm::GlobalValue::WeakAnyLinkage, ClassSymbol, symbolRef);
 }
 
-static std::string SymbolNameForMethod(const StringRef &ClassName,
-    const StringRef &CategoryName, const Selector MethodName,
-    bool isClassMethod) {
-  std::string MethodNameColonStripped = MethodName.getAsString();
-  std::replace(MethodNameColonStripped.begin(), MethodNameColonStripped.end(),
-      ':', '_');
-  return (Twine(isClassMethod ? "_c_" : "_i_") + ClassName + "_" +
-    CategoryName + "_" + MethodNameColonStripped).str();
-}
-
 CGObjCGNU::CGObjCGNU(CodeGenModule &cgm, unsigned runtimeABIVersion,
-    unsigned protocolClassVersion)
+                     unsigned protocolClassVersion, unsigned classABI)
   : CGObjCRuntime(cgm), TheModule(CGM.getModule()),
-    VMContext(cgm.getLLVMContext()), ClassPtrAlias(0), MetaClassPtrAlias(0),
-    RuntimeVersion(runtimeABIVersion), ProtocolVersion(protocolClassVersion) {
+    VMContext(cgm.getLLVMContext()), ClassPtrAlias(nullptr),
+    MetaClassPtrAlias(nullptr), RuntimeVersion(runtimeABIVersion),
+    ProtocolVersion(protocolClassVersion), ClassABIVersion(classABI) {
 
   msgSendMDKind = VMContext.getMDKindID("GNUObjCMessageSend");
+  usesSEHExceptions =
+      cgm.getContext().getTargetInfo().getTriple().isWindowsMSVCEnvironment();
 
   CodeGenTypes &Types = CGM.getTypes();
   IntTy = cast<llvm::IntegerType>(
@@ -706,6 +2143,8 @@ CGObjCGNU::CGObjCGNU(CodeGenModule &cgm, unsigned runtimeABIVersion,
   Int8Ty = llvm::Type::getInt8Ty(VMContext);
   // C string type.  Used in lots of places.
   PtrToInt8Ty = llvm::PointerType::getUnqual(Int8Ty);
+  ProtocolPtrTy = llvm::PointerType::getUnqual(
+      Types.ConvertType(CGM.getContext().getObjCProtoType()));
 
   Zeros[0] = llvm::ConstantInt::get(LongTy, 0);
   Zeros[1] = Zeros[0];
@@ -725,7 +2164,7 @@ CGObjCGNU::CGObjCGNU(CodeGenModule &cgm, unsigned runtimeABIVersion,
   Int64Ty = llvm::Type::getInt64Ty(VMContext);
 
   IntPtrTy =
-      TheModule.getPointerSize() == llvm::Module::Pointer32 ? Int32Ty : Int64Ty;
+      CGM.getDataLayout().getPointerSizeInBits() == 32 ? Int32Ty : Int64Ty;
 
   // Object type
   QualType UnqualIdTy = CGM.getContext().getObjCIdType();
@@ -737,36 +2176,60 @@ CGObjCGNU::CGObjCGNU(CodeGenModule &cgm, unsigned runtimeABIVersion,
     IdTy = PtrToInt8Ty;
   }
   PtrToIdTy = llvm::PointerType::getUnqual(IdTy);
+  ProtocolTy = llvm::StructType::get(IdTy,
+      PtrToInt8Ty, // name
+      PtrToInt8Ty, // protocols
+      PtrToInt8Ty, // instance methods
+      PtrToInt8Ty, // class methods
+      PtrToInt8Ty, // optional instance methods
+      PtrToInt8Ty, // optional class methods
+      PtrToInt8Ty, // properties
+      PtrToInt8Ty);// optional properties
 
-  ObjCSuperTy = llvm::StructType::get(IdTy, IdTy, NULL);
+  // struct objc_property_gsv1
+  // {
+  //   const char *name;
+  //   char attributes;
+  //   char attributes2;
+  //   char unused1;
+  //   char unused2;
+  //   const char *getter_name;
+  //   const char *getter_types;
+  //   const char *setter_name;
+  //   const char *setter_types;
+  // }
+  PropertyMetadataTy = llvm::StructType::get(CGM.getLLVMContext(), {
+      PtrToInt8Ty, Int8Ty, Int8Ty, Int8Ty, Int8Ty, PtrToInt8Ty, PtrToInt8Ty,
+      PtrToInt8Ty, PtrToInt8Ty });
+
+  ObjCSuperTy = llvm::StructType::get(IdTy, IdTy);
   PtrToObjCSuperTy = llvm::PointerType::getUnqual(ObjCSuperTy);
 
   llvm::Type *VoidTy = llvm::Type::getVoidTy(VMContext);
 
   // void objc_exception_throw(id);
-  ExceptionThrowFn.init(&CGM, "objc_exception_throw", VoidTy, IdTy, NULL);
-  ExceptionReThrowFn.init(&CGM, "objc_exception_throw", VoidTy, IdTy, NULL);
+  ExceptionThrowFn.init(&CGM, "objc_exception_throw", VoidTy, IdTy);
+  ExceptionReThrowFn.init(&CGM, "objc_exception_throw", VoidTy, IdTy);
   // int objc_sync_enter(id);
-  SyncEnterFn.init(&CGM, "objc_sync_enter", IntTy, IdTy, NULL);
+  SyncEnterFn.init(&CGM, "objc_sync_enter", IntTy, IdTy);
   // int objc_sync_exit(id);
-  SyncExitFn.init(&CGM, "objc_sync_exit", IntTy, IdTy, NULL);
+  SyncExitFn.init(&CGM, "objc_sync_exit", IntTy, IdTy);
 
   // void objc_enumerationMutation (id)
-  EnumerationMutationFn.init(&CGM, "objc_enumerationMutation", VoidTy,
-      IdTy, NULL);
+  EnumerationMutationFn.init(&CGM, "objc_enumerationMutation", VoidTy, IdTy);
 
   // id objc_getProperty(id, SEL, ptrdiff_t, BOOL)
   GetPropertyFn.init(&CGM, "objc_getProperty", IdTy, IdTy, SelectorTy,
-      PtrDiffTy, BoolTy, NULL);
+                     PtrDiffTy, BoolTy);
   // void objc_setProperty(id, SEL, ptrdiff_t, id, BOOL, BOOL)
   SetPropertyFn.init(&CGM, "objc_setProperty", VoidTy, IdTy, SelectorTy,
-      PtrDiffTy, IdTy, BoolTy, BoolTy, NULL);
+                     PtrDiffTy, IdTy, BoolTy, BoolTy);
   // void objc_setPropertyStruct(void*, void*, ptrdiff_t, BOOL, BOOL)
-  GetStructPropertyFn.init(&CGM, "objc_getPropertyStruct", VoidTy, PtrTy, PtrTy, 
-      PtrDiffTy, BoolTy, BoolTy, NULL);
+  GetStructPropertyFn.init(&CGM, "objc_getPropertyStruct", VoidTy, PtrTy, PtrTy,
+                           PtrDiffTy, BoolTy, BoolTy);
   // void objc_setPropertyStruct(void*, void*, ptrdiff_t, BOOL, BOOL)
-  SetStructPropertyFn.init(&CGM, "objc_setPropertyStruct", VoidTy, PtrTy, PtrTy, 
-      PtrDiffTy, BoolTy, BoolTy, NULL);
+  SetStructPropertyFn.init(&CGM, "objc_setPropertyStruct", VoidTy, PtrTy, PtrTy,
+                           PtrDiffTy, BoolTy, BoolTy);
 
   // IMP type
   llvm::Type *IMPArgs[] = { IdTy, SelectorTy };
@@ -790,28 +2253,25 @@ CGObjCGNU::CGObjCGNU(CodeGenModule &cgm, unsigned runtimeABIVersion,
     // Get functions needed in GC mode
 
     // id objc_assign_ivar(id, id, ptrdiff_t);
-    IvarAssignFn.init(&CGM, "objc_assign_ivar", IdTy, IdTy, IdTy, PtrDiffTy,
-        NULL);
+    IvarAssignFn.init(&CGM, "objc_assign_ivar", IdTy, IdTy, IdTy, PtrDiffTy);
     // id objc_assign_strongCast (id, id*)
     StrongCastAssignFn.init(&CGM, "objc_assign_strongCast", IdTy, IdTy,
-        PtrToIdTy, NULL);
+                            PtrToIdTy);
     // id objc_assign_global(id, id*);
-    GlobalAssignFn.init(&CGM, "objc_assign_global", IdTy, IdTy, PtrToIdTy,
-        NULL);
+    GlobalAssignFn.init(&CGM, "objc_assign_global", IdTy, IdTy, PtrToIdTy);
     // id objc_assign_weak(id, id*);
-    WeakAssignFn.init(&CGM, "objc_assign_weak", IdTy, IdTy, PtrToIdTy, NULL);
+    WeakAssignFn.init(&CGM, "objc_assign_weak", IdTy, IdTy, PtrToIdTy);
     // id objc_read_weak(id*);
-    WeakReadFn.init(&CGM, "objc_read_weak", IdTy, PtrToIdTy, NULL);
+    WeakReadFn.init(&CGM, "objc_read_weak", IdTy, PtrToIdTy);
     // void *objc_memmove_collectable(void*, void *, size_t);
     MemMoveFn.init(&CGM, "objc_memmove_collectable", PtrTy, PtrTy, PtrTy,
-        SizeTy, NULL);
+                   SizeTy);
   }
 }
 
-llvm::Value *CGObjCGNU::GetClassNamed(CGBuilderTy &Builder,
-                                      const std::string &Name,
-                                      bool isWeak) {
-  llvm::Value *ClassName = CGM.GetAddrOfConstantCString(Name);
+llvm::Value *CGObjCGNU::GetClassNamed(CodeGenFunction &CGF,
+                                      const std::string &Name, bool isWeak) {
+  llvm::Constant *ClassName = MakeConstantString(Name);
   // With the incompatible ABI, this will need to be replaced with a direct
   // reference to the class symbol.  For the compatible nonfragile ABI we are
   // still performing this lookup at run time but emitting the symbol for the
@@ -821,30 +2281,46 @@ llvm::Value *CGObjCGNU::GetClassNamed(CGBuilderTy &Builder,
   // with memoized versions or with static references if it's safe to do so.
   if (!isWeak)
     EmitClassRef(Name);
-  ClassName = Builder.CreateStructGEP(ClassName, 0);
 
-  llvm::Constant *ClassLookupFn =
-    CGM.CreateRuntimeFunction(llvm::FunctionType::get(IdTy, PtrToInt8Ty, true),
-                              "objc_lookup_class");
-  return Builder.CreateCall(ClassLookupFn, ClassName);
+  llvm::FunctionCallee ClassLookupFn = CGM.CreateRuntimeFunction(
+      llvm::FunctionType::get(IdTy, PtrToInt8Ty, true), "objc_lookup_class");
+  return CGF.EmitNounwindRuntimeCall(ClassLookupFn, ClassName);
 }
 
 // This has to perform the lookup every time, since posing and related
 // techniques can modify the name -> class mapping.
-llvm::Value *CGObjCGNU::GetClass(CGBuilderTy &Builder,
+llvm::Value *CGObjCGNU::GetClass(CodeGenFunction &CGF,
                                  const ObjCInterfaceDecl *OID) {
-  return GetClassNamed(Builder, OID->getNameAsString(), OID->isWeakImported());
+  auto *Value =
+      GetClassNamed(CGF, OID->getNameAsString(), OID->isWeakImported());
+  if (auto *ClassSymbol = dyn_cast<llvm::GlobalVariable>(Value))
+    CGM.setGVProperties(ClassSymbol, OID);
+  return Value;
 }
-llvm::Value *CGObjCGNU::EmitNSAutoreleasePoolClassRef(CGBuilderTy &Builder) {
-  return GetClassNamed(Builder, "NSAutoreleasePool", false);
+
+llvm::Value *CGObjCGNU::EmitNSAutoreleasePoolClassRef(CodeGenFunction &CGF) {
+  auto *Value  = GetClassNamed(CGF, "NSAutoreleasePool", false);
+  if (CGM.getTriple().isOSBinFormatCOFF()) {
+    if (auto *ClassSymbol = dyn_cast<llvm::GlobalVariable>(Value)) {
+      IdentifierInfo &II = CGF.CGM.getContext().Idents.get("NSAutoreleasePool");
+      TranslationUnitDecl *TUDecl = CGM.getContext().getTranslationUnitDecl();
+      DeclContext *DC = TranslationUnitDecl::castToDeclContext(TUDecl);
+
+      const VarDecl *VD = nullptr;
+      for (const auto &Result : DC->lookup(&II))
+        if ((VD = dyn_cast<VarDecl>(Result)))
+          break;
+
+      CGM.setGVProperties(ClassSymbol, VD);
+    }
+  }
+  return Value;
 }
 
-llvm::Value *CGObjCGNU::GetSelector(CGBuilderTy &Builder, Selector Sel,
-    const std::string &TypeEncoding, bool lval) {
-
-  SmallVector<TypedSelector, 2> &Types = SelectorTable[Sel];
-  llvm::GlobalAlias *SelValue = 0;
-
+llvm::Value *CGObjCGNU::GetTypedSelector(CodeGenFunction &CGF, Selector Sel,
+                                         const std::string &TypeEncoding) {
+  SmallVectorImpl<TypedSelector> &Types = SelectorTable[Sel];
+  llvm::GlobalAlias *SelValue = nullptr;
 
   for (SmallVectorImpl<TypedSelector>::iterator i = Types.begin(),
       e = Types.end() ; i!=e ; i++) {
@@ -853,58 +2329,65 @@ llvm::Value *CGObjCGNU::GetSelector(CGBuilderTy &Builder, Selector Sel,
       break;
     }
   }
-  if (0 == SelValue) {
-    SelValue = new llvm::GlobalAlias(SelectorTy,
-                                     llvm::GlobalValue::PrivateLinkage,
-                                     ".objc_selector_"+Sel.getAsString(), NULL,
-                                     &TheModule);
-    Types.push_back(TypedSelector(TypeEncoding, SelValue));
+  if (!SelValue) {
+    SelValue = llvm::GlobalAlias::create(
+        SelectorTy->getElementType(), 0, llvm::GlobalValue::PrivateLinkage,
+        ".objc_selector_" + Sel.getAsString(), &TheModule);
+    Types.emplace_back(TypeEncoding, SelValue);
   }
 
-  if (lval) {
-    llvm::Value *tmp = Builder.CreateAlloca(SelValue->getType());
-    Builder.CreateStore(SelValue, tmp);
-    return tmp;
-  }
   return SelValue;
 }
 
-llvm::Value *CGObjCGNU::GetSelector(CGBuilderTy &Builder, Selector Sel,
-                                    bool lval) {
-  return GetSelector(Builder, Sel, std::string(), lval);
+Address CGObjCGNU::GetAddrOfSelector(CodeGenFunction &CGF, Selector Sel) {
+  llvm::Value *SelValue = GetSelector(CGF, Sel);
+
+  // Store it to a temporary.  Does this satisfy the semantics of
+  // GetAddrOfSelector?  Hopefully.
+  Address tmp = CGF.CreateTempAlloca(SelValue->getType(),
+                                     CGF.getPointerAlign());
+  CGF.Builder.CreateStore(SelValue, tmp);
+  return tmp;
 }
 
-llvm::Value *CGObjCGNU::GetSelector(CGBuilderTy &Builder, const ObjCMethodDecl
-    *Method) {
-  std::string SelTypes;
-  CGM.getContext().getObjCEncodingForMethodDecl(Method, SelTypes);
-  return GetSelector(Builder, Method->getSelector(), SelTypes, false);
+llvm::Value *CGObjCGNU::GetSelector(CodeGenFunction &CGF, Selector Sel) {
+  return GetTypedSelector(CGF, Sel, std::string());
+}
+
+llvm::Value *CGObjCGNU::GetSelector(CodeGenFunction &CGF,
+                                    const ObjCMethodDecl *Method) {
+  std::string SelTypes = CGM.getContext().getObjCEncodingForMethodDecl(Method);
+  return GetTypedSelector(CGF, Method->getSelector(), SelTypes);
 }
 
 llvm::Constant *CGObjCGNU::GetEHType(QualType T) {
-  if (!CGM.getLangOpts().CPlusPlus) {
-      if (T->isObjCIdType()
-          || T->isObjCQualifiedIdType()) {
-        // With the old ABI, there was only one kind of catchall, which broke
-        // foreign exceptions.  With the new ABI, we use __objc_id_typeinfo as
-        // a pointer indicating object catchalls, and NULL to indicate real
-        // catchalls
-        if (CGM.getLangOpts().ObjCNonFragileABI) {
-          return MakeConstantString("@id");
-        } else {
-          return 0;
-        }
-      }
-
-      // All other types should be Objective-C interface pointer types.
-      const ObjCObjectPointerType *OPT =
-        T->getAs<ObjCObjectPointerType>();
-      assert(OPT && "Invalid @catch type.");
-      const ObjCInterfaceDecl *IDecl =
-        OPT->getObjectType()->getInterface();
-      assert(IDecl && "Invalid @catch type.");
-      return MakeConstantString(IDecl->getIdentifier()->getName());
+  if (T->isObjCIdType() || T->isObjCQualifiedIdType()) {
+    // With the old ABI, there was only one kind of catchall, which broke
+    // foreign exceptions.  With the new ABI, we use __objc_id_typeinfo as
+    // a pointer indicating object catchalls, and NULL to indicate real
+    // catchalls
+    if (CGM.getLangOpts().ObjCRuntime.isNonFragile()) {
+      return MakeConstantString("@id");
+    } else {
+      return nullptr;
+    }
   }
+
+  // All other types should be Objective-C interface pointer types.
+  const ObjCObjectPointerType *OPT = T->getAs<ObjCObjectPointerType>();
+  assert(OPT && "Invalid @catch type.");
+  const ObjCInterfaceDecl *IDecl = OPT->getObjectType()->getInterface();
+  assert(IDecl && "Invalid @catch type.");
+  return MakeConstantString(IDecl->getIdentifier()->getName());
+}
+
+llvm::Constant *CGObjCGNUstep::GetEHType(QualType T) {
+  if (usesSEHExceptions)
+    return CGM.getCXXABI().getAddrOfRTTIDescriptor(T);
+
+  if (!CGM.getLangOpts().CPlusPlus)
+    return CGObjCGNU::GetEHType(T);
+
   // For Objective-C++, we want to provide the ability to catch both C++ and
   // Objective-C objects in the same function.
 
@@ -918,7 +2401,7 @@ llvm::Constant *CGObjCGNU::GetEHType(QualType T) {
         new llvm::GlobalVariable(CGM.getModule(), PtrToInt8Ty,
                                  false,
                                  llvm::GlobalValue::ExternalLinkage,
-                                 0, "__objc_id_type_info");
+                                 nullptr, "__objc_id_type_info");
     return llvm::ConstantExpr::getBitCast(IDEHType, PtrToInt8Ty);
   }
 
@@ -942,41 +2425,46 @@ llvm::Constant *CGObjCGNU::GetEHType(QualType T) {
   // It's quite ugly hard-coding this.  Ideally we'd generate it using the host
   // platform's name mangling.
   const char *vtableName = "_ZTVN7gnustep7libobjc22__objc_class_type_infoE";
-  llvm::Constant *Vtable = TheModule.getGlobalVariable(vtableName);
+  auto *Vtable = TheModule.getGlobalVariable(vtableName);
   if (!Vtable) {
     Vtable = new llvm::GlobalVariable(TheModule, PtrToInt8Ty, true,
-            llvm::GlobalValue::ExternalLinkage, 0, vtableName);
+                                      llvm::GlobalValue::ExternalLinkage,
+                                      nullptr, vtableName);
   }
   llvm::Constant *Two = llvm::ConstantInt::get(IntTy, 2);
-  Vtable = llvm::ConstantExpr::getGetElementPtr(Vtable, Two);
-  Vtable = llvm::ConstantExpr::getBitCast(Vtable, PtrToInt8Ty);
+  auto *BVtable = llvm::ConstantExpr::getBitCast(
+      llvm::ConstantExpr::getGetElementPtr(Vtable->getValueType(), Vtable, Two),
+      PtrToInt8Ty);
 
   llvm::Constant *typeName =
     ExportUniqueString(className, "__objc_eh_typename_");
 
-  std::vector<llvm::Constant*> fields;
-  fields.push_back(Vtable);
-  fields.push_back(typeName);
-  llvm::Constant *TI = 
-      MakeGlobal(llvm::StructType::get(PtrToInt8Ty, PtrToInt8Ty,
-              NULL), fields, "__objc_eh_typeinfo_" + className,
-          llvm::GlobalValue::LinkOnceODRLinkage);
+  ConstantInitBuilder builder(CGM);
+  auto fields = builder.beginStruct();
+  fields.add(BVtable);
+  fields.add(typeName);
+  llvm::Constant *TI =
+    fields.finishAndCreateGlobal("__objc_eh_typeinfo_" + className,
+                                 CGM.getPointerAlign(),
+                                 /*constant*/ false,
+                                 llvm::GlobalValue::LinkOnceODRLinkage);
   return llvm::ConstantExpr::getBitCast(TI, PtrToInt8Ty);
 }
 
 /// Generate an NSConstantString object.
-llvm::Constant *CGObjCGNU::GenerateConstantString(const StringLiteral *SL) {
+ConstantAddress CGObjCGNU::GenerateConstantString(const StringLiteral *SL) {
 
   std::string Str = SL->getString().str();
+  CharUnits Align = CGM.getPointerAlign();
 
   // Look for an existing one
   llvm::StringMap<llvm::Constant*>::iterator old = ObjCStrings.find(Str);
   if (old != ObjCStrings.end())
-    return old->getValue();
+    return ConstantAddress(old->getValue(), Align);
 
   StringRef StringClass = CGM.getLangOpts().ObjCConstantStringClass;
 
-  if (StringClass.empty()) StringClass = "NXConstantString";
+  if (StringClass.empty()) StringClass = "NSConstantString";
 
   std::string Sym = "_OBJC_CLASS_";
   Sym += StringClass;
@@ -985,21 +2473,21 @@ llvm::Constant *CGObjCGNU::GenerateConstantString(const StringLiteral *SL) {
 
   if (!isa)
     isa = new llvm::GlobalVariable(TheModule, IdTy, /* isConstant */false,
-            llvm::GlobalValue::ExternalWeakLinkage, 0, Sym);
+            llvm::GlobalValue::ExternalWeakLinkage, nullptr, Sym);
   else if (isa->getType() != PtrToIdTy)
     isa = llvm::ConstantExpr::getBitCast(isa, PtrToIdTy);
 
-  std::vector<llvm::Constant*> Ivars;
-  Ivars.push_back(isa);
-  Ivars.push_back(MakeConstantString(Str));
-  Ivars.push_back(llvm::ConstantInt::get(IntTy, Str.size()));
-  llvm::Constant *ObjCStr = MakeGlobal(
-    llvm::StructType::get(PtrToIdTy, PtrToInt8Ty, IntTy, NULL),
-    Ivars, ".objc_str");
+  ConstantInitBuilder Builder(CGM);
+  auto Fields = Builder.beginStruct();
+  Fields.add(isa);
+  Fields.add(MakeConstantString(Str));
+  Fields.addInt(IntTy, Str.size());
+  llvm::Constant *ObjCStr =
+    Fields.finishAndCreateGlobal(".objc_str", Align);
   ObjCStr = llvm::ConstantExpr::getBitCast(ObjCStr, PtrToInt8Ty);
   ObjCStrings[Str] = ObjCStr;
   ConstantStrings.push_back(ObjCStr);
-  return ObjCStr;
+  return ConstantAddress(ObjCStr, Align);
 }
 
 ///Generates a message send where the super is the receiver.  This is a message
@@ -1023,13 +2511,11 @@ CGObjCGNU::GenerateMessageSendSuper(CodeGenFunction &CGF,
                   CGM.getTypes().ConvertType(ResultType)));
     }
     if (Sel == ReleaseSel) {
-      return RValue::get(0);
+      return RValue::get(nullptr);
     }
   }
 
-  llvm::Value *cmd = GetSelector(Builder, Sel);
-
-
+  llvm::Value *cmd = GetSelector(CGF, Sel);
   CallArgList ActualArgs;
 
   ActualArgs.add(RValue::get(EnforceType(Builder, Receiver, IdTy)), ASTIdTy);
@@ -1038,52 +2524,69 @@ CGObjCGNU::GenerateMessageSendSuper(CodeGenFunction &CGF,
 
   MessageSendInfo MSI = getMessageSendInfo(Method, ResultType, ActualArgs);
 
-  llvm::Value *ReceiverClass = 0;
-  if (isCategoryImpl) {
-    llvm::Constant *classLookupFunction = 0;
+  llvm::Value *ReceiverClass = nullptr;
+  bool isV2ABI = isRuntime(ObjCRuntime::GNUstep, 2);
+  if (isV2ABI) {
+    ReceiverClass = GetClassNamed(CGF,
+        Class->getSuperClass()->getNameAsString(), /*isWeak*/false);
     if (IsClassMessage)  {
-      classLookupFunction = CGM.CreateRuntimeFunction(llvm::FunctionType::get(
-            IdTy, PtrTy, true), "objc_get_meta_class");
-    } else {
-      classLookupFunction = CGM.CreateRuntimeFunction(llvm::FunctionType::get(
-            IdTy, PtrTy, true), "objc_get_class");
+      // Load the isa pointer of the superclass is this is a class method.
+      ReceiverClass = Builder.CreateBitCast(ReceiverClass,
+                                            llvm::PointerType::getUnqual(IdTy));
+      ReceiverClass =
+        Builder.CreateAlignedLoad(ReceiverClass, CGF.getPointerAlign());
     }
-    ReceiverClass = Builder.CreateCall(classLookupFunction,
-        MakeConstantString(Class->getNameAsString()));
+    ReceiverClass = EnforceType(Builder, ReceiverClass, IdTy);
   } else {
-    // Set up global aliases for the metaclass or class pointer if they do not
-    // already exist.  These will are forward-references which will be set to
-    // pointers to the class and metaclass structure created for the runtime
-    // load function.  To send a message to super, we look up the value of the
-    // super_class pointer from either the class or metaclass structure.
-    if (IsClassMessage)  {
-      if (!MetaClassPtrAlias) {
-        MetaClassPtrAlias = new llvm::GlobalAlias(IdTy,
-            llvm::GlobalValue::InternalLinkage, ".objc_metaclass_ref" +
-            Class->getNameAsString(), NULL, &TheModule);
+    if (isCategoryImpl) {
+      llvm::FunctionCallee classLookupFunction = nullptr;
+      if (IsClassMessage)  {
+        classLookupFunction = CGM.CreateRuntimeFunction(llvm::FunctionType::get(
+              IdTy, PtrTy, true), "objc_get_meta_class");
+      } else {
+        classLookupFunction = CGM.CreateRuntimeFunction(llvm::FunctionType::get(
+              IdTy, PtrTy, true), "objc_get_class");
       }
-      ReceiverClass = MetaClassPtrAlias;
+      ReceiverClass = Builder.CreateCall(classLookupFunction,
+          MakeConstantString(Class->getNameAsString()));
     } else {
-      if (!ClassPtrAlias) {
-        ClassPtrAlias = new llvm::GlobalAlias(IdTy,
-            llvm::GlobalValue::InternalLinkage, ".objc_class_ref" +
-            Class->getNameAsString(), NULL, &TheModule);
+      // Set up global aliases for the metaclass or class pointer if they do not
+      // already exist.  These will are forward-references which will be set to
+      // pointers to the class and metaclass structure created for the runtime
+      // load function.  To send a message to super, we look up the value of the
+      // super_class pointer from either the class or metaclass structure.
+      if (IsClassMessage)  {
+        if (!MetaClassPtrAlias) {
+          MetaClassPtrAlias = llvm::GlobalAlias::create(
+              IdTy->getElementType(), 0, llvm::GlobalValue::InternalLinkage,
+              ".objc_metaclass_ref" + Class->getNameAsString(), &TheModule);
+        }
+        ReceiverClass = MetaClassPtrAlias;
+      } else {
+        if (!ClassPtrAlias) {
+          ClassPtrAlias = llvm::GlobalAlias::create(
+              IdTy->getElementType(), 0, llvm::GlobalValue::InternalLinkage,
+              ".objc_class_ref" + Class->getNameAsString(), &TheModule);
+        }
+        ReceiverClass = ClassPtrAlias;
       }
-      ReceiverClass = ClassPtrAlias;
     }
+    // Cast the pointer to a simplified version of the class structure
+    llvm::Type *CastTy = llvm::StructType::get(IdTy, IdTy);
+    ReceiverClass = Builder.CreateBitCast(ReceiverClass,
+                                          llvm::PointerType::getUnqual(CastTy));
+    // Get the superclass pointer
+    ReceiverClass = Builder.CreateStructGEP(CastTy, ReceiverClass, 1);
+    // Load the superclass pointer
+    ReceiverClass =
+      Builder.CreateAlignedLoad(ReceiverClass, CGF.getPointerAlign());
   }
-  // Cast the pointer to a simplified version of the class structure
-  ReceiverClass = Builder.CreateBitCast(ReceiverClass,
-      llvm::PointerType::getUnqual(
-        llvm::StructType::get(IdTy, IdTy, NULL)));
-  // Get the superclass pointer
-  ReceiverClass = Builder.CreateStructGEP(ReceiverClass, 1);
-  // Load the superclass pointer
-  ReceiverClass = Builder.CreateLoad(ReceiverClass);
   // Construct the structure used to look up the IMP
-  llvm::StructType *ObjCSuperTy = llvm::StructType::get(
-      Receiver->getType(), IdTy, NULL);
-  llvm::Value *ObjCSuper = Builder.CreateAlloca(ObjCSuperTy);
+  llvm::StructType *ObjCSuperTy =
+      llvm::StructType::get(Receiver->getType(), IdTy);
+
+  Address ObjCSuper = CGF.CreateTempAlloca(ObjCSuperTy,
+                              CGF.getPointerAlign());
 
   Builder.CreateStore(Receiver, Builder.CreateStructGEP(ObjCSuper, 0));
   Builder.CreateStore(ReceiverClass, Builder.CreateStructGEP(ObjCSuper, 1));
@@ -1091,18 +2594,20 @@ CGObjCGNU::GenerateMessageSendSuper(CodeGenFunction &CGF,
   ObjCSuper = EnforceType(Builder, ObjCSuper, PtrToObjCSuperTy);
 
   // Get the IMP
-  llvm::Value *imp = LookupIMPSuper(CGF, ObjCSuper, cmd);
+  llvm::Value *imp = LookupIMPSuper(CGF, ObjCSuper, cmd, MSI);
   imp = EnforceType(Builder, imp, MSI.MessengerType);
 
-  llvm::Value *impMD[] = {
+  llvm::Metadata *impMD[] = {
       llvm::MDString::get(VMContext, Sel.getAsString()),
       llvm::MDString::get(VMContext, Class->getSuperClass()->getNameAsString()),
-      llvm::ConstantInt::get(llvm::Type::getInt1Ty(VMContext), IsClassMessage)
-   };
+      llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(
+          llvm::Type::getInt1Ty(VMContext), IsClassMessage))};
   llvm::MDNode *node = llvm::MDNode::get(VMContext, impMD);
 
-  llvm::Instruction *call;
-  RValue msgRet = CGF.EmitCall(MSI.CallInfo, imp, Return, ActualArgs, 0, &call);
+  CGCallee callee(CGCalleeInfo(), imp);
+
+  llvm::CallBase *call;
+  RValue msgRet = CGF.EmitCall(MSI.CallInfo, callee, Return, ActualArgs, &call);
   call->setMetadata(msgSendMDKind, node);
   return msgRet;
 }
@@ -1126,7 +2631,7 @@ CGObjCGNU::GenerateMessageSend(CodeGenFunction &CGF,
                   CGM.getTypes().ConvertType(ResultType)));
     }
     if (Sel == ReleaseSel) {
-      return RValue::get(0);
+      return RValue::get(nullptr);
     }
   }
 
@@ -1140,20 +2645,20 @@ CGObjCGNU::GenerateMessageSend(CodeGenFunction &CGF,
   // returns.  With GCC, this generates a random return value (whatever happens
   // to be on the stack / in those registers at the time) on most platforms,
   // and generates an illegal instruction trap on SPARC.  With LLVM it corrupts
-  // the stack.  
+  // the stack.
   bool isPointerSizedReturn = (ResultType->isAnyPointerType() ||
       ResultType->isIntegralOrEnumerationType() || ResultType->isVoidType());
 
-  llvm::BasicBlock *startBB = 0;
-  llvm::BasicBlock *messageBB = 0;
-  llvm::BasicBlock *continueBB = 0;
+  llvm::BasicBlock *startBB = nullptr;
+  llvm::BasicBlock *messageBB = nullptr;
+  llvm::BasicBlock *continueBB = nullptr;
 
   if (!isPointerSizedReturn) {
     startBB = Builder.GetInsertBlock();
     messageBB = CGF.createBasicBlock("msgSend");
     continueBB = CGF.createBasicBlock("continue");
 
-    llvm::Value *isNil = Builder.CreateICmpEQ(Receiver, 
+    llvm::Value *isNil = Builder.CreateICmpEQ(Receiver,
             llvm::Constant::getNullValue(Receiver->getType()));
     Builder.CreateCondBr(isNil, continueBB, messageBB);
     CGF.EmitBlock(messageBB);
@@ -1162,17 +2667,17 @@ CGObjCGNU::GenerateMessageSend(CodeGenFunction &CGF,
   IdTy = cast<llvm::PointerType>(CGM.getTypes().ConvertType(ASTIdTy));
   llvm::Value *cmd;
   if (Method)
-    cmd = GetSelector(Builder, Method);
+    cmd = GetSelector(CGF, Method);
   else
-    cmd = GetSelector(Builder, Sel);
+    cmd = GetSelector(CGF, Sel);
   cmd = EnforceType(Builder, cmd, SelectorTy);
   Receiver = EnforceType(Builder, Receiver, IdTy);
 
-  llvm::Value *impMD[] = {
-        llvm::MDString::get(VMContext, Sel.getAsString()),
-        llvm::MDString::get(VMContext, Class ? Class->getNameAsString() :""),
-        llvm::ConstantInt::get(llvm::Type::getInt1Ty(VMContext), Class!=0)
-   };
+  llvm::Metadata *impMD[] = {
+      llvm::MDString::get(VMContext, Sel.getAsString()),
+      llvm::MDString::get(VMContext, Class ? Class->getNameAsString() : ""),
+      llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(
+          llvm::Type::getInt1Ty(VMContext), Class != nullptr))};
   llvm::MDNode *node = llvm::MDNode::get(VMContext, impMD);
 
   CallArgList ActualArgs;
@@ -1187,35 +2692,40 @@ CGObjCGNU::GenerateMessageSend(CodeGenFunction &CGF,
 
   // If we have non-legacy dispatch specified, we try using the objc_msgSend()
   // functions.  These are not supported on all platforms (or all runtimes on a
-  // given platform), so we 
+  // given platform), so we
   switch (CGM.getCodeGenOpts().getObjCDispatchMethod()) {
     case CodeGenOptions::Legacy:
-      imp = LookupIMP(CGF, Receiver, cmd, node);
+      imp = LookupIMP(CGF, Receiver, cmd, node, MSI);
       break;
     case CodeGenOptions::Mixed:
     case CodeGenOptions::NonLegacy:
       if (CGM.ReturnTypeUsesFPRet(ResultType)) {
-        imp = CGM.CreateRuntimeFunction(llvm::FunctionType::get(IdTy, IdTy, true),
-                                  "objc_msgSend_fpret");
+        imp =
+            CGM.CreateRuntimeFunction(llvm::FunctionType::get(IdTy, IdTy, true),
+                                      "objc_msgSend_fpret")
+                .getCallee();
       } else if (CGM.ReturnTypeUsesSRet(MSI.CallInfo)) {
         // The actual types here don't matter - we're going to bitcast the
         // function anyway
-        imp = CGM.CreateRuntimeFunction(llvm::FunctionType::get(IdTy, IdTy, true),
-                                  "objc_msgSend_stret");
+        imp =
+            CGM.CreateRuntimeFunction(llvm::FunctionType::get(IdTy, IdTy, true),
+                                      "objc_msgSend_stret")
+                .getCallee();
       } else {
-        imp = CGM.CreateRuntimeFunction(llvm::FunctionType::get(IdTy, IdTy, true),
-                                  "objc_msgSend");
+        imp = CGM.CreateRuntimeFunction(
+                     llvm::FunctionType::get(IdTy, IdTy, true), "objc_msgSend")
+                  .getCallee();
       }
   }
 
   // Reset the receiver in case the lookup modified it
-  ActualArgs[0] = CallArg(RValue::get(Receiver), ASTIdTy, false);
+  ActualArgs[0] = CallArg(RValue::get(Receiver), ASTIdTy);
 
   imp = EnforceType(Builder, imp, MSI.MessengerType);
 
-  llvm::Instruction *call;
-  RValue msgRet = CGF.EmitCall(MSI.CallInfo, imp, Return, ActualArgs,
-      0, &call);
+  llvm::CallBase *call;
+  CGCallee callee(CGCalleeInfo(), imp);
+  RValue msgRet = CGF.EmitCall(MSI.CallInfo, callee, Return, ActualArgs, &call);
   call->setMetadata(msgSendMDKind, node);
 
 
@@ -1230,16 +2740,14 @@ CGObjCGNU::GenerateMessageSend(CodeGenFunction &CGF,
       phi->addIncoming(llvm::Constant::getNullValue(v->getType()), startBB);
       msgRet = RValue::get(phi);
     } else if (msgRet.isAggregate()) {
-      llvm::Value *v = msgRet.getAggregateAddr();
-      llvm::PHINode *phi = Builder.CreatePHI(v->getType(), 2);
-      llvm::PointerType *RetTy = cast<llvm::PointerType>(v->getType());
-      llvm::AllocaInst *NullVal = 
-          CGF.CreateTempAlloca(RetTy->getElementType(), "null");
-      CGF.InitTempAlloca(NullVal,
-          llvm::Constant::getNullValue(RetTy->getElementType()));
-      phi->addIncoming(v, messageBB);
-      phi->addIncoming(NullVal, startBB);
-      msgRet = RValue::getAggregate(phi);
+      Address v = msgRet.getAggregateAddress();
+      llvm::PHINode *phi = Builder.CreatePHI(v.getType(), 2);
+      llvm::Type *RetTy = v.getElementType();
+      Address NullVal = CGF.CreateTempAlloca(RetTy, v.getAlignment(), "null");
+      CGF.InitTempAlloca(NullVal, llvm::Constant::getNullValue(RetTy));
+      phi->addIncoming(v.getPointer(), messageBB);
+      phi->addIncoming(NullVal.getPointer(), startBB);
+      msgRet = RValue::getAggregate(Address(phi, v.getAlignment()));
     } else /* isComplex() */ {
       std::pair<llvm::Value*,llvm::Value*> v = msgRet.getComplexVal();
       llvm::PHINode *phi = Builder.CreatePHI(v.first->getType(), 2);
@@ -1259,100 +2767,108 @@ CGObjCGNU::GenerateMessageSend(CodeGenFunction &CGF,
 /// Generates a MethodList.  Used in construction of a objc_class and
 /// objc_category structures.
 llvm::Constant *CGObjCGNU::
-GenerateMethodList(const StringRef &ClassName,
-                   const StringRef &CategoryName,
-                   ArrayRef<Selector> MethodSels,
-                   ArrayRef<llvm::Constant *> MethodTypes,
+GenerateMethodList(StringRef ClassName,
+                   StringRef CategoryName,
+                   ArrayRef<const ObjCMethodDecl*> Methods,
                    bool isClassMethodList) {
-  if (MethodSels.empty())
+  if (Methods.empty())
     return NULLPtr;
+
+  ConstantInitBuilder Builder(CGM);
+
+  auto MethodList = Builder.beginStruct();
+  MethodList.addNullPointer(CGM.Int8PtrTy);
+  MethodList.addInt(Int32Ty, Methods.size());
+
   // Get the method structure type.
-  llvm::StructType *ObjCMethodTy = llvm::StructType::get(
-    PtrToInt8Ty, // Really a selector, but the runtime creates it us.
-    PtrToInt8Ty, // Method types
-    IMPTy, //Method pointer
-    NULL);
-  std::vector<llvm::Constant*> Methods;
-  std::vector<llvm::Constant*> Elements;
-  for (unsigned int i = 0, e = MethodTypes.size(); i < e; ++i) {
-    Elements.clear();
-    llvm::Constant *Method =
-      TheModule.getFunction(SymbolNameForMethod(ClassName, CategoryName,
-                                                MethodSels[i],
-                                                isClassMethodList));
-    assert(Method && "Can't generate metadata for method that doesn't exist");
-    llvm::Constant *C = MakeConstantString(MethodSels[i].getAsString());
-    Elements.push_back(C);
-    Elements.push_back(MethodTypes[i]);
-    Method = llvm::ConstantExpr::getBitCast(Method,
-        IMPTy);
-    Elements.push_back(Method);
-    Methods.push_back(llvm::ConstantStruct::get(ObjCMethodTy, Elements));
+  llvm::StructType *ObjCMethodTy =
+    llvm::StructType::get(CGM.getLLVMContext(), {
+      PtrToInt8Ty, // Really a selector, but the runtime creates it us.
+      PtrToInt8Ty, // Method types
+      IMPTy        // Method pointer
+    });
+  bool isV2ABI = isRuntime(ObjCRuntime::GNUstep, 2);
+  if (isV2ABI) {
+    // size_t size;
+    llvm::DataLayout td(&TheModule);
+    MethodList.addInt(SizeTy, td.getTypeSizeInBits(ObjCMethodTy) /
+        CGM.getContext().getCharWidth());
+    ObjCMethodTy =
+      llvm::StructType::get(CGM.getLLVMContext(), {
+        IMPTy,       // Method pointer
+        PtrToInt8Ty, // Selector
+        PtrToInt8Ty  // Extended type encoding
+      });
+  } else {
+    ObjCMethodTy =
+      llvm::StructType::get(CGM.getLLVMContext(), {
+        PtrToInt8Ty, // Really a selector, but the runtime creates it us.
+        PtrToInt8Ty, // Method types
+        IMPTy        // Method pointer
+      });
   }
-
-  // Array of method structures
-  llvm::ArrayType *ObjCMethodArrayTy = llvm::ArrayType::get(ObjCMethodTy,
-                                                            Methods.size());
-  llvm::Constant *MethodArray = llvm::ConstantArray::get(ObjCMethodArrayTy,
-                                                         Methods);
-
-  // Structure containing list pointer, array and array count
-  llvm::StructType *ObjCMethodListTy = llvm::StructType::create(VMContext);
-  llvm::Type *NextPtrTy = llvm::PointerType::getUnqual(ObjCMethodListTy);
-  ObjCMethodListTy->setBody(
-      NextPtrTy,
-      IntTy,
-      ObjCMethodArrayTy,
-      NULL);
-
-  Methods.clear();
-  Methods.push_back(llvm::ConstantPointerNull::get(
-        llvm::PointerType::getUnqual(ObjCMethodListTy)));
-  Methods.push_back(llvm::ConstantInt::get(Int32Ty, MethodTypes.size()));
-  Methods.push_back(MethodArray);
+  auto MethodArray = MethodList.beginArray();
+  ASTContext &Context = CGM.getContext();
+  for (const auto *OMD : Methods) {
+    llvm::Constant *FnPtr =
+      TheModule.getFunction(SymbolNameForMethod(ClassName, CategoryName,
+                                                OMD->getSelector(),
+                                                isClassMethodList));
+    assert(FnPtr && "Can't generate metadata for method that doesn't exist");
+    auto Method = MethodArray.beginStruct(ObjCMethodTy);
+    if (isV2ABI) {
+      Method.addBitCast(FnPtr, IMPTy);
+      Method.add(GetConstantSelector(OMD->getSelector(),
+          Context.getObjCEncodingForMethodDecl(OMD)));
+      Method.add(MakeConstantString(Context.getObjCEncodingForMethodDecl(OMD, true)));
+    } else {
+      Method.add(MakeConstantString(OMD->getSelector().getAsString()));
+      Method.add(MakeConstantString(Context.getObjCEncodingForMethodDecl(OMD)));
+      Method.addBitCast(FnPtr, IMPTy);
+    }
+    Method.finishAndAddTo(MethodArray);
+  }
+  MethodArray.finishAndAddTo(MethodList);
 
   // Create an instance of the structure
-  return MakeGlobal(ObjCMethodListTy, Methods, ".objc_method_list");
+  return MethodList.finishAndCreateGlobal(".objc_method_list",
+                                          CGM.getPointerAlign());
 }
 
 /// Generates an IvarList.  Used in construction of a objc_class.
 llvm::Constant *CGObjCGNU::
 GenerateIvarList(ArrayRef<llvm::Constant *> IvarNames,
                  ArrayRef<llvm::Constant *> IvarTypes,
-                 ArrayRef<llvm::Constant *> IvarOffsets) {
-  if (IvarNames.size() == 0)
+                 ArrayRef<llvm::Constant *> IvarOffsets,
+                 ArrayRef<llvm::Constant *> IvarAlign,
+                 ArrayRef<Qualifiers::ObjCLifetime> IvarOwnership) {
+  if (IvarNames.empty())
     return NULLPtr;
-  // Get the method structure type.
-  llvm::StructType *ObjCIvarTy = llvm::StructType::get(
-    PtrToInt8Ty,
-    PtrToInt8Ty,
-    IntTy,
-    NULL);
-  std::vector<llvm::Constant*> Ivars;
-  std::vector<llvm::Constant*> Elements;
+
+  ConstantInitBuilder Builder(CGM);
+
+  // Structure containing array count followed by array.
+  auto IvarList = Builder.beginStruct();
+  IvarList.addInt(IntTy, (int)IvarNames.size());
+
+  // Get the ivar structure type.
+  llvm::StructType *ObjCIvarTy =
+      llvm::StructType::get(PtrToInt8Ty, PtrToInt8Ty, IntTy);
+
+  // Array of ivar structures.
+  auto Ivars = IvarList.beginArray(ObjCIvarTy);
   for (unsigned int i = 0, e = IvarNames.size() ; i < e ; i++) {
-    Elements.clear();
-    Elements.push_back(IvarNames[i]);
-    Elements.push_back(IvarTypes[i]);
-    Elements.push_back(IvarOffsets[i]);
-    Ivars.push_back(llvm::ConstantStruct::get(ObjCIvarTy, Elements));
+    auto Ivar = Ivars.beginStruct(ObjCIvarTy);
+    Ivar.add(IvarNames[i]);
+    Ivar.add(IvarTypes[i]);
+    Ivar.add(IvarOffsets[i]);
+    Ivar.finishAndAddTo(Ivars);
   }
-
-  // Array of method structures
-  llvm::ArrayType *ObjCIvarArrayTy = llvm::ArrayType::get(ObjCIvarTy,
-      IvarNames.size());
-
-
-  Elements.clear();
-  Elements.push_back(llvm::ConstantInt::get(IntTy, (int)IvarNames.size()));
-  Elements.push_back(llvm::ConstantArray::get(ObjCIvarArrayTy, Ivars));
-  // Structure containing array and array count
-  llvm::StructType *ObjCIvarListTy = llvm::StructType::get(IntTy,
-    ObjCIvarArrayTy,
-    NULL);
+  Ivars.finishAndAddTo(IvarList);
 
   // Create an instance of the structure
-  return MakeGlobal(ObjCIvarListTy, Elements, ".objc_ivar_list");
+  return IvarList.finishAndCreateGlobal(".objc_ivar_list",
+                                        CGM.getPointerAlign());
 }
 
 /// Generate a class structure
@@ -1379,7 +2895,7 @@ llvm::Constant *CGObjCGNU::GenerateClassStructure(
   // anyway; the classes will still work with the GNU runtime, they will just
   // be ignored.
   llvm::StructType *ClassTy = llvm::StructType::get(
-      PtrToInt8Ty,        // isa 
+      PtrToInt8Ty,        // isa
       PtrToInt8Ty,        // super_class
       PtrToInt8Ty,        // name
       LongTy,             // version
@@ -1388,46 +2904,67 @@ llvm::Constant *CGObjCGNU::GenerateClassStructure(
       IVars->getType(),   // ivars
       Methods->getType(), // methods
       // These are all filled in by the runtime, so we pretend
-      PtrTy,              // dtable
-      PtrTy,              // subclass_list
-      PtrTy,              // sibling_class
-      PtrTy,              // protocols
-      PtrTy,              // gc_object_type
+      PtrTy, // dtable
+      PtrTy, // subclass_list
+      PtrTy, // sibling_class
+      PtrTy, // protocols
+      PtrTy, // gc_object_type
       // New ABI:
       LongTy,                 // abi_version
       IvarOffsets->getType(), // ivar_offsets
       Properties->getType(),  // properties
       IntPtrTy,               // strong_pointers
-      IntPtrTy,               // weak_pointers
-      NULL);
-  llvm::Constant *Zero = llvm::ConstantInt::get(LongTy, 0);
+      IntPtrTy                // weak_pointers
+      );
+
+  ConstantInitBuilder Builder(CGM);
+  auto Elements = Builder.beginStruct(ClassTy);
+
   // Fill in the structure
-  std::vector<llvm::Constant*> Elements;
-  Elements.push_back(llvm::ConstantExpr::getBitCast(MetaClass, PtrToInt8Ty));
-  Elements.push_back(SuperClass);
-  Elements.push_back(MakeConstantString(Name, ".class_name"));
-  Elements.push_back(Zero);
-  Elements.push_back(llvm::ConstantInt::get(LongTy, info));
+
+  // isa
+  Elements.addBitCast(MetaClass, PtrToInt8Ty);
+  // super_class
+  Elements.add(SuperClass);
+  // name
+  Elements.add(MakeConstantString(Name, ".class_name"));
+  // version
+  Elements.addInt(LongTy, 0);
+  // info
+  Elements.addInt(LongTy, info);
+  // instance_size
   if (isMeta) {
-    llvm::TargetData td(&TheModule);
-    Elements.push_back(
-        llvm::ConstantInt::get(LongTy,
-                               td.getTypeSizeInBits(ClassTy) /
-                                 CGM.getContext().getCharWidth()));
+    llvm::DataLayout td(&TheModule);
+    Elements.addInt(LongTy,
+                    td.getTypeSizeInBits(ClassTy) /
+                      CGM.getContext().getCharWidth());
   } else
-    Elements.push_back(InstanceSize);
-  Elements.push_back(IVars);
-  Elements.push_back(Methods);
-  Elements.push_back(NULLPtr);
-  Elements.push_back(NULLPtr);
-  Elements.push_back(NULLPtr);
-  Elements.push_back(llvm::ConstantExpr::getBitCast(Protocols, PtrTy));
-  Elements.push_back(NULLPtr);
-  Elements.push_back(llvm::ConstantInt::get(LongTy, 1));
-  Elements.push_back(IvarOffsets);
-  Elements.push_back(Properties);
-  Elements.push_back(StrongIvarBitmap);
-  Elements.push_back(WeakIvarBitmap);
+    Elements.add(InstanceSize);
+  // ivars
+  Elements.add(IVars);
+  // methods
+  Elements.add(Methods);
+  // These are all filled in by the runtime, so we pretend
+  // dtable
+  Elements.add(NULLPtr);
+  // subclass_list
+  Elements.add(NULLPtr);
+  // sibling_class
+  Elements.add(NULLPtr);
+  // protocols
+  Elements.addBitCast(Protocols, PtrTy);
+  // gc_object_type
+  Elements.add(NULLPtr);
+  // abi_version
+  Elements.addInt(LongTy, ClassABIVersion);
+  // ivar_offsets
+  Elements.add(IvarOffsets);
+  // properties
+  Elements.add(Properties);
+  // strong_pointers
+  Elements.add(StrongIvarBitmap);
+  // weak_pointers
+  Elements.add(WeakIvarBitmap);
   // Create an instance of the structure
   // This is now an externally visible symbol, so that we can speed up class
   // messages in the next ABI.  We may already have some weak references to
@@ -1435,58 +2972,52 @@ llvm::Constant *CGObjCGNU::GenerateClassStructure(
   std::string ClassSym((isMeta ? "_OBJC_METACLASS_": "_OBJC_CLASS_") +
           std::string(Name));
   llvm::GlobalVariable *ClassRef = TheModule.getNamedGlobal(ClassSym);
-  llvm::Constant *Class = MakeGlobal(ClassTy, Elements, ClassSym,
-          llvm::GlobalValue::ExternalLinkage);
+  llvm::Constant *Class =
+    Elements.finishAndCreateGlobal(ClassSym, CGM.getPointerAlign(), false,
+                                   llvm::GlobalValue::ExternalLinkage);
   if (ClassRef) {
-      ClassRef->replaceAllUsesWith(llvm::ConstantExpr::getBitCast(Class,
+    ClassRef->replaceAllUsesWith(llvm::ConstantExpr::getBitCast(Class,
                   ClassRef->getType()));
-      ClassRef->removeFromParent();
-      Class->setName(ClassSym);
+    ClassRef->removeFromParent();
+    Class->setName(ClassSym);
   }
   return Class;
 }
 
 llvm::Constant *CGObjCGNU::
-GenerateProtocolMethodList(ArrayRef<llvm::Constant *> MethodNames,
-                           ArrayRef<llvm::Constant *> MethodTypes) {
+GenerateProtocolMethodList(ArrayRef<const ObjCMethodDecl*> Methods) {
   // Get the method structure type.
-  llvm::StructType *ObjCMethodDescTy = llvm::StructType::get(
-    PtrToInt8Ty, // Really a selector, but the runtime does the casting for us.
-    PtrToInt8Ty,
-    NULL);
-  std::vector<llvm::Constant*> Methods;
-  std::vector<llvm::Constant*> Elements;
-  for (unsigned int i = 0, e = MethodTypes.size() ; i < e ; i++) {
-    Elements.clear();
-    Elements.push_back(MethodNames[i]);
-    Elements.push_back(MethodTypes[i]);
-    Methods.push_back(llvm::ConstantStruct::get(ObjCMethodDescTy, Elements));
+  llvm::StructType *ObjCMethodDescTy =
+    llvm::StructType::get(CGM.getLLVMContext(), { PtrToInt8Ty, PtrToInt8Ty });
+  ASTContext &Context = CGM.getContext();
+  ConstantInitBuilder Builder(CGM);
+  auto MethodList = Builder.beginStruct();
+  MethodList.addInt(IntTy, Methods.size());
+  auto MethodArray = MethodList.beginArray(ObjCMethodDescTy);
+  for (auto *M : Methods) {
+    auto Method = MethodArray.beginStruct(ObjCMethodDescTy);
+    Method.add(MakeConstantString(M->getSelector().getAsString()));
+    Method.add(MakeConstantString(Context.getObjCEncodingForMethodDecl(M)));
+    Method.finishAndAddTo(MethodArray);
   }
-  llvm::ArrayType *ObjCMethodArrayTy = llvm::ArrayType::get(ObjCMethodDescTy,
-      MethodNames.size());
-  llvm::Constant *Array = llvm::ConstantArray::get(ObjCMethodArrayTy,
-                                                   Methods);
-  llvm::StructType *ObjCMethodDescListTy = llvm::StructType::get(
-      IntTy, ObjCMethodArrayTy, NULL);
-  Methods.clear();
-  Methods.push_back(llvm::ConstantInt::get(IntTy, MethodNames.size()));
-  Methods.push_back(Array);
-  return MakeGlobal(ObjCMethodDescListTy, Methods, ".objc_method_list");
+  MethodArray.finishAndAddTo(MethodList);
+  return MethodList.finishAndCreateGlobal(".objc_method_list",
+                                          CGM.getPointerAlign());
 }
 
 // Create the protocol list structure used in classes, categories and so on
-llvm::Constant *CGObjCGNU::GenerateProtocolList(ArrayRef<std::string>Protocols){
-  llvm::ArrayType *ProtocolArrayTy = llvm::ArrayType::get(PtrToInt8Ty,
-      Protocols.size());
-  llvm::StructType *ProtocolListTy = llvm::StructType::get(
-      PtrTy, //Should be a recurisve pointer, but it's always NULL here.
-      SizeTy,
-      ProtocolArrayTy,
-      NULL);
-  std::vector<llvm::Constant*> Elements;
+llvm::Constant *
+CGObjCGNU::GenerateProtocolList(ArrayRef<std::string> Protocols) {
+
+  ConstantInitBuilder Builder(CGM);
+  auto ProtocolList = Builder.beginStruct();
+  ProtocolList.add(NULLPtr);
+  ProtocolList.addInt(LongTy, Protocols.size());
+
+  auto Elements = ProtocolList.beginArray(PtrToInt8Ty);
   for (const std::string *iter = Protocols.begin(), *endIter = Protocols.end();
       iter != endIter ; iter++) {
-    llvm::Constant *protocol = 0;
+    llvm::Constant *protocol = nullptr;
     llvm::StringMap<llvm::Constant*>::iterator value =
       ExistingProtocols.find(*iter);
     if (value == ExistingProtocols.end()) {
@@ -1494,278 +3025,162 @@ llvm::Constant *CGObjCGNU::GenerateProtocolList(ArrayRef<std::string>Protocols){
     } else {
       protocol = value->getValue();
     }
-    llvm::Constant *Ptr = llvm::ConstantExpr::getBitCast(protocol,
-                                                           PtrToInt8Ty);
-    Elements.push_back(Ptr);
+    Elements.addBitCast(protocol, PtrToInt8Ty);
   }
-  llvm::Constant * ProtocolArray = llvm::ConstantArray::get(ProtocolArrayTy,
-      Elements);
-  Elements.clear();
-  Elements.push_back(NULLPtr);
-  Elements.push_back(llvm::ConstantInt::get(LongTy, Protocols.size()));
-  Elements.push_back(ProtocolArray);
-  return MakeGlobal(ProtocolListTy, Elements, ".objc_protocol_list");
+  Elements.finishAndAddTo(ProtocolList);
+  return ProtocolList.finishAndCreateGlobal(".objc_protocol_list",
+                                            CGM.getPointerAlign());
 }
 
-llvm::Value *CGObjCGNU::GenerateProtocolRef(CGBuilderTy &Builder,
+llvm::Value *CGObjCGNU::GenerateProtocolRef(CodeGenFunction &CGF,
                                             const ObjCProtocolDecl *PD) {
-  llvm::Value *protocol = ExistingProtocols[PD->getNameAsString()];
+  llvm::Constant *&protocol = ExistingProtocols[PD->getNameAsString()];
+  if (!protocol)
+    GenerateProtocol(PD);
+  assert(protocol && "Unknown protocol");
   llvm::Type *T =
     CGM.getTypes().ConvertType(CGM.getContext().getObjCProtoType());
-  return Builder.CreateBitCast(protocol, llvm::PointerType::getUnqual(T));
+  return CGF.Builder.CreateBitCast(protocol, llvm::PointerType::getUnqual(T));
 }
 
-llvm::Constant *CGObjCGNU::GenerateEmptyProtocol(
-  const std::string &ProtocolName) {
-  SmallVector<std::string, 0> EmptyStringVector;
-  SmallVector<llvm::Constant*, 0> EmptyConstantVector;
-
-  llvm::Constant *ProtocolList = GenerateProtocolList(EmptyStringVector);
-  llvm::Constant *MethodList =
-    GenerateProtocolMethodList(EmptyConstantVector, EmptyConstantVector);
+llvm::Constant *
+CGObjCGNU::GenerateEmptyProtocol(StringRef ProtocolName) {
+  llvm::Constant *ProtocolList = GenerateProtocolList({});
+  llvm::Constant *MethodList = GenerateProtocolMethodList({});
+  MethodList = llvm::ConstantExpr::getBitCast(MethodList, PtrToInt8Ty);
   // Protocols are objects containing lists of the methods implemented and
   // protocols adopted.
-  llvm::StructType *ProtocolTy = llvm::StructType::get(IdTy,
-      PtrToInt8Ty,
-      ProtocolList->getType(),
-      MethodList->getType(),
-      MethodList->getType(),
-      MethodList->getType(),
-      MethodList->getType(),
-      NULL);
-  std::vector<llvm::Constant*> Elements;
+  ConstantInitBuilder Builder(CGM);
+  auto Elements = Builder.beginStruct();
+
   // The isa pointer must be set to a magic number so the runtime knows it's
   // the correct layout.
-  Elements.push_back(llvm::ConstantExpr::getIntToPtr(
-        llvm::ConstantInt::get(Int32Ty, ProtocolVersion), IdTy));
-  Elements.push_back(MakeConstantString(ProtocolName, ".objc_protocol_name"));
-  Elements.push_back(ProtocolList);
-  Elements.push_back(MethodList);
-  Elements.push_back(MethodList);
-  Elements.push_back(MethodList);
-  Elements.push_back(MethodList);
-  return MakeGlobal(ProtocolTy, Elements, ".objc_protocol");
+  Elements.add(llvm::ConstantExpr::getIntToPtr(
+          llvm::ConstantInt::get(Int32Ty, ProtocolVersion), IdTy));
+
+  Elements.add(MakeConstantString(ProtocolName, ".objc_protocol_name"));
+  Elements.add(ProtocolList); /* .protocol_list */
+  Elements.add(MethodList);   /* .instance_methods */
+  Elements.add(MethodList);   /* .class_methods */
+  Elements.add(MethodList);   /* .optional_instance_methods */
+  Elements.add(MethodList);   /* .optional_class_methods */
+  Elements.add(NULLPtr);      /* .properties */
+  Elements.add(NULLPtr);      /* .optional_properties */
+  return Elements.finishAndCreateGlobal(SymbolForProtocol(ProtocolName),
+                                        CGM.getPointerAlign());
 }
 
 void CGObjCGNU::GenerateProtocol(const ObjCProtocolDecl *PD) {
-  ASTContext &Context = CGM.getContext();
   std::string ProtocolName = PD->getNameAsString();
-  
+
   // Use the protocol definition, if there is one.
   if (const ObjCProtocolDecl *Def = PD->getDefinition())
     PD = Def;
 
   SmallVector<std::string, 16> Protocols;
-  for (ObjCProtocolDecl::protocol_iterator PI = PD->protocol_begin(),
-       E = PD->protocol_end(); PI != E; ++PI)
-    Protocols.push_back((*PI)->getNameAsString());
-  SmallVector<llvm::Constant*, 16> InstanceMethodNames;
-  SmallVector<llvm::Constant*, 16> InstanceMethodTypes;
-  SmallVector<llvm::Constant*, 16> OptionalInstanceMethodNames;
-  SmallVector<llvm::Constant*, 16> OptionalInstanceMethodTypes;
-  for (ObjCProtocolDecl::instmeth_iterator iter = PD->instmeth_begin(),
-       E = PD->instmeth_end(); iter != E; iter++) {
-    std::string TypeStr;
-    Context.getObjCEncodingForMethodDecl(*iter, TypeStr);
-    if ((*iter)->getImplementationControl() == ObjCMethodDecl::Optional) {
-      InstanceMethodNames.push_back(
-          MakeConstantString((*iter)->getSelector().getAsString()));
-      InstanceMethodTypes.push_back(MakeConstantString(TypeStr));
-    } else {
-      OptionalInstanceMethodNames.push_back(
-          MakeConstantString((*iter)->getSelector().getAsString()));
-      OptionalInstanceMethodTypes.push_back(MakeConstantString(TypeStr));
-    }
-  }
+  for (const auto *PI : PD->protocols())
+    Protocols.push_back(PI->getNameAsString());
+  SmallVector<const ObjCMethodDecl*, 16> InstanceMethods;
+  SmallVector<const ObjCMethodDecl*, 16> OptionalInstanceMethods;
+  for (const auto *I : PD->instance_methods())
+    if (I->isOptional())
+      OptionalInstanceMethods.push_back(I);
+    else
+      InstanceMethods.push_back(I);
   // Collect information about class methods:
-  SmallVector<llvm::Constant*, 16> ClassMethodNames;
-  SmallVector<llvm::Constant*, 16> ClassMethodTypes;
-  SmallVector<llvm::Constant*, 16> OptionalClassMethodNames;
-  SmallVector<llvm::Constant*, 16> OptionalClassMethodTypes;
-  for (ObjCProtocolDecl::classmeth_iterator
-         iter = PD->classmeth_begin(), endIter = PD->classmeth_end();
-       iter != endIter ; iter++) {
-    std::string TypeStr;
-    Context.getObjCEncodingForMethodDecl((*iter),TypeStr);
-    if ((*iter)->getImplementationControl() == ObjCMethodDecl::Optional) {
-      ClassMethodNames.push_back(
-          MakeConstantString((*iter)->getSelector().getAsString()));
-      ClassMethodTypes.push_back(MakeConstantString(TypeStr));
-    } else {
-      OptionalClassMethodNames.push_back(
-          MakeConstantString((*iter)->getSelector().getAsString()));
-      OptionalClassMethodTypes.push_back(MakeConstantString(TypeStr));
-    }
-  }
+  SmallVector<const ObjCMethodDecl*, 16> ClassMethods;
+  SmallVector<const ObjCMethodDecl*, 16> OptionalClassMethods;
+  for (const auto *I : PD->class_methods())
+    if (I->isOptional())
+      OptionalClassMethods.push_back(I);
+    else
+      ClassMethods.push_back(I);
 
   llvm::Constant *ProtocolList = GenerateProtocolList(Protocols);
   llvm::Constant *InstanceMethodList =
-    GenerateProtocolMethodList(InstanceMethodNames, InstanceMethodTypes);
+    GenerateProtocolMethodList(InstanceMethods);
   llvm::Constant *ClassMethodList =
-    GenerateProtocolMethodList(ClassMethodNames, ClassMethodTypes);
+    GenerateProtocolMethodList(ClassMethods);
   llvm::Constant *OptionalInstanceMethodList =
-    GenerateProtocolMethodList(OptionalInstanceMethodNames,
-            OptionalInstanceMethodTypes);
+    GenerateProtocolMethodList(OptionalInstanceMethods);
   llvm::Constant *OptionalClassMethodList =
-    GenerateProtocolMethodList(OptionalClassMethodNames,
-            OptionalClassMethodTypes);
+    GenerateProtocolMethodList(OptionalClassMethods);
 
   // Property metadata: name, attributes, isSynthesized, setter name, setter
   // types, getter name, getter types.
   // The isSynthesized value is always set to 0 in a protocol.  It exists to
   // simplify the runtime library by allowing it to use the same data
   // structures for protocol metadata everywhere.
-  llvm::StructType *PropertyMetadataTy = llvm::StructType::get(
-          PtrToInt8Ty, Int8Ty, Int8Ty, PtrToInt8Ty, PtrToInt8Ty, PtrToInt8Ty,
-          PtrToInt8Ty, NULL);
-  std::vector<llvm::Constant*> Properties;
-  std::vector<llvm::Constant*> OptionalProperties;
 
-  // Add all of the property methods need adding to the method list and to the
-  // property metadata list.
-  for (ObjCContainerDecl::prop_iterator
-         iter = PD->prop_begin(), endIter = PD->prop_end();
-       iter != endIter ; iter++) {
-    std::vector<llvm::Constant*> Fields;
-    ObjCPropertyDecl *property = (*iter);
-
-    Fields.push_back(MakeConstantString(property->getNameAsString()));
-    Fields.push_back(llvm::ConstantInt::get(Int8Ty,
-                property->getPropertyAttributes()));
-    Fields.push_back(llvm::ConstantInt::get(Int8Ty, 0));
-    if (ObjCMethodDecl *getter = property->getGetterMethodDecl()) {
-      std::string TypeStr;
-      Context.getObjCEncodingForMethodDecl(getter,TypeStr);
-      llvm::Constant *TypeEncoding = MakeConstantString(TypeStr);
-      InstanceMethodTypes.push_back(TypeEncoding);
-      Fields.push_back(MakeConstantString(getter->getSelector().getAsString()));
-      Fields.push_back(TypeEncoding);
-    } else {
-      Fields.push_back(NULLPtr);
-      Fields.push_back(NULLPtr);
-    }
-    if (ObjCMethodDecl *setter = property->getSetterMethodDecl()) {
-      std::string TypeStr;
-      Context.getObjCEncodingForMethodDecl(setter,TypeStr);
-      llvm::Constant *TypeEncoding = MakeConstantString(TypeStr);
-      InstanceMethodTypes.push_back(TypeEncoding);
-      Fields.push_back(MakeConstantString(setter->getSelector().getAsString()));
-      Fields.push_back(TypeEncoding);
-    } else {
-      Fields.push_back(NULLPtr);
-      Fields.push_back(NULLPtr);
-    }
-    if (property->getPropertyImplementation() == ObjCPropertyDecl::Optional) {
-      OptionalProperties.push_back(llvm::ConstantStruct::get(PropertyMetadataTy, Fields));
-    } else {
-      Properties.push_back(llvm::ConstantStruct::get(PropertyMetadataTy, Fields));
-    }
-  }
-  llvm::Constant *PropertyArray = llvm::ConstantArray::get(
-      llvm::ArrayType::get(PropertyMetadataTy, Properties.size()), Properties);
-  llvm::Constant* PropertyListInitFields[] =
-    {llvm::ConstantInt::get(IntTy, Properties.size()), NULLPtr, PropertyArray};
-
-  llvm::Constant *PropertyListInit =
-      llvm::ConstantStruct::getAnon(PropertyListInitFields);
-  llvm::Constant *PropertyList = new llvm::GlobalVariable(TheModule,
-      PropertyListInit->getType(), false, llvm::GlobalValue::InternalLinkage,
-      PropertyListInit, ".objc_property_list");
-
-  llvm::Constant *OptionalPropertyArray =
-      llvm::ConstantArray::get(llvm::ArrayType::get(PropertyMetadataTy,
-          OptionalProperties.size()) , OptionalProperties);
-  llvm::Constant* OptionalPropertyListInitFields[] = {
-      llvm::ConstantInt::get(IntTy, OptionalProperties.size()), NULLPtr,
-      OptionalPropertyArray };
-
-  llvm::Constant *OptionalPropertyListInit =
-      llvm::ConstantStruct::getAnon(OptionalPropertyListInitFields);
-  llvm::Constant *OptionalPropertyList = new llvm::GlobalVariable(TheModule,
-          OptionalPropertyListInit->getType(), false,
-          llvm::GlobalValue::InternalLinkage, OptionalPropertyListInit,
-          ".objc_property_list");
+  llvm::Constant *PropertyList =
+    GeneratePropertyList(nullptr, PD, false, false);
+  llvm::Constant *OptionalPropertyList =
+    GeneratePropertyList(nullptr, PD, false, true);
 
   // Protocols are objects containing lists of the methods implemented and
   // protocols adopted.
-  llvm::StructType *ProtocolTy = llvm::StructType::get(IdTy,
-      PtrToInt8Ty,
-      ProtocolList->getType(),
-      InstanceMethodList->getType(),
-      ClassMethodList->getType(),
-      OptionalInstanceMethodList->getType(),
-      OptionalClassMethodList->getType(),
-      PropertyList->getType(),
-      OptionalPropertyList->getType(),
-      NULL);
-  std::vector<llvm::Constant*> Elements;
   // The isa pointer must be set to a magic number so the runtime knows it's
   // the correct layout.
-  Elements.push_back(llvm::ConstantExpr::getIntToPtr(
-        llvm::ConstantInt::get(Int32Ty, ProtocolVersion), IdTy));
-  Elements.push_back(MakeConstantString(ProtocolName, ".objc_protocol_name"));
-  Elements.push_back(ProtocolList);
-  Elements.push_back(InstanceMethodList);
-  Elements.push_back(ClassMethodList);
-  Elements.push_back(OptionalInstanceMethodList);
-  Elements.push_back(OptionalClassMethodList);
-  Elements.push_back(PropertyList);
-  Elements.push_back(OptionalPropertyList);
+  ConstantInitBuilder Builder(CGM);
+  auto Elements = Builder.beginStruct();
+  Elements.add(
+      llvm::ConstantExpr::getIntToPtr(
+          llvm::ConstantInt::get(Int32Ty, ProtocolVersion), IdTy));
+  Elements.add(MakeConstantString(ProtocolName));
+  Elements.add(ProtocolList);
+  Elements.add(InstanceMethodList);
+  Elements.add(ClassMethodList);
+  Elements.add(OptionalInstanceMethodList);
+  Elements.add(OptionalClassMethodList);
+  Elements.add(PropertyList);
+  Elements.add(OptionalPropertyList);
   ExistingProtocols[ProtocolName] =
-    llvm::ConstantExpr::getBitCast(MakeGlobal(ProtocolTy, Elements,
-          ".objc_protocol"), IdTy);
+    llvm::ConstantExpr::getBitCast(
+      Elements.finishAndCreateGlobal(".objc_protocol", CGM.getPointerAlign()),
+      IdTy);
 }
-void CGObjCGNU::GenerateProtocolHolderCategory(void) {
+void CGObjCGNU::GenerateProtocolHolderCategory() {
   // Collect information about instance methods
-  SmallVector<Selector, 1> MethodSels;
-  SmallVector<llvm::Constant*, 1> MethodTypes;
 
-  std::vector<llvm::Constant*> Elements;
+  ConstantInitBuilder Builder(CGM);
+  auto Elements = Builder.beginStruct();
+
   const std::string ClassName = "__ObjC_Protocol_Holder_Ugly_Hack";
   const std::string CategoryName = "AnotherHack";
-  Elements.push_back(MakeConstantString(CategoryName));
-  Elements.push_back(MakeConstantString(ClassName));
+  Elements.add(MakeConstantString(CategoryName));
+  Elements.add(MakeConstantString(ClassName));
   // Instance method list
-  Elements.push_back(llvm::ConstantExpr::getBitCast(GenerateMethodList(
-          ClassName, CategoryName, MethodSels, MethodTypes, false), PtrTy));
+  Elements.addBitCast(GenerateMethodList(
+          ClassName, CategoryName, {}, false), PtrTy);
   // Class method list
-  Elements.push_back(llvm::ConstantExpr::getBitCast(GenerateMethodList(
-          ClassName, CategoryName, MethodSels, MethodTypes, true), PtrTy));
+  Elements.addBitCast(GenerateMethodList(
+          ClassName, CategoryName, {}, true), PtrTy);
+
   // Protocol list
-  llvm::ArrayType *ProtocolArrayTy = llvm::ArrayType::get(PtrTy,
-      ExistingProtocols.size());
-  llvm::StructType *ProtocolListTy = llvm::StructType::get(
-      PtrTy, //Should be a recurisve pointer, but it's always NULL here.
-      SizeTy,
-      ProtocolArrayTy,
-      NULL);
-  std::vector<llvm::Constant*> ProtocolElements;
-  for (llvm::StringMapIterator<llvm::Constant*> iter =
-       ExistingProtocols.begin(), endIter = ExistingProtocols.end();
+  ConstantInitBuilder ProtocolListBuilder(CGM);
+  auto ProtocolList = ProtocolListBuilder.beginStruct();
+  ProtocolList.add(NULLPtr);
+  ProtocolList.addInt(LongTy, ExistingProtocols.size());
+  auto ProtocolElements = ProtocolList.beginArray(PtrTy);
+  for (auto iter = ExistingProtocols.begin(), endIter = ExistingProtocols.end();
        iter != endIter ; iter++) {
-    llvm::Constant *Ptr = llvm::ConstantExpr::getBitCast(iter->getValue(),
-            PtrTy);
-    ProtocolElements.push_back(Ptr);
+    ProtocolElements.addBitCast(iter->getValue(), PtrTy);
   }
-  llvm::Constant * ProtocolArray = llvm::ConstantArray::get(ProtocolArrayTy,
-      ProtocolElements);
-  ProtocolElements.clear();
-  ProtocolElements.push_back(NULLPtr);
-  ProtocolElements.push_back(llvm::ConstantInt::get(LongTy,
-              ExistingProtocols.size()));
-  ProtocolElements.push_back(ProtocolArray);
-  Elements.push_back(llvm::ConstantExpr::getBitCast(MakeGlobal(ProtocolListTy,
-                  ProtocolElements, ".objc_protocol_list"), PtrTy));
+  ProtocolElements.finishAndAddTo(ProtocolList);
+  Elements.addBitCast(
+                   ProtocolList.finishAndCreateGlobal(".objc_protocol_list",
+                                                      CGM.getPointerAlign()),
+                   PtrTy);
   Categories.push_back(llvm::ConstantExpr::getBitCast(
-        MakeGlobal(llvm::StructType::get(PtrToInt8Ty, PtrToInt8Ty,
-            PtrTy, PtrTy, PtrTy, NULL), Elements), PtrTy));
+        Elements.finishAndCreateGlobal("", CGM.getPointerAlign()),
+        PtrTy));
 }
 
 /// Libobjc2 uses a bitfield representation where small(ish) bitfields are
 /// stored in a 64-bit value with the low bit set to 1 and the remaining 63
 /// bits set to their values, LSB first, while larger ones are stored in a
 /// structure of this / form:
-/// 
+///
 /// struct { int32_t length; int32_t values[length]; };
 ///
 /// The values in the array are stored in host-endian format, with the least
@@ -1774,8 +3189,7 @@ void CGObjCGNU::GenerateProtocolHolderCategory(void) {
 /// bitfield / with the 63rd bit set will be 1<<64.
 llvm::Constant *CGObjCGNU::MakeBitField(ArrayRef<bool> bits) {
   int bitCount = bits.size();
-  int ptrBits =
-        (TheModule.getPointerSize() == llvm::Module::Pointer32) ? 32 : 64;
+  int ptrBits = CGM.getDataLayout().getPointerSizeInBits();
   if (bitCount < ptrBits) {
     uint64_t val = 1;
     for (int i=0 ; i<bitCount ; ++i) {
@@ -1783,7 +3197,7 @@ llvm::Constant *CGObjCGNU::MakeBitField(ArrayRef<bool> bits) {
     }
     return llvm::ConstantInt::get(IntPtrTy, val);
   }
-  llvm::SmallVector<llvm::Constant*, 8> values;
+  SmallVector<llvm::Constant *, 8> values;
   int v=0;
   while (v < bitCount) {
     int32_t word = 0;
@@ -1793,150 +3207,173 @@ llvm::Constant *CGObjCGNU::MakeBitField(ArrayRef<bool> bits) {
     }
     values.push_back(llvm::ConstantInt::get(Int32Ty, word));
   }
-  llvm::ArrayType *arrayTy = llvm::ArrayType::get(Int32Ty, values.size());
-  llvm::Constant *array = llvm::ConstantArray::get(arrayTy, values);
-  llvm::Constant *fields[2] = {
-      llvm::ConstantInt::get(Int32Ty, values.size()),
-      array };
-  llvm::Constant *GS = MakeGlobal(llvm::StructType::get(Int32Ty, arrayTy,
-        NULL), fields);
+
+  ConstantInitBuilder builder(CGM);
+  auto fields = builder.beginStruct();
+  fields.addInt(Int32Ty, values.size());
+  auto array = fields.beginArray();
+  for (auto v : values) array.add(v);
+  array.finishAndAddTo(fields);
+
+  llvm::Constant *GS =
+    fields.finishAndCreateGlobal("", CharUnits::fromQuantity(4));
   llvm::Constant *ptr = llvm::ConstantExpr::getPtrToInt(GS, IntPtrTy);
   return ptr;
 }
 
-void CGObjCGNU::GenerateCategory(const ObjCCategoryImplDecl *OCD) {
-  std::string ClassName = OCD->getClassInterface()->getNameAsString();
-  std::string CategoryName = OCD->getNameAsString();
-  // Collect information about instance methods
-  SmallVector<Selector, 16> InstanceMethodSels;
-  SmallVector<llvm::Constant*, 16> InstanceMethodTypes;
-  for (ObjCCategoryImplDecl::instmeth_iterator
-         iter = OCD->instmeth_begin(), endIter = OCD->instmeth_end();
-       iter != endIter ; iter++) {
-    InstanceMethodSels.push_back((*iter)->getSelector());
-    std::string TypeStr;
-    CGM.getContext().getObjCEncodingForMethodDecl(*iter,TypeStr);
-    InstanceMethodTypes.push_back(MakeConstantString(TypeStr));
-  }
-
-  // Collect information about class methods
-  SmallVector<Selector, 16> ClassMethodSels;
-  SmallVector<llvm::Constant*, 16> ClassMethodTypes;
-  for (ObjCCategoryImplDecl::classmeth_iterator
-         iter = OCD->classmeth_begin(), endIter = OCD->classmeth_end();
-       iter != endIter ; iter++) {
-    ClassMethodSels.push_back((*iter)->getSelector());
-    std::string TypeStr;
-    CGM.getContext().getObjCEncodingForMethodDecl(*iter,TypeStr);
-    ClassMethodTypes.push_back(MakeConstantString(TypeStr));
-  }
-
-  // Collect the names of referenced protocols
+llvm::Constant *CGObjCGNU::GenerateCategoryProtocolList(const
+    ObjCCategoryDecl *OCD) {
   SmallVector<std::string, 16> Protocols;
-  const ObjCCategoryDecl *CatDecl = OCD->getCategoryDecl();
-  const ObjCList<ObjCProtocolDecl> &Protos = CatDecl->getReferencedProtocols();
-  for (ObjCList<ObjCProtocolDecl>::iterator I = Protos.begin(),
-       E = Protos.end(); I != E; ++I)
-    Protocols.push_back((*I)->getNameAsString());
-
-  std::vector<llvm::Constant*> Elements;
-  Elements.push_back(MakeConstantString(CategoryName));
-  Elements.push_back(MakeConstantString(ClassName));
-  // Instance method list
-  Elements.push_back(llvm::ConstantExpr::getBitCast(GenerateMethodList(
-          ClassName, CategoryName, InstanceMethodSels, InstanceMethodTypes,
-          false), PtrTy));
-  // Class method list
-  Elements.push_back(llvm::ConstantExpr::getBitCast(GenerateMethodList(
-          ClassName, CategoryName, ClassMethodSels, ClassMethodTypes, true),
-        PtrTy));
-  // Protocol list
-  Elements.push_back(llvm::ConstantExpr::getBitCast(
-        GenerateProtocolList(Protocols), PtrTy));
-  Categories.push_back(llvm::ConstantExpr::getBitCast(
-        MakeGlobal(llvm::StructType::get(PtrToInt8Ty, PtrToInt8Ty,
-            PtrTy, PtrTy, PtrTy, NULL), Elements), PtrTy));
+  for (const auto *PD : OCD->getReferencedProtocols())
+    Protocols.push_back(PD->getNameAsString());
+  return GenerateProtocolList(Protocols);
 }
 
-llvm::Constant *CGObjCGNU::GeneratePropertyList(const ObjCImplementationDecl *OID,
-        SmallVectorImpl<Selector> &InstanceMethodSels,
-        SmallVectorImpl<llvm::Constant*> &InstanceMethodTypes) {
-  ASTContext &Context = CGM.getContext();
-  //
-  // Property metadata: name, attributes, isSynthesized, setter name, setter
-  // types, getter name, getter types.
-  llvm::StructType *PropertyMetadataTy = llvm::StructType::get(
-          PtrToInt8Ty, Int8Ty, Int8Ty, PtrToInt8Ty, PtrToInt8Ty, PtrToInt8Ty,
-          PtrToInt8Ty, NULL);
-  std::vector<llvm::Constant*> Properties;
+void CGObjCGNU::GenerateCategory(const ObjCCategoryImplDecl *OCD) {
+  const ObjCInterfaceDecl *Class = OCD->getClassInterface();
+  std::string ClassName = Class->getNameAsString();
+  std::string CategoryName = OCD->getNameAsString();
 
+  // Collect the names of referenced protocols
+  const ObjCCategoryDecl *CatDecl = OCD->getCategoryDecl();
+
+  ConstantInitBuilder Builder(CGM);
+  auto Elements = Builder.beginStruct();
+  Elements.add(MakeConstantString(CategoryName));
+  Elements.add(MakeConstantString(ClassName));
+  // Instance method list
+  SmallVector<ObjCMethodDecl*, 16> InstanceMethods;
+  InstanceMethods.insert(InstanceMethods.begin(), OCD->instmeth_begin(),
+      OCD->instmeth_end());
+  Elements.addBitCast(
+          GenerateMethodList(ClassName, CategoryName, InstanceMethods, false),
+          PtrTy);
+  // Class method list
+
+  SmallVector<ObjCMethodDecl*, 16> ClassMethods;
+  ClassMethods.insert(ClassMethods.begin(), OCD->classmeth_begin(),
+      OCD->classmeth_end());
+  Elements.addBitCast(
+          GenerateMethodList(ClassName, CategoryName, ClassMethods, true),
+          PtrTy);
+  // Protocol list
+  Elements.addBitCast(GenerateCategoryProtocolList(CatDecl), PtrTy);
+  if (isRuntime(ObjCRuntime::GNUstep, 2)) {
+    const ObjCCategoryDecl *Category =
+      Class->FindCategoryDeclaration(OCD->getIdentifier());
+    if (Category) {
+      // Instance properties
+      Elements.addBitCast(GeneratePropertyList(OCD, Category, false), PtrTy);
+      // Class properties
+      Elements.addBitCast(GeneratePropertyList(OCD, Category, true), PtrTy);
+    } else {
+      Elements.addNullPointer(PtrTy);
+      Elements.addNullPointer(PtrTy);
+    }
+  }
+
+  Categories.push_back(llvm::ConstantExpr::getBitCast(
+        Elements.finishAndCreateGlobal(
+          std::string(".objc_category_")+ClassName+CategoryName,
+          CGM.getPointerAlign()),
+        PtrTy));
+}
+
+llvm::Constant *CGObjCGNU::GeneratePropertyList(const Decl *Container,
+    const ObjCContainerDecl *OCD,
+    bool isClassProperty,
+    bool protocolOptionalProperties) {
+
+  SmallVector<const ObjCPropertyDecl *, 16> Properties;
+  llvm::SmallPtrSet<const IdentifierInfo*, 16> PropertySet;
+  bool isProtocol = isa<ObjCProtocolDecl>(OCD);
+  ASTContext &Context = CGM.getContext();
+
+  std::function<void(const ObjCProtocolDecl *Proto)> collectProtocolProperties
+    = [&](const ObjCProtocolDecl *Proto) {
+      for (const auto *P : Proto->protocols())
+        collectProtocolProperties(P);
+      for (const auto *PD : Proto->properties()) {
+        if (isClassProperty != PD->isClassProperty())
+          continue;
+        // Skip any properties that are declared in protocols that this class
+        // conforms to but are not actually implemented by this class.
+        if (!isProtocol && !Context.getObjCPropertyImplDeclForPropertyDecl(PD, Container))
+          continue;
+        if (!PropertySet.insert(PD->getIdentifier()).second)
+          continue;
+        Properties.push_back(PD);
+      }
+    };
+
+  if (const ObjCInterfaceDecl *OID = dyn_cast<ObjCInterfaceDecl>(OCD))
+    for (const ObjCCategoryDecl *ClassExt : OID->known_extensions())
+      for (auto *PD : ClassExt->properties()) {
+        if (isClassProperty != PD->isClassProperty())
+          continue;
+        PropertySet.insert(PD->getIdentifier());
+        Properties.push_back(PD);
+      }
+
+  for (const auto *PD : OCD->properties()) {
+    if (isClassProperty != PD->isClassProperty())
+      continue;
+    // If we're generating a list for a protocol, skip optional / required ones
+    // when generating the other list.
+    if (isProtocol && (protocolOptionalProperties != PD->isOptional()))
+      continue;
+    // Don't emit duplicate metadata for properties that were already in a
+    // class extension.
+    if (!PropertySet.insert(PD->getIdentifier()).second)
+      continue;
+
+    Properties.push_back(PD);
+  }
+
+  if (const ObjCInterfaceDecl *OID = dyn_cast<ObjCInterfaceDecl>(OCD))
+    for (const auto *P : OID->all_referenced_protocols())
+      collectProtocolProperties(P);
+  else if (const ObjCCategoryDecl *CD = dyn_cast<ObjCCategoryDecl>(OCD))
+    for (const auto *P : CD->protocols())
+      collectProtocolProperties(P);
+
+  auto numProperties = Properties.size();
+
+  if (numProperties == 0)
+    return NULLPtr;
+
+  ConstantInitBuilder builder(CGM);
+  auto propertyList = builder.beginStruct();
+  auto properties = PushPropertyListHeader(propertyList, numProperties);
 
   // Add all of the property methods need adding to the method list and to the
   // property metadata list.
-  for (ObjCImplDecl::propimpl_iterator
-         iter = OID->propimpl_begin(), endIter = OID->propimpl_end();
-       iter != endIter ; iter++) {
-    std::vector<llvm::Constant*> Fields;
-    ObjCPropertyDecl *property = (*iter)->getPropertyDecl();
-    ObjCPropertyImplDecl *propertyImpl = *iter;
-    bool isSynthesized = (propertyImpl->getPropertyImplementation() == 
-        ObjCPropertyImplDecl::Synthesize);
-
-    Fields.push_back(MakeConstantString(property->getNameAsString()));
-    Fields.push_back(llvm::ConstantInt::get(Int8Ty,
-                property->getPropertyAttributes()));
-    Fields.push_back(llvm::ConstantInt::get(Int8Ty, isSynthesized));
-    if (ObjCMethodDecl *getter = property->getGetterMethodDecl()) {
-      std::string TypeStr;
-      Context.getObjCEncodingForMethodDecl(getter,TypeStr);
-      llvm::Constant *TypeEncoding = MakeConstantString(TypeStr);
-      if (isSynthesized) {
-        InstanceMethodTypes.push_back(TypeEncoding);
-        InstanceMethodSels.push_back(getter->getSelector());
+  for (auto *property : Properties) {
+    bool isSynthesized = false;
+    bool isDynamic = false;
+    if (!isProtocol) {
+      auto *propertyImpl = Context.getObjCPropertyImplDeclForPropertyDecl(property, Container);
+      if (propertyImpl) {
+        isSynthesized = (propertyImpl->getPropertyImplementation() ==
+            ObjCPropertyImplDecl::Synthesize);
+        isDynamic = (propertyImpl->getPropertyImplementation() ==
+            ObjCPropertyImplDecl::Dynamic);
       }
-      Fields.push_back(MakeConstantString(getter->getSelector().getAsString()));
-      Fields.push_back(TypeEncoding);
-    } else {
-      Fields.push_back(NULLPtr);
-      Fields.push_back(NULLPtr);
     }
-    if (ObjCMethodDecl *setter = property->getSetterMethodDecl()) {
-      std::string TypeStr;
-      Context.getObjCEncodingForMethodDecl(setter,TypeStr);
-      llvm::Constant *TypeEncoding = MakeConstantString(TypeStr);
-      if (isSynthesized) {
-        InstanceMethodTypes.push_back(TypeEncoding);
-        InstanceMethodSels.push_back(setter->getSelector());
-      }
-      Fields.push_back(MakeConstantString(setter->getSelector().getAsString()));
-      Fields.push_back(TypeEncoding);
-    } else {
-      Fields.push_back(NULLPtr);
-      Fields.push_back(NULLPtr);
-    }
-    Properties.push_back(llvm::ConstantStruct::get(PropertyMetadataTy, Fields));
+    PushProperty(properties, property, Container, isSynthesized, isDynamic);
   }
-  llvm::ArrayType *PropertyArrayTy =
-      llvm::ArrayType::get(PropertyMetadataTy, Properties.size());
-  llvm::Constant *PropertyArray = llvm::ConstantArray::get(PropertyArrayTy,
-          Properties);
-  llvm::Constant* PropertyListInitFields[] =
-    {llvm::ConstantInt::get(IntTy, Properties.size()), NULLPtr, PropertyArray};
+  properties.finishAndAddTo(propertyList);
 
-  llvm::Constant *PropertyListInit =
-      llvm::ConstantStruct::getAnon(PropertyListInitFields);
-  return new llvm::GlobalVariable(TheModule, PropertyListInit->getType(), false,
-          llvm::GlobalValue::InternalLinkage, PropertyListInit,
-          ".objc_property_list");
+  return propertyList.finishAndCreateGlobal(".objc_property_list",
+                                            CGM.getPointerAlign());
 }
 
 void CGObjCGNU::RegisterAlias(const ObjCCompatibleAliasDecl *OAD) {
   // Get the class declaration for which the alias is specified.
   ObjCInterfaceDecl *ClassDecl =
     const_cast<ObjCInterfaceDecl *>(OAD->getClassInterface());
-  std::string ClassName = ClassDecl->getNameAsString();
-  std::string AliasName = OAD->getNameAsString();
-  ClassAliases.push_back(ClassAliasPair(ClassName,AliasName));
+  ClassAliases.emplace_back(ClassDecl->getNameAsString(),
+                            OAD->getNameAsString());
 }
 
 void CGObjCGNU::GenerateClass(const ObjCImplementationDecl *OID) {
@@ -1953,30 +3390,34 @@ void CGObjCGNU::GenerateClass(const ObjCImplementationDecl *OID) {
 
   // Get the class name
   ObjCInterfaceDecl *ClassDecl =
-    const_cast<ObjCInterfaceDecl *>(OID->getClassInterface());
+      const_cast<ObjCInterfaceDecl *>(OID->getClassInterface());
   std::string ClassName = ClassDecl->getNameAsString();
+
   // Emit the symbol that is used to generate linker errors if this class is
   // referenced in other modules but not declared.
   std::string classSymbolName = "__objc_class_name_" + ClassName;
-  if (llvm::GlobalVariable *symbol =
-      TheModule.getGlobalVariable(classSymbolName)) {
+  if (auto *symbol = TheModule.getGlobalVariable(classSymbolName)) {
     symbol->setInitializer(llvm::ConstantInt::get(LongTy, 0));
   } else {
     new llvm::GlobalVariable(TheModule, LongTy, false,
-    llvm::GlobalValue::ExternalLinkage, llvm::ConstantInt::get(LongTy, 0),
-    classSymbolName);
+                             llvm::GlobalValue::ExternalLinkage,
+                             llvm::ConstantInt::get(LongTy, 0),
+                             classSymbolName);
   }
 
   // Get the size of instances.
-  int instanceSize = 
+  int instanceSize =
     Context.getASTObjCImplementationLayout(OID).getSize().getQuantity();
 
   // Collect information about instance variables.
   SmallVector<llvm::Constant*, 16> IvarNames;
   SmallVector<llvm::Constant*, 16> IvarTypes;
   SmallVector<llvm::Constant*, 16> IvarOffsets;
+  SmallVector<llvm::Constant*, 16> IvarAligns;
+  SmallVector<Qualifiers::ObjCLifetime, 16> IvarOwnership;
 
-  std::vector<llvm::Constant*> IvarOffsetValues;
+  ConstantInitBuilder IvarOffsetBuilder(CGM);
+  auto IvarOffsetValues = IvarOffsetBuilder.beginArray(PtrToIntTy);
   SmallVector<bool, 16> WeakIvars;
   SmallVector<bool, 16> StrongIvars;
 
@@ -1984,7 +3425,7 @@ void CGObjCGNU::GenerateClass(const ObjCImplementationDecl *OID) {
     Context.getASTObjCInterfaceLayout(SuperClassDecl).getSize().getQuantity();
   // For non-fragile ivars, set the instance size to 0 - {the size of just this
   // class}.  The runtime will then set this to the correct value on load.
-  if (CGM.getContext().getLangOpts().ObjCNonFragileABI) {
+  if (CGM.getLangOpts().ObjCRuntime.isNonFragile()) {
     instanceSize = 0 - (instanceSize - superInstanceSize);
   }
 
@@ -1994,18 +3435,21 @@ void CGObjCGNU::GenerateClass(const ObjCImplementationDecl *OID) {
       IvarNames.push_back(MakeConstantString(IVD->getNameAsString()));
       // Get the type encoding for this ivar
       std::string TypeStr;
-      Context.getObjCEncodingForType(IVD->getType(), TypeStr);
+      Context.getObjCEncodingForType(IVD->getType(), TypeStr, IVD);
       IvarTypes.push_back(MakeConstantString(TypeStr));
+      IvarAligns.push_back(llvm::ConstantInt::get(IntTy,
+            Context.getTypeSize(IVD->getType())));
       // Get the offset
       uint64_t BaseOffset = ComputeIvarBaseOffset(CGM, OID, IVD);
       uint64_t Offset = BaseOffset;
-      if (CGM.getContext().getLangOpts().ObjCNonFragileABI) {
+      if (CGM.getLangOpts().ObjCRuntime.isNonFragile()) {
         Offset = BaseOffset - superInstanceSize;
       }
       llvm::Constant *OffsetValue = llvm::ConstantInt::get(IntTy, Offset);
       // Create the direct offset value
       std::string OffsetName = "__objc_ivar_offset_value_" + ClassName +"." +
           IVD->getNameAsString();
+
       llvm::GlobalVariable *OffsetVar = TheModule.getGlobalVariable(OffsetName);
       if (OffsetVar) {
         OffsetVar->setInitializer(OffsetValue);
@@ -2014,14 +3458,13 @@ void CGObjCGNU::GenerateClass(const ObjCImplementationDecl *OID) {
         // copy.
         OffsetVar->setLinkage(llvm::GlobalValue::ExternalLinkage);
       } else
-        OffsetVar = new llvm::GlobalVariable(TheModule, IntTy,
+        OffsetVar = new llvm::GlobalVariable(TheModule, Int32Ty,
           false, llvm::GlobalValue::ExternalLinkage,
-          OffsetValue,
-          "__objc_ivar_offset_value_" + ClassName +"." +
-          IVD->getNameAsString());
+          OffsetValue, OffsetName);
       IvarOffsets.push_back(OffsetValue);
-      IvarOffsetValues.push_back(OffsetVar);
+      IvarOffsetValues.add(OffsetVar);
       Qualifiers::ObjCLifetime lt = IVD->getType().getQualifiers().getObjCLifetime();
+      IvarOwnership.push_back(lt);
       switch (lt) {
         case Qualifiers::OCL_Strong:
           StrongIvars.push_back(true);
@@ -2039,44 +3482,37 @@ void CGObjCGNU::GenerateClass(const ObjCImplementationDecl *OID) {
   llvm::Constant *StrongIvarBitmap = MakeBitField(StrongIvars);
   llvm::Constant *WeakIvarBitmap = MakeBitField(WeakIvars);
   llvm::GlobalVariable *IvarOffsetArray =
-    MakeGlobalArray(PtrToIntTy, IvarOffsetValues, ".ivar.offsets");
-
+    IvarOffsetValues.finishAndCreateGlobal(".ivar.offsets",
+                                           CGM.getPointerAlign());
 
   // Collect information about instance methods
-  SmallVector<Selector, 16> InstanceMethodSels;
-  SmallVector<llvm::Constant*, 16> InstanceMethodTypes;
-  for (ObjCImplementationDecl::instmeth_iterator
-         iter = OID->instmeth_begin(), endIter = OID->instmeth_end();
-       iter != endIter ; iter++) {
-    InstanceMethodSels.push_back((*iter)->getSelector());
-    std::string TypeStr;
-    Context.getObjCEncodingForMethodDecl((*iter),TypeStr);
-    InstanceMethodTypes.push_back(MakeConstantString(TypeStr));
-  }
+  SmallVector<const ObjCMethodDecl*, 16> InstanceMethods;
+  InstanceMethods.insert(InstanceMethods.begin(), OID->instmeth_begin(),
+      OID->instmeth_end());
 
-  llvm::Constant *Properties = GeneratePropertyList(OID, InstanceMethodSels,
-          InstanceMethodTypes);
+  SmallVector<const ObjCMethodDecl*, 16> ClassMethods;
+  ClassMethods.insert(ClassMethods.begin(), OID->classmeth_begin(),
+      OID->classmeth_end());
 
+  // Collect the same information about synthesized properties, which don't
+  // show up in the instance method lists.
+  for (auto *propertyImpl : OID->property_impls())
+    if (propertyImpl->getPropertyImplementation() ==
+        ObjCPropertyImplDecl::Synthesize) {
+      auto addPropertyMethod = [&](const ObjCMethodDecl *accessor) {
+        if (accessor)
+          InstanceMethods.push_back(accessor);
+      };
+      addPropertyMethod(propertyImpl->getGetterMethodDecl());
+      addPropertyMethod(propertyImpl->getSetterMethodDecl());
+    }
 
-  // Collect information about class methods
-  SmallVector<Selector, 16> ClassMethodSels;
-  SmallVector<llvm::Constant*, 16> ClassMethodTypes;
-  for (ObjCImplementationDecl::classmeth_iterator
-         iter = OID->classmeth_begin(), endIter = OID->classmeth_end();
-       iter != endIter ; iter++) {
-    ClassMethodSels.push_back((*iter)->getSelector());
-    std::string TypeStr;
-    Context.getObjCEncodingForMethodDecl((*iter),TypeStr);
-    ClassMethodTypes.push_back(MakeConstantString(TypeStr));
-  }
+  llvm::Constant *Properties = GeneratePropertyList(OID, ClassDecl);
+
   // Collect the names of referenced protocols
   SmallVector<std::string, 16> Protocols;
-  for (ObjCInterfaceDecl::protocol_iterator
-         I = ClassDecl->protocol_begin(),
-         E = ClassDecl->protocol_end(); I != E; ++I)
-    Protocols.push_back((*I)->getNameAsString());
-
-
+  for (const auto *I : ClassDecl->protocols())
+    Protocols.push_back(I->getNameAsString());
 
   // Get the superclass pointer.
   llvm::Constant *SuperClass;
@@ -2089,11 +3525,11 @@ void CGObjCGNU::GenerateClass(const ObjCImplementationDecl *OID) {
   SmallVector<llvm::Constant*, 1>  empty;
   // Generate the method and instance variable lists
   llvm::Constant *MethodList = GenerateMethodList(ClassName, "",
-      InstanceMethodSels, InstanceMethodTypes, false);
+      InstanceMethods, false);
   llvm::Constant *ClassMethodList = GenerateMethodList(ClassName, "",
-      ClassMethodSels, ClassMethodTypes, true);
+      ClassMethods, true);
   llvm::Constant *IvarList = GenerateIvarList(IvarNames, IvarTypes,
-      IvarOffsets);
+      IvarOffsets, IvarAligns, IvarOwnership);
   // Irrespective of whether we are compiling for a fragile or non-fragile ABI,
   // we emit a symbol containing the offset for each ivar in the class.  This
   // allows code compiled for the non-Fragile ABI to inherit from code compiled
@@ -2106,18 +3542,18 @@ void CGObjCGNU::GenerateClass(const ObjCImplementationDecl *OID) {
   // the offset (third field in ivar structure)
   llvm::Type *IndexTy = Int32Ty;
   llvm::Constant *offsetPointerIndexes[] = {Zeros[0],
-      llvm::ConstantInt::get(IndexTy, 1), 0,
-      llvm::ConstantInt::get(IndexTy, 2) };
+      llvm::ConstantInt::get(IndexTy, ClassABIVersion > 1 ? 2 : 1), nullptr,
+      llvm::ConstantInt::get(IndexTy, ClassABIVersion > 1 ? 3 : 2) };
 
   unsigned ivarIndex = 0;
   for (const ObjCIvarDecl *IVD = ClassDecl->all_declared_ivar_begin(); IVD;
        IVD = IVD->getNextIvar()) {
-      const std::string Name = "__objc_ivar_offset_" + ClassName + '.'
-          + IVD->getNameAsString();
+      const std::string Name = GetIVarOffsetVariableName(ClassDecl, IVD);
       offsetPointerIndexes[2] = llvm::ConstantInt::get(IndexTy, ivarIndex);
       // Get the correct ivar field
       llvm::Constant *offsetValue = llvm::ConstantExpr::getGetElementPtr(
-              IvarList, offsetPointerIndexes);
+          cast<llvm::GlobalVariable>(IvarList)->getValueType(), IvarList,
+          offsetPointerIndexes);
       // Get the existing variable, if one exists.
       llvm::GlobalVariable *offset = TheModule.getNamedGlobal(Name);
       if (offset) {
@@ -2126,41 +3562,43 @@ void CGObjCGNU::GenerateClass(const ObjCImplementationDecl *OID) {
         // different modules will use this one, rather than their private
         // copy.
         offset->setLinkage(llvm::GlobalValue::ExternalLinkage);
-      } else {
+      } else
         // Add a new alias if there isn't one already.
-        offset = new llvm::GlobalVariable(TheModule, offsetValue->getType(),
+        new llvm::GlobalVariable(TheModule, offsetValue->getType(),
                 false, llvm::GlobalValue::ExternalLinkage, offsetValue, Name);
-        (void) offset; // Silence dead store warning.
-      }
       ++ivarIndex;
   }
   llvm::Constant *ZeroPtr = llvm::ConstantInt::get(IntPtrTy, 0);
+
   //Generate metaclass for class methods
-  llvm::Constant *MetaClassStruct = GenerateClassStructure(NULLPtr,
-      NULLPtr, 0x12L, ClassName.c_str(), 0, Zeros[0], GenerateIvarList(
-        empty, empty, empty), ClassMethodList, NULLPtr,
-      NULLPtr, NULLPtr, ZeroPtr, ZeroPtr, true);
+  llvm::Constant *MetaClassStruct = GenerateClassStructure(
+      NULLPtr, NULLPtr, 0x12L, ClassName.c_str(), nullptr, Zeros[0],
+      NULLPtr, ClassMethodList, NULLPtr, NULLPtr,
+      GeneratePropertyList(OID, ClassDecl, true), ZeroPtr, ZeroPtr, true);
+  CGM.setGVProperties(cast<llvm::GlobalValue>(MetaClassStruct),
+                      OID->getClassInterface());
 
   // Generate the class structure
-  llvm::Constant *ClassStruct =
-    GenerateClassStructure(MetaClassStruct, SuperClass, 0x11L,
-                           ClassName.c_str(), 0,
-      llvm::ConstantInt::get(LongTy, instanceSize), IvarList,
-      MethodList, GenerateProtocolList(Protocols), IvarOffsetArray,
-      Properties, StrongIvarBitmap, WeakIvarBitmap);
+  llvm::Constant *ClassStruct = GenerateClassStructure(
+      MetaClassStruct, SuperClass, 0x11L, ClassName.c_str(), nullptr,
+      llvm::ConstantInt::get(LongTy, instanceSize), IvarList, MethodList,
+      GenerateProtocolList(Protocols), IvarOffsetArray, Properties,
+      StrongIvarBitmap, WeakIvarBitmap);
+  CGM.setGVProperties(cast<llvm::GlobalValue>(ClassStruct),
+                      OID->getClassInterface());
 
   // Resolve the class aliases, if they exist.
   if (ClassPtrAlias) {
     ClassPtrAlias->replaceAllUsesWith(
         llvm::ConstantExpr::getBitCast(ClassStruct, IdTy));
     ClassPtrAlias->eraseFromParent();
-    ClassPtrAlias = 0;
+    ClassPtrAlias = nullptr;
   }
   if (MetaClassPtrAlias) {
     MetaClassPtrAlias->replaceAllUsesWith(
         llvm::ConstantExpr::getBitCast(MetaClassStruct, IdTy));
     MetaClassPtrAlias->eraseFromParent();
-    MetaClassPtrAlias = 0;
+    MetaClassPtrAlias = nullptr;
   }
 
   // Add class structure to list to be added to the symtab later
@@ -2168,176 +3606,193 @@ void CGObjCGNU::GenerateClass(const ObjCImplementationDecl *OID) {
   Classes.push_back(ClassStruct);
 }
 
-
 llvm::Function *CGObjCGNU::ModuleInitFunction() {
   // Only emit an ObjC load function if no Objective-C stuff has been called
   if (Classes.empty() && Categories.empty() && ConstantStrings.empty() &&
       ExistingProtocols.empty() && SelectorTable.empty())
-    return NULL;
+    return nullptr;
 
   // Add all referenced protocols to a category.
   GenerateProtocolHolderCategory();
 
-  llvm::StructType *SelStructTy = dyn_cast<llvm::StructType>(
-          SelectorTy->getElementType());
-  llvm::Type *SelStructPtrTy = SelectorTy;
-  if (SelStructTy == 0) {
-    SelStructTy = llvm::StructType::get(PtrToInt8Ty, PtrToInt8Ty, NULL);
-    SelStructPtrTy = llvm::PointerType::getUnqual(SelStructTy);
+  llvm::StructType *selStructTy =
+    dyn_cast<llvm::StructType>(SelectorTy->getElementType());
+  llvm::Type *selStructPtrTy = SelectorTy;
+  if (!selStructTy) {
+    selStructTy = llvm::StructType::get(CGM.getLLVMContext(),
+                                        { PtrToInt8Ty, PtrToInt8Ty });
+    selStructPtrTy = llvm::PointerType::getUnqual(selStructTy);
   }
 
-  std::vector<llvm::Constant*> Elements;
-  llvm::Constant *Statics = NULLPtr;
   // Generate statics list:
-  if (ConstantStrings.size()) {
-    llvm::ArrayType *StaticsArrayTy = llvm::ArrayType::get(PtrToInt8Ty,
-        ConstantStrings.size() + 1);
-    ConstantStrings.push_back(NULLPtr);
+  llvm::Constant *statics = NULLPtr;
+  if (!ConstantStrings.empty()) {
+    llvm::GlobalVariable *fileStatics = [&] {
+      ConstantInitBuilder builder(CGM);
+      auto staticsStruct = builder.beginStruct();
 
-    StringRef StringClass = CGM.getLangOpts().ObjCConstantStringClass;
+      StringRef stringClass = CGM.getLangOpts().ObjCConstantStringClass;
+      if (stringClass.empty()) stringClass = "NXConstantString";
+      staticsStruct.add(MakeConstantString(stringClass,
+                                           ".objc_static_class_name"));
 
-    if (StringClass.empty()) StringClass = "NXConstantString";
+      auto array = staticsStruct.beginArray();
+      array.addAll(ConstantStrings);
+      array.add(NULLPtr);
+      array.finishAndAddTo(staticsStruct);
 
-    Elements.push_back(MakeConstantString(StringClass,
-                ".objc_static_class_name"));
-    Elements.push_back(llvm::ConstantArray::get(StaticsArrayTy,
-       ConstantStrings));
-    llvm::StructType *StaticsListTy =
-      llvm::StructType::get(PtrToInt8Ty, StaticsArrayTy, NULL);
-    llvm::Type *StaticsListPtrTy =
-      llvm::PointerType::getUnqual(StaticsListTy);
-    Statics = MakeGlobal(StaticsListTy, Elements, ".objc_statics");
-    llvm::ArrayType *StaticsListArrayTy =
-      llvm::ArrayType::get(StaticsListPtrTy, 2);
-    Elements.clear();
-    Elements.push_back(Statics);
-    Elements.push_back(llvm::Constant::getNullValue(StaticsListPtrTy));
-    Statics = MakeGlobal(StaticsListArrayTy, Elements, ".objc_statics_ptr");
-    Statics = llvm::ConstantExpr::getBitCast(Statics, PtrTy);
+      return staticsStruct.finishAndCreateGlobal(".objc_statics",
+                                                 CGM.getPointerAlign());
+    }();
+
+    ConstantInitBuilder builder(CGM);
+    auto allStaticsArray = builder.beginArray(fileStatics->getType());
+    allStaticsArray.add(fileStatics);
+    allStaticsArray.addNullPointer(fileStatics->getType());
+
+    statics = allStaticsArray.finishAndCreateGlobal(".objc_statics_ptr",
+                                                    CGM.getPointerAlign());
+    statics = llvm::ConstantExpr::getBitCast(statics, PtrTy);
   }
-  // Array of classes, categories, and constant objects
-  llvm::ArrayType *ClassListTy = llvm::ArrayType::get(PtrToInt8Ty,
-      Classes.size() + Categories.size()  + 2);
-  llvm::StructType *SymTabTy = llvm::StructType::get(LongTy, SelStructPtrTy,
-                                                     llvm::Type::getInt16Ty(VMContext),
-                                                     llvm::Type::getInt16Ty(VMContext),
-                                                     ClassListTy, NULL);
 
-  Elements.clear();
+  // Array of classes, categories, and constant objects.
+
+  SmallVector<llvm::GlobalAlias*, 16> selectorAliases;
+  unsigned selectorCount;
+
   // Pointer to an array of selectors used in this module.
-  std::vector<llvm::Constant*> Selectors;
-  std::vector<llvm::GlobalAlias*> SelectorAliases;
-  for (SelectorMap::iterator iter = SelectorTable.begin(),
-      iterEnd = SelectorTable.end(); iter != iterEnd ; ++iter) {
+  llvm::GlobalVariable *selectorList = [&] {
+    ConstantInitBuilder builder(CGM);
+    auto selectors = builder.beginArray(selStructTy);
+    auto &table = SelectorTable; // MSVC workaround
+    std::vector<Selector> allSelectors;
+    for (auto &entry : table)
+      allSelectors.push_back(entry.first);
+    llvm::sort(allSelectors);
 
-    std::string SelNameStr = iter->first.getAsString();
-    llvm::Constant *SelName = ExportUniqueString(SelNameStr, ".objc_sel_name");
+    for (auto &untypedSel : allSelectors) {
+      std::string selNameStr = untypedSel.getAsString();
+      llvm::Constant *selName = ExportUniqueString(selNameStr, ".objc_sel_name");
 
-    SmallVectorImpl<TypedSelector> &Types = iter->second;
-    for (SmallVectorImpl<TypedSelector>::iterator i = Types.begin(),
-        e = Types.end() ; i!=e ; i++) {
+      for (TypedSelector &sel : table[untypedSel]) {
+        llvm::Constant *selectorTypeEncoding = NULLPtr;
+        if (!sel.first.empty())
+          selectorTypeEncoding =
+            MakeConstantString(sel.first, ".objc_sel_types");
 
-      llvm::Constant *SelectorTypeEncoding = NULLPtr;
-      if (!i->first.empty())
-        SelectorTypeEncoding = MakeConstantString(i->first, ".objc_sel_types");
+        auto selStruct = selectors.beginStruct(selStructTy);
+        selStruct.add(selName);
+        selStruct.add(selectorTypeEncoding);
+        selStruct.finishAndAddTo(selectors);
 
-      Elements.push_back(SelName);
-      Elements.push_back(SelectorTypeEncoding);
-      Selectors.push_back(llvm::ConstantStruct::get(SelStructTy, Elements));
-      Elements.clear();
-
-      // Store the selector alias for later replacement
-      SelectorAliases.push_back(i->second);
+        // Store the selector alias for later replacement
+        selectorAliases.push_back(sel.second);
+      }
     }
-  }
-  unsigned SelectorCount = Selectors.size();
-  // NULL-terminate the selector list.  This should not actually be required,
-  // because the selector list has a length field.  Unfortunately, the GCC
-  // runtime decides to ignore the length field and expects a NULL terminator,
-  // and GCC cooperates with this by always setting the length to 0.
-  Elements.push_back(NULLPtr);
-  Elements.push_back(NULLPtr);
-  Selectors.push_back(llvm::ConstantStruct::get(SelStructTy, Elements));
-  Elements.clear();
 
-  // Number of static selectors
-  Elements.push_back(llvm::ConstantInt::get(LongTy, SelectorCount));
-  llvm::Constant *SelectorList = MakeGlobalArray(SelStructTy, Selectors,
-          ".objc_selector_list");
-  Elements.push_back(llvm::ConstantExpr::getBitCast(SelectorList,
-    SelStructPtrTy));
+    // Remember the number of entries in the selector table.
+    selectorCount = selectors.size();
+
+    // NULL-terminate the selector list.  This should not actually be required,
+    // because the selector list has a length field.  Unfortunately, the GCC
+    // runtime decides to ignore the length field and expects a NULL terminator,
+    // and GCC cooperates with this by always setting the length to 0.
+    auto selStruct = selectors.beginStruct(selStructTy);
+    selStruct.add(NULLPtr);
+    selStruct.add(NULLPtr);
+    selStruct.finishAndAddTo(selectors);
+
+    return selectors.finishAndCreateGlobal(".objc_selector_list",
+                                           CGM.getPointerAlign());
+  }();
 
   // Now that all of the static selectors exist, create pointers to them.
-  for (unsigned int i=0 ; i<SelectorCount ; i++) {
-
-    llvm::Constant *Idxs[] = {Zeros[0],
-      llvm::ConstantInt::get(Int32Ty, i), Zeros[0]};
+  for (unsigned i = 0; i < selectorCount; ++i) {
+    llvm::Constant *idxs[] = {
+      Zeros[0],
+      llvm::ConstantInt::get(Int32Ty, i)
+    };
     // FIXME: We're generating redundant loads and stores here!
-    llvm::Constant *SelPtr = llvm::ConstantExpr::getGetElementPtr(SelectorList,
-        makeArrayRef(Idxs, 2));
+    llvm::Constant *selPtr = llvm::ConstantExpr::getGetElementPtr(
+        selectorList->getValueType(), selectorList, idxs);
     // If selectors are defined as an opaque type, cast the pointer to this
     // type.
-    SelPtr = llvm::ConstantExpr::getBitCast(SelPtr, SelectorTy);
-    SelectorAliases[i]->replaceAllUsesWith(SelPtr);
-    SelectorAliases[i]->eraseFromParent();
+    selPtr = llvm::ConstantExpr::getBitCast(selPtr, SelectorTy);
+    selectorAliases[i]->replaceAllUsesWith(selPtr);
+    selectorAliases[i]->eraseFromParent();
   }
 
-  // Number of classes defined.
-  Elements.push_back(llvm::ConstantInt::get(llvm::Type::getInt16Ty(VMContext),
-        Classes.size()));
-  // Number of categories defined
-  Elements.push_back(llvm::ConstantInt::get(llvm::Type::getInt16Ty(VMContext),
-        Categories.size()));
-  // Create an array of classes, then categories, then static object instances
-  Classes.insert(Classes.end(), Categories.begin(), Categories.end());
-  //  NULL-terminated list of static object instances (mainly constant strings)
-  Classes.push_back(Statics);
-  Classes.push_back(NULLPtr);
-  llvm::Constant *ClassList = llvm::ConstantArray::get(ClassListTy, Classes);
-  Elements.push_back(ClassList);
-  // Construct the symbol table
-  llvm::Constant *SymTab= MakeGlobal(SymTabTy, Elements);
+  llvm::GlobalVariable *symtab = [&] {
+    ConstantInitBuilder builder(CGM);
+    auto symtab = builder.beginStruct();
+
+    // Number of static selectors
+    symtab.addInt(LongTy, selectorCount);
+
+    symtab.addBitCast(selectorList, selStructPtrTy);
+
+    // Number of classes defined.
+    symtab.addInt(CGM.Int16Ty, Classes.size());
+    // Number of categories defined
+    symtab.addInt(CGM.Int16Ty, Categories.size());
+
+    // Create an array of classes, then categories, then static object instances
+    auto classList = symtab.beginArray(PtrToInt8Ty);
+    classList.addAll(Classes);
+    classList.addAll(Categories);
+    //  NULL-terminated list of static object instances (mainly constant strings)
+    classList.add(statics);
+    classList.add(NULLPtr);
+    classList.finishAndAddTo(symtab);
+
+    // Construct the symbol table.
+    return symtab.finishAndCreateGlobal("", CGM.getPointerAlign());
+  }();
 
   // The symbol table is contained in a module which has some version-checking
   // constants
-  llvm::StructType * ModuleTy = llvm::StructType::get(LongTy, LongTy,
-      PtrToInt8Ty, llvm::PointerType::getUnqual(SymTabTy), 
-      (RuntimeVersion >= 10) ? IntTy : NULL, NULL);
-  Elements.clear();
-  // Runtime version, used for ABI compatibility checking.
-  Elements.push_back(llvm::ConstantInt::get(LongTy, RuntimeVersion));
-  // sizeof(ModuleTy)
-  llvm::TargetData td(&TheModule);
-  Elements.push_back(
-    llvm::ConstantInt::get(LongTy,
-                           td.getTypeSizeInBits(ModuleTy) /
-                             CGM.getContext().getCharWidth()));
+  llvm::Constant *module = [&] {
+    llvm::Type *moduleEltTys[] = {
+      LongTy, LongTy, PtrToInt8Ty, symtab->getType(), IntTy
+    };
+    llvm::StructType *moduleTy =
+      llvm::StructType::get(CGM.getLLVMContext(),
+         makeArrayRef(moduleEltTys).drop_back(unsigned(RuntimeVersion < 10)));
 
-  // The path to the source file where this module was declared
-  SourceManager &SM = CGM.getContext().getSourceManager();
-  const FileEntry *mainFile = SM.getFileEntryForID(SM.getMainFileID());
-  std::string path =
-    std::string(mainFile->getDir()->getName()) + '/' + mainFile->getName();
-  Elements.push_back(MakeConstantString(path, ".objc_source_file_name"));
-  Elements.push_back(SymTab);
+    ConstantInitBuilder builder(CGM);
+    auto module = builder.beginStruct(moduleTy);
+    // Runtime version, used for ABI compatibility checking.
+    module.addInt(LongTy, RuntimeVersion);
+    // sizeof(ModuleTy)
+    module.addInt(LongTy, CGM.getDataLayout().getTypeStoreSize(moduleTy));
 
-  if (RuntimeVersion >= 10)
-    switch (CGM.getLangOpts().getGC()) {
+    // The path to the source file where this module was declared
+    SourceManager &SM = CGM.getContext().getSourceManager();
+    const FileEntry *mainFile = SM.getFileEntryForID(SM.getMainFileID());
+    std::string path =
+      (Twine(mainFile->getDir()->getName()) + "/" + mainFile->getName()).str();
+    module.add(MakeConstantString(path, ".objc_source_file_name"));
+    module.add(symtab);
+
+    if (RuntimeVersion >= 10) {
+      switch (CGM.getLangOpts().getGC()) {
       case LangOptions::GCOnly:
-        Elements.push_back(llvm::ConstantInt::get(IntTy, 2));
+        module.addInt(IntTy, 2);
         break;
       case LangOptions::NonGC:
         if (CGM.getLangOpts().ObjCAutoRefCount)
-          Elements.push_back(llvm::ConstantInt::get(IntTy, 1));
+          module.addInt(IntTy, 1);
         else
-          Elements.push_back(llvm::ConstantInt::get(IntTy, 0));
+          module.addInt(IntTy, 0);
         break;
       case LangOptions::HybridGC:
-          Elements.push_back(llvm::ConstantInt::get(IntTy, 1));
+        module.addInt(IntTy, 1);
         break;
+      }
     }
 
-  llvm::Value *Module = MakeGlobal(ModuleTy, Elements);
+    return module.finishAndCreateGlobal("", CGM.getPointerAlign());
+  }();
 
   // Create the load function calling the runtime entry point with the module
   // structure
@@ -2347,14 +3802,14 @@ llvm::Function *CGObjCGNU::ModuleInitFunction() {
       &TheModule);
   llvm::BasicBlock *EntryBB =
       llvm::BasicBlock::Create(VMContext, "entry", LoadFunction);
-  CGBuilderTy Builder(VMContext);
+  CGBuilderTy Builder(CGM, VMContext);
   Builder.SetInsertPoint(EntryBB);
 
   llvm::FunctionType *FT =
-    llvm::FunctionType::get(Builder.getVoidTy(),
-                            llvm::PointerType::getUnqual(ModuleTy), true);
-  llvm::Value *Register = CGM.CreateRuntimeFunction(FT, "__objc_exec_class");
-  Builder.CreateCall(Register, Module);
+    llvm::FunctionType::get(Builder.getVoidTy(), module->getType(), true);
+  llvm::FunctionCallee Register =
+      CGM.CreateRuntimeFunction(FT, "__objc_exec_class");
+  Builder.CreateCall(Register, module);
 
   if (!ClassAliases.empty()) {
     llvm::Type *ArgTypes[2] = {PtrTy, PtrToInt8Ty};
@@ -2375,18 +3830,17 @@ llvm::Function *CGObjCGNU::ModuleInitFunction() {
             llvm::Constant::getNullValue(RegisterAlias->getType()));
     Builder.CreateCondBr(HasRegisterAlias, AliasBB, NoAliasBB);
 
-    // The true branch (has alias registration fucntion):
+    // The true branch (has alias registration function):
     Builder.SetInsertPoint(AliasBB);
     // Emit alias registration calls:
     for (std::vector<ClassAliasPair>::iterator iter = ClassAliases.begin();
        iter != ClassAliases.end(); ++iter) {
        llvm::Constant *TheClass =
-         TheModule.getGlobalVariable(("_OBJC_CLASS_" + iter->first).c_str(),
-            true);
-       if (0 != TheClass) {
+          TheModule.getGlobalVariable("_OBJC_CLASS_" + iter->first, true);
+       if (TheClass) {
          TheClass = llvm::ConstantExpr::getBitCast(TheClass, PtrTy);
-         Builder.CreateCall2(RegisterAlias, TheClass,
-            MakeConstantString(iter->second));
+         Builder.CreateCall(RegisterAlias,
+                            {TheClass, MakeConstantString(iter->second)});
        }
     }
     // Jump to end:
@@ -2423,30 +3877,43 @@ llvm::Function *CGObjCGNU::GenerateMethod(const ObjCMethodDecl *OMD,
   return Method;
 }
 
-llvm::Constant *CGObjCGNU::GetPropertyGetFunction() {
+void CGObjCGNU::GenerateDirectMethodPrologue(CodeGenFunction &CGF,
+                                             llvm::Function *Fn,
+                                             const ObjCMethodDecl *OMD,
+                                             const ObjCContainerDecl *CD) {
+  // GNU runtime doesn't support direct calls at this time
+}
+
+llvm::FunctionCallee CGObjCGNU::GetPropertyGetFunction() {
   return GetPropertyFn;
 }
 
-llvm::Constant *CGObjCGNU::GetPropertySetFunction() {
+llvm::FunctionCallee CGObjCGNU::GetPropertySetFunction() {
   return SetPropertyFn;
 }
 
-llvm::Constant *CGObjCGNU::GetOptimizedPropertySetFunction(bool atomic,
-                                                           bool copy) {
-  return 0;
+llvm::FunctionCallee CGObjCGNU::GetOptimizedPropertySetFunction(bool atomic,
+                                                                bool copy) {
+  return nullptr;
 }
 
-llvm::Constant *CGObjCGNU::GetGetStructFunction() {
+llvm::FunctionCallee CGObjCGNU::GetGetStructFunction() {
   return GetStructPropertyFn;
 }
-llvm::Constant *CGObjCGNU::GetSetStructFunction() {
+
+llvm::FunctionCallee CGObjCGNU::GetSetStructFunction() {
   return SetStructPropertyFn;
 }
-llvm::Constant *CGObjCGNU::GetCppAtomicObjectFunction() {
-  return 0;
+
+llvm::FunctionCallee CGObjCGNU::GetCppAtomicObjectGetFunction() {
+  return nullptr;
 }
 
-llvm::Constant *CGObjCGNU::EnumerationMutationFunction() {
+llvm::FunctionCallee CGObjCGNU::GetCppAtomicObjectSetFunction() {
+  return nullptr;
+}
+
+llvm::FunctionCallee CGObjCGNU::EnumerationMutationFunction() {
   return EnumerationMutationFn;
 }
 
@@ -2461,21 +3928,22 @@ void CGObjCGNU::EmitTryStmt(CodeGenFunction &CGF,
   // Unlike the Apple non-fragile runtimes, which also uses
   // unwind-based zero cost exceptions, the GNU Objective C runtime's
   // EH support isn't a veneer over C++ EH.  Instead, exception
-  // objects are created by __objc_exception_throw and destroyed by
+  // objects are created by objc_exception_throw and destroyed by
   // the personality function; this avoids the need for bracketing
   // catch handlers with calls to __blah_begin_catch/__blah_end_catch
   // (or even _Unwind_DeleteException), but probably doesn't
   // interoperate very well with foreign exceptions.
   //
   // In Objective-C++ mode, we actually emit something equivalent to the C++
-  // exception handler. 
+  // exception handler.
   EmitTryCatchStmt(CGF, S, EnterCatchFn, ExitCatchFn, ExceptionReThrowFn);
-  return ;
 }
 
 void CGObjCGNU::EmitThrowStmt(CodeGenFunction &CGF,
-                              const ObjCAtThrowStmt &S) {
+                              const ObjCAtThrowStmt &S,
+                              bool ClearInsertionPoint) {
   llvm::Value *ExceptionAsObject;
+  bool isRethrow = false;
 
   if (const Expr *ThrowExpr = S.getThrowExpr()) {
     llvm::Value *Exception = CGF.EmitObjCThrowOperand(ThrowExpr);
@@ -2484,129 +3952,96 @@ void CGObjCGNU::EmitThrowStmt(CodeGenFunction &CGF,
     assert((!CGF.ObjCEHValueStack.empty() && CGF.ObjCEHValueStack.back()) &&
            "Unexpected rethrow outside @catch block.");
     ExceptionAsObject = CGF.ObjCEHValueStack.back();
+    isRethrow = true;
   }
-  ExceptionAsObject = CGF.Builder.CreateBitCast(ExceptionAsObject, IdTy);
-
-  // Note: This may have to be an invoke, if we want to support constructs like:
-  // @try {
-  //  @throw(obj);
-  // }
-  // @catch(id) ...
-  //
-  // This is effectively turning @throw into an incredibly-expensive goto, but
-  // it may happen as a result of inlining followed by missed optimizations, or
-  // as a result of stupidity.
-  llvm::BasicBlock *UnwindBB = CGF.getInvokeDest();
-  if (!UnwindBB) {
-    CGF.Builder.CreateCall(ExceptionThrowFn, ExceptionAsObject);
-    CGF.Builder.CreateUnreachable();
-  } else {
-    CGF.Builder.CreateInvoke(ExceptionThrowFn, UnwindBB, UnwindBB,
-                             ExceptionAsObject);
+  if (isRethrow && usesSEHExceptions) {
+    // For SEH, ExceptionAsObject may be undef, because the catch handler is
+    // not passed it for catchalls and so it is not visible to the catch
+    // funclet.  The real thrown object will still be live on the stack at this
+    // point and will be rethrown.  If we are explicitly rethrowing the object
+    // that was passed into the `@catch` block, then this code path is not
+    // reached and we will instead call `objc_exception_throw` with an explicit
+    // argument.
+    llvm::CallBase *Throw = CGF.EmitRuntimeCallOrInvoke(ExceptionReThrowFn);
+    Throw->setDoesNotReturn();
   }
-  // Clear the insertion point to indicate we are in unreachable code.
-  CGF.Builder.ClearInsertionPoint();
+  else {
+    ExceptionAsObject = CGF.Builder.CreateBitCast(ExceptionAsObject, IdTy);
+    llvm::CallBase *Throw =
+        CGF.EmitRuntimeCallOrInvoke(ExceptionThrowFn, ExceptionAsObject);
+    Throw->setDoesNotReturn();
+  }
+  CGF.Builder.CreateUnreachable();
+  if (ClearInsertionPoint)
+    CGF.Builder.ClearInsertionPoint();
 }
 
 llvm::Value * CGObjCGNU::EmitObjCWeakRead(CodeGenFunction &CGF,
-                                          llvm::Value *AddrWeakObj) {
-  CGBuilderTy B = CGF.Builder;
+                                          Address AddrWeakObj) {
+  CGBuilderTy &B = CGF.Builder;
   AddrWeakObj = EnforceType(B, AddrWeakObj, PtrToIdTy);
-  return B.CreateCall(WeakReadFn, AddrWeakObj);
+  return B.CreateCall(WeakReadFn, AddrWeakObj.getPointer());
 }
 
 void CGObjCGNU::EmitObjCWeakAssign(CodeGenFunction &CGF,
-                                   llvm::Value *src, llvm::Value *dst) {
-  CGBuilderTy B = CGF.Builder;
+                                   llvm::Value *src, Address dst) {
+  CGBuilderTy &B = CGF.Builder;
   src = EnforceType(B, src, IdTy);
   dst = EnforceType(B, dst, PtrToIdTy);
-  B.CreateCall2(WeakAssignFn, src, dst);
+  B.CreateCall(WeakAssignFn, {src, dst.getPointer()});
 }
 
 void CGObjCGNU::EmitObjCGlobalAssign(CodeGenFunction &CGF,
-                                     llvm::Value *src, llvm::Value *dst,
+                                     llvm::Value *src, Address dst,
                                      bool threadlocal) {
-  CGBuilderTy B = CGF.Builder;
+  CGBuilderTy &B = CGF.Builder;
   src = EnforceType(B, src, IdTy);
   dst = EnforceType(B, dst, PtrToIdTy);
-  if (!threadlocal)
-    B.CreateCall2(GlobalAssignFn, src, dst);
-  else
-    // FIXME. Add threadloca assign API
-    llvm_unreachable("EmitObjCGlobalAssign - Threal Local API NYI");
+  // FIXME. Add threadloca assign API
+  assert(!threadlocal && "EmitObjCGlobalAssign - Threal Local API NYI");
+  B.CreateCall(GlobalAssignFn, {src, dst.getPointer()});
 }
 
 void CGObjCGNU::EmitObjCIvarAssign(CodeGenFunction &CGF,
-                                   llvm::Value *src, llvm::Value *dst,
+                                   llvm::Value *src, Address dst,
                                    llvm::Value *ivarOffset) {
-  CGBuilderTy B = CGF.Builder;
+  CGBuilderTy &B = CGF.Builder;
   src = EnforceType(B, src, IdTy);
   dst = EnforceType(B, dst, IdTy);
-  B.CreateCall3(IvarAssignFn, src, dst, ivarOffset);
+  B.CreateCall(IvarAssignFn, {src, dst.getPointer(), ivarOffset});
 }
 
 void CGObjCGNU::EmitObjCStrongCastAssign(CodeGenFunction &CGF,
-                                         llvm::Value *src, llvm::Value *dst) {
-  CGBuilderTy B = CGF.Builder;
+                                         llvm::Value *src, Address dst) {
+  CGBuilderTy &B = CGF.Builder;
   src = EnforceType(B, src, IdTy);
   dst = EnforceType(B, dst, PtrToIdTy);
-  B.CreateCall2(StrongCastAssignFn, src, dst);
+  B.CreateCall(StrongCastAssignFn, {src, dst.getPointer()});
 }
 
 void CGObjCGNU::EmitGCMemmoveCollectable(CodeGenFunction &CGF,
-                                         llvm::Value *DestPtr,
-                                         llvm::Value *SrcPtr,
+                                         Address DestPtr,
+                                         Address SrcPtr,
                                          llvm::Value *Size) {
-  CGBuilderTy B = CGF.Builder;
+  CGBuilderTy &B = CGF.Builder;
   DestPtr = EnforceType(B, DestPtr, PtrTy);
   SrcPtr = EnforceType(B, SrcPtr, PtrTy);
 
-  B.CreateCall3(MemMoveFn, DestPtr, SrcPtr, Size);
+  B.CreateCall(MemMoveFn, {DestPtr.getPointer(), SrcPtr.getPointer(), Size});
 }
 
 llvm::GlobalVariable *CGObjCGNU::ObjCIvarOffsetVariable(
                               const ObjCInterfaceDecl *ID,
                               const ObjCIvarDecl *Ivar) {
-  const std::string Name = "__objc_ivar_offset_" + ID->getNameAsString()
-    + '.' + Ivar->getNameAsString();
+  const std::string Name = GetIVarOffsetVariableName(ID, Ivar);
   // Emit the variable and initialize it with what we think the correct value
   // is.  This allows code compiled with non-fragile ivars to work correctly
   // when linked against code which isn't (most of the time).
   llvm::GlobalVariable *IvarOffsetPointer = TheModule.getNamedGlobal(Name);
-  if (!IvarOffsetPointer) {
-    // This will cause a run-time crash if we accidentally use it.  A value of
-    // 0 would seem more sensible, but will silently overwrite the isa pointer
-    // causing a great deal of confusion.
-    uint64_t Offset = -1;
-    // We can't call ComputeIvarBaseOffset() here if we have the
-    // implementation, because it will create an invalid ASTRecordLayout object
-    // that we are then stuck with forever, so we only initialize the ivar
-    // offset variable with a guess if we only have the interface.  The
-    // initializer will be reset later anyway, when we are generating the class
-    // description.
-    if (!CGM.getContext().getObjCImplementation(
-              const_cast<ObjCInterfaceDecl *>(ID)))
-      Offset = ComputeIvarBaseOffset(CGM, ID, Ivar);
-
-    llvm::ConstantInt *OffsetGuess = llvm::ConstantInt::get(Int32Ty, Offset,
-                             /*isSigned*/true);
-    // Don't emit the guess in non-PIC code because the linker will not be able
-    // to replace it with the real version for a library.  In non-PIC code you
-    // must compile with the fragile ABI if you want to use ivars from a
-    // GCC-compiled class.
-    if (CGM.getLangOpts().PICLevel || CGM.getLangOpts().PIELevel) {
-      llvm::GlobalVariable *IvarOffsetGV = new llvm::GlobalVariable(TheModule,
-            Int32Ty, false,
-            llvm::GlobalValue::PrivateLinkage, OffsetGuess, Name+".guess");
-      IvarOffsetPointer = new llvm::GlobalVariable(TheModule,
-            IvarOffsetGV->getType(), false, llvm::GlobalValue::LinkOnceAnyLinkage,
-            IvarOffsetGV, Name);
-    } else {
-      IvarOffsetPointer = new llvm::GlobalVariable(TheModule,
-              llvm::Type::getInt32PtrTy(VMContext), false,
-              llvm::GlobalValue::ExternalLinkage, 0, Name);
-    }
-  }
+  if (!IvarOffsetPointer)
+    IvarOffsetPointer = new llvm::GlobalVariable(TheModule,
+            llvm::Type::getInt32PtrTy(VMContext), false,
+            llvm::GlobalValue::ExternalLinkage, nullptr, Name);
   return IvarOffsetPointer;
 }
 
@@ -2616,7 +4051,7 @@ LValue CGObjCGNU::EmitObjCValueForIvar(CodeGenFunction &CGF,
                                        const ObjCIvarDecl *Ivar,
                                        unsigned CVRQualifiers) {
   const ObjCInterfaceDecl *ID =
-    ObjectTy->getAs<ObjCObjectType>()->getInterface();
+    ObjectTy->castAs<ObjCObjectType>()->getInterface();
   return EmitValueForIvarAtOffset(CGF, ID, BaseValue, Ivar, CVRQualifiers,
                                   EmitIvarOffset(CGF, ID, Ivar));
 }
@@ -2634,27 +4069,39 @@ static const ObjCInterfaceDecl *FindIvarInterface(ASTContext &Context,
   if (const ObjCInterfaceDecl *Super = OID->getSuperClass())
     return FindIvarInterface(Context, Super, OIVD);
 
-  return 0;
+  return nullptr;
 }
 
 llvm::Value *CGObjCGNU::EmitIvarOffset(CodeGenFunction &CGF,
                          const ObjCInterfaceDecl *Interface,
                          const ObjCIvarDecl *Ivar) {
-  if (CGM.getLangOpts().ObjCNonFragileABI) {
+  if (CGM.getLangOpts().ObjCRuntime.isNonFragile()) {
     Interface = FindIvarInterface(CGM.getContext(), Interface, Ivar);
-    if (RuntimeVersion < 10)
+
+    // The MSVC linker cannot have a single global defined as LinkOnceAnyLinkage
+    // and ExternalLinkage, so create a reference to the ivar global and rely on
+    // the definition being created as part of GenerateClass.
+    if (RuntimeVersion < 10 ||
+        CGF.CGM.getTarget().getTriple().isKnownWindowsMSVCEnvironment())
       return CGF.Builder.CreateZExtOrBitCast(
-          CGF.Builder.CreateLoad(CGF.Builder.CreateLoad(
-                  ObjCIvarOffsetVariable(Interface, Ivar), false, "ivar")),
+          CGF.Builder.CreateAlignedLoad(
+              Int32Ty, CGF.Builder.CreateAlignedLoad(
+                           ObjCIvarOffsetVariable(Interface, Ivar),
+                           CGF.getPointerAlign(), "ivar"),
+              CharUnits::fromQuantity(4)),
           PtrDiffTy);
     std::string name = "__objc_ivar_offset_value_" +
       Interface->getNameAsString() +"." + Ivar->getNameAsString();
+    CharUnits Align = CGM.getIntAlign();
     llvm::Value *Offset = TheModule.getGlobalVariable(name);
-    if (!Offset)
-      Offset = new llvm::GlobalVariable(TheModule, IntTy,
+    if (!Offset) {
+      auto GV = new llvm::GlobalVariable(TheModule, IntTy,
           false, llvm::GlobalValue::LinkOnceAnyLinkage,
           llvm::Constant::getNullValue(IntTy), name);
-    Offset = CGF.Builder.CreateLoad(Offset);
+      GV->setAlignment(Align.getAsAlign());
+      Offset = GV;
+    }
+    Offset = CGF.Builder.CreateAlignedLoad(Offset, Align);
     if (Offset->getType() != PtrDiffTy)
       Offset = CGF.Builder.CreateZExtOrBitCast(Offset, PtrDiffTy);
     return Offset;
@@ -2665,7 +4112,24 @@ llvm::Value *CGObjCGNU::EmitIvarOffset(CodeGenFunction &CGF,
 
 CGObjCRuntime *
 clang::CodeGen::CreateGNUObjCRuntime(CodeGenModule &CGM) {
-  if (CGM.getLangOpts().ObjCNonFragileABI)
+  auto Runtime = CGM.getLangOpts().ObjCRuntime;
+  switch (Runtime.getKind()) {
+  case ObjCRuntime::GNUstep:
+    if (Runtime.getVersion() >= VersionTuple(2, 0))
+      return new CGObjCGNUstep2(CGM);
     return new CGObjCGNUstep(CGM);
-  return new CGObjCGCC(CGM);
+
+  case ObjCRuntime::GCC:
+    return new CGObjCGCC(CGM);
+
+  case ObjCRuntime::ObjFW:
+    return new CGObjCObjFW(CGM);
+
+  case ObjCRuntime::FragileMacOSX:
+  case ObjCRuntime::MacOSX:
+  case ObjCRuntime::iOS:
+  case ObjCRuntime::WatchOS:
+    llvm_unreachable("these runtimes are not GNU runtimes");
+  }
+  llvm_unreachable("bad runtime");
 }

@@ -1,9 +1,8 @@
-//===-- DeclContextInternals.h - DeclContext Representation -----*- C++ -*-===//
+//===- DeclContextInternals.h - DeclContext Representation ------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,38 +10,45 @@
 //  of DeclContext.
 //
 //===----------------------------------------------------------------------===//
+
 #ifndef LLVM_CLANG_AST_DECLCONTEXTINTERNALS_H
 #define LLVM_CLANG_AST_DECLCONTEXTINTERNALS_H
 
 #include "clang/AST/Decl.h"
-#include "clang/AST/DeclarationName.h"
+#include "clang/AST/DeclBase.h"
 #include "clang/AST/DeclCXX.h"
+#include "clang/AST/DeclarationName.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/PointerIntPair.h"
 #include "llvm/ADT/PointerUnion.h"
 #include "llvm/ADT/SmallVector.h"
 #include <algorithm>
+#include <cassert>
 
 namespace clang {
 
 class DependentDiagnostic;
 
-/// StoredDeclsList - This is an array of decls optimized a common case of only
-/// containing one entry.
+/// An array of decls optimized for the common case of only containing
+/// one entry.
 struct StoredDeclsList {
+  /// When in vector form, this is what the Data pointer points to.
+  using DeclsTy = SmallVector<NamedDecl *, 4>;
 
-  /// DeclsTy - When in vector form, this is what the Data pointer points to.
-  typedef SmallVector<NamedDecl *, 4> DeclsTy;
+  /// A collection of declarations, with a flag to indicate if we have
+  /// further external declarations.
+  using DeclsAndHasExternalTy = llvm::PointerIntPair<DeclsTy *, 1, bool>;
 
-  /// \brief The stored data, which will be either a pointer to a NamedDecl,
-  /// or a pointer to a vector.
-  llvm::PointerUnion<NamedDecl *, DeclsTy *> Data;
+  /// The stored data, which will be either a pointer to a NamedDecl,
+  /// or a pointer to a vector with a flag to indicate if there are further
+  /// external declarations.
+  llvm::PointerUnion<NamedDecl *, DeclsAndHasExternalTy> Data;
 
 public:
-  StoredDeclsList() {}
+  StoredDeclsList() = default;
 
-  StoredDeclsList(const StoredDeclsList &RHS) : Data(RHS.Data) {
-    if (DeclsTy *RHSVec = RHS.getAsVector())
-      Data = new DeclsTy(*RHSVec);
+  StoredDeclsList(StoredDeclsList &&RHS) : Data(RHS.Data) {
+    RHS.Data = (NamedDecl *)nullptr;
   }
 
   ~StoredDeclsList() {
@@ -51,12 +57,11 @@ public:
       delete Vector;
   }
 
-  StoredDeclsList &operator=(const StoredDeclsList &RHS) {
+  StoredDeclsList &operator=(StoredDeclsList &&RHS) {
     if (DeclsTy *Vector = getAsVector())
       delete Vector;
     Data = RHS.Data;
-    if (DeclsTy *RHSVec = RHS.getAsVector())
-      Data = new DeclsTy(*RHSVec);
+    RHS.Data = (NamedDecl *)nullptr;
     return *this;
   }
 
@@ -66,8 +71,27 @@ public:
     return Data.dyn_cast<NamedDecl *>();
   }
 
+  DeclsAndHasExternalTy getAsVectorAndHasExternal() const {
+    return Data.dyn_cast<DeclsAndHasExternalTy>();
+  }
+
   DeclsTy *getAsVector() const {
-    return Data.dyn_cast<DeclsTy *>();
+    return getAsVectorAndHasExternal().getPointer();
+  }
+
+  bool hasExternalDecls() const {
+    return getAsVectorAndHasExternal().getInt();
+  }
+
+  void setHasExternalDecls() {
+    if (DeclsTy *Vec = getAsVector())
+      Data = DeclsAndHasExternalTy(Vec, true);
+    else {
+      DeclsTy *VT = new DeclsTy();
+      if (NamedDecl *OldD = getAsDecl())
+        VT->push_back(OldD);
+      Data = DeclsAndHasExternalTy(VT, true);
+    }
   }
 
   void setOnlyValue(NamedDecl *ND) {
@@ -84,48 +108,63 @@ public:
     if (NamedDecl *Singleton = getAsDecl()) {
       assert(Singleton == D && "list is different singleton");
       (void)Singleton;
-      Data = (NamedDecl *)0;
+      Data = (NamedDecl *)nullptr;
       return;
     }
 
     DeclsTy &Vec = *getAsVector();
-    DeclsTy::iterator I = std::find(Vec.begin(), Vec.end(), D);
+    DeclsTy::iterator I = llvm::find(Vec, D);
     assert(I != Vec.end() && "list does not contain decl");
     Vec.erase(I);
 
-    assert(std::find(Vec.begin(), Vec.end(), D)
-             == Vec.end() && "list still contains decl");
+    assert(llvm::find(Vec, D) == Vec.end() && "list still contains decl");
+  }
+
+  /// Remove any declarations which were imported from an external
+  /// AST source.
+  void removeExternalDecls() {
+    if (isNull()) {
+      // Nothing to do.
+    } else if (NamedDecl *Singleton = getAsDecl()) {
+      if (Singleton->isFromASTFile())
+        *this = StoredDeclsList();
+    } else {
+      DeclsTy &Vec = *getAsVector();
+      Vec.erase(std::remove_if(Vec.begin(), Vec.end(),
+                               [](Decl *D) { return D->isFromASTFile(); }),
+                Vec.end());
+      // Don't have any external decls any more.
+      Data = DeclsAndHasExternalTy(&Vec, false);
+    }
   }
 
   /// getLookupResult - Return an array of all the decls that this list
   /// represents.
   DeclContext::lookup_result getLookupResult() {
     if (isNull())
-      return DeclContext::lookup_result(DeclContext::lookup_iterator(0),
-                                        DeclContext::lookup_iterator(0));
+      return DeclContext::lookup_result();
 
     // If we have a single NamedDecl, return it.
-    if (getAsDecl()) {
+    if (NamedDecl *ND = getAsDecl()) {
       assert(!isNull() && "Empty list isn't allowed");
 
       // Data is a raw pointer to a NamedDecl*, return it.
-      void *Ptr = &Data;
-      return DeclContext::lookup_result((NamedDecl**)Ptr, (NamedDecl**)Ptr+1);
+      return DeclContext::lookup_result(ND);
     }
 
     assert(getAsVector() && "Must have a vector at this point");
     DeclsTy &Vector = *getAsVector();
 
     // Otherwise, we have a range result.
-    return DeclContext::lookup_result(&Vector[0], &Vector[0]+Vector.size());
+    return DeclContext::lookup_result(Vector);
   }
 
   /// HandleRedeclaration - If this is a redeclaration of an existing decl,
   /// replace the old one with D and return true.  Otherwise return false.
-  bool HandleRedeclaration(NamedDecl *D) {
+  bool HandleRedeclaration(NamedDecl *D, bool IsKnownNewer) {
     // Most decls only have one entry in their list, special case it.
     if (NamedDecl *OldD = getAsDecl()) {
-      if (!D->declarationReplaces(OldD))
+      if (!D->declarationReplaces(OldD, IsKnownNewer))
         return false;
       setOnlyValue(D);
       return true;
@@ -136,7 +175,7 @@ public:
     for (DeclsTy::iterator OD = Vec.begin(), ODEnd = Vec.end();
          OD != ODEnd; ++OD) {
       NamedDecl *OldD = *OD;
-      if (D->declarationReplaces(OldD)) {
+      if (D->declarationReplaces(OldD, IsKnownNewer)) {
         *OD = D;
         return true;
       }
@@ -147,14 +186,15 @@ public:
 
   /// AddSubsequentDecl - This is called on the second and later decl when it is
   /// not a redeclaration to merge it into the appropriate place in our list.
-  ///
   void AddSubsequentDecl(NamedDecl *D) {
+    assert(!isNull() && "don't AddSubsequentDecl when we have no decls");
+
     // If this is the second decl added to the list, convert this to vector
     // form.
     if (NamedDecl *OldD = getAsDecl()) {
       DeclsTy *VT = new DeclsTy();
       VT->push_back(OldD);
-      Data = VT;
+      Data = DeclsAndHasExternalTy(VT, false);
     }
 
     DeclsTy &Vec = *getAsVector();
@@ -186,7 +226,7 @@ public:
     // All other declarations go at the end of the list, but before any
     // tag declarations.  But we can be clever about tag declarations
     // because there can only ever be one in a scope.
-    } else if (Vec.back()->hasTagIdentifierNamespace()) {
+    } else if (!Vec.empty() && Vec.back()->hasTagIdentifierNamespace()) {
       NamedDecl *TagD = Vec.back();
       Vec.back() = D;
       Vec.push_back(TagD);
@@ -196,28 +236,28 @@ public:
 };
 
 class StoredDeclsMap
-  : public llvm::DenseMap<DeclarationName, StoredDeclsList> {
-
+    : public llvm::SmallDenseMap<DeclarationName, StoredDeclsList, 4> {
 public:
   static void DestroyAll(StoredDeclsMap *Map, bool Dependent);
 
 private:
   friend class ASTContext; // walks the chain deleting these
   friend class DeclContext;
+
   llvm::PointerIntPair<StoredDeclsMap*, 1> Previous;
 };
 
 class DependentStoredDeclsMap : public StoredDeclsMap {
 public:
-  DependentStoredDeclsMap() : FirstDiagnostic(0) {}
+  DependentStoredDeclsMap() = default;
 
 private:
-  friend class DependentDiagnostic;
   friend class DeclContext; // iterates over diagnostics
+  friend class DependentDiagnostic;
 
-  DependentDiagnostic *FirstDiagnostic;
+  DependentDiagnostic *FirstDiagnostic = nullptr;
 };
 
-} // end namespace clang
+} // namespace clang
 
-#endif
+#endif // LLVM_CLANG_AST_DECLCONTEXTINTERNALS_H

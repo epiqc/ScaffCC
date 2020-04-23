@@ -1,24 +1,31 @@
-set( LLVM_LINK_COMPONENTS
-  support
-  )
-
-set( LLVM_USED_LIBS
-  clangBasic
-  clangLex
-  clangSema
+set(LLVM_LINK_COMPONENTS
+  Support
   )
 
 add_clang_executable(diagtool
   diagtool_main.cpp
   DiagTool.cpp
+  DiagnosticNames.cpp
+  FindDiagnosticID.cpp
   ListWarnings.cpp
+  ShowEnabledWarnings.cpp
+  TreeView.cpp
 )
 
-if(UNIX)
-  set(CLANGXX_LINK_OR_COPY create_symlink)
-else()
-  set(CLANGXX_LINK_OR_COPY copy)
-endif()
+clang_target_link_libraries(diagtool
+  PRIVATE
+  clangBasic
+  clangFrontend
+  )
 
-install(TARGETS diagtool 
-  RUNTIME DESTINATION bin)
+if (NOT LLVM_INSTALL_TOOLCHAIN_ONLY)
+  install(TARGETS diagtool
+    COMPONENT diagtool
+    RUNTIME DESTINATION bin)
+
+  if (NOT LLVM_ENABLE_IDE)
+    add_llvm_install_targets(install-diagtool
+      DEPENDS diagtool
+      COMPONENT diagtool)
+  endif()
+endif()

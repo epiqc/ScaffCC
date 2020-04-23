@@ -1,4 +1,7 @@
 // RUN: %clang_cc1 -fsyntax-only -verify %s 
+// RUN: %clang_cc1 -fsyntax-only -verify -std=c++98 %s
+// RUN: %clang_cc1 -fsyntax-only -verify -std=c++11 %s
+
 struct ConvToBool {
   operator bool() const;
 };
@@ -8,7 +11,10 @@ struct ConvToInt {
 };
 
 struct ExplicitConvToBool {
-  explicit operator bool(); // expected-warning{{explicit conversion functions are a C++11 extension}}
+  explicit operator bool(); // expected-note {{explicit}}
+#if __cplusplus <= 199711L // C++03 or earlier modes
+  // expected-warning@-2{{explicit conversion functions are a C++11 extension}}
+#endif
 };
 
 void test_conv_to_bool(ConvToBool ctb, ConvToInt cti, ExplicitConvToBool ecb) {
@@ -39,7 +45,10 @@ void test_conv_to_bool(ConvToBool ctb, ConvToInt cti, ExplicitConvToBool ecb) {
 void accepts_bool(bool) { } // expected-note{{candidate function}}
 
 struct ExplicitConvToRef {
-  explicit operator int&(); // expected-warning{{explicit conversion functions are a C++11 extension}}
+  explicit operator int&(); // expected-note {{explicit}}
+#if (__cplusplus <= 199711L) // C++03 or earlier modes
+  // expected-warning@-2{{explicit conversion functions are a C++11 extension}}
+#endif
 };
 
 void test_explicit_bool(ExplicitConvToBool ecb) {
@@ -49,19 +58,21 @@ void test_explicit_bool(ExplicitConvToBool ecb) {
 }
 
 void test_explicit_conv_to_ref(ExplicitConvToRef ecr) {
-  int& i1 = ecr; // expected-error{{non-const lvalue reference to type 'int' cannot bind to a value of unrelated type 'ExplicitConvToRef'}}
+  int& i1 = ecr; // expected-error{{no viable conversion from 'ExplicitConvToRef' to 'int'}}
   int& i2(ecr); // okay
 }
 
 struct A { };
 struct B { };
 struct C {
-  explicit operator A&(); // expected-warning{{explicit conversion functions are a C++11 extension}}
+  explicit operator A&();  // expected-note {{explicit}}
+#if __cplusplus <= 199711L // C++03 or earlier modes
+// expected-warning@-2{{explicit conversion functions are a C++11 extension}}
+#endif
   operator B&(); // expected-note{{candidate}}
 };
 
 void test_copy_init_conversions(C c) {
   A &a = c; // expected-error{{no viable conversion from 'C' to 'A'}}
-  B &b = b; // okay
+  B &b = c; // okay
 }
-

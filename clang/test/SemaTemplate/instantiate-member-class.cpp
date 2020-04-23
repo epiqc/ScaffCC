@@ -1,4 +1,6 @@
 // RUN: %clang_cc1 -fsyntax-only -verify %s
+// RUN: %clang_cc1 -fsyntax-only -verify -std=c++98 %s
+// RUN: %clang_cc1 -fsyntax-only -verify -std=c++11 %s
 
 namespace PR8965 {
   template<typename T>
@@ -37,8 +39,8 @@ public:
 X<int>::C *c1;
 X<float>::C *c2;
 
-X<int>::X *xi; // expected-error{{qualified reference to 'X' is a constructor name rather than a type wherever a constructor can be declared}}
-X<float>::X *xf; // expected-error{{qualified reference to 'X' is a constructor name rather than a type wherever a constructor can be declared}}
+X<int>::X *xi; // expected-error{{qualified reference to 'X' is a constructor name rather than a type}}
+X<float>::X *xf; // expected-error{{qualified reference to 'X' is a constructor name rather than a type}}
 
 void test_naming() {
   c1 = c2; // expected-error{{assigning to 'X<int>::C *' from incompatible type 'X<float>::C *'}}
@@ -91,12 +93,10 @@ namespace test2 {
       typedef int X;
     };
     typename Foo::X x;
-    class Foo;
   };
   template class B<int>;
 
   template <typename T> class C {
-    class Foo;
     class Foo;
   };
   template <typename T> class C<T>::Foo {
@@ -108,7 +108,10 @@ namespace test2 {
 namespace AliasTagDef {
   template<typename T>
   struct F {
-    using S = struct U { // expected-warning {{C++11}}
+    using S = struct U {
+#if __cplusplus <= 199711L
+    // expected-warning@-2 {{alias declarations are a C++11 extension}}
+#endif
       T g() {
         return T();
       }
@@ -124,19 +127,25 @@ namespace rdar10397846 {
   {
     struct B
     {
-      struct C { C() { int *ptr = I; } }; // expected-error{{cannot initialize a variable of type 'int *' with an rvalue of type 'int'}}
+      struct C { C() { int *ptr = I; } };
+#if __cplusplus >= 201103L
+      // expected-error@-2 {{cannot initialize a variable of type 'int *' with an rvalue of type 'int'}}
+#else
+      // expected-warning@-4 {{expression which evaluates to zero treated as a null pointer constant of type 'int *'}}
+#endif
+      // expected-error@-6 {{cannot initialize a variable of type 'int *' with an rvalue of type 'int'}}
     };
   };
 
   template<int N> void foo()
   {
-    class A<N>::B::C X; // expected-note{{in instantiation of member function}}
+    class A<N>::B::C X; // expected-note 2 {{in instantiation of member function}}
     int A<N+1>::B::C::*member = 0;
   }
 
   void bar()
   {
-    foo<0>();
+    foo<0>(); // expected-note{{in instantiation of function template}}
     foo<1>(); // expected-note{{in instantiation of function template}}
   }
 }

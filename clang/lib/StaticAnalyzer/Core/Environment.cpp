@@ -1,9 +1,8 @@
-//== Environment.cpp - Map from Stmt* to Locations/Values -------*- C++ -*--==//
+//===- Environment.cpp - Map from Stmt* to Locations/Values ---------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,14 +10,68 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "clang/StaticAnalyzer/Core/PathSensitive/Environment.h"
+#include "clang/AST/Expr.h"
 #include "clang/AST/ExprCXX.h"
-#include "clang/AST/ExprObjC.h"
-#include "clang/Analysis/AnalysisContext.h"
-#include "clang/Analysis/CFG.h"
+#include "clang/AST/PrettyPrinter.h"
+#include "clang/AST/Stmt.h"
+#include "clang/Analysis/AnalysisDeclContext.h"
+#include "clang/Basic/LLVM.h"
+#include "clang/Basic/LangOptions.h"
+#include "clang/Basic/JsonSupport.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/ProgramState.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/SValBuilder.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/SVals.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/SymExpr.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/SymbolManager.h"
+#include "llvm/ADT/ImmutableMap.h"
+#include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/Support/Casting.h"
+#include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/raw_ostream.h"
+#include <cassert>
 
 using namespace clang;
 using namespace ento;
+
+static const Expr *ignoreTransparentExprs(const Expr *E) {
+  E = E->IgnoreParens();
+
+  switch (E->getStmtClass()) {
+  case Stmt::OpaqueValueExprClass:
+    E = cast<OpaqueValueExpr>(E)->getSourceExpr();
+    break;
+  case Stmt::ExprWithCleanupsClass:
+    E = cast<ExprWithCleanups>(E)->getSubExpr();
+    break;
+  case Stmt::ConstantExprClass:
+    E = cast<ConstantExpr>(E)->getSubExpr();
+    break;
+  case Stmt::CXXBindTemporaryExprClass:
+    E = cast<CXXBindTemporaryExpr>(E)->getSubExpr();
+    break;
+  case Stmt::SubstNonTypeTemplateParmExprClass:
+    E = cast<SubstNonTypeTemplateParmExpr>(E)->getReplacement();
+    break;
+  default:
+    // This is the base case: we can't look through more than we already have.
+    return E;
+  }
+
+  return ignoreTransparentExprs(E);
+}
+
+static const Stmt *ignoreTransparentExprs(const Stmt *S) {
+  if (const auto *E = dyn_cast<Expr>(S))
+    return ignoreTransparentExprs(E);
+  return S;
+}
+
+EnvironmentEntry::EnvironmentEntry(const Stmt *S, const LocationContext *L)
+    : std::pair<const Stmt *,
+                const StackFrameContext *>(ignoreTransparentExprs(S),
+                                           L ? L->getStackFrame()
+                                             : nullptr) {}
 
 SVal Environment::lookupExpr(const EnvironmentEntry &E) const {
   const SVal* X = ExprBindings.lookup(E);
@@ -30,95 +83,46 @@ SVal Environment::lookupExpr(const EnvironmentEntry &E) const {
 }
 
 SVal Environment::getSVal(const EnvironmentEntry &Entry,
-                          SValBuilder& svalBuilder,
-                          bool useOnlyDirectBindings) const {
-
-  if (useOnlyDirectBindings) {
-    // This branch is rarely taken, but can be exercised by
-    // checkers that explicitly bind values to arbitrary
-    // expressions.  It is crucial that we do not ignore any
-    // expression here, and do a direct lookup.
-    return lookupExpr(Entry);
-  }
-
-  const Stmt *E = Entry.getStmt();
+                          SValBuilder& svalBuilder) const {
+  const Stmt *S = Entry.getStmt();
   const LocationContext *LCtx = Entry.getLocationContext();
-  
-  for (;;) {
-    if (const Expr *Ex = dyn_cast<Expr>(E))
-      E = Ex->IgnoreParens();
 
-    switch (E->getStmtClass()) {
-      case Stmt::AddrLabelExprClass:
-        return svalBuilder.makeLoc(cast<AddrLabelExpr>(E));
-      case Stmt::OpaqueValueExprClass: {
-        const OpaqueValueExpr *ope = cast<OpaqueValueExpr>(E);
-        E = ope->getSourceExpr();
-        continue;        
-      }        
-      case Stmt::ParenExprClass:
-      case Stmt::GenericSelectionExprClass:
-        llvm_unreachable("ParenExprs and GenericSelectionExprs should "
-                         "have been handled by IgnoreParens()");
-      case Stmt::CharacterLiteralClass: {
-        const CharacterLiteral* C = cast<CharacterLiteral>(E);
-        return svalBuilder.makeIntVal(C->getValue(), C->getType());
-      }
-      case Stmt::CXXBoolLiteralExprClass: {
-        const SVal *X = ExprBindings.lookup(EnvironmentEntry(E, LCtx));
-        if (X) 
-          return *X;
-        else 
-          return svalBuilder.makeBoolVal(cast<CXXBoolLiteralExpr>(E));
-      }
-      case Stmt::IntegerLiteralClass: {
-        // In C++, this expression may have been bound to a temporary object.
-        SVal const *X = ExprBindings.lookup(EnvironmentEntry(E, LCtx));
-        if (X)
-          return *X;
-        else
-          return svalBuilder.makeIntVal(cast<IntegerLiteral>(E));
-      }
-      case Stmt::ObjCBoolLiteralExprClass:
-        return svalBuilder.makeBoolVal(cast<ObjCBoolLiteralExpr>(E));
+  switch (S->getStmtClass()) {
+  case Stmt::CXXBindTemporaryExprClass:
+  case Stmt::ExprWithCleanupsClass:
+  case Stmt::GenericSelectionExprClass:
+  case Stmt::OpaqueValueExprClass:
+  case Stmt::ConstantExprClass:
+  case Stmt::ParenExprClass:
+  case Stmt::SubstNonTypeTemplateParmExprClass:
+    llvm_unreachable("Should have been handled by ignoreTransparentExprs");
 
-      // For special C0xx nullptr case, make a null pointer SVal.
-      case Stmt::CXXNullPtrLiteralExprClass:
-        return svalBuilder.makeNull();
-      case Stmt::ExprWithCleanupsClass:
-        E = cast<ExprWithCleanups>(E)->getSubExpr();
-        continue;
-      case Stmt::CXXBindTemporaryExprClass:
-        E = cast<CXXBindTemporaryExpr>(E)->getSubExpr();
-        continue;
-      case Stmt::ObjCPropertyRefExprClass:
-        return loc::ObjCPropRef(cast<ObjCPropertyRefExpr>(E));
-      case Stmt::ObjCStringLiteralClass: {
-        MemRegionManager &MRMgr = svalBuilder.getRegionManager();
-        const ObjCStringLiteral *SL = cast<ObjCStringLiteral>(E);
-        return svalBuilder.makeLoc(MRMgr.getObjCStringRegion(SL));
-      }
-      case Stmt::StringLiteralClass: {
-        MemRegionManager &MRMgr = svalBuilder.getRegionManager();
-        const StringLiteral *SL = cast<StringLiteral>(E);
-        return svalBuilder.makeLoc(MRMgr.getStringRegion(SL));
-      }
-      case Stmt::ReturnStmtClass: {
-        const ReturnStmt *RS = cast<ReturnStmt>(E);
-        if (const Expr *RE = RS->getRetValue()) {
-          E = RE;
-          continue;
-        }
-        return UndefinedVal();        
-      }
-        
-      // Handle all other Stmt* using a lookup.
-      default:
-        break;
-    };
-    break;
+  case Stmt::AddrLabelExprClass:
+  case Stmt::CharacterLiteralClass:
+  case Stmt::CXXBoolLiteralExprClass:
+  case Stmt::CXXScalarValueInitExprClass:
+  case Stmt::ImplicitValueInitExprClass:
+  case Stmt::IntegerLiteralClass:
+  case Stmt::ObjCBoolLiteralExprClass:
+  case Stmt::CXXNullPtrLiteralExprClass:
+  case Stmt::ObjCStringLiteralClass:
+  case Stmt::StringLiteralClass:
+  case Stmt::TypeTraitExprClass:
+  case Stmt::SizeOfPackExprClass:
+    // Known constants; defer to SValBuilder.
+    return svalBuilder.getConstantVal(cast<Expr>(S)).getValue();
+
+  case Stmt::ReturnStmtClass: {
+    const auto *RS = cast<ReturnStmt>(S);
+    if (const Expr *RE = RS->getRetValue())
+      return getSVal(EnvironmentEntry(RE, LCtx), svalBuilder);
+    return UndefinedVal();
   }
-  return lookupExpr(EnvironmentEntry(E, LCtx));
+
+  // Handle all other Stmt* using a lookup.
+  default:
+    return lookupExpr(EnvironmentEntry(S, LCtx));
+  }
 }
 
 Environment EnvironmentManager::bindExpr(Environment Env,
@@ -134,42 +138,26 @@ Environment EnvironmentManager::bindExpr(Environment Env,
   return Environment(F.add(Env.ExprBindings, E, V));
 }
 
-static inline EnvironmentEntry MakeLocation(const EnvironmentEntry &E) {
-  const Stmt *S = E.getStmt();
-  S = (const Stmt*) (((uintptr_t) S) | 0x1);
-  return EnvironmentEntry(S, E.getLocationContext());
-}
-
-Environment EnvironmentManager::bindExprAndLocation(Environment Env,
-                                                    const EnvironmentEntry &E,
-                                                    SVal location, SVal V) {
-  return Environment(F.add(F.add(Env.ExprBindings, MakeLocation(E), location),
-                           E, V));
-}
-
 namespace {
-class MarkLiveCallback : public SymbolVisitor {
+
+class MarkLiveCallback final : public SymbolVisitor {
   SymbolReaper &SymReaper;
+
 public:
   MarkLiveCallback(SymbolReaper &symreaper) : SymReaper(symreaper) {}
-  bool VisitSymbol(SymbolRef sym) {
+
+  bool VisitSymbol(SymbolRef sym) override {
     SymReaper.markLive(sym);
     return true;
   }
-  bool VisitMemRegion(const MemRegion *R) {
+
+  bool VisitMemRegion(const MemRegion *R) override {
     SymReaper.markLive(R);
     return true;
   }
 };
-} // end anonymous namespace
 
-// In addition to mapping from EnvironmentEntry - > SVals in the Environment,
-// we also maintain a mapping from EnvironmentEntry -> SVals (locations)
-// that were used during a load and store.
-static inline bool IsLocation(const EnvironmentEntry &E) {
-  const Stmt *S = E.getStmt();
-  return (bool) (((uintptr_t) S) & 0x1);
-}
+} // namespace
 
 // removeDeadBindings:
 //  - Remove subexpression bindings.
@@ -182,114 +170,117 @@ Environment
 EnvironmentManager::removeDeadBindings(Environment Env,
                                        SymbolReaper &SymReaper,
                                        ProgramStateRef ST) {
-
   // We construct a new Environment object entirely, as this is cheaper than
   // individually removing all the subexpression bindings (which will greatly
   // outnumber block-level expression bindings).
   Environment NewEnv = getInitialEnvironment();
-  
-  SmallVector<std::pair<EnvironmentEntry, SVal>, 10> deferredLocations;
 
   MarkLiveCallback CB(SymReaper);
   ScanReachableSymbols RSScaner(ST, CB);
 
-  llvm::ImmutableMapRef<EnvironmentEntry,SVal>
+  llvm::ImmutableMapRef<EnvironmentEntry, SVal>
     EBMapRef(NewEnv.ExprBindings.getRootWithoutRetain(),
              F.getTreeFactory());
 
   // Iterate over the block-expr bindings.
   for (Environment::iterator I = Env.begin(), E = Env.end();
        I != E; ++I) {
-
     const EnvironmentEntry &BlkExpr = I.getKey();
-    // For recorded locations (used when evaluating loads and stores), we
-    // consider them live only when their associated normal expression is
-    // also live.
-    // NOTE: This assumes that loads/stores that evaluated to UnknownVal
-    // still have an entry in the map.
-    if (IsLocation(BlkExpr)) {
-      deferredLocations.push_back(std::make_pair(BlkExpr, I.getData()));
-      continue;
-    }
     const SVal &X = I.getData();
 
     if (SymReaper.isLive(BlkExpr.getStmt(), BlkExpr.getLocationContext())) {
       // Copy the binding to the new map.
       EBMapRef = EBMapRef.add(BlkExpr, X);
 
-      // If the block expr's value is a memory region, then mark that region.
-      if (isa<loc::MemRegionVal>(X)) {
-        const MemRegion *R = cast<loc::MemRegionVal>(X).getRegion();
-        SymReaper.markLive(R);
-      }
-
       // Mark all symbols in the block expr's value live.
       RSScaner.scan(X);
-      continue;
     }
-
-    // Otherwise the expression is dead with a couple exceptions.
-    // Do not misclean LogicalExpr or ConditionalOperator.  It is dead at the
-    // beginning of itself, but we need its UndefinedVal to determine its
-    // SVal.
-    if (X.isUndef() && cast<UndefinedVal>(X).getData())
-      EBMapRef = EBMapRef.add(BlkExpr, X);
-  }
-  
-  // Go through he deferred locations and add them to the new environment if
-  // the correspond Stmt* is in the map as well.
-  for (SmallVectorImpl<std::pair<EnvironmentEntry, SVal> >::iterator
-      I = deferredLocations.begin(), E = deferredLocations.end(); I != E; ++I) {
-    const EnvironmentEntry &En = I->first;
-    const Stmt *S = (Stmt*) (((uintptr_t) En.getStmt()) & (uintptr_t) ~0x1);
-    if (EBMapRef.lookup(EnvironmentEntry(S, En.getLocationContext())))
-      EBMapRef = EBMapRef.add(En, I->second);
   }
 
   NewEnv.ExprBindings = EBMapRef.asImmutableMap();
   return NewEnv;
 }
 
-void Environment::print(raw_ostream &Out, const char *NL,
-                        const char *Sep) const {
-  printAux(Out, false, NL, Sep);
-  printAux(Out, true, NL, Sep);
-}
-  
-void Environment::printAux(raw_ostream &Out, bool printLocations,
-                           const char *NL,
-                           const char *Sep) const{
+void Environment::printJson(raw_ostream &Out, const ASTContext &Ctx,
+                            const LocationContext *LCtx, const char *NL,
+                            unsigned int Space, bool IsDot) const {
+  Indent(Out, Space, IsDot) << "\"environment\": ";
 
-  bool isFirst = true;
+  if (ExprBindings.isEmpty()) {
+    Out << "null," << NL;
+    return;
+  }
 
-  for (Environment::iterator I = begin(), E = end(); I != E; ++I) {
-    const EnvironmentEntry &En = I.getKey();
-    if (IsLocation(En)) {
-      if (!printLocations)
-        continue;
+  ++Space;
+  if (!LCtx) {
+    // Find the freshest location context.
+    llvm::SmallPtrSet<const LocationContext *, 16> FoundContexts;
+    for (const auto &I : *this) {
+      const LocationContext *LC = I.first.getLocationContext();
+      if (FoundContexts.count(LC) == 0) {
+        // This context is fresher than all other contexts so far.
+        LCtx = LC;
+        for (const LocationContext *LCI = LC; LCI; LCI = LCI->getParent())
+          FoundContexts.insert(LCI);
+      }
     }
-    else {
-      if (printLocations)
+  }
+
+  assert(LCtx);
+
+  Out << "{ \"pointer\": \"" << (const void *)LCtx->getStackFrame()
+      << "\", \"items\": [" << NL;
+  PrintingPolicy PP = Ctx.getPrintingPolicy();
+
+  LCtx->printJson(Out, NL, Space, IsDot, [&](const LocationContext *LC) {
+    // LCtx items begin
+    bool HasItem = false;
+    unsigned int InnerSpace = Space + 1;
+
+    // Store the last ExprBinding which we will print.
+    BindingsTy::iterator LastI = ExprBindings.end();
+    for (BindingsTy::iterator I = ExprBindings.begin(); I != ExprBindings.end();
+         ++I) {
+      if (I->first.getLocationContext() != LC)
         continue;
+
+      if (!HasItem) {
+        HasItem = true;
+        Out << '[' << NL;
+      }
+
+      const Stmt *S = I->first.getStmt();
+      (void)S;
+      assert(S != nullptr && "Expected non-null Stmt");
+
+      LastI = I;
     }
-    
-    if (isFirst) {
-      Out << NL << NL
-          << (printLocations ? "Load/Store locations:" : "Expressions:")
-          << NL;      
-      isFirst = false;
-    } else {
+
+    for (BindingsTy::iterator I = ExprBindings.begin(); I != ExprBindings.end();
+         ++I) {
+      if (I->first.getLocationContext() != LC)
+        continue;
+
+      const Stmt *S = I->first.getStmt();
+      Indent(Out, InnerSpace, IsDot)
+          << "{ \"stmt_id\": " << S->getID(Ctx) << ", \"pretty\": ";
+      S->printJson(Out, nullptr, PP, /*AddQuotes=*/true);
+
+      Out << ", \"value\": ";
+      I->second.printJson(Out, /*AddQuotes=*/true);
+
+      Out << " }";
+
+      if (I != LastI)
+        Out << ',';
       Out << NL;
     }
-    
-    const Stmt *S = En.getStmt();
-    if (printLocations) {
-      S = (Stmt*) (((uintptr_t) S) & ((uintptr_t) ~0x1));
-    }
-    
-    Out << " (" << (void*) En.getLocationContext() << ',' << (void*) S << ") ";
-    LangOptions LO; // FIXME.
-    S->printPretty(Out, 0, PrintingPolicy(LO));
-    Out << " : " << I.getData();
-  }
+
+    if (HasItem)
+      Indent(Out, --InnerSpace, IsDot) << ']';
+    else
+      Out << "null ";
+  });
+
+  Indent(Out, --Space, IsDot) << "]}," << NL;
 }

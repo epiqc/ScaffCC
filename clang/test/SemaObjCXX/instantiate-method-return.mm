@@ -3,11 +3,12 @@
 
 @class NSObject;
 
-class A;
-template<class T> class V {};
+class A; // expected-note {{forward declaration of 'A'}}
+template<class T> class V { T x; }; // expected-error {{field has incomplete type 'A'}}
 
 @protocol Protocol
 - (V<A*>)protocolMethod;
+- (V<A>)method2;
 @end
 
 
@@ -22,5 +23,7 @@ template<class T> class V {};
 
 - (V<A*>)protocolMethod {
   V<A*> va; return va;
+}
+- (V<A>)method2 { // expected-note {{in instantiation of}}
 }
 @end

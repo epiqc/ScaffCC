@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -fsyntax-only -verify %s -std=c++11
+// RUN: %clang_cc1 -fsyntax-only -verify %s -std=c++11 -Wno-defaulted-function-deleted
 
 struct DefaultedDefCtor1 {};
 struct DefaultedDefCtor2 { DefaultedDefCtor2() = default; };
@@ -21,7 +21,7 @@ int n;
 
 // - X is a union-like class that has a variant member with a non-trivial
 // default constructor,
-union Deleted1a { UserProvidedDefCtor u; }; // expected-note {{default constructor of union 'Deleted1a' is implicitly deleted because field 'u' has a non-trivial default constructor}}
+union Deleted1a { UserProvidedDefCtor u; }; // expected-note {{default constructor of 'Deleted1a' is implicitly deleted because variant field 'u' has a non-trivial default constructor}}
 Deleted1a d1a; // expected-error {{implicitly-deleted default constructor}}
 union NotDeleted1a { DefaultedDefCtor1 nu; };
 NotDeleted1a nd1a;
@@ -43,8 +43,12 @@ class NotDeleted2a { int &a = n; };
 NotDeleted2a nd2a;
 class NotDeleted2b { int &a = error; }; // expected-error {{undeclared identifier}}
 NotDeleted2b nd2b;
-class NotDeleted2c { int &&a = 0; };
+class NotDeleted2c { int &&a = static_cast<int&&>(n); };
 NotDeleted2c nd2c;
+// Note: this one does not have a deleted default constructor even though the
+// implicit default constructor is ill-formed!
+class NotDeleted2d { int &&a = 0; }; // expected-error {{reference member 'a' binds to a temporary object}} expected-note {{default member init}}
+NotDeleted2d nd2d; // expected-note {{first required here}}
 
 // - any non-variant non-static data member of const qualified type (or array
 // thereof) with no brace-or-equal-initializer does not have a user-provided
@@ -53,7 +57,7 @@ class Deleted3a { const int a; }; // expected-note {{because field 'a' of const-
                                      expected-warning {{does not declare any constructor}} \
                                      expected-note {{will never be initialized}}
 Deleted3a d3a; // expected-error {{implicitly-deleted default constructor}}
-class Deleted3b { const DefaultedDefCtor1 a[42]; }; // expected-note {{because field 'a' of const-qualified type 'const DefaultedDefCtor1' would not be initialized}}
+class Deleted3b { const DefaultedDefCtor1 a[42]; }; // expected-note {{because field 'a' of const-qualified type 'const DefaultedDefCtor1 [42]' would not be initialized}}
 Deleted3b d3b; // expected-error {{implicitly-deleted default constructor}}
 class Deleted3c { const DefaultedDefCtor2 a; }; // expected-note {{because field 'a' of const-qualified type 'const DefaultedDefCtor2' would not be initialized}}
 Deleted3c d3c; // expected-error {{implicitly-deleted default constructor}}
@@ -77,7 +81,7 @@ NotDeleted3g nd3g;
 union Deleted4a {
   const int a;
   const int b;
-  const UserProvidedDefCtor c; // expected-note {{because field 'c' has a non-trivial default constructor}}
+  const UserProvidedDefCtor c; // expected-note {{because variant field 'c' has a non-trivial default constructor}}
 };
 Deleted4a d4a; // expected-error {{implicitly-deleted default constructor}}
 union NotDeleted4a { const int a; int b; };
@@ -149,26 +153,41 @@ static_assert(__has_trivial_constructor(Trivial), "Trivial is nontrivial");
 class NonTrivialDefCtor1 { NonTrivialDefCtor1(); };
 static_assert(!__has_trivial_constructor(NonTrivialDefCtor1), "NonTrivialDefCtor1 is trivial");
 
+#define ASSERT_NONTRIVIAL_IMPL(Class, Bases, Body) \
+  class Class Bases { Body }; \
+  static_assert(!__has_trivial_constructor(Class), "");
+#define ASSERT_NONTRIVIAL(Class, Bases, Body) \
+  ASSERT_NONTRIVIAL_IMPL(Class, Bases, Body) \
+  ASSERT_NONTRIVIAL_IMPL(Def ## Class, Bases, Def ## Class() = default; Body) \
+  ASSERT_NONTRIVIAL_IMPL(Del ## Class, Bases, Del ## Class() = delete; Body)
+
 // - its class has no virtual functions (10.3) and no virtual base classes (10.1), and
-class NonTrivialDefCtor2 { virtual void f(); };
-static_assert(!__has_trivial_constructor(NonTrivialDefCtor2), "NonTrivialDefCtor2 is trivial");
-class NonTrivialDefCtor3 : virtual Trivial {};
-static_assert(!__has_trivial_constructor(NonTrivialDefCtor3), "NonTrivialDefCtor3 is trivial");
+ASSERT_NONTRIVIAL(NonTrivialDefCtor2, , virtual void f();)
+ASSERT_NONTRIVIAL(NonTrivialDefCtor3, : virtual Trivial, )
 
 // - no non-static data member of its class has a brace-or-equal-initializer, and
-class NonTrivialDefCtor4 { int m = 52; };
-static_assert(!__has_trivial_constructor(NonTrivialDefCtor4), "NonTrivialDefCtor4 is trivial");
+ASSERT_NONTRIVIAL(NonTrivialDefCtor4, , int m = 52;)
 
 // - all the direct base classes of its class have trivial default constructors, and
-class NonTrivialDefCtor5 : NonTrivialDefCtor1 {};
-static_assert(!__has_trivial_constructor(NonTrivialDefCtor5), "NonTrivialDefCtor5 is trivial");
+ASSERT_NONTRIVIAL(NonTrivialDefCtor5, : NonTrivialDefCtor1, )
 
 // - for all the non-static data members of its class that are of class type (or array thereof), each such class
 // has a trivial default constructor.
-class NonTrivialDefCtor6 { NonTrivialDefCtor1 t; };
-static_assert(!__has_trivial_constructor(NonTrivialDefCtor6), "NonTrivialDefCtor5 is trivial");
+ASSERT_NONTRIVIAL(NonTrivialDefCtor6, , NonTrivialDefCtor1 t;)
+
+// FIXME: No core issue number yet.
+// - its parameter-declaration-clause is equivalent to that of an implicit declaration.
+struct NonTrivialDefCtor7 {
+  NonTrivialDefCtor7(...) = delete;
+};
+static_assert(!__has_trivial_constructor(NonTrivialDefCtor7), "");
+struct NonTrivialDefCtor8 {
+  NonTrivialDefCtor8(int = 0) = delete;
+};
+static_assert(!__has_trivial_constructor(NonTrivialDefCtor8), "");
 
 // Otherwise, the default constructor is non-trivial.
+
 class Trivial2 { Trivial2() = delete; };
 static_assert(__has_trivial_constructor(Trivial2), "Trivial2 is trivial");
 
@@ -180,3 +199,15 @@ static_assert(__has_trivial_constructor(Trivial4<int>), "Trivial4 is trivial");
 
 template<typename T> class Trivial5 { Trivial5() = delete; };
 static_assert(__has_trivial_constructor(Trivial5<int>), "Trivial5 is trivial");
+
+namespace PR14558 {
+  // Ensure we determine whether an explicitly-defaulted or deleted special
+  // member is trivial before we return to parsing the containing class.
+  struct A {
+    struct B { B() = default; } b;
+    struct C { C() = delete; } c;
+  };
+
+  static_assert(__has_trivial_constructor(A), "");
+  static_assert(__has_trivial_constructor(A::B), "");
+}

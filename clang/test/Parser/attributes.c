@@ -58,34 +58,34 @@ void d2(void) __attribute__((noreturn)), d3(void) __attribute__((noreturn));
 void __attribute__((returns_twice)) returns_twice_test();
 
 int aligned(int);
-int __attribute__((vec_type_hint(char, aligned(16) )) missing_rparen_1; // expected-error {{expected ')'}}
-int __attribute__((mode(x aligned(16) )) missing_rparen_2; // expected-error {{expected ')'}}
-int __attribute__((format(printf, 0 aligned(16) )) missing_rparen_3; // expected-error {{expected ')'}}
+int __attribute__((vec_type_hint(char, aligned(16) )) missing_rparen_1; // expected-error 2{{expected ')'}} expected-note {{to match}} expected-warning {{does not declare anything}}
+int __attribute__((mode(x aligned(16) )) missing_rparen_2; // expected-error 2{{expected ')'}}
+int __attribute__((format(printf, 0 aligned(16) )) missing_rparen_3; // expected-error 2{{expected ')'}}
 
 
 
 int testFundef1(int *a) __attribute__((nonnull(1))) { // \
-    // expected-warning {{GCC does not allow nonnull attribute in this position on a function definition}}
+    // expected-warning {{GCC does not allow 'nonnull' attribute in this position on a function definition}}
   return *a;
 }
 
 // noreturn is lifted to type qualifier
 void testFundef2() __attribute__((noreturn)) { // \
-    // expected-warning {{GCC does not allow noreturn attribute in this position on a function definition}}
+    // expected-warning {{GCC does not allow 'noreturn' attribute in this position on a function definition}}
   testFundef2();
 }
 
 int testFundef3(int *a) __attribute__((nonnull(1), // \
-    // expected-warning {{GCC does not allow nonnull attribute in this position on a function definition}}
+    // expected-warning {{GCC does not allow 'nonnull' attribute in this position on a function definition}}
                                      pure)) { // \
-    // expected-warning {{GCC does not allow pure attribute in this position on a function definition}}
+    // expected-warning {{GCC does not allow 'pure' attribute in this position on a function definition}}
   return *a;
 }
 
 int testFundef4(int *a) __attribute__((nonnull(1))) // \
-    // expected-warning {{GCC does not allow nonnull attribute in this position on a function definition}}
+    // expected-warning {{GCC does not allow 'nonnull' attribute in this position on a function definition}}
                       __attribute((pure)) { // \
-    // expected-warning {{GCC does not allow pure attribute in this position on a function definition}}
+    // expected-warning {{GCC does not allow 'pure' attribute in this position on a function definition}}
   return *a;
 }
 
@@ -94,5 +94,22 @@ void testFundef5() __attribute__(()) { }
 
 __attribute__((pure)) int testFundef6(int a) { return a; }
 
+void deprecatedTestFun(void) __attribute__((deprecated()));
 
+struct s {
+  int a;
+};
 
+// This test ensure compatibility with parsing GNU-style attributes
+// where the attribute is on a separate line from the elaborated type
+// specifier.
+struct s
+__attribute__((used)) bar;
+
+// Ensure that attributes must be separated by a comma (PR38352).
+__attribute__((const const)) int PR38352(void); // expected-error {{expected ')'}}
+// Also ensure that we accept spurious commas.
+__attribute__((,,,const)) int PR38352_1(void);
+__attribute__((const,,,)) int PR38352_2(void);
+__attribute__((const,,,const)) int PR38352_3(void);
+__attribute__((,,,const,,,const,,,)) int PR38352_4(void);

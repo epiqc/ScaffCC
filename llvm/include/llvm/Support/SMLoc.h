@@ -1,9 +1,8 @@
 //===- SMLoc.h - Source location for use with diagnostics -------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -12,21 +11,22 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef SUPPORT_SMLOC_H
-#define SUPPORT_SMLOC_H
+#ifndef LLVM_SUPPORT_SMLOC_H
+#define LLVM_SUPPORT_SMLOC_H
 
+#include "llvm/ADT/None.h"
 #include <cassert>
 
 namespace llvm {
 
-/// SMLoc - Represents a location in source code.
+/// Represents a location in source code.
 class SMLoc {
-  const char *Ptr;
-public:
-  SMLoc() : Ptr(0) {}
-  SMLoc(const SMLoc &RHS) : Ptr(RHS.Ptr) {}
+  const char *Ptr = nullptr;
 
-  bool isValid() const { return Ptr != 0; }
+public:
+  SMLoc() = default;
+
+  bool isValid() const { return Ptr != nullptr; }
 
   bool operator==(const SMLoc &RHS) const { return RHS.Ptr == Ptr; }
   bool operator!=(const SMLoc &RHS) const { return RHS.Ptr != Ptr; }
@@ -40,23 +40,25 @@ public:
   }
 };
 
-/// SMRange - Represents a range in source code.  Note that unlike standard STL
-/// ranges, the locations specified are considered to be *inclusive*.  For
-/// example, [X,X] *does* include X, it isn't an empty range.
+/// Represents a range in source code.
+///
+/// SMRange is implemented using a half-open range, as is the convention in C++.
+/// In the string "abc", the range [1,3) represents the substring "bc", and the
+/// range [2,2) represents an empty range between the characters "b" and "c".
 class SMRange {
 public:
   SMLoc Start, End;
 
-  SMRange() {}
-  SMRange(SMLoc Start, SMLoc End) : Start(Start), End(End) {
+  SMRange() = default;
+  SMRange(NoneType) {}
+  SMRange(SMLoc St, SMLoc En) : Start(St), End(En) {
     assert(Start.isValid() == End.isValid() &&
-           "Start and end should either both be valid or both be invalid!");
+           "Start and End should either both be valid or both be invalid!");
   }
-  
+
   bool isValid() const { return Start.isValid(); }
 };
-  
+
 } // end namespace llvm
 
-#endif
-
+#endif // LLVM_SUPPORT_SMLOC_H

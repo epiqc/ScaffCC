@@ -1,4 +1,6 @@
 // RUN: %clang_cc1 -fsyntax-only -verify %s
+// RUN: %clang_cc1 -fsyntax-only -verify -std=c++98 %s
+// RUN: %clang_cc1 -fsyntax-only -verify -std=c++11 %s
 
 struct A {};
 
@@ -38,7 +40,10 @@ char ***good_const_cast_test(ccvpcvpp var)
   f *fpp = const_cast<f*>(&fp);
   int const A::* const A::*icapcap = 0;
   int A::* A::* iapap = const_cast<int A::* A::*>(icapcap);
-
+  (void)const_cast<A&&>(A());
+#if __cplusplus <= 199711L // C++03 or earlier modes
+  // expected-warning@-2 {{rvalue references are a C++11 extension}}
+#endif
   return var4;
 }
 
@@ -53,12 +58,25 @@ short *bad_const_cast_test(char const *volatile *const volatile *var)
   // Non-pointer.
   char v = const_cast<char>(**var2); // expected-error {{const_cast to 'char', which is not a reference, pointer-to-object, or pointer-to-data-member}}
   const int *ar[100] = {0};
-  // Not even lenient g++ accepts this.
-  int *(*rar)[100] = const_cast<int *(*)[100]>(&ar); // expected-error {{const_cast from 'const int *(*)[100]' to 'int *(*)[100]' is not allowed}}
+  extern const int *aub[];
+  // const_cast looks through arrays as of DR330.
+  (void) const_cast<int *(*)[100]>(&ar); // ok
+  (void) const_cast<int *(*)[]>(&aub); // ok
+  // ... but the array bound must exactly match.
+  (void) const_cast<int *(*)[]>(&ar); // expected-error {{const_cast from 'const int *(*)[100]' to 'int *(*)[]' is not allowed}}
+  (void) const_cast<int *(*)[99]>(&ar); // expected-error {{const_cast from 'const int *(*)[100]' to 'int *(*)[99]' is not allowed}}
+  (void) const_cast<int *(*)[100]>(&aub); // expected-error {{const_cast from 'const int *(*)[]' to 'int *(*)[100]' is not allowed}}
   f fp1 = 0;
   // Function pointers.
   f fp2 = const_cast<f>(fp1); // expected-error {{const_cast to 'f' (aka 'int (*)(int)'), which is not a reference, pointer-to-object, or pointer-to-data-member}}
   void (A::*mfn)() = 0;
-  (void)const_cast<void (A::*)()>(mfn); // expected-error {{const_cast to 'void (A::*)()', which is not a reference, pointer-to-object, or pointer-to-data-member}}
+  (void)const_cast<void (A::*)()>(mfn); // expected-error-re {{const_cast to 'void (A::*)(){{( __attribute__\(\(thiscall\)\))?}}', which is not a reference, pointer-to-object, or pointer-to-data-member}}
+  (void)const_cast<int&&>(0); // expected-error {{const_cast from rvalue to reference type 'int &&'}}
+#if __cplusplus <= 199711L // C++03 or earlier modes
+  // expected-warning@-2 {{rvalue references are a C++11 extension}}
+#endif
   return **var3;
 }
+
+template <typename T>
+char *PR21845() { return const_cast<char *>((void)T::x); } // expected-error {{const_cast from 'void' to 'char *' is not allowed}}

@@ -1,4 +1,5 @@
-// RUN: %clang_cc1 -Wnonfragile-abi2 -fsyntax-only -fobjc-default-synthesize-properties -verify -Wno-objc-root-class %s
+// RUN: %clang_cc1 -fsyntax-only -verify -Wno-objc-root-class %s
+// expected-no-diagnostics
 // rdar://8673791
 // rdar://9943851
 

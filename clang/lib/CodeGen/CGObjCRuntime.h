@@ -1,9 +1,8 @@
 //===----- CGObjCRuntime.h - Interface to ObjC Runtimes ---------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,14 +12,14 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CLANG_CODEGEN_OBCJRUNTIME_H
-#define CLANG_CODEGEN_OBCJRUNTIME_H
-#include "clang/Basic/IdentifierTable.h" // Selector
-#include "clang/AST/DeclObjC.h"
-
+#ifndef LLVM_CLANG_LIB_CODEGEN_CGOBJCRUNTIME_H
+#define LLVM_CLANG_LIB_CODEGEN_CGOBJCRUNTIME_H
 #include "CGBuilder.h"
 #include "CGCall.h"
+#include "CGCleanup.h"
 #include "CGValue.h"
+#include "clang/AST/DeclObjC.h"
+#include "clang/Basic/IdentifierTable.h" // Selector
 
 namespace llvm {
   class Constant;
@@ -91,24 +90,27 @@ protected:
                                   llvm::Value *Offset);
   /// Emits a try / catch statement.  This function is intended to be called by
   /// subclasses, and provides a generic mechanism for generating these, which
-  /// should be usable by all runtimes.  The caller must provide the functions to
-  /// call when entering and exiting a @catch() block, and the function used to
-  /// rethrow exceptions.  If the begin and end catch functions are NULL, then
-  /// the function assumes that the EH personality function provides the
-  /// thrown object directly.
-  void EmitTryCatchStmt(CodeGenFunction &CGF,
-                        const ObjCAtTryStmt &S,
-                        llvm::Constant *beginCatchFn,
-                        llvm::Constant *endCatchFn,
-                        llvm::Constant *exceptionRethrowFn);
-  /// Emits an @synchronize() statement, using the syncEnterFn and syncExitFn
-  /// arguments as the functions called to lock and unlock the object.  This
-  /// function can be called by subclasses that use zero-cost exception
-  /// handling.
+  /// should be usable by all runtimes.  The caller must provide the functions
+  /// to call when entering and exiting a \@catch() block, and the function
+  /// used to rethrow exceptions.  If the begin and end catch functions are
+  /// NULL, then the function assumes that the EH personality function provides
+  /// the thrown object directly.
+  void EmitTryCatchStmt(CodeGenFunction &CGF, const ObjCAtTryStmt &S,
+                        llvm::FunctionCallee beginCatchFn,
+                        llvm::FunctionCallee endCatchFn,
+                        llvm::FunctionCallee exceptionRethrowFn);
+
+  void EmitInitOfCatchParam(CodeGenFunction &CGF, llvm::Value *exn,
+                            const VarDecl *paramDecl);
+
+  /// Emits an \@synchronize() statement, using the \p syncEnterFn and
+  /// \p syncExitFn arguments as the functions called to lock and unlock
+  /// the object.  This function can be called by subclasses that use
+  /// zero-cost exception handling.
   void EmitAtSynchronizedStmt(CodeGenFunction &CGF,
-                            const ObjCAtSynchronizedStmt &S,
-                            llvm::Function *syncEnterFn,
-                            llvm::Function *syncExitFn);
+                              const ObjCAtSynchronizedStmt &S,
+                              llvm::FunctionCallee syncEnterFn,
+                              llvm::FunctionCallee syncExitFn);
 
 public:
   virtual ~CGObjCRuntime();
@@ -117,14 +119,19 @@ public:
   /// this compilation unit with the runtime library.
   virtual llvm::Function *ModuleInitFunction() = 0;
 
-  /// Get a selector for the specified name and type values. The
-  /// return value should have the LLVM type for pointer-to
+  /// Get a selector for the specified name and type values.
+  /// The result should have the LLVM type for ASTContext::getObjCSelType().
+  virtual llvm::Value *GetSelector(CodeGenFunction &CGF, Selector Sel) = 0;
+
+  /// Get the address of a selector for the specified name and type values.
+  /// This is a rarely-used language extension, but sadly it exists.
+  ///
+  /// The result should have the LLVM type for a pointer to
   /// ASTContext::getObjCSelType().
-  virtual llvm::Value *GetSelector(CGBuilderTy &Builder,
-                                   Selector Sel, bool lval=false) = 0;
+  virtual Address GetAddrOfSelector(CodeGenFunction &CGF, Selector Sel) = 0;
 
   /// Get a typed selector.
-  virtual llvm::Value *GetSelector(CGBuilderTy &Builder,
+  virtual llvm::Value *GetSelector(CodeGenFunction &CGF,
                                    const ObjCMethodDecl *Method) = 0;
 
   /// Get the type constant to catch for the given ObjC pointer type.
@@ -133,9 +140,11 @@ public:
   /// error to Sema.
   virtual llvm::Constant *GetEHType(QualType T) = 0;
 
+  virtual CatchTypeInfo getCatchAllTypeInfo() { return { nullptr, 0 }; }
+
   /// Generate a constant string object.
-  virtual llvm::Constant *GenerateConstantString(const StringLiteral *) = 0;
-  
+  virtual ConstantAddress GenerateConstantString(const StringLiteral *) = 0;
+
   /// Generate a category.  A category contains a list of methods (and
   /// accompanying metadata) and a list of protocols.
   virtual void GenerateCategory(const ObjCCategoryImplDecl *OCD) = 0;
@@ -157,8 +166,23 @@ public:
                       Selector Sel,
                       llvm::Value *Receiver,
                       const CallArgList &CallArgs,
-                      const ObjCInterfaceDecl *Class = 0,
-                      const ObjCMethodDecl *Method = 0) = 0;
+                      const ObjCInterfaceDecl *Class = nullptr,
+                      const ObjCMethodDecl *Method = nullptr) = 0;
+
+  /// Generate an Objective-C message send operation.
+  ///
+  /// This variant allows for the call to be substituted with an optimized
+  /// variant.
+  CodeGen::RValue
+  GeneratePossiblySpecializedMessageSend(CodeGenFunction &CGF,
+                                         ReturnValueSlot Return,
+                                         QualType ResultType,
+                                         Selector Sel,
+                                         llvm::Value *Receiver,
+                                         const CallArgList& Args,
+                                         const ObjCInterfaceDecl *OID,
+                                         const ObjCMethodDecl *Method,
+                                         bool isClassMessage);
 
   /// Generate an Objective-C message send operation to the super
   /// class initiated in a method for Class and with the given Self
@@ -176,11 +200,11 @@ public:
                            llvm::Value *Self,
                            bool IsClassMessage,
                            const CallArgList &CallArgs,
-                           const ObjCMethodDecl *Method = 0) = 0;
+                           const ObjCMethodDecl *Method = nullptr) = 0;
 
   /// Emit the code to return the named protocol as an object, as in a
-  /// @protocol expression.
-  virtual llvm::Value *GenerateProtocolRef(CGBuilderTy &Builder,
+  /// \@protocol expression.
+  virtual llvm::Value *GenerateProtocolRef(CodeGenFunction &CGF,
                                            const ObjCProtocolDecl *OPD) = 0;
 
   /// Generate the named protocol.  Protocols contain method metadata but no
@@ -196,56 +220,66 @@ public:
   virtual llvm::Function *GenerateMethod(const ObjCMethodDecl *OMD,
                                          const ObjCContainerDecl *CD) = 0;
 
+  /// Generates prologue for direct Objective-C Methods.
+  virtual void GenerateDirectMethodPrologue(CodeGenFunction &CGF,
+                                            llvm::Function *Fn,
+                                            const ObjCMethodDecl *OMD,
+                                            const ObjCContainerDecl *CD) = 0;
+
   /// Return the runtime function for getting properties.
-  virtual llvm::Constant *GetPropertyGetFunction() = 0;
+  virtual llvm::FunctionCallee GetPropertyGetFunction() = 0;
 
   /// Return the runtime function for setting properties.
-  virtual llvm::Constant *GetPropertySetFunction() = 0;
+  virtual llvm::FunctionCallee GetPropertySetFunction() = 0;
 
   /// Return the runtime function for optimized setting properties.
-  virtual llvm::Constant *GetOptimizedPropertySetFunction(bool atomic, 
-                                                          bool copy) = 0;
+  virtual llvm::FunctionCallee GetOptimizedPropertySetFunction(bool atomic,
+                                                               bool copy) = 0;
 
   // API for atomic copying of qualified aggregates in getter.
-  virtual llvm::Constant *GetGetStructFunction() = 0;
+  virtual llvm::FunctionCallee GetGetStructFunction() = 0;
   // API for atomic copying of qualified aggregates in setter.
-  virtual llvm::Constant *GetSetStructFunction() = 0;
-  // API for atomic copying of qualified aggregates with non-trivial copy
-  // assignment (c++) in setter/getter.
-  virtual llvm::Constant *GetCppAtomicObjectFunction() = 0;
-  
+  virtual llvm::FunctionCallee GetSetStructFunction() = 0;
+  /// API for atomic copying of qualified aggregates with non-trivial copy
+  /// assignment (c++) in setter.
+  virtual llvm::FunctionCallee GetCppAtomicObjectSetFunction() = 0;
+  /// API for atomic copying of qualified aggregates with non-trivial copy
+  /// assignment (c++) in getter.
+  virtual llvm::FunctionCallee GetCppAtomicObjectGetFunction() = 0;
+
   /// GetClass - Return a reference to the class for the given
   /// interface decl.
-  virtual llvm::Value *GetClass(CGBuilderTy &Builder,
+  virtual llvm::Value *GetClass(CodeGenFunction &CGF,
                                 const ObjCInterfaceDecl *OID) = 0;
-  
-  
-  virtual llvm::Value *EmitNSAutoreleasePoolClassRef(CGBuilderTy &Builder) {
+
+
+  virtual llvm::Value *EmitNSAutoreleasePoolClassRef(CodeGenFunction &CGF) {
     llvm_unreachable("autoreleasepool unsupported in this ABI");
   }
-  
+
   /// EnumerationMutationFunction - Return the function that's called by the
   /// compiler when a mutation is detected during foreach iteration.
-  virtual llvm::Constant *EnumerationMutationFunction() = 0;
+  virtual llvm::FunctionCallee EnumerationMutationFunction() = 0;
 
   virtual void EmitSynchronizedStmt(CodeGen::CodeGenFunction &CGF,
                                     const ObjCAtSynchronizedStmt &S) = 0;
   virtual void EmitTryStmt(CodeGen::CodeGenFunction &CGF,
                            const ObjCAtTryStmt &S) = 0;
   virtual void EmitThrowStmt(CodeGen::CodeGenFunction &CGF,
-                             const ObjCAtThrowStmt &S) = 0;
+                             const ObjCAtThrowStmt &S,
+                             bool ClearInsertionPoint=true) = 0;
   virtual llvm::Value *EmitObjCWeakRead(CodeGen::CodeGenFunction &CGF,
-                                        llvm::Value *AddrWeakObj) = 0;
+                                        Address AddrWeakObj) = 0;
   virtual void EmitObjCWeakAssign(CodeGen::CodeGenFunction &CGF,
-                                  llvm::Value *src, llvm::Value *dest) = 0;
+                                  llvm::Value *src, Address dest) = 0;
   virtual void EmitObjCGlobalAssign(CodeGen::CodeGenFunction &CGF,
-                                    llvm::Value *src, llvm::Value *dest,
+                                    llvm::Value *src, Address dest,
                                     bool threadlocal=false) = 0;
   virtual void EmitObjCIvarAssign(CodeGen::CodeGenFunction &CGF,
-                                  llvm::Value *src, llvm::Value *dest,
+                                  llvm::Value *src, Address dest,
                                   llvm::Value *ivarOffset) = 0;
   virtual void EmitObjCStrongCastAssign(CodeGen::CodeGenFunction &CGF,
-                                        llvm::Value *src, llvm::Value *dest) = 0;
+                                        llvm::Value *src, Address dest) = 0;
 
   virtual LValue EmitObjCValueForIvar(CodeGen::CodeGenFunction &CGF,
                                       QualType ObjectTy,
@@ -256,12 +290,21 @@ public:
                                       const ObjCInterfaceDecl *Interface,
                                       const ObjCIvarDecl *Ivar) = 0;
   virtual void EmitGCMemmoveCollectable(CodeGen::CodeGenFunction &CGF,
-                                        llvm::Value *DestPtr,
-                                        llvm::Value *SrcPtr,
+                                        Address DestPtr,
+                                        Address SrcPtr,
                                         llvm::Value *Size) = 0;
   virtual llvm::Constant *BuildGCBlockLayout(CodeGen::CodeGenModule &CGM,
                                   const CodeGen::CGBlockInfo &blockInfo) = 0;
-  virtual llvm::GlobalVariable *GetClassGlobal(const std::string &Name) = 0;
+  virtual llvm::Constant *BuildRCBlockLayout(CodeGen::CodeGenModule &CGM,
+                                  const CodeGen::CGBlockInfo &blockInfo) = 0;
+  virtual std::string getRCBlockLayoutStr(CodeGen::CodeGenModule &CGM,
+                                          const CGBlockInfo &blockInfo) {
+    return {};
+  }
+
+  /// Returns an i8* which points to the byref layout information.
+  virtual llvm::Constant *BuildByrefLayout(CodeGen::CodeGenModule &CGM,
+                                           QualType T) = 0;
 
   struct MessageSendInfo {
     const CGFunctionInfo &CallInfo;
@@ -275,6 +318,12 @@ public:
   MessageSendInfo getMessageSendInfo(const ObjCMethodDecl *method,
                                      QualType resultType,
                                      CallArgList &callArgs);
+
+  // FIXME: This probably shouldn't be here, but the code to compute
+  // it is here.
+  unsigned ComputeBitfieldBitOffset(CodeGen::CodeGenModule &CGM,
+                                    const ObjCInterfaceDecl *ID,
+                                    const ObjCIvarDecl *Ivar);
 };
 
 /// Creates an instance of an Objective-C runtime class.

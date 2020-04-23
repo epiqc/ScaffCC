@@ -6,14 +6,16 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <cstring>
+#include <cstdlib>
 #include "llvm/Pass.h"
-#include "llvm/Module.h"
-#include "llvm/Function.h"
-#include "llvm/BasicBlock.h"
-#include "llvm/Instruction.h"
-#include "llvm/Constants.h"
-#include "llvm/Intrinsics.h"
-#include "llvm/Support/InstVisitor.h" 
+#include "llvm/IR/Module.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Instruction.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/InstVisitor.h" 
 #include "llvm/Support/raw_ostream.h"
 
 using namespace llvm;
@@ -49,14 +51,14 @@ namespace {
 
     static char ID;  // Pass identification, replacement for typeid
 
-    Function* qasmGate; //external instrumentation function
-    Function* qasmQbitDecl; //external instrumentation function    
-    Function* qasmCbitDecl; //external instrumentation function    
-    Function* qasmResSum; //external instrumentation function    
+    FunctionCallee qasmGate; //external instrumentation function
+    FunctionCallee qasmQbitDecl; //external instrumentation function    
+    FunctionCallee qasmCbitDecl; //external instrumentation function    
+    FunctionCallee qasmResSum; //external instrumentation function    
 
     RTResourceEst() : ModulePass(ID) {  }
 
-    void instrumentInst(Function* F,Instruction* pInst, int intParam, bool isCall){
+    void instrumentInst(FunctionCallee F,Instruction* pInst, int intParam, bool isCall){
       SmallVector<Value*,16> call_args;
       Value* intArg = ConstantInt::get(Type::getInt32Ty(pInst->getContext()),intParam);	
       call_args.push_back(intArg);
@@ -138,19 +140,31 @@ namespace {
     void visitFunction(Function &F){
       if(F.getName() == "main"){
 	BasicBlock* BB = &F.back();
-	TerminatorInst *BBTerm = BB->getTerminator();
+	Instruction *BBTerm = BB->getTerminator();
 	CallInst::Create(qasmResSum, "",(Instruction*)BBTerm);	
       }
     }
     
     bool runOnModule(Module &M){
-      qasmGate = cast<Function>(M.getOrInsertFunction("qasm_gate", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), (Type*)0));
+      const char *debug_val = getenv("DEBUG_RUNTIMERESOURCEST");
+      if(debug_val){
+        if(!strncmp(debug_val, "1", 1)) debugRTResourceEst = true;
+        else debugRTResourceEst = false;
+      }
+
+      debug_val = getenv("DEBUG_SCAFFOLD");
+      if(debug_val && !debugRTResourceEst){
+        if(!strncmp(debug_val, "1", 1)) debugRTResourceEst = true;
+        else debugRTResourceEst = false;
+      }
+
+      qasmGate = M.getOrInsertFunction("qasm_gate", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), (Type*)0);
       
-      qasmQbitDecl = cast<Function>(M.getOrInsertFunction("qasm_qbit_decl", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), (Type*)0));
+      qasmQbitDecl = M.getOrInsertFunction("qasm_qbit_decl", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), (Type*)0);
       
-      qasmCbitDecl = cast<Function>(M.getOrInsertFunction("qasm_cbit_decl", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), (Type*)0));
+      qasmCbitDecl = M.getOrInsertFunction("qasm_cbit_decl", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), (Type*)0);
       
-      qasmResSum = cast<Function>(M.getOrInsertFunction("qasm_resource_summary", Type::getVoidTy(M.getContext()), (Type*)0));
+      qasmResSum = M.getOrInsertFunction("qasm_resource_summary", Type::getVoidTy(M.getContext()), (Type*)0);
             
       visit(M);
 

@@ -1,27 +1,37 @@
 set(LLVM_LINK_COMPONENTS
-  ${LLVM_TARGETS_TO_BUILD}
-  ipo scalaropts linker bitreader bitwriter mcdisassembler vectorize)
-
-add_definitions( -DLLVM_VERSION_INFO=\"${PACKAGE_VERSION}\" )
-
-set(SOURCES
-  LTOCodeGenerator.cpp
-  lto.cpp
-  LTOModule.cpp
+  AllTargetsAsmParsers
+  AllTargetsCodeGens
+  AllTargetsDescs
+  AllTargetsDisassemblers
+  AllTargetsInfos
+  BitReader
+  Core
+  LTO
+  MC
+  MCDisassembler
+  Support
+  Target
   )
 
-if( NOT WIN32 AND LLVM_ENABLE_PIC )
-  set(bsl ${BUILD_SHARED_LIBS})
-  set(BUILD_SHARED_LIBS ON)
-  add_llvm_library(LTO ${SOURCES})
-  set_property(TARGET LTO PROPERTY OUTPUT_NAME "LTO")
-  set(BUILD_SHARED_LIBS ${bsl})
-  set(LTO_STATIC_TARGET_NAME LTO_static)
-else()
-  set(LTO_STATIC_TARGET_NAME LTO)
-endif()
+set(SOURCES
+  LTODisassembler.cpp
+  lto.cpp
+  )
 
-if( NOT BUILD_SHARED_LIBS )
-  add_llvm_library(${LTO_STATIC_TARGET_NAME} ${SOURCES})
-  set_property(TARGET ${LTO_STATIC_TARGET_NAME} PROPERTY OUTPUT_NAME "LTO")
+set(LLVM_EXPORTED_SYMBOL_FILE ${CMAKE_CURRENT_SOURCE_DIR}/lto.exports)
+
+add_llvm_library(LTO SHARED INSTALL_WITH_TOOLCHAIN ${SOURCES} DEPENDS intrinsics_gen)
+
+install(FILES ${LLVM_MAIN_INCLUDE_DIR}/llvm-c/lto.h
+  DESTINATION include/llvm-c
+  COMPONENT LTO)
+
+if (APPLE)
+  set(LTO_VERSION ${LLVM_VERSION_MAJOR})
+  if(LLVM_LTO_VERSION_OFFSET)
+    math(EXPR LTO_VERSION "${LLVM_VERSION_MAJOR} + ${LLVM_LTO_VERSION_OFFSET}")
+  endif()
+  set_property(TARGET LTO APPEND_STRING PROPERTY
+              LINK_FLAGS
+              " -compatibility_version 1 -current_version ${LTO_VERSION}.${LLVM_VERSION_MINOR}.${LLVM_VERSION_PATCH}")
 endif()

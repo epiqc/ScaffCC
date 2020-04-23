@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -analyze -analyze-function="myMethodWithY:withX:" -analyzer-checker=core,osx.cocoa.RetainCount -analyzer-store=region -verify %s
+// RUN: %clang_analyze_cc1 -analyze-function="-[Test1 myMethodWithY:withX:]" -analyzer-checker=core,osx.cocoa.RetainCount -analyzer-store=region -verify %s
 
 typedef signed char BOOL;
 typedef unsigned int NSUInteger;
@@ -38,7 +38,7 @@ typedef struct _NSZone NSZone;
 -(id)myMethod {
   Test1 *cell = [[[Test1 alloc] init] autorelease];
 
-  NSString *string1 = [[NSString alloc] initWithFormat:@"test %f", 0.0]; // No warning: this function is not analized.
+  NSString *string1 = [[NSString alloc] initWithFormat:@"test %f", 0.0]; // No warning: this function is not analyzed.
   cell.text = string1;
 
   return cell;

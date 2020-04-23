@@ -3,14 +3,15 @@
 // An attribute-specifier-seq in a lambda-declarator appertains to the
 // type of the corresponding function call operator.
 void test_attributes() {
-  auto nrl = [](int x) -> int { if (x > 0) return x; }; // expected-warning{{control may reach end of non-void lambda}}
+  auto nrl = [](int x) -> int { if (x > 0) return x; }; // expected-warning{{on-void lambda does not return a value in all control paths}}
 
-  auto nrl2 = []() [[noreturn]] { return; }; // expected-error{{lambda declared 'noreturn' should not return}}
+  // FIXME: GCC accepts the [[gnu::noreturn]] attribute here.
+  auto nrl2 = []() [[gnu::noreturn]] { return; }; // expected-warning{{attribute 'noreturn' ignored}}
 }
 
 template<typename T>
 struct bogus_override_if_virtual : public T {
-  bogus_override_if_virtual() : T(*(T*)0) { }
+  bogus_override_if_virtual() : T(*(T*)0) { } // expected-warning {{binding dereferenced null pointer to reference has undefined behavior}}
   int operator()() const;
 };
 
@@ -35,15 +36,13 @@ void test_quals() {
   lv(); // expected-error{{no matching function for call to object of type}}
   mlv(); // expected-error{{no matching function for call to object of type}}
 
-  bogus_override_if_virtual<decltype(l)> bogus;
+  bogus_override_if_virtual<decltype(l)> bogus; // expected-note{{in instantiation of member function 'bogus_override_if_virtual<(lambda}}
 }
 
-// Default arguments (8.3.6) shall not be specified in the
-// parameter-declaration-clause of a lambda- declarator.
-// Note: Removed by core issue 974.
+// Core issue 974: default arguments (8.3.6) may be specified in the
+// parameter-declaration-clause of a lambda-declarator.
 int test_default_args() {
-  return [](int i = 5,  // expected-warning{{C++11 forbids default arguments for lambda expressions}}
-            int j = 17) { return i+j;}(5, 6);
+  return [](int i = 5, int j = 17) { return i+j;}(5, 6);
 }
 
 // Any exception-specification specified on a lambda-expression

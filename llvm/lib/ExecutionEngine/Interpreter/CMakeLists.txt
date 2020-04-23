@@ -6,12 +6,15 @@ if( FFI_INCLUDE_PATH )
   include_directories( ${FFI_INCLUDE_PATH} )
 endif()
 
-add_llvm_library(LLVMInterpreter
+add_llvm_component_library(LLVMInterpreter
   Execution.cpp
   ExternalFunctions.cpp
   Interpreter.cpp
+
+  DEPENDS
+  intrinsics_gen
   )
 
 if( LLVM_ENABLE_FFI )
-  target_link_libraries( LLVMInterpreter ${FFI_LIBRARY_PATH} )
+  target_link_libraries( LLVMInterpreter PRIVATE ${FFI_LIBRARY_PATH} )
 endif()

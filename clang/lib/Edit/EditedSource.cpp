@@ -1,19 +1,28 @@
-//===----- EditedSource.cpp - Collection of source edits ------------------===//
+//===- EditedSource.cpp - Collection of source edits ----------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
 #include "clang/Edit/EditedSource.h"
+#include "clang/Basic/CharInfo.h"
+#include "clang/Basic/LLVM.h"
+#include "clang/Basic/SourceLocation.h"
+#include "clang/Basic/SourceManager.h"
 #include "clang/Edit/Commit.h"
 #include "clang/Edit/EditsReceiver.h"
+#include "clang/Edit/FileOffset.h"
 #include "clang/Lex/Lexer.h"
-#include "clang/Basic/SourceManager.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallString.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
+#include <algorithm>
+#include <cassert>
+#include <tuple>
+#include <utility>
 
 using namespace clang;
 using namespace edit;
@@ -22,8 +31,43 @@ void EditsReceiver::remove(CharSourceRange range) {
   replace(range, StringRef());
 }
 
+void EditedSource::deconstructMacroArgLoc(SourceLocation Loc,
+                                          SourceLocation &ExpansionLoc,
+                                          MacroArgUse &ArgUse) {
+  assert(SourceMgr.isMacroArgExpansion(Loc));
+  SourceLocation DefArgLoc =
+      SourceMgr.getImmediateExpansionRange(Loc).getBegin();
+  SourceLocation ImmediateExpansionLoc =
+      SourceMgr.getImmediateExpansionRange(DefArgLoc).getBegin();
+  ExpansionLoc = ImmediateExpansionLoc;
+  while (SourceMgr.isMacroBodyExpansion(ExpansionLoc))
+    ExpansionLoc =
+        SourceMgr.getImmediateExpansionRange(ExpansionLoc).getBegin();
+  SmallString<20> Buf;
+  StringRef ArgName = Lexer::getSpelling(SourceMgr.getSpellingLoc(DefArgLoc),
+                                         Buf, SourceMgr, LangOpts);
+  ArgUse = MacroArgUse{nullptr, SourceLocation(), SourceLocation()};
+  if (!ArgName.empty())
+    ArgUse = {&IdentTable.get(ArgName), ImmediateExpansionLoc,
+              SourceMgr.getSpellingLoc(DefArgLoc)};
+}
+
+void EditedSource::startingCommit() {}
+
+void EditedSource::finishedCommit() {
+  for (auto &ExpArg : CurrCommitMacroArgExps) {
+    SourceLocation ExpLoc;
+    MacroArgUse ArgUse;
+    std::tie(ExpLoc, ArgUse) = ExpArg;
+    auto &ArgUses = ExpansionToArgMap[ExpLoc.getRawEncoding()];
+    if (llvm::find(ArgUses, ArgUse) == ArgUses.end())
+      ArgUses.push_back(ArgUse);
+  }
+  CurrCommitMacroArgExps.clear();
+}
+
 StringRef EditedSource::copyString(const Twine &twine) {
-  llvm::SmallString<128> Data;
+  SmallString<128> Data;
   return copyString(twine.toStringRef(Data));
 }
 
@@ -35,17 +79,32 @@ bool EditedSource::canInsertInOffset(SourceLocation OrigLoc, FileOffset Offs) {
   }
 
   if (SourceMgr.isMacroArgExpansion(OrigLoc)) {
-    SourceLocation
-      DefArgLoc = SourceMgr.getImmediateExpansionRange(OrigLoc).first;
-    SourceLocation
-      ExpLoc = SourceMgr.getImmediateExpansionRange(DefArgLoc).first;
-    llvm::DenseMap<unsigned, SourceLocation>::iterator
-      I = ExpansionToArgMap.find(ExpLoc.getRawEncoding());
-    if (I != ExpansionToArgMap.end() && I->second != DefArgLoc)
-      return false; // Trying to write in a macro argument input that has
-                 // already been written for another argument of the same macro. 
+    SourceLocation ExpLoc;
+    MacroArgUse ArgUse;
+    deconstructMacroArgLoc(OrigLoc, ExpLoc, ArgUse);
+    auto I = ExpansionToArgMap.find(ExpLoc.getRawEncoding());
+    if (I != ExpansionToArgMap.end() &&
+        find_if(I->second, [&](const MacroArgUse &U) {
+          return ArgUse.Identifier == U.Identifier &&
+                 std::tie(ArgUse.ImmediateExpansionLoc, ArgUse.UseLoc) !=
+                     std::tie(U.ImmediateExpansionLoc, U.UseLoc);
+        }) != I->second.end()) {
+      // Trying to write in a macro argument input that has already been
+      // written by a previous commit for another expansion of the same macro
+      // argument name. For example:
+      //
+      // \code
+      //   #define MAC(x) ((x)+(x))
+      //   MAC(a)
+      // \endcode
+      //
+      // A commit modified the macro argument 'a' due to the first '(x)'
+      // expansion inside the macro definition, and a subsequent commit tried
+      // to modify 'a' again for the second '(x)' expansion. The edits of the
+      // second commit will be rejected.
+      return false;
+    }
   }
-
   return true;
 }
 
@@ -58,26 +117,24 @@ bool EditedSource::commitInsert(SourceLocation OrigLoc,
     return true;
 
   if (SourceMgr.isMacroArgExpansion(OrigLoc)) {
-    SourceLocation
-      DefArgLoc = SourceMgr.getImmediateExpansionRange(OrigLoc).first;
-    SourceLocation
-      ExpLoc = SourceMgr.getImmediateExpansionRange(DefArgLoc).first;
-    ExpansionToArgMap[ExpLoc.getRawEncoding()] = DefArgLoc;
+    MacroArgUse ArgUse;
+    SourceLocation ExpLoc;
+    deconstructMacroArgLoc(OrigLoc, ExpLoc, ArgUse);
+    if (ArgUse.Identifier)
+      CurrCommitMacroArgExps.emplace_back(ExpLoc, ArgUse);
   }
-  
+
   FileEdit &FA = FileEdits[Offs];
   if (FA.Text.empty()) {
     FA.Text = copyString(text);
     return true;
   }
 
-  Twine concat;
   if (beforePreviousInsertions)
-    concat = Twine(text) + FA.Text;
+    FA.Text = copyString(Twine(text) + FA.Text);
   else
-    concat = Twine(FA.Text) +  text;
+    FA.Text = copyString(Twine(FA.Text) + text);
 
-  FA.Text = copyString(concat);
   return true;
 }
 
@@ -88,7 +145,7 @@ bool EditedSource::commitInsertFromRange(SourceLocation OrigLoc,
   if (Len == 0)
     return true;
 
-  llvm::SmallString<128> StrVec;
+  SmallString<128> StrVec;
   FileOffset BeginOffs = InsertFromRangeOffs;
   FileOffset EndOffs = BeginOffs.getWithOffset(Len);
   FileEditsTy::iterator I = FileEdits.upper_bound(BeginOffs);
@@ -100,8 +157,11 @@ bool EditedSource::commitInsertFromRange(SourceLocation OrigLoc,
     FileOffset B = I->first;
     FileOffset E = B.getWithOffset(FA.RemoveLen);
 
+    if (BeginOffs == B)
+      break;
+
     if (BeginOffs < E) {
-      if (BeginOffs >= B) {
+      if (BeginOffs > B) {
         BeginOffs = E;
         ++I;
       }
@@ -133,7 +193,7 @@ bool EditedSource::commitInsertFromRange(SourceLocation OrigLoc,
     StrVec += text;
   }
 
-  return commitInsert(OrigLoc, Offs, StrVec.str(), beforePreviousInsertions);
+  return commitInsert(OrigLoc, Offs, StrVec, beforePreviousInsertions);
 }
 
 void EditedSource::commitRemove(SourceLocation OrigLoc,
@@ -156,7 +216,7 @@ void EditedSource::commitRemove(SourceLocation OrigLoc,
   }
 
   FileOffset TopBegin, TopEnd;
-  FileEdit *TopFA = 0;
+  FileEdit *TopFA = nullptr;
 
   if (I == FileEdits.end()) {
     FileEditsTy::iterator
@@ -184,6 +244,8 @@ void EditedSource::commitRemove(SourceLocation OrigLoc,
     unsigned diff = EndOffs.getOffset() - TopEnd.getOffset();
     TopEnd = EndOffs;
     TopFA->RemoveLen += diff;
+    if (B == BeginOffs)
+      TopFA->Text = StringRef();
     ++I;
   }
 
@@ -215,6 +277,18 @@ bool EditedSource::commit(const Commit &commit) {
   if (!commit.isCommitable())
     return false;
 
+  struct CommitRAII {
+    EditedSource &Editor;
+
+    CommitRAII(EditedSource &Editor) : Editor(Editor) {
+      Editor.startingCommit();
+    }
+
+    ~CommitRAII() {
+      Editor.finishedCommit();
+    }
+  } CommitRAII(*this);
+
   for (edit::Commit::edit_iterator
          I = commit.edit_begin(), E = commit.edit_end(); I != E; ++I) {
     const edit::Commit::Edit &edit = *I;
@@ -236,13 +310,87 @@ bool EditedSource::commit(const Commit &commit) {
   return true;
 }
 
+// Returns true if it is ok to make the two given characters adjacent.
+static bool canBeJoined(char left, char right, const LangOptions &LangOpts) {
+  // FIXME: Should use TokenConcatenation to make sure we don't allow stuff like
+  // making two '<' adjacent.
+  return !(Lexer::isIdentifierBodyChar(left, LangOpts) &&
+           Lexer::isIdentifierBodyChar(right, LangOpts));
+}
+
+/// Returns true if it is ok to eliminate the trailing whitespace between
+/// the given characters.
+static bool canRemoveWhitespace(char left, char beforeWSpace, char right,
+                                const LangOptions &LangOpts) {
+  if (!canBeJoined(left, right, LangOpts))
+    return false;
+  if (isWhitespace(left) || isWhitespace(right))
+    return true;
+  if (canBeJoined(beforeWSpace, right, LangOpts))
+    return false; // the whitespace was intentional, keep it.
+  return true;
+}
+
+/// Check the range that we are going to remove and:
+/// -Remove any trailing whitespace if possible.
+/// -Insert a space if removing the range is going to mess up the source tokens.
+static void adjustRemoval(const SourceManager &SM, const LangOptions &LangOpts,
+                          SourceLocation Loc, FileOffset offs,
+                          unsigned &len, StringRef &text) {
+  assert(len && text.empty());
+  SourceLocation BeginTokLoc = Lexer::GetBeginningOfToken(Loc, SM, LangOpts);
+  if (BeginTokLoc != Loc)
+    return; // the range is not at the beginning of a token, keep the range.
+
+  bool Invalid = false;
+  StringRef buffer = SM.getBufferData(offs.getFID(), &Invalid);
+  if (Invalid)
+    return;
+
+  unsigned begin = offs.getOffset();
+  unsigned end = begin + len;
+
+  // Do not try to extend the removal if we're at the end of the buffer already.
+  if (end == buffer.size())
+    return;
+
+  assert(begin < buffer.size() && end < buffer.size() && "Invalid range!");
+
+  // FIXME: Remove newline.
+
+  if (begin == 0) {
+    if (buffer[end] == ' ')
+      ++len;
+    return;
+  }
+
+  if (buffer[end] == ' ') {
+    assert((end + 1 != buffer.size() || buffer.data()[end + 1] == 0) &&
+           "buffer not zero-terminated!");
+    if (canRemoveWhitespace(/*left=*/buffer[begin-1],
+                            /*beforeWSpace=*/buffer[end-1],
+                            /*right=*/buffer.data()[end + 1], // zero-terminated
+                            LangOpts))
+      ++len;
+    return;
+  }
+
+  if (!canBeJoined(buffer[begin-1], buffer[end], LangOpts))
+    text = " ";
+}
+
 static void applyRewrite(EditsReceiver &receiver,
                          StringRef text, FileOffset offs, unsigned len,
-                         const SourceManager &SM) {
-  assert(!offs.getFID().isInvalid());
+                         const SourceManager &SM, const LangOptions &LangOpts,
+                         bool shouldAdjustRemovals) {
+  assert(offs.getFID().isValid());
   SourceLocation Loc = SM.getLocForStartOfFile(offs.getFID());
   Loc = Loc.getLocWithOffset(offs.getOffset());
   assert(Loc.isFileID());
+
+  if (text.empty() && shouldAdjustRemovals)
+    adjustRemoval(SM, LangOpts, Loc, offs, len, text);
+
   CharSourceRange range = CharSourceRange::getCharRange(Loc,
                                                      Loc.getLocWithOffset(len));
 
@@ -258,8 +406,9 @@ static void applyRewrite(EditsReceiver &receiver,
     receiver.insert(Loc, text);
 }
 
-void EditedSource::applyRewrites(EditsReceiver &receiver) {
-  llvm::SmallString<128> StrVec;
+void EditedSource::applyRewrites(EditsReceiver &receiver,
+                                 bool shouldAdjustRemovals) {
+  SmallString<128> StrVec;
   FileOffset CurOffs, CurEnd;
   unsigned CurLen;
 
@@ -285,14 +434,16 @@ void EditedSource::applyRewrites(EditsReceiver &receiver) {
       continue;
     }
 
-    applyRewrite(receiver, StrVec.str(), CurOffs, CurLen, SourceMgr);
+    applyRewrite(receiver, StrVec, CurOffs, CurLen, SourceMgr, LangOpts,
+                 shouldAdjustRemovals);
     CurOffs = offs;
     StrVec = act.Text;
     CurLen = act.RemoveLen;
     CurEnd = CurOffs.getWithOffset(CurLen);
   }
 
-  applyRewrite(receiver, StrVec.str(), CurOffs, CurLen, SourceMgr);
+  applyRewrite(receiver, StrVec, CurOffs, CurLen, SourceMgr, LangOpts,
+               shouldAdjustRemovals);
 }
 
 void EditedSource::clearRewrites() {

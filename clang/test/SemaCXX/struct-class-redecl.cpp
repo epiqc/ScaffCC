@@ -1,11 +1,17 @@
 // RUN: %clang_cc1 -fsyntax-only -Wmismatched-tags -verify %s
-// RUN: %clang_cc1 -fsyntax-only -Wmismatched-tags %s 2>&1 | FileCheck %s
+// RUN: not %clang_cc1 -fsyntax-only -Wmismatched-tags %s 2>&1 | FileCheck %s
 class X; // expected-note 2{{here}}
 typedef struct X * X_t; // expected-warning{{previously declared}}
 union X { int x; float y; }; // expected-error{{use of 'X' with tag type that does not match previous declaration}}
 
 template<typename T> struct Y; // expected-note{{did you mean class here?}}
 template<class U> class Y { }; // expected-warning{{previously declared}}
+
+template <typename>
+struct Z {
+  struct Z { // expected-error{{member 'Z' has the same name as its class}}
+  };
+};
 
 class A;
 class A;  // expected-note{{previous use is here}}
@@ -41,13 +47,42 @@ class E;
 
 struct F;
 struct F;
-struct F {};
+struct F {}; // expected-note {{previous use}}
 struct F;
+class F; // expected-warning {{previously declared as a struct}} expected-note {{did you mean struct}}
 
 template<class U> class G;  // expected-note{{previous use is here}}\
                             // expected-note{{did you mean struct here?}}
 template<class U> struct G;  // expected-warning{{struct template 'G' was previously declared as a class template}}
 template<class U> struct G {};  // expected-warning{{'G' defined as a struct template here but previously declared as a class template}}
+
+// Declarations from contexts where the warning is disabled are entirely
+// ignored for the purpose of this warning.
+struct J;
+struct K; // expected-note {{previous use}}
+struct L;
+struct M; // expected-note {{previous use}}
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wmismatched-tags"
+struct H;
+class I {};
+class J;
+class K;
+class L;
+class M {};
+#pragma clang diagnostic pop
+
+class H; // expected-note {{previous use}}
+struct H; // expected-warning {{previously declared as a class}}
+
+struct I; // expected-note {{previous use}}
+class I; // expected-warning {{previously declared as a struct}}
+
+struct J;
+class K; // expected-warning {{previously declared as a struct}}
+struct L;
+class M; // expected-warning {{previously declared as a struct}}
 
 /*
 *** 'X' messages ***

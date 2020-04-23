@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -std=c++0x -fsyntax-only -verify %s
+// RUN: %clang_cc1 -std=c++0x -fsyntax-only -fexceptions -verify %s
 
 struct one { char c[1]; };
 struct two { char c[2]; };
@@ -75,9 +75,8 @@ namespace objects {
     { F<0> f = {}; }
     // Narrowing conversions don't affect viability. The next two choose
     // the initializer_list constructor.
-    // FIXME: Emit narrowing conversion errors.
-    { F<3> f{1, 1.0}; } // xpected-error {{narrowing conversion}}
-    { F<3> f = {1, 1.0}; } // xpected-error {{narrowing conversion}}
+    { F<3> f{1, 1.0}; } // expected-error {{type 'double' cannot be narrowed to 'int' in initializer list}} expected-note {{silence}}
+    { F<3> f = {1, 1.0}; } // expected-error {{type 'double' cannot be narrowed to 'int' in initializer list}} expected-note {{silence}}
     { F<3> f{1, 2, 3, 4, 5, 6, 7, 8}; }
     { F<3> f = {1, 2, 3, 4, 5, 6, 7, 8}; }
     { F<3> f{1, 2, 3, 4, 5, 6, 7, 8}; }
@@ -143,6 +142,7 @@ namespace objects {
 
     one ov2(int);
     two ov2(F<3>);
+    // expected-warning@+1 {{braces around scalar initializer}}
     static_assert(sizeof(ov2({1})) == sizeof(one), "bad overload"); // list -> int ranks as identity
     static_assert(sizeof(ov2({1, 2, 3})) == sizeof(two), "bad overload"); // list -> F only viable
   }
@@ -173,8 +173,7 @@ namespace objects {
     // invalid
     H h1({1, 2}); // expected-error {{no matching constructor}}
     (void) new H({1, 2}); // expected-error {{no matching constructor}}
-    // FIXME: Bad diagnostic, mentions void type instead of init list.
-    (void) H({1, 2}); // expected-error {{no matching conversion}}
+    (void) H({1, 2}); // expected-error {{no matching constructor}}
 
     // valid (by copy constructor).
     H h2({1, nullptr});
@@ -215,7 +214,10 @@ namespace PR12092 {
 
 namespace PR12117 {
   struct A { A(int); }; 
-  struct B { B(A); } b{{0}};
+  struct B { B(A); } b{{0}};   //FIXME: non-conformant. Temporary fix until standard resolution.
+                                // expected- error {{call to constructor of 'struct B' is ambiguous}} \
+                                // expected- note 2{{candidate is the implicit}} \
+                                // expected- note {{candidate constructor}}
   struct C { C(int); } c{0};
 }
 
@@ -264,8 +266,11 @@ namespace PR12120 {
   struct A { explicit A(int); A(float); }; // expected-note {{declared here}}
   A a = { 0 }; // expected-error {{constructor is explicit}}
 
-  struct B { explicit B(short); B(long); }; // expected-note 2 {{candidate}}
+  struct B { explicit B(short); B(long); }; // expected-note 2{{candidate}}
   B b = { 0 }; // expected-error {{ambiguous}}
+
+  struct C { explicit C(short); C(long); }; // expected-note 2{{candidate}}
+  C c = {{ 0 }}; // expected-error {{ambiguous}}
 }
 
 namespace PR12498 {
@@ -279,5 +284,128 @@ namespace PR12498 {
   {
     c->foo({ nullptr, 1 }); // expected-error{{initialization of incomplete type 'const PR12498::ArrayRef'}}
   }
+}
 
+namespace explicit_default {
+  struct A {
+    explicit A(); // expected-note{{here}}
+  };
+  A a {}; // ok
+  // This is copy-list-initialization, and we choose an explicit constructor
+  // (even though we do so via value-initialization), so the initialization is
+  // ill-formed.
+  A b = {}; // expected-error{{chosen constructor is explicit}}
+}
+
+namespace init_list_default {
+  struct A {
+    A(std::initializer_list<int>);
+  };
+  A a {}; // calls initializer list constructor
+
+  struct B {
+    B();
+    B(std::initializer_list<int>) = delete;
+  };
+  B b {}; // calls default constructor
+}
+
+// PR13470, <rdar://problem/11974632>
+namespace PR13470 {
+  struct W {
+    explicit W(int); // expected-note {{here}}
+  };
+
+  struct X {
+    X(const X&) = delete; // expected-note 3 {{here}}
+    X(int);
+  };
+
+  template<typename T, typename Fn> void call(Fn f) {
+    f({1}); // expected-error {{constructor is explicit}}
+    f(T{1}); // expected-error {{call to deleted constructor}}
+  }
+
+  void ref_w(const W &); // expected-note 2 {{not viable}}
+  void call_ref_w() {
+    ref_w({1}); // expected-error {{no matching function}}
+    ref_w(W{1});
+    call<W>(ref_w); // expected-note {{instantiation of}}
+  }
+
+  void ref_x(const X &);
+  void call_ref_x() {
+    ref_x({1});
+    ref_x(X{1});
+    call<X>(ref_x); // ok
+  }
+
+  void val_x(X); // expected-note 2 {{parameter}}
+  void call_val_x() {
+    val_x({1});
+    val_x(X{1}); // expected-error {{call to deleted constructor}}
+    call<X>(val_x); // expected-note {{instantiation of}}
+  }
+
+  template<typename T>
+  struct Y {
+    X x{1};
+    void f() { X x{1}; }
+    void h() {
+      ref_w({1}); // expected-error {{no matching function}}
+      ref_w(W{1});
+      ref_x({1});
+      ref_x(X{1});
+      val_x({1});
+      val_x(X{1}); // expected-error {{call to deleted constructor}}
+    }
+    Y() {}
+    Y(int) : x{1} {}
+  };
+
+  Y<int> yi;
+  Y<int> yi2(0);
+  void g() {
+    yi.f();
+    yi.h(); // ok, all diagnostics produced in template definition
+  }
+}
+
+namespace PR19729 {
+  struct A {
+    A(int);
+    A(const A&) = delete;
+  };
+  struct B {
+    void *operator new(std::size_t, A);
+  };
+  B *p = new ({123}) B;
+}
+
+namespace PR11410 {
+  struct A {
+    A() = delete; // expected-note 2{{deleted here}}
+    A(int);
+  };
+
+  A a[3] = {
+    {1}, {2}
+  }; // expected-error {{call to deleted constructor}} \
+        expected-note {{in implicit initialization of array element 2 with omitted initializer}}
+
+  struct B {
+    A a; // expected-note {{in implicit initialization of field 'a'}}
+  } b = {
+  }; // expected-error {{call to deleted constructor}}
+
+  struct C {
+    C(int = 0); // expected-note 2{{candidate}}
+    C(float = 0); // expected-note 2{{candidate}}
+  };
+  C c[3] = {
+    0, 1
+  }; // expected-error {{ambiguous}} expected-note {{in implicit initialization of array element 2}}
+  C c2[3] = {
+    [0] = 1, [2] = 3 // expected-warning {{C99}}
+  }; // expected-error {{ambiguous}} expected-note {{in implicit initialization of array element 1}}
 }

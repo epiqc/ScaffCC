@@ -1,9 +1,8 @@
 //==- WorkList.h - Worklist class used by CoreEngine ---------------*- C++ -*-//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -12,20 +11,18 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_CLANG_GR_WORKLIST
-#define LLVM_CLANG_GR_WORKLIST
+#ifndef LLVM_CLANG_STATICANALYZER_CORE_PATHSENSITIVE_WORKLIST_H
+#define LLVM_CLANG_STATICANALYZER_CORE_PATHSENSITIVE_WORKLIST_H
 
 #include "clang/StaticAnalyzer/Core/PathSensitive/BlockCounter.h"
-#include <cstddef>
+#include "clang/StaticAnalyzer/Core/PathSensitive/ExplodedGraph.h"
+#include <cassert>
 
 namespace clang {
-  
+
 class CFGBlock;
 
 namespace ento {
-
-class ExplodedNode;
-class ExplodedNodeImpl;
 
 class WorkListUnit {
   ExplodedNode *node;
@@ -44,18 +41,18 @@ public:
   explicit WorkListUnit(ExplodedNode *N, BlockCounter C)
   : node(N),
     counter(C),
-    block(NULL),
+    block(nullptr),
     blockIdx(0) {}
 
   /// Returns the node associated with the worklist unit.
   ExplodedNode *getNode() const { return node; }
-  
+
   /// Returns the block counter map associated with the worklist unit.
   BlockCounter getBlockCounter() const { return counter; }
 
   /// Returns the CFGblock associated with the worklist unit.
   const CFGBlock *getBlock() const { return block; }
-  
+
   /// Return the index within the CFGBlock for the worklist unit.
   unsigned getIndex() const { return blockIdx; }
 };
@@ -82,20 +79,15 @@ public:
   void setBlockCounter(BlockCounter C) { CurrentCounter = C; }
   BlockCounter getBlockCounter() const { return CurrentCounter; }
 
-  class Visitor {
-  public:
-    Visitor() {}
-    virtual ~Visitor();
-    virtual bool visit(const WorkListUnit &U) = 0;
-  };
-  virtual bool visitItemsInWorkList(Visitor &V) = 0;
-  
-  static WorkList *makeDFS();
-  static WorkList *makeBFS();
-  static WorkList *makeBFSBlockDFSContents();
+  static std::unique_ptr<WorkList> makeDFS();
+  static std::unique_ptr<WorkList> makeBFS();
+  static std::unique_ptr<WorkList> makeBFSBlockDFSContents();
+  static std::unique_ptr<WorkList> makeUnexploredFirst();
+  static std::unique_ptr<WorkList> makeUnexploredFirstPriorityQueue();
+  static std::unique_ptr<WorkList> makeUnexploredFirstPriorityLocationQueue();
 };
 
-} // end GR namespace
+} // end ento namespace
 
 } // end clang namespace
 

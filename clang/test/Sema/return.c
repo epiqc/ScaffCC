@@ -1,4 +1,4 @@
-// RUN: %clang %s -fsyntax-only -Wignored-qualifiers -Wno-error=return-type -Xclang -verify -fblocks -Wno-unreachable-code -Wno-unused-value
+// RUN: %clang_cc1 -triple x86_64-apple-darwin9 %s -fsyntax-only -Wignored-qualifiers -Wno-error=return-type -verify -fblocks -Wno-unreachable-code -Wno-unused-value
 
 // clang emits the following warning by default.
 // With GCC, -pedantic, -Wreturn-type or -Wall are required to produce the 
@@ -17,7 +17,7 @@ void test0() {
 }
 
 int test1() {
-} // expected-warning {{control reaches end of non-void function}}
+} // expected-warning {{non-void function does not return a value}}
 
 int test2() {
   a: goto a;
@@ -26,7 +26,7 @@ int test2() {
 int test3() {
   goto a;
   a: ;
-} // expected-warning {{control reaches end of non-void function}}
+} // expected-warning {{non-void function does not return a value}}
 
 
 void halt() {
@@ -54,11 +54,11 @@ int unknown_nohalt() {
 
 int test7() {
   unknown();
-} // expected-warning {{control reaches end of non-void function}}
+} // expected-warning {{non-void function does not return a value}}
 
 int test8() {
   (void)(1 + unknown());
-} // expected-warning {{control reaches end of non-void function}}
+} // expected-warning {{non-void function does not return a value}}
 
 int halt3() __attribute__((noreturn));
 
@@ -68,11 +68,11 @@ int test9() {
 
 int test10() {
   (void)(unknown() || halt3());
-} // expected-warning {{control may reach end of non-void function}}
+} // expected-warning {{non-void function does not return a value in all control paths}}
 
 int test11() {
   (void)(unknown() && halt3());
-} // expected-warning {{control may reach end of non-void function}}
+} // expected-warning {{non-void function does not return a value in all control paths}}
 
 int test12() {
   (void)(halt3() || unknown());
@@ -84,27 +84,27 @@ int test13() {
 
 int test14() {
   (void)(1 || unknown());
-} // expected-warning {{control reaches end of non-void function}}
+} // expected-warning {{non-void function does not return a value}}
 
 int test15() {
   (void)(0 || unknown());
-} // expected-warning {{control reaches end of non-void function}}
+} // expected-warning {{non-void function does not return a value}}
 
 int test16() {
   (void)(0 && unknown());
-} // expected-warning {{control reaches end of non-void function}}
+} // expected-warning {{non-void function does not return a value}}
 
 int test17() {
   (void)(1 && unknown());
-} // expected-warning {{control reaches end of non-void function}}
+} // expected-warning {{non-void function does not return a value}}
 
 int test18() {
   (void)(unknown_nohalt() && halt3());
-} // expected-warning {{control may reach end of non-void function}}
+} // expected-warning {{non-void function does not return a value in all control paths}}
 
 int test19() {
   (void)(unknown_nohalt() && unknown());
-} // expected-warning {{control reaches end of non-void function}}
+} // expected-warning {{non-void function does not return a value}}
 
 int test20() {
   int i;
@@ -112,7 +112,7 @@ int test20() {
     return 0;
   else if (0)
     return 2;
-} // expected-warning {{control may reach end of non-void function}}
+} // expected-warning {{non-void function does not return a value in all control paths}}
 
 int test21() {
   int i;
@@ -125,7 +125,7 @@ int test21() {
 int test22() {
   int i;
   switch (i) default: ;
-} // expected-warning {{control reaches end of non-void function}}
+} // expected-warning {{non-void function does not return a value}}
 
 int test23() {
   int i;
@@ -135,7 +135,7 @@ int test23() {
   case 2:
     return 2;
   }
-} // expected-warning {{control may reach end of non-void function}}
+} // expected-warning {{non-void function does not return a value in all control paths}}
 
 int test24() {
   int i;
@@ -155,7 +155,7 @@ int test25() {
 
 int test26() {
   0 ? halt3() : unknown();
-} // expected-warning {{control reaches end of non-void function}}
+} // expected-warning {{non-void function does not return a value}}
 
 int j;
 void (*fptr)() __attribute__((noreturn));
@@ -197,8 +197,14 @@ int test29() {
   exit(1);
 }
 
-#include <setjmp.h>
+// Include these declarations here explicitly so we don't depend on system headers.
+typedef struct __jmp_buf_tag{} jmp_buf[1];
+
+extern void longjmp (struct __jmp_buf_tag __env[1], int __val) __attribute__ ((noreturn));
+extern void _longjmp (struct __jmp_buf_tag __env[1], int __val) __attribute__ ((noreturn));
+
 jmp_buf test30_j;
+
 int test30() {
   if (j)
     longjmp(test30_j, 1);
@@ -225,24 +231,29 @@ void test33() {
 
 // Test that 'static inline' functions are only analyzed for CFG-based warnings
 // when they are used.
-static inline int si_has_missing_return() {} // expected-warning{{control reaches end of non-void function}}
-static inline int si_has_missing_return_2() {}; // expected-warning{{control reaches end of non-void function}}
+static inline int si_has_missing_return() {} // expected-warning{{non-void function does not return a value}}
+static inline int si_has_missing_return_2() {}; // expected-warning{{non-void function does not return a value}}
 static inline int si_forward();
 static inline int si_has_missing_return_3(int x) {
   if (x)
    return si_has_missing_return_3(x+1);
-} // expected-warning{{control may reach end of non-void function}}
+} // expected-warning{{non-void function does not return a value in all control paths}}
 
 int test_static_inline(int x) {
   si_forward();
   return x ? si_has_missing_return_2() : si_has_missing_return_3(x);
 }
-static inline int si_forward() {} // expected-warning{{control reaches end of non-void function}}
+static inline int si_forward() {} // expected-warning{{non-void function does not return a value}}
 
 // Test warnings on ignored qualifiers on return types.
 const int ignored_c_quals(); // expected-warning{{'const' type qualifier on return type has no effect}}
 const volatile int ignored_cv_quals(); // expected-warning{{'const volatile' type qualifiers on return type have no effect}}
 char* const volatile restrict ignored_cvr_quals(); // expected-warning{{'const volatile restrict' type qualifiers on return type have no effect}}
+
+typedef const int CI;
+CI ignored_quals_typedef();
+
+const CI ignored_quals_typedef_2(); // expected-warning{{'const' type qualifier}}
 
 // Test that for switch(enum) that if the switch statement covers all the cases
 // that we don't consider that for -Wreturn-type.
@@ -264,3 +275,67 @@ int test34(int x) {
     return 5;
   }
 }
+
+// PR18999
+int test35() {
+lbl:
+  if (1)
+    goto lbl;
+}
+
+int test36a(int b) {
+  if (b)
+    return 43;
+  __builtin_unreachable();
+}
+
+int test36b(int b) {
+  if (b)
+    return 43;
+  __builtin_assume(0);
+}
+
+// PR19074.
+void abort(void) __attribute__((noreturn));
+#define av_assert0(cond) do {\
+    if (!(cond)) {\
+      abort();\
+    }\
+  } while (0)
+
+int PR19074(int x) {
+  switch(x) {
+  case 0:
+    return 0;
+  default:
+    av_assert0(0);
+  } // no-warning
+}
+
+int PR19074_positive(int x) {
+  switch(x) {
+  case 0:
+    return 0;
+  default:
+    break;
+  }
+} // expected-warning {{non-void function does not return a value in all control paths}}
+
+// sizeof(long) test.
+int sizeof_long() {
+  if (sizeof(long) == 4)
+    return 1;
+  if (sizeof(long) == 8)
+    return 2;
+} // no-warning
+
+int return_statement_expression() {
+  if (unknown())
+    return ({
+      while (0)
+        ;
+      0;
+    });
+  else
+    return 0;
+} // no-warning (used to be "non-void function does not return a value in all control paths")

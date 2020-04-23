@@ -1,9 +1,8 @@
-//=== BasicValueFactory.cpp - Basic values for Path Sens analysis --*- C++ -*-//
+//===- BasicValueFactory.cpp - Basic values for Path Sens analysis --------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -14,7 +13,17 @@
 //===----------------------------------------------------------------------===//
 
 #include "clang/StaticAnalyzer/Core/PathSensitive/BasicValueFactory.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/APSIntType.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/SVals.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/Store.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/StoreRef.h"
+#include "llvm/ADT/APSInt.h"
+#include "llvm/ADT/FoldingSet.h"
+#include "llvm/ADT/ImmutableList.h"
+#include "llvm/ADT/STLExtras.h"
+#include <cassert>
+#include <cstdint>
+#include <utility>
 
 using namespace clang;
 using namespace ento;
@@ -32,10 +41,18 @@ void LazyCompoundValData::Profile(llvm::FoldingSetNodeID& ID,
   ID.AddPointer(region);
 }
 
-typedef std::pair<SVal, uintptr_t> SValData;
-typedef std::pair<SVal, SVal> SValPair;
+void PointerToMemberData::Profile(
+    llvm::FoldingSetNodeID& ID, const DeclaratorDecl *D,
+    llvm::ImmutableList<const CXXBaseSpecifier *> L) {
+  ID.AddPointer(D);
+  ID.AddPointer(L.getInternalPointer());
+}
+
+using SValData = std::pair<SVal, uintptr_t>;
+using SValPair = std::pair<SVal, SVal>;
 
 namespace llvm {
+
 template<> struct FoldingSetTrait<SValData> {
   static inline void Profile(const SValData& X, llvm::FoldingSetNodeID& ID) {
     X.first.Profile(ID);
@@ -49,20 +66,21 @@ template<> struct FoldingSetTrait<SValPair> {
     X.second.Profile(ID);
   }
 };
-}
 
-typedef llvm::FoldingSet<llvm::FoldingSetNodeWrapper<SValData> >
-  PersistentSValsTy;
+} // namespace llvm
 
-typedef llvm::FoldingSet<llvm::FoldingSetNodeWrapper<SValPair> >
-  PersistentSValPairsTy;
+using PersistentSValsTy =
+    llvm::FoldingSet<llvm::FoldingSetNodeWrapper<SValData>>;
+
+using PersistentSValPairsTy =
+    llvm::FoldingSet<llvm::FoldingSetNodeWrapper<SValPair>>;
 
 BasicValueFactory::~BasicValueFactory() {
   // Note that the dstor for the contents of APSIntSet will never be called,
   // so we iterate over the set and invoke the dstor for each APSInt.  This
   // frees an aux. memory allocated to represent very large constants.
-  for (APSIntSetTy::iterator I=APSIntSet.begin(), E=APSIntSet.end(); I!=E; ++I)
-    I->getValue().~APSInt();
+  for (const auto &I : APSIntSet)
+    I.getValue().~APSInt();
 
   delete (PersistentSValsTy*) PersistentSVals;
   delete (PersistentSValPairsTy*) PersistentSValPairs;
@@ -71,7 +89,8 @@ BasicValueFactory::~BasicValueFactory() {
 const llvm::APSInt& BasicValueFactory::getValue(const llvm::APSInt& X) {
   llvm::FoldingSetNodeID ID;
   void *InsertPos;
-  typedef llvm::FoldingSetNodeWrapper<llvm::APSInt> FoldNodeTy;
+
+  using FoldNodeTy = llvm::FoldingSetNodeWrapper<llvm::APSInt>;
 
   X.Profile(ID);
   FoldNodeTy* P = APSIntSet.FindNodeOrInsertPos(ID, InsertPos);
@@ -99,18 +118,12 @@ const llvm::APSInt& BasicValueFactory::getValue(uint64_t X, unsigned BitWidth,
 }
 
 const llvm::APSInt& BasicValueFactory::getValue(uint64_t X, QualType T) {
-
-  unsigned bits = Ctx.getTypeSize(T);
-  llvm::APSInt V(bits, 
-                 T->isUnsignedIntegerOrEnumerationType() || Loc::isLocType(T));
-  V = X;
-  return getValue(V);
+  return getValue(getAPSIntType(T).getValue(X));
 }
 
 const CompoundValData*
 BasicValueFactory::getCompoundValData(QualType T,
                                       llvm::ImmutableList<SVal> Vals) {
-
   llvm::FoldingSetNodeID ID;
   CompoundValData::Profile(ID, T, Vals);
   void *InsertPos;
@@ -145,21 +158,67 @@ BasicValueFactory::getLazyCompoundValData(const StoreRef &store,
   return D;
 }
 
+const PointerToMemberData *BasicValueFactory::getPointerToMemberData(
+    const DeclaratorDecl *DD, llvm::ImmutableList<const CXXBaseSpecifier *> L) {
+  llvm::FoldingSetNodeID ID;
+  PointerToMemberData::Profile(ID, DD, L);
+  void *InsertPos;
+
+  PointerToMemberData *D =
+      PointerToMemberDataSet.FindNodeOrInsertPos(ID, InsertPos);
+
+  if (!D) {
+    D = (PointerToMemberData*) BPAlloc.Allocate<PointerToMemberData>();
+    new (D) PointerToMemberData(DD, L);
+    PointerToMemberDataSet.InsertNode(D, InsertPos);
+  }
+
+  return D;
+}
+
+const PointerToMemberData *BasicValueFactory::accumCXXBase(
+    llvm::iterator_range<CastExpr::path_const_iterator> PathRange,
+    const nonloc::PointerToMember &PTM) {
+  nonloc::PointerToMember::PTMDataType PTMDT = PTM.getPTMData();
+  const DeclaratorDecl *DD = nullptr;
+  llvm::ImmutableList<const CXXBaseSpecifier *> PathList;
+
+  if (PTMDT.isNull() || PTMDT.is<const DeclaratorDecl *>()) {
+    if (PTMDT.is<const DeclaratorDecl *>())
+      DD = PTMDT.get<const DeclaratorDecl *>();
+
+    PathList = CXXBaseListFactory.getEmptyList();
+  } else { // const PointerToMemberData *
+    const PointerToMemberData *PTMD =
+        PTMDT.get<const PointerToMemberData *>();
+    DD = PTMD->getDeclaratorDecl();
+
+    PathList = PTMD->getCXXBaseList();
+  }
+
+  for (const auto &I : llvm::reverse(PathRange))
+    PathList = prependCXXBase(I, PathList);
+  return getPointerToMemberData(DD, PathList);
+}
+
 const llvm::APSInt*
 BasicValueFactory::evalAPSInt(BinaryOperator::Opcode Op,
                              const llvm::APSInt& V1, const llvm::APSInt& V2) {
-
   switch (Op) {
     default:
-      assert (false && "Invalid Opcode.");
+      llvm_unreachable("Invalid Opcode.");
 
     case BO_Mul:
       return &getValue( V1 * V2 );
 
     case BO_Div:
+      if (V2 == 0) // Avoid division by zero
+        return nullptr;
       return &getValue( V1 / V2 );
 
     case BO_Rem:
+      if (V2 == 0) // Avoid division by zero
+        return nullptr;
       return &getValue( V1 % V2 );
 
     case BO_Add:
@@ -169,37 +228,39 @@ BasicValueFactory::evalAPSInt(BinaryOperator::Opcode Op,
       return &getValue( V1 - V2 );
 
     case BO_Shl: {
-
       // FIXME: This logic should probably go higher up, where we can
       // test these conditions symbolically.
 
-      // FIXME: Expand these checks to include all undefined behavior.
-
       if (V2.isSigned() && V2.isNegative())
-        return NULL;
+        return nullptr;
 
       uint64_t Amt = V2.getZExtValue();
 
-      if (Amt > V1.getBitWidth())
-        return NULL;
+      if (Amt >= V1.getBitWidth())
+        return nullptr;
+
+      if (!Ctx.getLangOpts().CPlusPlus2a) {
+        if (V1.isSigned() && V1.isNegative())
+          return nullptr;
+
+        if (V1.isSigned() && Amt > V1.countLeadingZeros())
+          return nullptr;
+      }
 
       return &getValue( V1.operator<<( (unsigned) Amt ));
     }
 
     case BO_Shr: {
-
       // FIXME: This logic should probably go higher up, where we can
       // test these conditions symbolically.
 
-      // FIXME: Expand these checks to include all undefined behavior.
-
       if (V2.isSigned() && V2.isNegative())
-        return NULL;
+        return nullptr;
 
       uint64_t Amt = V2.getZExtValue();
 
-      if (Amt > V1.getBitWidth())
-        return NULL;
+      if (Amt >= V1.getBitWidth())
+        return nullptr;
 
       return &getValue( V1.operator>>( (unsigned) Amt ));
     }
@@ -235,10 +296,8 @@ BasicValueFactory::evalAPSInt(BinaryOperator::Opcode Op,
   }
 }
 
-
 const std::pair<SVal, uintptr_t>&
 BasicValueFactory::getPersistentSValWithData(const SVal& V, uintptr_t Data) {
-
   // Lazily create the folding set.
   if (!PersistentSVals) PersistentSVals = new PersistentSValsTy();
 
@@ -249,7 +308,8 @@ BasicValueFactory::getPersistentSValWithData(const SVal& V, uintptr_t Data) {
 
   PersistentSValsTy& Map = *((PersistentSValsTy*) PersistentSVals);
 
-  typedef llvm::FoldingSetNodeWrapper<SValData> FoldNodeTy;
+  using FoldNodeTy = llvm::FoldingSetNodeWrapper<SValData>;
+
   FoldNodeTy* P = Map.FindNodeOrInsertPos(ID, InsertPos);
 
   if (!P) {
@@ -263,7 +323,6 @@ BasicValueFactory::getPersistentSValWithData(const SVal& V, uintptr_t Data) {
 
 const std::pair<SVal, SVal>&
 BasicValueFactory::getPersistentSValPair(const SVal& V1, const SVal& V2) {
-
   // Lazily create the folding set.
   if (!PersistentSValPairs) PersistentSValPairs = new PersistentSValPairsTy();
 
@@ -274,7 +333,8 @@ BasicValueFactory::getPersistentSValPair(const SVal& V1, const SVal& V2) {
 
   PersistentSValPairsTy& Map = *((PersistentSValPairsTy*) PersistentSValPairs);
 
-  typedef llvm::FoldingSetNodeWrapper<SValPair> FoldNodeTy;
+  using FoldNodeTy = llvm::FoldingSetNodeWrapper<SValPair>;
+
   FoldNodeTy* P = Map.FindNodeOrInsertPos(ID, InsertPos);
 
   if (!P) {

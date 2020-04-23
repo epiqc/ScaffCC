@@ -1,9 +1,8 @@
 //===-- MSP430MCInstLower.cpp - Convert MSP430 MachineInstr to an MCInst --===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,17 +12,19 @@
 //===----------------------------------------------------------------------===//
 
 #include "MSP430MCInstLower.h"
+#include "llvm/ADT/SmallString.h"
 #include "llvm/CodeGen/AsmPrinter.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineInstr.h"
+#include "llvm/IR/DataLayout.h"
+#include "llvm/IR/Mangler.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCInst.h"
-#include "llvm/Target/Mangler.h"
-#include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/ErrorHandling.h"
-#include "llvm/ADT/SmallString.h"
+#include "llvm/Support/raw_ostream.h"
+#include "llvm/Target/TargetMachine.h"
 using namespace llvm;
 
 MCSymbol *MSP430MCInstLower::
@@ -33,7 +34,7 @@ GetGlobalAddressSymbol(const MachineOperand &MO) const {
   case 0: break;
   }
 
-  return Printer.Mang->getSymbol(MO.getGlobal());
+  return Printer.getSymbol(MO.getGlobal());
 }
 
 MCSymbol *MSP430MCInstLower::
@@ -48,8 +49,9 @@ GetExternalSymbolSymbol(const MachineOperand &MO) const {
 
 MCSymbol *MSP430MCInstLower::
 GetJumpTableSymbol(const MachineOperand &MO) const {
+  const DataLayout &DL = Printer.getDataLayout();
   SmallString<256> Name;
-  raw_svector_ostream(Name) << Printer.MAI->getPrivateGlobalPrefix() << "JTI"
+  raw_svector_ostream(Name) << DL.getPrivateGlobalPrefix() << "JTI"
                             << Printer.getFunctionNumber() << '_'
                             << MO.getIndex();
 
@@ -59,13 +61,14 @@ GetJumpTableSymbol(const MachineOperand &MO) const {
   }
 
   // Create a symbol for the name.
-  return Ctx.GetOrCreateSymbol(Name.str());
+  return Ctx.getOrCreateSymbol(Name);
 }
 
 MCSymbol *MSP430MCInstLower::
 GetConstantPoolIndexSymbol(const MachineOperand &MO) const {
+  const DataLayout &DL = Printer.getDataLayout();
   SmallString<256> Name;
-  raw_svector_ostream(Name) << Printer.MAI->getPrivateGlobalPrefix() << "CPI"
+  raw_svector_ostream(Name) << DL.getPrivateGlobalPrefix() << "CPI"
                             << Printer.getFunctionNumber() << '_'
                             << MO.getIndex();
 
@@ -75,7 +78,7 @@ GetConstantPoolIndexSymbol(const MachineOperand &MO) const {
   }
 
   // Create a symbol for the name.
-  return Ctx.GetOrCreateSymbol(Name.str());
+  return Ctx.getOrCreateSymbol(Name);
 }
 
 MCSymbol *MSP430MCInstLower::
@@ -92,7 +95,7 @@ MCOperand MSP430MCInstLower::
 LowerSymbolOperand(const MachineOperand &MO, MCSymbol *Sym) const {
   // FIXME: We would like an efficient form for this, so we don't have to do a
   // lot of extra uniquing.
-  const MCExpr *Expr = MCSymbolRefExpr::Create(Sym, Ctx);
+  const MCExpr *Expr = MCSymbolRefExpr::create(Sym, Ctx);
 
   switch (MO.getTargetFlags()) {
   default: llvm_unreachable("Unknown target flag on GV operand");
@@ -100,11 +103,14 @@ LowerSymbolOperand(const MachineOperand &MO, MCSymbol *Sym) const {
   }
 
   if (!MO.isJTI() && MO.getOffset())
-    Expr = MCBinaryExpr::CreateAdd(Expr,
-                                   MCConstantExpr::Create(MO.getOffset(), Ctx),
+    Expr = MCBinaryExpr::createAdd(Expr,
+                                   MCConstantExpr::create(MO.getOffset(), Ctx),
                                    Ctx);
-  return MCOperand::CreateExpr(Expr);
+  return MCOperand::createExpr(Expr);
 }
+
+#define GET_REGINFO_ENUM
+#include "MSP430GenRegisterInfo.inc"
 
 void MSP430MCInstLower::Lower(const MachineInstr *MI, MCInst &OutMI) const {
   OutMI.setOpcode(MI->getOpcode());
@@ -115,18 +121,18 @@ void MSP430MCInstLower::Lower(const MachineInstr *MI, MCInst &OutMI) const {
     MCOperand MCOp;
     switch (MO.getType()) {
     default:
-      MI->dump();
+      MI->print(errs());
       llvm_unreachable("unknown operand type");
     case MachineOperand::MO_Register:
       // Ignore all implicit register operands.
       if (MO.isImplicit()) continue;
-      MCOp = MCOperand::CreateReg(MO.getReg());
+      MCOp = MCOperand::createReg(MO.getReg());
       break;
     case MachineOperand::MO_Immediate:
-      MCOp = MCOperand::CreateImm(MO.getImm());
+      MCOp = MCOperand::createImm(MO.getImm());
       break;
     case MachineOperand::MO_MachineBasicBlock:
-      MCOp = MCOperand::CreateExpr(MCSymbolRefExpr::Create(
+      MCOp = MCOperand::createExpr(MCSymbolRefExpr::create(
                          MO.getMBB()->getSymbol(), Ctx));
       break;
     case MachineOperand::MO_GlobalAddress:

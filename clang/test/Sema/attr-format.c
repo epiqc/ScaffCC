@@ -57,6 +57,13 @@ void callnull(void){
   null(0,  (int*)0); // expected-warning {{incompatible pointer types}}
 }
 
+// FreeBSD kernel extensions
+void a3(const char *a, ...)    __attribute__((format(freebsd_kprintf, 1,2))); // no-error
+void b3(const char *a, ...)    __attribute__((format(freebsd_kprintf, 1,1))); // expected-error {{'format' attribute parameter 3 is out of bounds}}
+void c3(const char *a, ...)    __attribute__((format(freebsd_kprintf, 0,2))); // expected-error {{'format' attribute parameter 2 is out of bounds}}
+void d3(const char *a, int c)  __attribute__((format(freebsd_kprintf, 1,2))); // expected-error {{format attribute requires variadic function}}
+void e3(char *str, int c, ...) __attribute__((format(freebsd_kprintf, 2,3))); // expected-error {{format argument not a string type}}
+
 
 
 // PR4470
@@ -78,3 +85,5 @@ extern void gcc_cxxformat (const char *, ...)
   __attribute__ ((__format__(__gcc_cxxdiag__, 1, 2)));
 extern void gcc_tformat (const char *, ...)
   __attribute__ ((__format__(__gcc_tdiag__, 1, 2)));
+
+const char *foo3(const char *format) __attribute__((format_arg("foo")));  // expected-error{{'format_arg' attribute requires parameter 1 to be an integer constant}}

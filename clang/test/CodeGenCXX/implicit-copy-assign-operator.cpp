@@ -40,11 +40,11 @@ void test_D(D d1, D d2) {
   d1 = d2;
 }
 
-// CHECK: define linkonce_odr %struct.D* @_ZN1DaSERS_
+// CHECK-LABEL: define linkonce_odr dereferenceable({{[0-9]+}}) %struct.D* @_ZN1DaSERS_
 // CHECK: {{call.*_ZN1AaSERS_}}
 // CHECK: {{call.*_ZN1BaSERS_}}
 // CHECK: {{call.*_ZN1CaSERKS_}}
-// CHECK: {{call void @llvm.memcpy.p0i8.p0i8.i64.*i64 24}}
+// CHECK: {{call void @llvm.memcpy.p0i8.p0i8.i64.*i64 28}}
 // CHECK: {{call.*_ZN1BaSERS_}}
 // CHECK: br
 // CHECK: {{call.*_ZN1CaSERKS_}}
@@ -53,4 +53,3 @@ void test_D(D d1, D d2) {
 // CHECK: call void @_ZN11CopyByValueC1ERKS_
 // CHECK: {{call.*_ZN11CopyByValueaSES_}}
 // CHECK: ret
-

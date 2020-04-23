@@ -1,9 +1,8 @@
 //===- llvm/Support/FileUtilities.h - File System Utilities -----*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -15,6 +14,9 @@
 #ifndef LLVM_SUPPORT_FILEUTILITIES_H
 #define LLVM_SUPPORT_FILEUTILITIES_H
 
+#include "llvm/ADT/StringRef.h"
+#include "llvm/Support/Errc.h"
+#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
 
@@ -27,10 +29,10 @@ namespace llvm {
   /// option, it will set the string to an error message if an error occurs, or
   /// if the files are different.
   ///
-  int DiffFilesWithTolerance(const sys::PathWithStatus &FileA,
-                             const sys::PathWithStatus &FileB,
+  int DiffFilesWithTolerance(StringRef FileA,
+                             StringRef FileB,
                              double AbsTol, double RelTol,
-                             std::string *Error = 0);
+                             std::string *Error = nullptr);
 
 
   /// FileRemover - This class is a simple object meant to be stack allocated.
@@ -51,8 +53,7 @@ namespace llvm {
     ~FileRemover() {
       if (DeleteIt) {
         // Ignore problems deleting the file.
-        bool existed;
-        sys::fs::remove(Filename.str(), existed);
+        sys::fs::remove(Filename);
       }
     }
 
@@ -62,8 +63,7 @@ namespace llvm {
     void setFile(const Twine& filename, bool deleteIt = true) {
       if (DeleteIt) {
         // Ignore problems deleting the file.
-        bool existed;
-        sys::fs::remove(Filename.str(), existed);
+        sys::fs::remove(Filename);
       }
 
       Filename.clear();
@@ -75,6 +75,41 @@ namespace llvm {
     /// will not be removed when the object is destroyed.
     void releaseFile() { DeleteIt = false; }
   };
+
+  enum class atomic_write_error {
+    failed_to_create_uniq_file = 0,
+    output_stream_error,
+    failed_to_rename_temp_file
+  };
+
+  class AtomicFileWriteError : public llvm::ErrorInfo<AtomicFileWriteError> {
+  public:
+    AtomicFileWriteError(atomic_write_error Error) : Error(Error) {}
+
+    void log(raw_ostream &OS) const override;
+
+    const atomic_write_error Error;
+    static char ID;
+
+  private:
+    // Users are not expected to use error_code.
+    std::error_code convertToErrorCode() const override {
+      return llvm::inconvertibleErrorCode();
+    }
+  };
+
+  // atomic_write_error + whatever the Writer can return
+
+  /// Creates a unique file with name according to the given \p TempPathModel,
+  /// writes content of \p Buffer to the file and renames it to \p FinalPath.
+  ///
+  /// \returns \c AtomicFileWriteError in case of error.
+  llvm::Error writeFileAtomically(StringRef TempPathModel, StringRef FinalPath,
+                                  StringRef Buffer);
+
+  llvm::Error
+  writeFileAtomically(StringRef TempPathModel, StringRef FinalPath,
+                      std::function<llvm::Error(llvm::raw_ostream &)> Writer);
 } // End llvm namespace
 
 #endif

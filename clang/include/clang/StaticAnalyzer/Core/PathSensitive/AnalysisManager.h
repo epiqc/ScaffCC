@@ -1,9 +1,8 @@
 //== AnalysisManager.h - Path sensitive analysis data manager ------*- C++ -*-//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -12,15 +11,18 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_CLANG_GR_ANALYSISMANAGER_H
-#define LLVM_CLANG_GR_ANALYSISMANAGER_H
+#ifndef LLVM_CLANG_STATICANALYZER_CORE_PATHSENSITIVE_ANALYSISMANAGER_H
+#define LLVM_CLANG_STATICANALYZER_CORE_PATHSENSITIVE_ANALYSISMANAGER_H
 
-#include "clang/Analysis/AnalysisContext.h"
-#include "clang/Frontend/AnalyzerOptions.h"
+#include "clang/Analysis/AnalysisDeclContext.h"
+#include "clang/Analysis/PathDiagnostic.h"
+#include "clang/StaticAnalyzer/Core/AnalyzerOptions.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugReporter.h"
-#include "clang/StaticAnalyzer/Core/BugReporter/PathDiagnostic.h"
+#include "clang/StaticAnalyzer/Core/PathDiagnosticConsumers.h"
 
 namespace clang {
+
+class CodeInjector;
 
 namespace ento {
   class CheckerManager;
@@ -30,10 +32,8 @@ class AnalysisManager : public BugReporterData {
   AnalysisDeclContextManager AnaCtxMgr;
 
   ASTContext &Ctx;
-  DiagnosticsEngine &Diags;
   const LangOptions &LangOpts;
-
-  OwningPtr<PathDiagnosticConsumer> PD;
+  PathDiagnosticConsumers PathConsumers;
 
   // Configurable components creators.
   StoreManagerCreator CreateStoreMgr;
@@ -41,77 +41,22 @@ class AnalysisManager : public BugReporterData {
 
   CheckerManager *CheckerMgr;
 
-  enum AnalysisScope { ScopeTU, ScopeDecl } AScope;
-
-  /// \brief The maximum number of exploded nodes the analyzer will generate.
-  unsigned MaxNodes;
-
-  /// \brief The maximum number of times the analyzer visits a block.
-  unsigned MaxVisit;
-
-  bool VisualizeEGDot;
-  bool VisualizeEGUbi;
-  AnalysisPurgeMode PurgeDead;
-
-  /// \brief The flag regulates if we should eagerly assume evaluations of
-  /// conditionals, thus, bifurcating the path.
-  ///
-  /// EagerlyAssume - A flag indicating how the engine should handle
-  ///   expressions such as: 'x = (y != 0)'.  When this flag is true then
-  ///   the subexpression 'y != 0' will be eagerly assumed to be true or false,
-  ///   thus evaluating it to the integers 0 or 1 respectively.  The upside
-  ///   is that this can increase analysis precision until we have a better way
-  ///   to lazily evaluate such logic.  The downside is that it eagerly
-  ///   bifurcates paths.
-  bool EagerlyAssume;
-  bool TrimGraph;
-  bool EagerlyTrimEGraph;
-
 public:
-  // \brief inter-procedural analysis mode.
-  AnalysisIPAMode IPAMode;
+  AnalyzerOptions &options;
 
-  // Settings for inlining tuning.
-  /// \brief The inlining stack depth limit.
-  unsigned InlineMaxStackDepth;
-  /// \brief The max number of basic blocks in a function being inlined.
-  unsigned InlineMaxFunctionSize;
-  /// \brief The mode of function selection used during inlining.
-  AnalysisInliningMode InliningMode;
-
-  /// \brief Do not re-analyze paths leading to exhausted nodes with a different
-  /// strategy. We get better code coverage when retry is enabled.
-  bool NoRetryExhausted;
-
-public:
-  AnalysisManager(ASTContext &ctx, DiagnosticsEngine &diags, 
-                  const LangOptions &lang, PathDiagnosticConsumer *pd,
+  AnalysisManager(ASTContext &ctx,
+                  const PathDiagnosticConsumers &Consumers,
                   StoreManagerCreator storemgr,
-                  ConstraintManagerCreator constraintmgr, 
-                  CheckerManager *checkerMgr,
-                  unsigned maxnodes, unsigned maxvisit,
-                  bool vizdot, bool vizubi, AnalysisPurgeMode purge,
-                  bool eager, bool trim,
-                  bool useUnoptimizedCFG,
-                  bool addImplicitDtors, bool addInitializers,
-                  bool eagerlyTrimEGraph,
-                  AnalysisIPAMode ipa,
-                  unsigned inlineMaxStack,
-                  unsigned inlineMaxFunctionSize,
-                  AnalysisInliningMode inliningMode,
-                  bool NoRetry);
+                  ConstraintManagerCreator constraintmgr,
+                  CheckerManager *checkerMgr, AnalyzerOptions &Options,
+                  CodeInjector *injector = nullptr);
 
-  /// Construct a clone of the given AnalysisManager with the given ASTContext
-  /// and DiagnosticsEngine.
-  AnalysisManager(ASTContext &ctx, DiagnosticsEngine &diags,
-                  AnalysisManager &ParentAM);
+  ~AnalysisManager() override;
 
-  ~AnalysisManager() { FlushDiagnostics(); }
-  
   void ClearContexts() {
     AnaCtxMgr.clear();
   }
-  
+
   AnalysisDeclContextManager& getAnalysisDeclContextManager() {
     return AnaCtxMgr;
   }
@@ -120,58 +65,41 @@ public:
     return CreateStoreMgr;
   }
 
+  AnalyzerOptions& getAnalyzerOptions() override {
+    return options;
+  }
+
   ConstraintManagerCreator getConstraintManagerCreator() {
     return CreateConstraintMgr;
   }
 
   CheckerManager *getCheckerManager() const { return CheckerMgr; }
 
-  virtual ASTContext &getASTContext() {
+  ASTContext &getASTContext() override {
     return Ctx;
   }
 
-  virtual SourceManager &getSourceManager() {
+  SourceManager &getSourceManager() override {
     return getASTContext().getSourceManager();
-  }
-
-  virtual DiagnosticsEngine &getDiagnostic() {
-    return Diags;
   }
 
   const LangOptions &getLangOpts() const {
     return LangOpts;
   }
 
-  virtual PathDiagnosticConsumer *getPathDiagnosticConsumer() {
-    return PD.get();
-  }
-  
-  void FlushDiagnostics() {
-    if (PD.get())
-      PD->FlushDiagnostics(0);
+  ArrayRef<PathDiagnosticConsumer*> getPathDiagnosticConsumers() override {
+    return PathConsumers;
   }
 
-  unsigned getMaxNodes() const { return MaxNodes; }
-
-  unsigned getMaxVisit() const { return MaxVisit; }
-
-  bool shouldVisualizeGraphviz() const { return VisualizeEGDot; }
-
-  bool shouldVisualizeUbigraph() const { return VisualizeEGUbi; }
+  void FlushDiagnostics();
 
   bool shouldVisualize() const {
-    return VisualizeEGDot || VisualizeEGUbi;
+    return options.visualizeExplodedGraphWithGraphViz;
   }
 
-  bool shouldEagerlyTrimExplodedGraph() const { return EagerlyTrimEGraph; }
-
-  bool shouldTrimGraph() const { return TrimGraph; }
-
-  AnalysisPurgeMode getPurgeMode() const { return PurgeDead; }
-
-  bool shouldEagerlyAssume() const { return EagerlyAssume; }
-
-  bool shouldInlineCall() const { return (IPAMode == Inlining); }
+  bool shouldInlineCall() const {
+    return options.getIPAMode() != IPAK_None;
+  }
 
   CFG *getCFG(Decl const *D) {
     return AnaCtxMgr.getContext(D)->getCFG();
@@ -190,10 +118,35 @@ public:
     return AnaCtxMgr.getContext(D);
   }
 
-  AnalysisDeclContext *getAnalysisDeclContext(const Decl *D, idx::TranslationUnit *TU) {
-    return AnaCtxMgr.getContext(D, TU);
+  static bool isInCodeFile(SourceLocation SL, const SourceManager &SM) {
+    if (SM.isInMainFile(SL))
+      return true;
+
+    // Support the "unified sources" compilation method (eg. WebKit) that
+    // involves producing non-header files that include other non-header files.
+    // We should be included directly from a UnifiedSource* file
+    // and we shouldn't be a header - which is a very safe defensive check.
+    SourceLocation IL = SM.getIncludeLoc(SM.getFileID(SL));
+    if (!IL.isValid() || !SM.isInMainFile(IL))
+      return false;
+    // Should rather be "file name starts with", but the current .getFilename
+    // includes the full path.
+    if (SM.getFilename(IL).contains("UnifiedSource")) {
+      // It might be great to reuse FrontendOptions::getInputKindForExtension()
+      // but for now it doesn't discriminate between code and header files.
+      return llvm::StringSwitch<bool>(SM.getFilename(SL).rsplit('.').second)
+          .Cases("c", "m", "mm", "C", "cc", "cp", true)
+          .Cases("cpp", "CPP", "c++", "cxx", "cppm", true)
+          .Default(false);
+    }
+
+    return false;
   }
 
+  bool isInCodeFile(SourceLocation SL) {
+    const SourceManager &SM = getASTContext().getSourceManager();
+    return isInCodeFile(SL, SM);
+  }
 };
 
 } // enAnaCtxMgrspace

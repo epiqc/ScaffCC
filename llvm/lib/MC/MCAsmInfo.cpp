@@ -1,9 +1,8 @@
-//===-- MCAsmInfo.cpp - Asm Info -------------------------------------------==//
+//===- MCAsmInfo.cpp - Asm Info -------------------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,43 +12,34 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/MC/MCAsmInfo.h"
+#include "llvm/BinaryFormat/Dwarf.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCStreamer.h"
-#include "llvm/Support/DataTypes.h"
-#include "llvm/Support/Dwarf.h"
-#include <cctype>
-#include <cstring>
+#include "llvm/Support/CommandLine.h"
+
 using namespace llvm;
 
+enum DefaultOnOff { Default, Enable, Disable };
+static cl::opt<DefaultOnOff> DwarfExtendedLoc(
+    "dwarf-extended-loc", cl::Hidden,
+    cl::desc("Disable emission of the extended flags in .loc directives."),
+    cl::values(clEnumVal(Default, "Default for platform"),
+               clEnumVal(Enable, "Enabled"), clEnumVal(Disable, "Disabled")),
+    cl::init(Default));
+
 MCAsmInfo::MCAsmInfo() {
-  PointerSize = 4;
-  IsLittleEndian = true;
-  StackGrowsUp = false;
-  HasSubsectionsViaSymbols = false;
-  HasMachoZeroFillDirective = false;
-  HasMachoTBSSDirective = false;
-  HasStaticCtorDtorReferenceInStaticMode = false;
-  LinkerRequiresNonEmptyDwarfLines = false;
-  MaxInstLength = 4;
-  PCSymbol = "$";
   SeparatorString = ";";
-  CommentColumn = 40;
   CommentString = "#";
   LabelSuffix = ":";
-  GlobalPrefix = "";
-  PrivateGlobalPrefix = ".";
+  PrivateGlobalPrefix = "L";
+  PrivateLabelPrefix = PrivateGlobalPrefix;
   LinkerPrivateGlobalPrefix = "";
   InlineAsmStart = "APP";
   InlineAsmEnd = "NO_APP";
   Code16Directive = ".code16";
   Code32Directive = ".code32";
   Code64Directive = ".code64";
-  AssemblerDialect = 0;
-  AllowQuotesInName = false;
-  AllowNameToStartWithDigit = false;
-  AllowPeriodsInName = true;
-  AllowUTF8 = true;
   ZeroDirective = "\t.zero\t";
   AsciiDirective = "\t.ascii\t";
   AscizDirective = "\t.asciz\t";
@@ -57,73 +47,35 @@ MCAsmInfo::MCAsmInfo() {
   Data16bitsDirective = "\t.short\t";
   Data32bitsDirective = "\t.long\t";
   Data64bitsDirective = "\t.quad\t";
-  DataBegin = "$d.";
-  CodeBegin = "$a.";
-  JT8Begin = "$d.";
-  JT16Begin = "$d.";
-  JT32Begin = "$d.";
-  SupportsDataRegions = false;
-  SunStyleELFSectionSwitchSyntax = false;
-  UsesELFSectionDirectiveForBSS = false;
-  AlignDirective = "\t.align\t";
-  AlignmentIsInBytes = true;
-  TextAlignFillValue = 0;
-  GPRel64Directive = 0;
-  GPRel32Directive = 0;
   GlobalDirective = "\t.globl\t";
-  HasSetDirective = true;
-  HasAggressiveSymbolFolding = true;
-  LCOMMDirectiveType = LCOMM::None;
-  COMMDirectiveAlignmentIsInBytes = true;
-  HasDotTypeDotSizeDirective = true;
-  HasSingleParameterDotFile = true;
-  HasNoDeadStrip = false;
-  HasSymbolResolver = false;
-  WeakRefDirective = 0;
-  WeakDefDirective = 0;
-  LinkOnceDirective = 0;
-  HiddenVisibilityAttr = MCSA_Hidden;
-  HiddenDeclarationVisibilityAttr = MCSA_Hidden;
-  ProtectedVisibilityAttr = MCSA_Protected;
-  HasLEB128 = false;
-  SupportsDebugInformation = false;
-  ExceptionsType = ExceptionHandling::None;
-  DwarfUsesInlineInfoSection = false;
-  DwarfRequiresRelocationForSectionOffset = true;
-  DwarfSectionOffsetDirective = 0;
-  DwarfUsesLabelOffsetForRanges = true;
-  DwarfUsesRelocationsForStringPool = true;
-  DwarfRegNumForCFI = false;
-  HasMicrosoftFastStdCallMangling = false;
+  WeakDirective = "\t.weak\t";
+  if (DwarfExtendedLoc != Default)
+    SupportsExtendedDwarfLocDirective = DwarfExtendedLoc == Enable;
 
-  AsmTransCBE = 0;
+  // FIXME: Clang's logic should be synced with the logic used to initialize
+  //        this member and the two implementations should be merged.
+  // For reference:
+  // - Solaris always enables the integrated assembler by default
+  //   - SparcELFMCAsmInfo and X86ELFMCAsmInfo are handling this case
+  // - Windows always enables the integrated assembler by default
+  //   - MCAsmInfoCOFF is handling this case, should it be MCAsmInfoMicrosoft?
+  // - MachO targets always enables the integrated assembler by default
+  //   - MCAsmInfoDarwin is handling this case
+  // - Generic_GCC toolchains enable the integrated assembler on a per
+  //   architecture basis.
+  //   - The target subclasses for AArch64, ARM, and X86 handle these cases
+  UseIntegratedAssembler = false;
+  PreserveAsmComments = true;
 }
 
-MCAsmInfo::~MCAsmInfo() {
+MCAsmInfo::~MCAsmInfo() = default;
+
+void MCAsmInfo::addInitialFrameState(const MCCFIInstruction &Inst) {
+  InitialFrameState.push_back(Inst);
 }
 
-
-unsigned MCAsmInfo::getULEB128Size(unsigned Value) {
-  unsigned Size = 0;
-  do {
-    Value >>= 7;
-    Size += sizeof(int8_t);
-  } while (Value);
-  return Size;
-}
-
-unsigned MCAsmInfo::getSLEB128Size(int Value) {
-  unsigned Size = 0;
-  int Sign = Value >> (8 * sizeof(Value) - 1);
-  bool IsMore;
-
-  do {
-    unsigned Byte = Value & 0x7f;
-    Value >>= 7;
-    IsMore = Value != Sign || ((Byte ^ Sign) & 0x40) != 0;
-    Size += sizeof(int8_t);
-  } while (IsMore);
-  return Size;
+bool MCAsmInfo::isSectionAtomizableBySymbols(const MCSection &Section) const {
+  return false;
 }
 
 const MCExpr *
@@ -138,12 +90,37 @@ MCAsmInfo::getExprForFDESymbol(const MCSymbol *Sym,
                                unsigned Encoding,
                                MCStreamer &Streamer) const {
   if (!(Encoding & dwarf::DW_EH_PE_pcrel))
-    return MCSymbolRefExpr::Create(Sym, Streamer.getContext());
+    return MCSymbolRefExpr::create(Sym, Streamer.getContext());
 
   MCContext &Context = Streamer.getContext();
-  const MCExpr *Res = MCSymbolRefExpr::Create(Sym, Context);
-  MCSymbol *PCSym = Context.CreateTempSymbol();
+  const MCExpr *Res = MCSymbolRefExpr::create(Sym, Context);
+  MCSymbol *PCSym = Context.createTempSymbol();
   Streamer.EmitLabel(PCSym);
-  const MCExpr *PC = MCSymbolRefExpr::Create(PCSym, Context);
-  return MCBinaryExpr::CreateSub(Res, PC, Context);
+  const MCExpr *PC = MCSymbolRefExpr::create(PCSym, Context);
+  return MCBinaryExpr::createSub(Res, PC, Context);
+}
+
+bool MCAsmInfo::isAcceptableChar(char C) const {
+  return (C >= 'a' && C <= 'z') || (C >= 'A' && C <= 'Z') ||
+         (C >= '0' && C <= '9') || C == '_' || C == '$' || C == '.' || C == '@';
+}
+
+bool MCAsmInfo::isValidUnquotedName(StringRef Name) const {
+  if (Name.empty())
+    return false;
+
+  // If any of the characters in the string is an unacceptable character, force
+  // quotes.
+  for (char C : Name) {
+    if (!isAcceptableChar(C))
+      return false;
+  }
+
+  return true;
+}
+
+bool MCAsmInfo::shouldOmitSectionDirective(StringRef SectionName) const {
+  // FIXME: Does .section .bss/.data/.text work everywhere??
+  return SectionName == ".text" || SectionName == ".data" ||
+        (SectionName == ".bss" && !usesELFSectionDirectiveForBSS());
 }

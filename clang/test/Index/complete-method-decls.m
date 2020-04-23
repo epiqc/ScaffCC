@@ -8,7 +8,7 @@
 - (int)getInt;
 - (id)getSelf;
 @end
-
+@protocol P1;
 @protocol P2<P1>
 + (id)alloc;
 @end
@@ -72,12 +72,47 @@
 - (oneway void)method:(in id x) {}
 @end
 
+typedef A MyObject;
+typedef A *MyObjectRef;
+
+@interface I1
+-(Class<P1>)meth;
+-(MyObject <P1> *)meth2;
+-(MyObjectRef)meth3;
+@end
+
+@implementation I1
+-(void)foo {}
+@end
+
+@interface I2
+-(nonnull I2 *)produceI2:(nullable I2 *)i2;
+-(int *__nullable *__nullable)something:(void(^__nullable)(int *__nullable))b;
+@property (nullable, strong) id prop;
+@property (nullable, strong) void(^propWB)(int *_Nullable);
+@end
+
+@implementation I2
+-(void)foo {}
+@end
+
+#pragma clang assume_nonnull begin
+@interface I3
+-(I3 *)produceI3:(I3 *)i3;
+-(instancetype)getI3;
+@end
+#pragma clang assume_nonnull end
+
+@implementation I3
+-(void)foo {}
+@end
+
 // RUN: c-index-test -code-completion-at=%s:17:3 %s | FileCheck -check-prefix=CHECK-CC1 %s
-// CHECK-CC1: ObjCInstanceMethodDecl:{LeftParen (}{Text id}{RightParen )}{TypedText abc} (40) (parent: ObjCProtocolDecl 'P1')
-// CHECK-CC1: ObjCInstanceMethodDecl:{LeftParen (}{Text int}{RightParen )}{TypedText getInt} (40) (parent: ObjCProtocolDecl 'P1')
-// CHECK-CC1: ObjCInstanceMethodDecl:{LeftParen (}{Text id}{RightParen )}{TypedText getSelf} (40) (parent: ObjCProtocolDecl 'P1')
-// CHECK-CC1: ObjCInstanceMethodDecl:{LeftParen (}{Text id}{RightParen )}{TypedText initWithInt}{TypedText :}{LeftParen (}{Text int}{RightParen )}{Text x} (40) (parent: ObjCProtocolDecl 'P1')
-// CHECK-CC1: ObjCInstanceMethodDecl:{LeftParen (}{Text id}{RightParen )}{TypedText initWithTwoInts}{TypedText :}{LeftParen (}{Text inout }{Text int}{RightParen )}{Text x}{HorizontalSpace  }{TypedText second:}{LeftParen (}{Text int}{RightParen )}{Text y} (40) (parent: ObjCProtocolDecl 'P1')
+// CHECK-CC1: ObjCInstanceMethodDecl:{LeftParen (}{Text id}{RightParen )}{TypedText abc} (40)
+// CHECK-CC1: ObjCInstanceMethodDecl:{LeftParen (}{Text int}{RightParen )}{TypedText getInt} (40)
+// CHECK-CC1: ObjCInstanceMethodDecl:{LeftParen (}{Text id}{RightParen )}{TypedText getSelf} (40)
+// CHECK-CC1: ObjCInstanceMethodDecl:{LeftParen (}{Text id}{RightParen )}{TypedText initWithInt}{TypedText :}{LeftParen (}{Text int}{RightParen )}{Text x} (40)
+// CHECK-CC1: ObjCInstanceMethodDecl:{LeftParen (}{Text id}{RightParen )}{TypedText initWithTwoInts}{TypedText :}{LeftParen (}{Text inout }{Text int}{RightParen )}{Text x}{HorizontalSpace  }{TypedText second:}{LeftParen (}{Text int}{RightParen )}{Text y} (40)
 // RUN: c-index-test -code-completion-at=%s:17:7 %s | FileCheck -check-prefix=CHECK-CC2 %s
 // CHECK-CC2: ObjCInstanceMethodDecl:{TypedText abc}
 // CHECK-CC2-NEXT: ObjCInstanceMethodDecl:{TypedText getSelf}
@@ -98,8 +133,8 @@
 // CHECK-CC4: ObjCInstanceMethodDecl:{LeftParen (}{Text id}{RightParen )}{TypedText initWithTwoInts}{TypedText :}{LeftParen (}{Text inout }{Text int}{RightParen )}{Text x}{HorizontalSpace  }{TypedText second:}{LeftParen (}{Text int}{RightParen )}{Text y}{HorizontalSpace  }{LeftBrace {}{VerticalSpace
 // CHECK-CC4: ObjCInstanceMethodDecl:{LeftParen (}{Text int}{RightParen )}{TypedText setValue}{TypedText :}{LeftParen (}{Text int}{RightParen )}{Text x}{HorizontalSpace  }{LeftBrace {}{VerticalSpace
 // RUN: env CINDEXTEST_CODE_COMPLETE_PATTERNS=1 c-index-test -code-completion-at=%s:33:8 %s | FileCheck -check-prefix=CHECK-CC5 %s
-// CHECK-CC5: ObjCInstanceMethodDecl:{TypedText getInt}{HorizontalSpace  }{LeftBrace {}{VerticalSpace  }{Text return}{HorizontalSpace  }{Placeholder expression}{SemiColon ;}{VerticalSpace  }{RightBrace }} (42) (parent: ObjCProtocolDecl 'P1')
-// CHECK-CC5: ObjCInstanceMethodDecl:{TypedText getSecondValue}{HorizontalSpace  }{LeftBrace {}{VerticalSpace  }{Text return}{HorizontalSpace  }{Placeholder expression}{SemiColon ;}{VerticalSpace  }{RightBrace }} (40) (parent: ObjCInterfaceDecl 'B')
+// CHECK-CC5: ObjCInstanceMethodDecl:{TypedText getInt}{HorizontalSpace  }{LeftBrace {}{VerticalSpace  }{Text return}{HorizontalSpace  }{Placeholder expression}{SemiColon ;}{VerticalSpace  }{RightBrace }} (42)
+// CHECK-CC5: ObjCInstanceMethodDecl:{TypedText getSecondValue}{HorizontalSpace  }{LeftBrace {}{VerticalSpace  }{Text return}{HorizontalSpace  }{Placeholder expression}{SemiColon ;}{VerticalSpace  }{RightBrace }} (40)
 // CHECK-CC5-NOT: {TypedText getSelf}{HorizontalSpace  }{LeftBrace {}{VerticalSpace
 // CHECK-CC5: ObjCInstanceMethodDecl:{TypedText setValue}{TypedText :}{LeftParen (}{Text int}{RightParen )}{Text x}{HorizontalSpace  }{LeftBrace {}{VerticalSpace
 // RUN: env CINDEXTEST_CODE_COMPLETE_PATTERNS=1 c-index-test -code-completion-at=%s:37:7 %s | FileCheck -check-prefix=CHECK-CC6 %s
@@ -140,6 +175,8 @@
 // CHECK-CCF: NotImplemented:{TypedText byref} (40)
 // CHECK-CCF: NotImplemented:{TypedText in} (40)
 // CHECK-CCF: NotImplemented:{TypedText inout} (40)
+// CHECK-CCF: NotImplemented:{TypedText nonnull} (40)
+// CHECK-CCF: NotImplemented:{TypedText nullable} (40)
 // CHECK-CCF: NotImplemented:{TypedText oneway} (40)
 // CHECK-CCF: NotImplemented:{TypedText out} (40)
 // CHECK-CCF: NotImplemented:{TypedText unsigned} (50)
@@ -158,7 +195,7 @@
 // CHECK-CCG: NotImplemented:{TypedText void} (50)
 // CHECK-CCG: NotImplemented:{TypedText volatile} (50)
 // RUN: c-index-test -code-completion-at=%s:60:24 %s | FileCheck -check-prefix=CHECK-CCF %s
-// RUN: c-index-test -code-completion-at=%s:60:26 %s | FileCheck -check-prefix=CHECK-CCH %s
+// RUN: c-index-test -code-completion-at=%s:60:27 %s | FileCheck -check-prefix=CHECK-CCH %s
 // CHECK-CCH: ObjCInterfaceDecl:{TypedText A} (50)
 // CHECK-CCH: ObjCInterfaceDecl:{TypedText B} (50)
 // CHECK-CCH: NotImplemented:{TypedText bycopy} (40)
@@ -181,4 +218,43 @@
 
 
 // RUN: c-index-test -code-completion-at=%s:72:2 %s | FileCheck -check-prefix=CHECK-ONEWAY %s
-// CHECK-ONEWAY: ObjCInstanceMethodDecl:{LeftParen (}{Text oneway }{Text void}{RightParen )}{TypedText method}{TypedText :}{LeftParen (}{Text in }{Text id}{RightParen )}{Text x} (40) (parent: ObjCInterfaceDecl 'Passing')
+// CHECK-ONEWAY: ObjCInstanceMethodDecl:{LeftParen (}{Text oneway }{Text void}{RightParen )}{TypedText method}{TypedText :}{LeftParen (}{Text in }{Text id}{RightParen )}{Text x} (40)
+
+// RUN: c-index-test -code-completion-at=%s:85:2 %s | FileCheck -check-prefix=CHECK-CLASSTY %s
+// CHECK-CLASSTY: ObjCInstanceMethodDecl:{LeftParen (}{Text Class<P1>}{RightParen )}{TypedText meth}
+// CHECK-CLASSTY: ObjCInstanceMethodDecl:{LeftParen (}{Text MyObject<P1> *}{RightParen )}{TypedText meth2}
+// CHECK-CLASSTY: ObjCInstanceMethodDecl:{LeftParen (}{Text MyObjectRef}{RightParen )}{TypedText meth3}
+
+// RUN: c-index-test -code-completion-at=%s:96:2 %s -target x86_64-apple-macosx10.7 | FileCheck -check-prefix=CHECK-NULLABILITY %s
+// CHECK-NULLABILITY: ObjCInstanceMethodDecl:{LeftParen (}{Text I2 *}{RightParen )}{TypedText produceI2}{TypedText :}{LeftParen (}{Text I2 *}{RightParen )}{Text i2} (40)
+// CHECK-NULLABILITY: ObjCInstanceMethodDecl:{LeftParen (}{Text id}{RightParen )}{TypedText prop}
+// CHECK-NULLABILITY: ObjCInstanceMethodDecl:{LeftParen (}{Text void (^)(int * _Nullable)}{RightParen )}{TypedText propWB}
+// CHECK-NULLABILITY: ObjCInstanceMethodDecl:{LeftParen (}{Text void}{RightParen )}{TypedText setProp}{TypedText :}{LeftParen (}{Text id}{RightParen )}{Text prop}
+// CHECK-NULLABILITY: ObjCInstanceMethodDecl:{LeftParen (}{Text void}{RightParen )}{TypedText setPropWB}{TypedText :}{LeftParen (}{Text void (^)(int * _Nullable)}{RightParen )}{Text propWB}
+// CHECK-NULLABILITY: ObjCInstanceMethodDecl:{LeftParen (}{Text int * _Nullable *}{RightParen )}{TypedText something}{TypedText :}{LeftParen (}{Text void (^)(int * _Nullable)}{RightParen )}{Text b}
+
+// RUN: c-index-test -code-completion-at=%s:107:2 %s -target x86_64-apple-macosx10.7 | FileCheck -check-prefix=CHECK-NULLABILITY2 %s
+// CHECK-NULLABILITY2: ObjCInstanceMethodDecl:{LeftParen (}{Text instancetype}{RightParen )}{TypedText getI3} (40)
+// CHECK-NULLABILITY2: ObjCInstanceMethodDecl:{LeftParen (}{Text I3 *}{RightParen )}{TypedText produceI3}{TypedText :}{LeftParen (}{Text I3 *}{RightParen )}{Text i3} (40)
+
+@interface CompleteWithoutLeadingPrefix
+
+- (void)aMethod;
++ (int)aClassMethod:(int)x;
+@property int p;
+
+@end
+
+@implementation CompleteWithoutLeadingPrefix
+
+
+
+@end
+
+// RUN: c-index-test -code-completion-at=%s:250:1 %s | FileCheck -check-prefix=CHECK-COMP-NO-PREFIX %s
+// CHECK-COMP-NO-PREFIX: NotImplemented:{TypedText @end} (40)
+// CHECK-COMP-NO-PREFIX: ObjCClassMethodDecl:{Text +}{HorizontalSpace  }{LeftParen (}{Text int}{RightParen )}{TypedText aClassMethod}{TypedText :}{LeftParen (}{Text int}{RightParen )}{Text x} (40)
+// CHECK-COMP-NO-PREFIX: ObjCInstanceMethodDecl:{Text -}{HorizontalSpace  }{LeftParen (}{Text void}{RightParen )}{TypedText aMethod} (40)
+// CHECK-COMP-NO-PREFIX: ObjCInterfaceDecl:{TypedText I1}
+// CHECK-COMP-NO-PREFIX: ObjCInstanceMethodDecl:{Text -}{HorizontalSpace  }{LeftParen (}{Text int}{RightParen )}{TypedText p} (40)
+// CHECK-COMP-NO-PREFIX: ObjCInstanceMethodDecl:{Text -}{HorizontalSpace  }{LeftParen (}{Text void}{RightParen )}{TypedText setP}{TypedText :}{LeftParen (}{Text int}{RightParen )}{Text p} (40)

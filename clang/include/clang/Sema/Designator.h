@@ -1,9 +1,8 @@
 //===--- Designator.h - Initialization Designator ---------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -179,18 +178,10 @@ public:
 /// Designation - Represent a full designation, which is a sequence of
 /// designators.  This class is mostly a helper for InitListDesignations.
 class Designation {
-  /// InitIndex - The index of the initializer expression this is for.  For
-  /// example, if the initializer were "{ A, .foo=B, C }" a Designation would
-  /// exist with InitIndex=1, because element #1 has a designation.
-  unsigned InitIndex;
-
   /// Designators - The actual designators for this initializer.
   SmallVector<Designator, 2> Designators;
 
-  Designation(unsigned Idx) : InitIndex(Idx) {}
 public:
-  Designation() : InitIndex(4000) {}
-
   /// AddDesignator - Add a designator to the end of this list.
   void AddDesignator(Designator D) {
     Designators.push_back(D);

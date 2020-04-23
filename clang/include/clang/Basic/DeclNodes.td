@@ -1,77 +1,105 @@
-class AttrSubject;
+include "clang/Basic/ASTNode.td"
 
-class Decl<bit abstract = 0> : AttrSubject {
+class DeclNode<DeclNode base, string diagSpelling = "", bit abstract = 0>
+    : ASTNode, AttrSubject {
+  DeclNode Base = base;
   bit Abstract = abstract;
+  string DiagSpelling = diagSpelling;
 }
 
-class DDecl<Decl base, bit abstract = 0> : Decl<abstract> {
-  Decl Base = base;
-}
+class DeclContext {}
 
-class DeclContext { }
-
-def TranslationUnit : Decl, DeclContext;
-def Named : Decl<1>;
-  def Namespace : DDecl<Named>, DeclContext;
-  def UsingDirective : DDecl<Named>;
-  def NamespaceAlias : DDecl<Named>;
-  def Label : DDecl<Named>;
-  def Type : DDecl<Named, 1>;
-    def TypedefName : DDecl<Type, 1>;
-      def Typedef : DDecl<TypedefName>;
-      def TypeAlias : DDecl<TypedefName>;
-    def UnresolvedUsingTypename : DDecl<Type>;
-    def Tag : DDecl<Type, 1>, DeclContext;
-      def Enum : DDecl<Tag>;
-      def Record : DDecl<Tag>;
-        def CXXRecord : DDecl<Record>;
-          def ClassTemplateSpecialization : DDecl<CXXRecord>;
+def Decl : DeclNode<?, "", 1>;
+def TranslationUnit : DeclNode<Decl>, DeclContext;
+def PragmaComment : DeclNode<Decl>;
+def PragmaDetectMismatch : DeclNode<Decl>;
+def ExternCContext : DeclNode<Decl>, DeclContext;
+def Named : DeclNode<Decl, "named declarations", 1>;
+  def Namespace : DeclNode<Named, "namespaces">, DeclContext;
+  def UsingDirective : DeclNode<Named>;
+  def NamespaceAlias : DeclNode<Named>;
+  def Label : DeclNode<Named, "labels">;
+  def Type : DeclNode<Named, "types", 1>;
+    def TypedefName : DeclNode<Type, "typedefs", 1>;
+      def Typedef : DeclNode<TypedefName>;
+      def TypeAlias : DeclNode<TypedefName>;
+      def ObjCTypeParam : DeclNode<TypedefName>;
+    def UnresolvedUsingTypename : DeclNode<Type>;
+    def Tag : DeclNode<Type, "tag types", 1>, DeclContext;
+      def Enum : DeclNode<Tag, "enums">;
+      def Record : DeclNode<Tag, "structs, unions, classes">;
+        def CXXRecord : DeclNode<Record, "classes">;
+          def ClassTemplateSpecialization : DeclNode<CXXRecord>;
             def ClassTemplatePartialSpecialization
-              : DDecl<ClassTemplateSpecialization>;
-    def TemplateTypeParm : DDecl<Type>;
-  def Value : DDecl<Named, 1>;
-    def EnumConstant : DDecl<Value>;
-    def UnresolvedUsingValue : DDecl<Value>;
-    def IndirectField : DDecl<Value>;
-    def Declarator : DDecl<Value, 1>;
-      def Function : DDecl<Declarator>, DeclContext;
-        def CXXMethod : DDecl<Function>;
-          def CXXConstructor : DDecl<CXXMethod>;
-          def CXXDestructor : DDecl<CXXMethod>;
-          def CXXConversion : DDecl<CXXMethod>;
-      def Field : DDecl<Declarator>;
-        def ObjCIvar : DDecl<Field>;
-        def ObjCAtDefsField : DDecl<Field>;
-      def Var : DDecl<Declarator>;
-        def ImplicitParam : DDecl<Var>;
-        def ParmVar : DDecl<Var>;
-      def NonTypeTemplateParm : DDecl<Declarator>;
-  def Template : DDecl<Named, 1>;
-    def RedeclarableTemplate : DDecl<Template, 1>;
-      def FunctionTemplate : DDecl<RedeclarableTemplate>;
-      def ClassTemplate : DDecl<RedeclarableTemplate>;
-      def TypeAliasTemplate : DDecl<RedeclarableTemplate>;
-    def TemplateTemplateParm : DDecl<Template>;
-  def Using : DDecl<Named>;
-  def UsingShadow : DDecl<Named>;
-  def ObjCMethod : DDecl<Named>, DeclContext;
-  def ObjCContainer : DDecl<Named, 1>, DeclContext;
-    def ObjCCategory : DDecl<ObjCContainer>;
-    def ObjCProtocol : DDecl<ObjCContainer>;
-    def ObjCInterface : DDecl<ObjCContainer>;
-    def ObjCImpl : DDecl<ObjCContainer, 1>;
-      def ObjCCategoryImpl : DDecl<ObjCImpl>;
-      def ObjCImplementation : DDecl<ObjCImpl>;
-  def ObjCProperty : DDecl<Named>;
-  def ObjCCompatibleAlias : DDecl<Named>;
-def LinkageSpec : Decl, DeclContext;
-def ObjCPropertyImpl : Decl;
-def FileScopeAsm : Decl;
-def AccessSpec : Decl;
-def Friend : Decl;
-def FriendTemplate : Decl;
-def StaticAssert : Decl;
-def Block : Decl, DeclContext;
-def ClassScopeFunctionSpecialization : Decl;
-def Import : Decl;
+              : DeclNode<ClassTemplateSpecialization>;
+    def TemplateTypeParm : DeclNode<Type>;
+  def Value : DeclNode<Named, "value declarations", 1>;
+    def EnumConstant : DeclNode<Value, "enumerators">;
+    def UnresolvedUsingValue : DeclNode<Value>;
+    def IndirectField : DeclNode<Value>;
+    def Binding : DeclNode<Value>;
+    def OMPDeclareReduction : DeclNode<Value>, DeclContext;
+    def OMPDeclareMapper : DeclNode<Value>, DeclContext;
+    def Declarator : DeclNode<Value, "declarators", 1>;
+      def Field : DeclNode<Declarator, "non-static data members">;
+        def ObjCIvar : DeclNode<Field>;
+        def ObjCAtDefsField : DeclNode<Field>;
+      def MSProperty : DeclNode<Declarator>;
+      def Function : DeclNode<Declarator, "functions">, DeclContext;
+        def CXXDeductionGuide : DeclNode<Function>;
+        def CXXMethod : DeclNode<Function>;
+          def CXXConstructor : DeclNode<CXXMethod>;
+          def CXXDestructor : DeclNode<CXXMethod>;
+          def CXXConversion : DeclNode<CXXMethod>;
+      def Var : DeclNode<Declarator, "variables">;
+        def VarTemplateSpecialization : DeclNode<Var>;
+          def VarTemplatePartialSpecialization
+            : DeclNode<VarTemplateSpecialization>;
+        def ImplicitParam : DeclNode<Var>;
+        def ParmVar : DeclNode<Var, "parameters">;
+        def Decomposition : DeclNode<Var>;
+        def OMPCapturedExpr : DeclNode<Var>;
+      def NonTypeTemplateParm : DeclNode<Declarator>;
+  def Template : DeclNode<Named, "templates", 1>;
+    def RedeclarableTemplate : DeclNode<Template, "redeclarable templates", 1>;
+      def FunctionTemplate : DeclNode<RedeclarableTemplate>;
+      def ClassTemplate : DeclNode<RedeclarableTemplate>;
+      def VarTemplate : DeclNode<RedeclarableTemplate>;
+      def TypeAliasTemplate : DeclNode<RedeclarableTemplate>;
+    def TemplateTemplateParm : DeclNode<Template>;
+    def BuiltinTemplate : DeclNode<Template>;
+    def Concept : DeclNode<Template>;
+  def Using : DeclNode<Named>;
+  def UsingPack : DeclNode<Named>;
+  def UsingShadow : DeclNode<Named>;
+    def ConstructorUsingShadow : DeclNode<UsingShadow>;
+  def ObjCMethod : DeclNode<Named, "Objective-C methods">, DeclContext;
+  def ObjCContainer : DeclNode<Named, "Objective-C containers", 1>, DeclContext;
+    def ObjCCategory : DeclNode<ObjCContainer>;
+    def ObjCProtocol : DeclNode<ObjCContainer, "Objective-C protocols">;
+    def ObjCInterface : DeclNode<ObjCContainer, "Objective-C interfaces">;
+    def ObjCImpl
+        : DeclNode<ObjCContainer, "Objective-C implementation declarations", 1>;
+      def ObjCCategoryImpl : DeclNode<ObjCImpl>;
+      def ObjCImplementation : DeclNode<ObjCImpl>;
+  def ObjCProperty : DeclNode<Named, "Objective-C properties">;
+  def ObjCCompatibleAlias : DeclNode<Named>;
+def LinkageSpec : DeclNode<Decl>, DeclContext;
+def Export : DeclNode<Decl>, DeclContext;
+def ObjCPropertyImpl : DeclNode<Decl>;
+def FileScopeAsm : DeclNode<Decl>;
+def AccessSpec : DeclNode<Decl>;
+def Friend : DeclNode<Decl>;
+def FriendTemplate : DeclNode<Decl>;
+def StaticAssert : DeclNode<Decl>;
+def Block : DeclNode<Decl, "blocks">, DeclContext;
+def Captured : DeclNode<Decl>, DeclContext;
+def ClassScopeFunctionSpecialization : DeclNode<Decl>;
+def Import : DeclNode<Decl>;
+def OMPThreadPrivate : DeclNode<Decl>;
+def OMPAllocate : DeclNode<Decl>;
+def OMPRequires : DeclNode<Decl>;
+def Empty : DeclNode<Decl>;
+def RequiresExprBody : DeclNode<Decl>, DeclContext;
+def LifetimeExtendedTemporary : DeclNode<Decl>;
 

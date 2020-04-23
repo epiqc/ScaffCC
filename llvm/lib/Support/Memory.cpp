@@ -1,9 +1,8 @@
 //===- Memory.cpp - Memory Handling Support ---------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,68 +12,42 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Support/Memory.h"
+#include "llvm/Config/llvm-config.h"
 #include "llvm/Support/Valgrind.h"
-#include "llvm/Config/config.h"
 
-#if defined(__mips__)
-#include <sys/cachectl.h>
-#endif
-
-namespace llvm {
-using namespace sys;
-}
+#ifndef NDEBUG
+#include "llvm/Support/raw_ostream.h"
+#endif // ifndef NDEBUG
 
 // Include the platform-specific parts of this class.
 #ifdef LLVM_ON_UNIX
 #include "Unix/Memory.inc"
 #endif
-#ifdef LLVM_ON_WIN32
+#ifdef _WIN32
 #include "Windows/Memory.inc"
 #endif
 
-extern "C" void sys_icache_invalidate(const void *Addr, size_t len);
+#ifndef NDEBUG
 
-/// InvalidateInstructionCache - Before the JIT can run a block of code
-/// that has been emitted it must invalidate the instruction cache on some
-/// platforms.
-void llvm::sys::Memory::InvalidateInstructionCache(const void *Addr,
-                                                   size_t Len) {
+namespace llvm {
+namespace sys {
 
-// icache invalidation for PPC and ARM.
-#if defined(__APPLE__)
+raw_ostream &operator<<(raw_ostream &OS, const Memory::ProtectionFlags &PF) {
+  assert((PF & ~(Memory::MF_READ | Memory::MF_WRITE | Memory::MF_EXEC)) == 0 &&
+         "Unrecognized flags");
 
-#  if (defined(__POWERPC__) || defined (__ppc__) || \
-     defined(_POWER) || defined(_ARCH_PPC)) || defined(__arm__)
-  sys_icache_invalidate(Addr, Len);
-#  endif
-
-#else
-
-#  if (defined(__POWERPC__) || defined (__ppc__) || \
-       defined(_POWER) || defined(_ARCH_PPC)) && defined(__GNUC__)
-  const size_t LineSize = 32;
-
-  const intptr_t Mask = ~(LineSize - 1);
-  const intptr_t StartLine = ((intptr_t) Addr) & Mask;
-  const intptr_t EndLine = ((intptr_t) Addr + Len + LineSize - 1) & Mask;
-
-  for (intptr_t Line = StartLine; Line < EndLine; Line += LineSize)
-    asm volatile("dcbf 0, %0" : : "r"(Line));
-  asm volatile("sync");
-
-  for (intptr_t Line = StartLine; Line < EndLine; Line += LineSize)
-    asm volatile("icbi 0, %0" : : "r"(Line));
-  asm volatile("isync");
-#  elif defined(__arm__) && defined(__GNUC__)
-  // FIXME: Can we safely always call this for __GNUC__ everywhere?
-  char *Start = (char*) Addr;
-  char *End = Start + Len;
-  __clear_cache(Start, End);
-#  elif defined(__mips__)
-  cacheflush((char*)Addr, Len, BCACHE);
-#  endif
-
-#endif  // end apple
-
-  ValgrindDiscardTranslations(Addr, Len);
+  return OS << (PF & Memory::MF_READ ? 'R' : '-')
+            << (PF & Memory::MF_WRITE ? 'W' : '-')
+            << (PF & Memory::MF_EXEC ? 'X' : '-');
 }
+
+raw_ostream &operator<<(raw_ostream &OS, const MemoryBlock &MB) {
+  return OS << "[ " << MB.base() << " .. "
+            << (void *)((char *)MB.base() + MB.allocatedSize()) << " ] ("
+            << MB.allocatedSize() << " bytes)";
+}
+
+} // end namespace sys
+} // end namespace llvm
+
+#endif // ifndef NDEBUG

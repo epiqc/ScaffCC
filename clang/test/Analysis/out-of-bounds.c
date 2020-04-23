@@ -1,4 +1,6 @@
-// RUN: %clang_cc1 -Wno-array-bounds -analyze -analyzer-checker=core,experimental.security.ArrayBoundV2 -verify %s
+// RUN: %clang_analyze_cc1 -Wno-array-bounds -analyzer-checker=core,alpha.security.ArrayBoundV2,debug.ExprInspection -verify %s
+
+void clang_analyzer_eval(int);
 
 // Tests doing an out-of-bounds access after the end of an array using:
 // - constant integer index
@@ -128,20 +130,22 @@ void test2_multi_ok(int x) {
   buf[0][0] = 1; // no-warning
 }
 
-// Testing if solver handles (symbol * constant) < constant
 void test3(int x) {
   int buf[100];
   if (x < 0)
-    buf[x] = 1; // expected-warning {{Out of bound memory access (accessed memory precedes memory block)}}
+    buf[x] = 1; // expected-warning{{Out of bound memory access}}
 }
 
-// *** FIXME ***
-// We don't get a warning here yet because our symbolic constraint solving
-// doesn't handle:  (symbol * constant) < constant
 void test4(int x) {
   int buf[100];
   if (x > 99)
-    buf[x] = 1; 
+    buf[x] = 1; // expected-warning{{Out of bound memory access}}
+}
+
+void test_assume_after_access(unsigned long x) {
+  int buf[100];
+  buf[x] = 1;
+  clang_analyzer_eval(x <= 99); // expected-warning{{TRUE}}
 }
 
 // Don't warn when indexing below the start of a symbolic region's whose
@@ -150,5 +154,23 @@ int *get_symbolic();
 void test_index_below_symboloc() {
   int *buf = get_symbolic();
   buf[-1] = 0; // no-warning;
+}
+
+void test_incomplete_struct() {
+  extern struct incomplete incomplete;
+  int *p = (int *)&incomplete;
+  p[1] = 42; // no-warning
+}
+
+void test_extern_void() {
+  extern void v;
+  int *p = (int *)&v;
+  p[1] = 42; // no-warning
+}
+
+void test_assume_after_access2(unsigned long x) {
+  char buf[100];
+  buf[x] = 1;
+  clang_analyzer_eval(x <= 99); // expected-warning{{TRUE}}
 }
 

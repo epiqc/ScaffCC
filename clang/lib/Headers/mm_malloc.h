@@ -1,22 +1,8 @@
 /*===---- mm_malloc.h - Allocating and Freeing Aligned Memory Blocks -------===
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
+ * Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+ * See https://llvm.org/LICENSE.txt for license information.
+ * SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
  *
  *===-----------------------------------------------------------------------===
  */
@@ -30,45 +16,45 @@
 #include <malloc.h>
 #else
 #ifndef __cplusplus
-extern int posix_memalign(void **memptr, size_t alignment, size_t size);
+extern int posix_memalign(void **__memptr, size_t __alignment, size_t __size);
 #else
 // Some systems (e.g. those with GNU libc) declare posix_memalign with an
 // exception specifier. Via an "egregious workaround" in
 // Sema::CheckEquivalentExceptionSpec, Clang accepts the following as a valid
 // redeclaration of glibc's declaration.
-extern "C" int posix_memalign(void **memptr, size_t alignment, size_t size);
+extern "C" int posix_memalign(void **__memptr, size_t __alignment, size_t __size);
 #endif
 #endif
 
 #if !(defined(_WIN32) && defined(_mm_malloc))
 static __inline__ void *__attribute__((__always_inline__, __nodebug__,
                                        __malloc__))
-_mm_malloc(size_t size, size_t align)
+_mm_malloc(size_t __size, size_t __align)
 {
-  if (align == 1) {
-    return malloc(size);
+  if (__align == 1) {
+    return malloc(__size);
   }
 
-  if (!(align & (align - 1)) && align < sizeof(void *))
-    align = sizeof(void *);
+  if (!(__align & (__align - 1)) && __align < sizeof(void *))
+    __align = sizeof(void *);
 
-  void *mallocedMemory;
+  void *__mallocedMemory;
 #if defined(__MINGW32__)
-  mallocedMemory = __mingw_aligned_malloc(size, align);
+  __mallocedMemory = __mingw_aligned_malloc(__size, __align);
 #elif defined(_WIN32)
-  mallocedMemory = _aligned_malloc(size, align);
+  __mallocedMemory = _aligned_malloc(__size, __align);
 #else
-  if (posix_memalign(&mallocedMemory, align, size))
+  if (posix_memalign(&__mallocedMemory, __align, __size))
     return 0;
 #endif
 
-  return mallocedMemory;
+  return __mallocedMemory;
 }
 
 static __inline__ void __attribute__((__always_inline__, __nodebug__))
-_mm_free(void *p)
+_mm_free(void *__p)
 {
-  free(p);
+  free(__p);
 }
 #endif
 

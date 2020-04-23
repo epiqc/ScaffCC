@@ -21,20 +21,21 @@
 //
 #include <map>
 
-#include "llvm/ADT/ValueMap.h" 
+#include "llvm/IR/ValueMap.h" 
 
-#include "llvm/Function.h"
-#include "llvm/Instructions.h"
-#include "llvm/Intrinsics.h"
-#include "llvm/LLVMContext.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/LLVMContext.h"
 #include "llvm/Pass.h"
 
-#include "llvm/Support/InstIterator.h"
-#include "llvm/Support/InstVisitor.h"
+#include "llvm/IR/InstIterator.h"
+#include "llvm/IR/InstVisitor.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Transforms/Utils/Cloning.h"
+#include "llvm/IR/ValueSymbolTable.h"
 
 using namespace llvm;
 
@@ -71,8 +72,8 @@ namespace {
                 //errs() << "About to get type pointers\n";
                 Type *aa = Type::getInt8Ty(M->getContext());
                 Type *qq = Type::getInt16Ty(M->getContext());
-                Type *dd = Type::getDoubleTy(M->getContext());
-                Type *ii = Type::getInt32Ty(M->getContext());
+                // Type *dd = Type::getDoubleTy(M->getContext());
+                // Type *ii = Type::getInt32Ty(M->getContext());
                 /*
                 v.push_back(aa);
                 v.push_back(dd);
@@ -263,9 +264,9 @@ namespace {
                 Function *ReverseFunc = M->getFunction(ReverseFuncName);
                 // If it doesn't exist yet, create it
                 if (!ReverseFunc) {
-                    ValueMap<const Value*, WeakVH> VMap;
+                    ValueMap<const Value*, WeakTrackingVH> VMap;
                     ReverseFunc = CloneFunction
-                       (Func, VMap, false /* ModuleLevelChanges */);
+                       (Func, VMap/*, false  ModuleLevelChanges */);
                     ReverseFunc->setName(ReverseFuncName);
                     BasicBlock &BB = ReverseFunc->front();
                     // Finds all of the call instructions 
@@ -274,11 +275,13 @@ namespace {
                     BasicBlock::iterator It;
                     BasicBlock::iterator E = BB.end();
                     CallInst *CI;
-                    
                     for (It = BB.begin(); It != E; It++) {
                         if ( (CI = dyn_cast<CallInst>(&*It)) ) {
                             V.push_back(CI);
                         }
+                        /*else if ( (RI = dyn_cast<ReturnInst>(&*It)) ) {
+                          RI->removeFromParent();
+                        }*/
                     }
                     // Iterates backwards through the list of call 
                     // instructions, inverts the functions call by the 
@@ -287,14 +290,14 @@ namespace {
                     std::vector<CallInst *>::reverse_iterator I;
                     Function *Inverse;
                     std::vector<CallInst *>::reverse_iterator F = V.rend();
+                    Instruction *term = BB.getTerminator();
                     for (I = V.rbegin(); I != F; I++) {
-                        Inverse = GetOrCreateInverseFunction
-                            ((*I)->getCalledFunction());
+                        Inverse = GetOrCreateInverseFunction(
+                          (*I)->getCalledFunction());
                         (*I)->setCalledFunction(Inverse);
                         (*I)->removeFromParent();
-                        BB.getInstList().insert(&BB.back(), *I);
+                        (*I)->insertBefore(term);
                     }
-                    M->getFunctionList().push_back(ReverseFunc);
                 }
                 return ReverseFunc;
             } // GetOrCreateInverseFunction()
@@ -312,13 +315,11 @@ namespace {
                     // otherwiseit will be replaced by the function itself
                     int numReverses = 0;
                     StringRef ForwardFunctionName = CF->getName();
-                    
                     while(ForwardFunctionName.startswith(REVERSE_PREFIX)){
                         ForwardFunctionName = ForwardFunctionName.drop_front
                             (REVERSE_PREFIX.size());
                         ++numReverses;
                     }
-                    
                     Function *ForwardFunction;
                     // The Toffoli function is special becuase it has 
                     // been rewritten to have a different function name
@@ -326,17 +327,20 @@ namespace {
                         ForwardFunction = M->getFunction("ToffoliImpl");
                     else
                         ForwardFunction = M->getFunction(ForwardFunctionName);
-                    
                     // If the function name was not found in the current 
                     // module we can search for it in the intrinsics by 
                     // prepending "llvm." to it
                     if (ForwardFunction == NULL) {
+                        std::string typeString = "";
+                        size_t args = CF->getFunctionType()->getNumParams();
+                        for(size_t i = 0;i<args;i++){
+                          typeString += ".i16";
+                        }
                         const std::string IntrinsicForwardFunctionName 
-                            = "llvm." + ForwardFunctionName.str();
+                            = "llvm." + ForwardFunctionName.str() + typeString;
                         ForwardFunction = M->getFunction
                             (IntrinsicForwardFunctionName);
                     }
-
                     // If no function exists for the base after the 
                     // _reverse_, print an error message
                     if (ForwardFunction == NULL) {
@@ -349,7 +353,7 @@ namespace {
                     // function, print an error message
                     else if (CF->getFunctionType() != ForwardFunction->
                         getFunctionType()) {
-                        errs() << "Error: reversed function " << CF->getName()
+                        errs() << "Warning: reversed function " << CF->getName()
                                << " did not match type of foward function " 
                                << ForwardFunctionName << "\n";
                     }

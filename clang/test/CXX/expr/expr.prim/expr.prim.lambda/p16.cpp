@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -std=c++11 %s -Wunused -verify
+// RUN: %clang_cc1 -std=c++11 %s -Wunused -Wno-unused-lambda-capture -verify
 
 
 struct X {
@@ -21,20 +21,20 @@ void test_capture(X x) {
     }();
   }();
 
-  int a; 
-  [=]{ 
-    [&] { 
-      int &x = a;  // expected-error{{binding of reference to type 'int' to a value of type 'const int' drops qualifiers}}
-      int &x2 = a;  // expected-error{{binding of reference to type 'int' to a value of type 'const int' drops qualifiers}}
-    }(); 
-  }(); 
+  int a;
+  [=] {
+    [&] {
+      int &x = a;  // expected-error{{binding reference of type 'int' to value of type 'const int' drops 'const' qualifier}}
+      int &x2 = a; // expected-error{{binding reference of type 'int' to value of type 'const int' drops 'const' qualifier}}
+    }();
+  }();
 
-  [=]{ 
-    [&a] { 
-      [&] { 
-        int &x = a;  // expected-error{{binding of reference to type 'int' to a value of type 'const int' drops qualifiers}}
-        int &x2 = a;  // expected-error{{binding of reference to type 'int' to a value of type 'const int' drops qualifiers}}
+  [=] {
+    [&a] {
+      [&] {
+        int &x = a;  // expected-error{{binding reference of type 'int' to value of type 'const int' drops 'const' qualifier}}
+        int &x2 = a; // expected-error{{binding reference of type 'int' to value of type 'const int' drops 'const' qualifier}}
       }();
-    }(); 
-  }(); 
+    }();
+  }();
 }

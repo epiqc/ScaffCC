@@ -1,4 +1,6 @@
-add_llvm_library(LLVMMCJIT
+add_llvm_component_library(LLVMMCJIT
   MCJIT.cpp
-  MCJITMemoryManager.cpp
+
+  DEPENDS
+  intrinsics_gen
   )

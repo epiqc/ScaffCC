@@ -1,5 +1,25 @@
-set(LLVM_LINK_COMPONENTS asmparser instrumentation scalaropts ipo
-  linker bitreader bitwriter vectorize)
+set(LLVM_LINK_COMPONENTS
+  AllTargetsAsmParsers
+  AllTargetsCodeGens
+  AllTargetsDescs
+  AllTargetsInfos
+  Analysis
+  BitWriter
+  CodeGen
+  Core
+  IPO
+  IRReader
+  AggressiveInstCombine
+  InstCombine
+  Instrumentation
+  Linker
+  ObjCARCOpts
+  ScalarOpts
+  Support
+  Target
+  TransformUtils
+  Vectorize
+  )
 
 add_llvm_tool(bugpoint
   BugDriver.cpp
@@ -11,4 +31,11 @@ add_llvm_tool(bugpoint
   OptimizerDriver.cpp
   ToolRunner.cpp
   bugpoint.cpp
+
+  ENABLE_PLUGINS
+
+  DEPENDS
+  intrinsics_gen
+  SUPPORT_PLUGINS
   )
+export_executable_symbols(bugpoint)

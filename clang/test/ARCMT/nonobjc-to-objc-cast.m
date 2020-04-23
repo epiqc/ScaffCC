@@ -1,18 +1,13 @@
 // RUN: %clang_cc1 -triple x86_64-apple-darwin10 -fsyntax-only -fobjc-arc -x objective-c %s.result
 // RUN: arcmt-test --args -triple x86_64-apple-darwin10 -fsyntax-only -x objective-c %s > %t
 // RUN: diff %t %s.result
-// DISABLE: mingw32
 
 #include "Common.h"
-
-@interface NSString : NSObject
--(id)string;
--(id)newString;
-@end
 
 typedef const struct __CFString * CFStringRef;
 extern const CFStringRef kUTTypePlainText;
 extern const CFStringRef kUTTypeRTF;
+extern CFStringRef kNonConst;
 
 typedef const struct __CFAllocator * CFAllocatorRef;
 typedef const struct __CFUUID * CFUUIDRef;
@@ -21,11 +16,27 @@ extern const CFAllocatorRef kCFAllocatorDefault;
 
 extern CFStringRef CFUUIDCreateString(CFAllocatorRef alloc, CFUUIDRef uuid);
 
+struct StrS {
+  CFStringRef sref_member;
+};
+
+@interface NSString : NSObject {
+  CFStringRef sref;
+  struct StrS *strS;
+}
+-(id)string;
+-(id)newString;
+@end
+
 void f(BOOL b, id p) {
-  NSString *str = (NSString *)kUTTypePlainText;
-  str = b ? kUTTypeRTF : kUTTypePlainText;
-  str = (NSString *)(b ? kUTTypeRTF : kUTTypePlainText);
+  NSString *str = (NSString *)kUTTypePlainText; // no change
+  str = b ? kUTTypeRTF : kUTTypePlainText; // no change
+  str = (NSString *)(b ? kUTTypeRTF : kUTTypePlainText); // no change
   str = (NSString *)p; // no change.
+
+  str = (NSString *)kNonConst;
+  str = b ? kUTTypeRTF : kNonConst;
+  str = (NSString *)(b ? kUTTypeRTF : kNonConst);
 
   CFUUIDRef   _uuid;
   NSString *_uuidString = (NSString *)CFUUIDCreateString(kCFAllocatorDefault, _uuid);
@@ -39,6 +50,16 @@ void f(BOOL b, id p) {
   CFStringRef str2 = self;
   return self;
 }
+@end
+
+@implementation NSString
+-(id)string {
+  if (0)
+    return sref;
+  else
+    return strS->sref_member;
+}
+-(id)newString { return 0; }
 @end
 
 extern void consumeParam(CFStringRef CF_CONSUMED p);

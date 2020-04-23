@@ -78,22 +78,22 @@ Complete2 complete2;
 // All the redeclarations below are done twice on purpose. Tests that the type
 // of the declaration isn't changed.
 
-enum class Redeclare2; // expected-note{{previous use is here}} expected-note{{previous use is here}}
+enum class Redeclare2; // expected-note{{previous declaration is here}} expected-note{{previous declaration is here}}
 enum Redeclare2; // expected-error{{previously declared as scoped}}
 enum Redeclare2; // expected-error{{previously declared as scoped}}
 
-enum Redeclare3 : int; // expected-note{{previous use is here}} expected-note{{previous use is here}}
+enum Redeclare3 : int; // expected-note{{previous declaration is here}} expected-note{{previous declaration is here}}
 enum Redeclare3; // expected-error{{previously declared with fixed underlying type}}
 enum Redeclare3; // expected-error{{previously declared with fixed underlying type}}
 
 enum class Redeclare5;
 enum class Redeclare5 : int; // ok
 
-enum Redeclare6 : int; // expected-note{{previous use is here}} expected-note{{previous use is here}}
+enum Redeclare6 : int;   // expected-note{{previous declaration is here}} expected-note{{previous declaration is here}}
 enum Redeclare6 : short; // expected-error{{redeclared with different underlying type}}
 enum Redeclare6 : short; // expected-error{{redeclared with different underlying type}}
 
-enum class Redeclare7; // expected-note{{previous use is here}} expected-note{{previous use is here}}
+enum class Redeclare7;         // expected-note{{previous declaration is here}} expected-note{{previous declaration is here}}
 enum class Redeclare7 : short; // expected-error{{redeclared with different underlying type}}
 enum class Redeclare7 : short; // expected-error{{redeclared with different underlying type}}
 
@@ -245,3 +245,72 @@ namespace test10 {
   int m = g<int>();
   int n = g<short>(); // expected-note {{here}}
 }
+
+namespace pr13128 {
+  // This should compile cleanly
+  class C {
+    enum class E { C };
+  };
+}
+
+namespace PR15633 {
+  template<typename T> struct A {
+    struct B {
+      enum class E : T;
+      enum class E2 : T;
+    };
+  };
+  template<typename T> enum class A<T>::B::E { e };
+  template class A<int>;
+
+  struct B { enum class E; };
+  template<typename T> enum class B::E { e }; // expected-error {{enumeration cannot be a template}}
+}
+
+namespace PR16900 {
+  enum class A;
+  A f(A a) { return -a; } // expected-error {{invalid argument type 'PR16900::A' to unary expression}}
+}
+
+namespace PR18551 {
+  enum class A { A };
+  bool f() { return !A::A; } // expected-error {{invalid argument type 'PR18551::A' to unary expression}}
+}
+
+namespace rdar15124329 {
+  enum class B : bool { F, T };
+
+  const rdar15124329::B T1 = B::T;
+  typedef B C;  const C T2 = B::T;
+
+  static_assert(T1 != B::F, "");
+  static_assert(T2 == B::T, "");
+}
+
+namespace PR18044 {
+  enum class E { a };
+
+  int E::e = 0; // expected-error {{does not refer into a class}}
+  void E::f() {} // expected-error {{does not refer into a class}}
+  struct E::S {}; // expected-error {{no struct named 'S'}}
+  struct T : E::S {}; // expected-error {{expected class name}}
+  enum E::E {}; // expected-error {{no enum named 'E'}}
+  int E::*p; // expected-error {{does not point into a class}}
+  using E::f; // expected-error {{no member named 'f'}}
+
+  using E::a; // expected-error {{using declaration cannot refer to a scoped enumerator}}
+  E b = a; // expected-error {{undeclared}}
+}
+
+namespace test11 {
+  enum class E { a };
+  typedef E E2;
+  E2 f1() { return E::a; }
+
+  bool f() { return !f1(); } // expected-error {{invalid argument type 'test11::E2' (aka 'test11::E') to unary expression}}
+}
+
+namespace PR35586 {
+  enum C { R, G, B };
+  enum B { F = (enum C) -1, T}; // this should compile cleanly, it used to assert.
+};

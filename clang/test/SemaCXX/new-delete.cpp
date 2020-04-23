@@ -1,7 +1,12 @@
-// RUN: %clang_cc1 -fsyntax-only -verify %s -triple=i686-pc-linux-gnu
+// RUN: %clang_cc1 -fsyntax-only -verify %s -triple=i686-pc-linux-gnu -Wno-new-returns-null
+// RUN: %clang_cc1 -fsyntax-only -verify %s -triple=i686-pc-linux-gnu -Wno-new-returns-null -std=c++98
+// RUN: %clang_cc1 -fsyntax-only -verify %s -triple=i686-pc-linux-gnu -Wno-new-returns-null -std=c++11
 
 #include <stddef.h>
 
+#if __cplusplus >= 201103L
+// expected-note@+2 {{candidate constructor (the implicit move constructor) not viable}}
+#endif
 struct S // expected-note {{candidate}}
 {
   S(int, int, double); // expected-note {{candidate}}
@@ -17,6 +22,13 @@ struct U
 struct V : U
 {
 };
+
+inline void operator delete(void *); // expected-warning {{replacement function 'operator delete' cannot be declared 'inline'}}
+
+__attribute__((used))
+inline void *operator new(size_t) { // no warning, due to __attribute__((used))
+  return 0;
+}
 
 // PR5823
 void* operator new(const size_t); // expected-note 2 {{candidate}}
@@ -53,6 +65,12 @@ void good_news()
   typedef foo x[2];
   typedef foo y[2][2];
   x* f3 = new y;
+
+#if __cplusplus >= 201103L
+  (void)new int[]{};
+  (void)new int[]{1, 2, 3};
+  (void)new char[]{"hello"};
+#endif
 }
 
 struct abstract {
@@ -65,9 +83,24 @@ void bad_news(int *ip)
   (void)new; // expected-error {{expected a type}}
   (void)new 4; // expected-error {{expected a type}}
   (void)new () int; // expected-error {{expected expression}}
-  (void)new int[1.1]; // expected-error {{array size expression must have integral or enumeration type, not 'double'}}
-  (void)new int[1][i]; // expected-error {{only the first dimension}} expected-note {{read of non-const variable 'i' is not allowed in a constant expression}}
-  (void)new (int[1][i]); // expected-error {{only the first dimension}} expected-note {{read of non-const variable 'i' is not allowed in a constant expression}}
+  (void)new int[1.1];
+#if __cplusplus <= 199711L
+  // expected-error@-2 {{array size expression must have integral or enumeration type, not 'double'}}
+#elif __cplusplus <= 201103L
+  // expected-error@-4 {{array size expression must have integral or unscoped enumeration type, not 'double'}}
+#else
+  // expected-warning@-6 {{implicit conversion from 'double' to 'unsigned int' changes value from 1.1 to 1}}
+#endif
+
+  (void)new int[1][i];  // expected-note {{read of non-const variable 'i' is not allowed in a constant expression}}
+  (void)new (int[1][i]); // expected-note {{read of non-const variable 'i' is not allowed in a constant expression}}
+#if __cplusplus <= 201103L
+  // expected-error@-3 {{only the first dimension}}
+  // expected-error@-3 {{only the first dimension}}
+#else
+  // expected-error@-6 {{array size is not a constant expression}}
+  // expected-error@-6 {{array size is not a constant expression}}
+#endif
   (void)new (int[i]); // expected-warning {{when type is in parentheses}}
   (void)new int(*(S*)0); // expected-error {{no viable conversion from 'S' to 'int'}}
   (void)new int(1, 2); // expected-error {{excess elements in scalar initializer}}
@@ -76,9 +109,22 @@ void bad_news(int *ip)
   (void)new const int; // expected-error {{default initialization of an object of const type 'const int'}}
   (void)new float*(ip); // expected-error {{cannot initialize a new value of type 'float *' with an lvalue of type 'int *'}}
   // Undefined, but clang should reject it directly.
-  (void)new int[-1]; // expected-error {{array size is negative}}
+  (void)new int[-1];
+#if __cplusplus <= 201103L
+  // expected-error@-2 {{array size is negative}}
+#else
+  // expected-error@-4 {{array is too large}}
+#endif
   (void)new int[2000000000]; // expected-error {{array is too large}}
-  (void)new int[*(S*)0]; // expected-error {{array size expression must have integral or enumeration type, not 'S'}}
+  (void)new int[*(S*)0];
+#if __cplusplus <= 199711L
+  // expected-error@-2 {{array size expression must have integral or enumeration type, not 'S'}}
+#elif __cplusplus <= 201103L
+  // expected-error@-4 {{array size expression must have integral or unscoped enumeration type, not 'S'}}
+#else
+  // expected-error@-6 {{converting 'S' to incompatible type}}
+#endif
+
   (void)::S::new int; // expected-error {{expected unqualified-id}}
   (void)new (0, 0) int; // expected-error {{no matching function for call to 'operator new'}}
   (void)new (0L) int; // expected-error {{call to 'operator new' is ambiguous}}
@@ -86,9 +132,14 @@ void bad_news(int *ip)
   (void)::new ((S*)0) U; // expected-error {{no matching function for call to 'operator new'}}
   // This must fail, because any member version hides all global versions.
   (void)new U; // expected-error {{no matching function for call to 'operator new'}}
-  (void)new (int[]); // expected-error {{array size must be specified in new expressions}}
+  (void)new (int[]); // expected-error {{array size must be specified in new expression with no initializer}}
   (void)new int&; // expected-error {{cannot allocate reference type 'int &' with new}}
-  // Some lacking cases due to lack of sema support.
+  (void)new int[]; // expected-error {{array size must be specified in new expression with no initializer}}
+  (void)new int[](); // expected-error {{cannot determine allocated array size from initializer}}
+  // FIXME: This is a terrible diagnostic.
+#if __cplusplus < 201103L
+  (void)new int[]{}; // expected-error {{array size must be specified in new expression with no initializer}}
+#endif
 }
 
 void good_deletes()
@@ -102,7 +153,12 @@ void good_deletes()
 void bad_deletes()
 {
   delete 0; // expected-error {{cannot delete expression of type 'int'}}
-  delete [0] (int*)0; // expected-error {{expected expression}}
+  delete [0] (int*)0;
+#if __cplusplus <= 199711L
+  // expected-error@-2 {{expected expression}}
+#else
+  // expected-error@-4 {{expected variable name or 'this' in lambda capture list}}
+#endif
   delete (void*)0; // expected-warning {{cannot delete expression with pointer-to-'void' type 'void *'}}
   delete (T*)0; // expected-warning {{deleting pointer to incomplete type}}
   ::S::delete (int*)0; // expected-error {{expected unqualified-id}}
@@ -116,8 +172,8 @@ struct X1 {
 };
 
 struct X2 {
-  operator int*(); // expected-note {{candidate function}}
-  operator float*(); // expected-note {{candidate function}}
+  operator int*(); // expected-note {{conversion}}
+  operator float*(); // expected-note {{conversion}}
 };
 
 void test_delete_conv(X0 x0, X1 x1, X2 x2) {
@@ -202,14 +258,31 @@ void f(X9 *x9) {
 
 struct X10 {
   virtual ~X10();
+#if __cplusplus >= 201103L
+  // expected-note@-2 {{overridden virtual function is here}}
+#endif
 };
 
-struct X11 : X10 { // expected-error {{no suitable member 'operator delete' in 'X11'}}
-  void operator delete(void*, int); // expected-note {{'operator delete' declared here}}
+struct X11 : X10 {
+#if __cplusplus <= 199711L
+// expected-error@-2 {{no suitable member 'operator delete' in 'X11'}}
+#else
+// expected-error@-4 {{deleted function '~X11' cannot override a non-deleted function}}
+// expected-note@-5 2 {{virtual destructor requires an unambiguous, accessible 'operator delete'}}
+#endif
+  void operator delete(void*, int);
+#if __cplusplus <= 199711L
+  // expected-note@-2 {{'operator delete' declared here}}
+#endif
 };
 
 void f() {
-  X11 x11; // expected-note {{implicit default destructor for 'X11' first required here}}
+  X11 x11;
+#if __cplusplus <= 199711L
+  // expected-note@-2 {{implicit destructor for 'X11' first required here}}
+#else
+  // expected-error@-4 {{attempt to use a deleted function}}
+#endif
 }
 
 struct X12 {
@@ -391,10 +464,24 @@ namespace PR7702 {
 }
 
 namespace ArrayNewNeedsDtor {
-  struct A { A(); private: ~A(); }; // expected-note {{declared private here}}
-  struct B { B(); A a; }; // expected-error {{field of type 'ArrayNewNeedsDtor::A' has private destructor}}
+  struct A { A(); private: ~A(); };
+#if __cplusplus <= 199711L
+  // expected-note@-2 {{declared private here}}
+#endif
+  struct B { B(); A a; };
+#if __cplusplus <= 199711L
+  // expected-error@-2 {{field of type 'ArrayNewNeedsDtor::A' has private destructor}}
+#else
+  // expected-note@-4 {{destructor of 'B' is implicitly deleted because field 'a' has an inaccessible destructor}}
+#endif
+
   B *test9() {
-    return new B[5]; // expected-note {{implicit default destructor for 'ArrayNewNeedsDtor::B' first required here}}
+    return new B[5];
+#if __cplusplus <= 199711L
+    // expected-note@-2 {{implicit destructor for 'ArrayNewNeedsDtor::B' first required here}}
+#else
+    // expected-error@-4 {{attempt to use a deleted function}}
+#endif
   }
 }
 
@@ -437,11 +524,11 @@ namespace r150682 {
 
   template<typename X>
   void tfn() {
-    new (*(PlacementArg*)0) T[1];
+    new (*(PlacementArg*)0) T[1]; // expected-warning 2 {{binding dereferenced null pointer to reference has undefined behavior}}
   }
 
   void fn() {
-    tfn<int>();
+    tfn<int>();  // expected-note {{in instantiation of function template specialization 'r150682::tfn<int>' requested here}}
   }
 
 }
@@ -499,3 +586,38 @@ namespace PR12061 {
     DeferredCookieTaskTest() {}
   };
 }
+
+class DeletingPlaceholder {
+  int* f() {
+    delete f; // expected-error {{reference to non-static member function must be called; did you mean to call it with no arguments?}}
+    return 0;
+  }
+  int* g(int, int) {
+    delete g; // expected-error {{reference to non-static member function must be called}}
+    return 0;
+  }
+};
+
+namespace PR18544 {
+  inline void *operator new(size_t); // expected-error {{'operator new' cannot be declared inside a namespace}}
+}
+
+// PR19968
+inline void* operator new(); // expected-error {{'operator new' must have at least one parameter}}
+
+namespace {
+template <class C>
+struct A {
+  void f() { this->::new; } // expected-error {{expected unqualified-id}}
+  void g() { this->::delete; } // expected-error {{expected unqualified-id}}
+};
+}
+
+#if __cplusplus >= 201103L
+template<typename ...T> int *dependent_array_size(T ...v) {
+  return new int[]{v...}; // expected-error {{cannot initialize}}
+}
+int *p0 = dependent_array_size();
+int *p3 = dependent_array_size(1, 2, 3);
+int *fail = dependent_array_size("hello"); // expected-note {{instantiation of}}
+#endif

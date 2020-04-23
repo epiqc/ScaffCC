@@ -9,24 +9,26 @@
 #define DEBUG_TYPE "FunctionClone"
 #include <sstream>
 #include <algorithm>
+#include <cstring>
+#include <cstdlib>
 #include "llvm/Pass.h"
-#include "llvm/Function.h"
-#include "llvm/Module.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/Module.h"
 #include "llvm/Transforms/Utils/Cloning.h"
-#include "llvm/BasicBlock.h"
-#include "llvm/Instruction.h"
-#include "llvm/Instructions.h"
+#include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Instruction.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/ADT/Statistic.h"
-#include "llvm/Support/InstIterator.h"
+#include "llvm/IR/InstIterator.h"
 #include "llvm/PassAnalysisSupport.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
-#include "llvm/Support/CallSite.h"
+#include "llvm/IR/CallSite.h"
 #include "llvm/Analysis/CallGraph.h"
-#include "llvm/Support/CFG.h"
+#include "llvm/IR/CFG.h"
 #include "llvm/ADT/SCCIterator.h"
 
 #define _MAX_FUNCTION_NAME 32
@@ -47,15 +49,16 @@ namespace {
     static char ID; // Pass identification
     FunctionClone() : ModulePass(ID) {}
 
-    Function *CloneFunctionInfo(const Function *F, ValueMap<const Value*, WeakVH> &VMap, Module *M);
+    Function *CloneFunctionInfo(const Function *F, ValueMap<const Value*, WeakTrackingVH> &VMap, Module *M);
     
     void insertNewCallSite(CallInst *CI, std::string specializedName, Module *M);
 
     bool runOnModule (Module &M);
+    static const std::string REVERSE_PREFIX;
 
     virtual void getAnalysisUsage(AnalysisUsage &AU) const {
         AU.setPreservesAll();  
-        AU.addRequired<CallGraph>();
+        AU.addRequired<CallGraphWrapperPass>(); 
     }
 
   }; // End of struct FunctionClone
@@ -63,10 +66,11 @@ namespace {
 
 
 char FunctionClone::ID = 0;
+const std::string FunctionClone::REVERSE_PREFIX = "_reverse_";
 static RegisterPass<FunctionClone> X("FunctionClone", "Function Cloning Pass", false, false);
 
 
-Function *FunctionClone::CloneFunctionInfo(const Function *F, ValueMap<const Value*, WeakVH> &VMap, Module *M) {
+Function *FunctionClone::CloneFunctionInfo(const Function *F, ValueMap<const Value*, WeakTrackingVH> &VMap, Module *M) {
   std::vector<Type*> ArgTypes;
   // the user might be deleting arguments to the function by specifying them in the VMap.
   // If so, we need to not add the arguments to the ArgTypes vector
@@ -87,7 +91,7 @@ Function *FunctionClone::CloneFunctionInfo(const Function *F, ValueMap<const Val
   for (Function::const_arg_iterator I = F->arg_begin(), E = F->arg_end(); I!=E; ++I)
     if (VMap.count(I) == 0) {     // is this argument preserved?
       DestI->setName(I->getName());   // copy the name over..
-      WeakVH wval(DestI++);
+      WeakTrackingVH wval(DestI++);
       VMap[I] = wval;          // add mapping to VMap
     }
   return NewF;
@@ -112,10 +116,32 @@ void FunctionClone::insertNewCallSite(CallInst *CI, std::string specializedName,
 
 bool FunctionClone::runOnModule (Module &M) {
 
+  const char *debug_val = getenv("DEBUG_FUNCTIONCLONE");
+  if(debug_val){
+    if(!strncmp(debug_val, "1", 1)) debugCloning = true;
+    else debugCloning = false;
+  }
+
+  debug_val = getenv("DEBUG_SCAFFOLD");
+  if(debug_val && !debugCloning){
+    if(!strncmp(debug_val, "1", 1)) debugCloning = true;
+    else debugCloning = false;
+  }
+
   // iterate over all functions, and over all instructions in those functions
   // find call sites that have constant integer or double values.
-  CallGraphNode* rootNode = getAnalysis<CallGraph>().getRoot();
-  
+  CallGraph cg = CallGraph(M);
+
+  CallGraphNode *rootNode;
+
+  for(auto it = cg.begin();it != cg.end();it++){
+    if(!(it->second->getFunction())) continue;
+    if(it->second->getFunction()->getName() == "main"){
+      rootNode = &(*it->second);
+      break;
+    }
+  }
+
   std::vector<Function*> vectPostOrder;
   
   for (scc_iterator<CallGraphNode*> sccIb = scc_begin(rootNode), E = scc_end(rootNode); sccIb != E; ++sccIb) {
@@ -164,7 +190,7 @@ bool FunctionClone::runOnModule (Module &M) {
     }      
 
     for (inst_iterator I = inst_begin(*f), E = inst_end(*f); I != E; ++I) {
-      Instruction *pInst = &*I;             
+      Instruction *pInst = &*I;
       if(CallInst *CI = dyn_cast<CallInst>(pInst)) {
         bool isQuantumModuleCall = false;         
         for(unsigned iop=0;iop < CI->getNumArgOperands(); iop++) {
@@ -173,8 +199,9 @@ bool FunctionClone::runOnModule (Module &M) {
               isQuantumModuleCall = true;
           if (CI->getArgOperand(iop)->getType()->isIntegerTy(16))
             isQuantumModuleCall = true;
-        }        
-        if (!CI->getCalledFunction()->isIntrinsic() && !CI->getCalledFunction()->isDeclaration() && isQuantumModuleCall) {
+        }
+        const Value *V = CI->getCalledValue();
+        if (isa<Function>(V) && !CI->getCalledFunction()->isIntrinsic() && (!CI->getCalledFunction()->isDeclaration() || CI->getCalledFunction()->getName().startswith(REVERSE_PREFIX)) && isQuantumModuleCall) {
           // first, find the argument positions of all integers and doubles (regardless of being contstant or not)
           std::vector<unsigned> posOfInt;
           std::vector<unsigned> posOfDouble;
@@ -313,7 +340,7 @@ bool FunctionClone::runOnModule (Module &M) {
               continue;
             }
 
-            ValueMap<const Value*, WeakVH> VMap;
+            ValueMap<const Value*, WeakTrackingVH> VMap;
             Function *specializedFunction = CloneFunctionInfo(F, VMap, &M); 
             specializedFunction->setName(specializedName);
 
@@ -328,22 +355,22 @@ bool FunctionClone::runOnModule (Module &M) {
                 // Replace int arg with Const expression                     
                 Value *val;                    
                 val = ConstantInt::get(Type::getInt32Ty(M.getContext()), valueOfInt[argNo]);
-                WeakVH wval(val);
+                WeakTrackingVH wval(val);
                 VMap[i] = wval;
               }
               else if (valueOfDouble.count(argNo) == 1) {
                 // Replace double arg with Const expression
                 Value *val;
                 val = ConstantFP::get(Type::getDoubleTy(M.getContext()), valueOfDouble[argNo]);
-                WeakVH wval(val);
+                WeakTrackingVH wval(val);
                 VMap[i] = wval;
               }
             }
 
             SmallVector<ReturnInst*,1> Returns; // FIXME: what is the length of this vector?
             ClonedCodeInfo SpecializedFunctionInfo;
-
-            CloneAndPruneFunctionInto (specializedFunction,   // NewFunc
+            if(!CI->getCalledFunction()->isDeclaration())
+              CloneAndPruneFunctionInto (specializedFunction,   // NewFunc
                                         F,                    // OldFunc
                                         VMap,                 // ValueMap
                                         0,                    // ModuleLevelChanges
@@ -351,7 +378,6 @@ bool FunctionClone::runOnModule (Module &M) {
                                         ".",                  // NameSuffix
                                         &SpecializedFunctionInfo,  // CodeInfo
                                         0);                   // TD            
-
             // replace CI to call the new cloned function
             insertNewCallSite(CI, specializedName, &M);
             instErase.push_back((Instruction*)CI); // queue for erasing
@@ -368,7 +394,7 @@ bool FunctionClone::runOnModule (Module &M) {
 
             // the insertion will invalidate vit - reassign the vector to be safe
             vit = std::find(vectPostOrder.begin(), vectPostOrder.end(), f);
-      
+          
             
           }  
         }

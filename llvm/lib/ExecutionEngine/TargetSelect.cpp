@@ -1,9 +1,8 @@
 //===-- TargetSelect.cpp - Target Chooser Code ----------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -14,22 +13,23 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/ExecutionEngine/ExecutionEngine.h"
-#include "llvm/Module.h"
 #include "llvm/ADT/Triple.h"
+#include "llvm/ExecutionEngine/ExecutionEngine.h"
+#include "llvm/IR/Module.h"
 #include "llvm/MC/SubtargetFeature.h"
-#include "llvm/Target/TargetMachine.h"
-#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Host.h"
 #include "llvm/Support/TargetRegistry.h"
+#include "llvm/Target/TargetMachine.h"
 
 using namespace llvm;
 
 TargetMachine *EngineBuilder::selectTarget() {
-  StringRef MArch = "";
-  StringRef MCPU = "";
-  SmallVector<std::string, 1> MAttrs;
-  Triple TT(M->getTargetTriple());
+  Triple TT;
+
+  // MCJIT can generate code for remote targets, but the old JIT and Interpreter
+  // must use the host architecture.
+  if (WhichEngine != EngineKind::Interpreter && M)
+    TT.setTriple(M->getTargetTriple());
 
   return selectTarget(TT, MArch, MCPU, MAttrs);
 }
@@ -42,24 +42,22 @@ TargetMachine *EngineBuilder::selectTarget(const Triple &TargetTriple,
                               const SmallVectorImpl<std::string>& MAttrs) {
   Triple TheTriple(TargetTriple);
   if (TheTriple.getTriple().empty())
-    TheTriple.setTriple(sys::getDefaultTargetTriple());
+    TheTriple.setTriple(sys::getProcessTriple());
 
   // Adjust the triple to match what the user requested.
-  const Target *TheTarget = 0;
+  const Target *TheTarget = nullptr;
   if (!MArch.empty()) {
-    for (TargetRegistry::iterator it = TargetRegistry::begin(),
-           ie = TargetRegistry::end(); it != ie; ++it) {
-      if (MArch == it->getName()) {
-        TheTarget = &*it;
-        break;
-      }
+    auto I = find_if(TargetRegistry::targets(),
+                     [&](const Target &T) { return MArch == T.getName(); });
+
+    if (I == TargetRegistry::targets().end()) {
+      if (ErrorStr)
+        *ErrorStr = "No available targets are compatible with this -march, "
+                    "see -version for the available targets.\n";
+      return nullptr;
     }
 
-    if (!TheTarget) {
-      *ErrorStr = "No available targets are compatible with this -march, "
-        "see -version for the available targets.\n";
-      return 0;
-    }
+    TheTarget = &*I;
 
     // Adjust the triple to match (if known), otherwise stick with the
     // requested/host triple.
@@ -69,10 +67,10 @@ TargetMachine *EngineBuilder::selectTarget(const Triple &TargetTriple,
   } else {
     std::string Error;
     TheTarget = TargetRegistry::lookupTarget(TheTriple.getTriple(), Error);
-    if (TheTarget == 0) {
+    if (!TheTarget) {
       if (ErrorStr)
         *ErrorStr = Error;
-      return 0;
+      return nullptr;
     }
   }
 
@@ -86,11 +84,13 @@ TargetMachine *EngineBuilder::selectTarget(const Triple &TargetTriple,
   }
 
   // Allocate a target...
-  TargetMachine *Target = TheTarget->createTargetMachine(TheTriple.getTriple(),
-                                                         MCPU, FeaturesStr,
-                                                         Options,
-                                                         RelocModel, CMModel,
-                                                         OptLevel);
+  TargetMachine *Target =
+      TheTarget->createTargetMachine(TheTriple.getTriple(), MCPU, FeaturesStr,
+                                     Options, RelocModel, CMModel, OptLevel,
+				     /*JIT*/ true);
+  Target->Options.EmulatedTLS = EmulatedTLS;
+  Target->Options.ExplicitEmulatedTLS = true;
+
   assert(Target && "Could not allocate target machine!");
   return Target;
 }

@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -triple x86_64 -fobjc-fragile-abi -emit-llvm -o - %s | FileCheck %s
+// RUN: %clang_cc1 -triple x86_64 -fobjc-runtime=macosx-fragile-10.5 -emit-llvm -o - %s | FileCheck %s
 
 struct s0 {
   int x;
@@ -12,7 +12,7 @@ struct s0 {
 
 // Check that we get exactly the message sends we expect, and no more.
 //
-// CHECK: define void @f0
+// CHECK-LABEL: define void @f0
 void f0(C0 *a) {
 // CHECK: objc_msgSend
   int l0 = (a.x0 = 1);

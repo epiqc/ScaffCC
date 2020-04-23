@@ -1,4 +1,5 @@
-// RUN: %clang_cc1 -triple x86_64-apple-darwin10 -analyze -analyzer-checker=core -analyzer-store=region -fblocks -verify %s
+// RUN: %clang_analyze_cc1 -triple x86_64-apple-darwin10 -analyzer-checker=core -analyzer-store=region -fblocks -analyzer-opt-analyze-nested-blocks -verify %s
+// RUN: %clang_analyze_cc1 -triple x86_64-apple-darwin10 -analyzer-checker=core -analyzer-store=region -fblocks -analyzer-opt-analyze-nested-blocks -verify -x objective-c++ %s
 
 //===----------------------------------------------------------------------===//
 // The following code is reduced using delta-debugging from Mac OS X headers:
@@ -13,6 +14,10 @@ void dispatch_async(dispatch_queue_t queue, dispatch_block_t block);
 __attribute__((visibility("default"))) __attribute__((__malloc__)) __attribute__((__warn_unused_result__)) __attribute__((__nothrow__)) dispatch_queue_t dispatch_queue_create(const char *label, dispatch_queue_attr_t attr);
 typedef long dispatch_once_t;
 void dispatch_once(dispatch_once_t *predicate, dispatch_block_t block);
+dispatch_queue_t
+dispatch_queue_create(const char *label, dispatch_queue_attr_t attr);
+
+
 typedef signed char BOOL;
 typedef unsigned long NSUInteger;
 typedef struct _NSZone NSZone;
@@ -26,10 +31,13 @@ typedef struct _NSZone NSZone;
 @protocol NSCoding  - (void)encodeWithCoder:(NSCoder *)aCoder; @end
 @interface NSObject <NSObject> {}
 + (id)alloc;
+- (id)init;
+- (id)copy;
 @end
 extern id NSAllocateObject(Class aClass, NSUInteger extraBytes, NSZone *zone);
-@interface NSString : NSObject <NSCopying, NSMutableCopying, NSCoding>    - (NSUInteger)length;
-- ( const char *)UTF8String;
+@interface NSString : NSObject <NSCopying, NSMutableCopying, NSCoding>
+- (NSUInteger)length;
+- (const char *)UTF8String;
 - (id)initWithFormat:(NSString *)format arguments:(va_list)argList __attribute__((format(__NSString__, 1, 0)));
 @end
 @class NSString, NSData;
@@ -38,6 +46,10 @@ typedef struct __aslclient *aslclient;
 typedef struct __aslmsg *aslmsg;
 aslclient asl_open(const char *ident, const char *facility, uint32_t opts);
 int asl_log(aslclient asl, aslmsg msg, int level, const char *format, ...) __attribute__((__format__ (__printf__, 4, 5)));
+
+struct Block_layout {
+  int flags;
+};
 
 //===----------------------------------------------------------------------===//
 // Begin actual test cases.
@@ -53,8 +65,8 @@ void test1(NSString *format, ...) {
   do {
     if (__builtin_expect(*(&pred), ~0l) != ~0l)
       dispatch_once(&pred, ^{
-        logQueue = dispatch_queue_create("com.mycompany.myproduct.asl", ((void*)0));
-        client = asl_open(((void*)0), "com.mycompany.myproduct", 0);
+        logQueue = dispatch_queue_create("com.mycompany.myproduct.asl", 0);
+        client = asl_open(((char*)0), "com.mycompany.myproduct", 0);
       });
   } while (0);
 
@@ -62,7 +74,7 @@ void test1(NSString *format, ...) {
   __builtin_va_start(args, format);
 
   NSString *str = [[NSString alloc] initWithFormat:format arguments:args];
-  dispatch_async(logQueue, ^{ asl_log(client, ((void*)0), 4, "%s", [str UTF8String]); });
+  dispatch_async(logQueue, ^{ asl_log(client, ((aslmsg)0), 4, "%s", [str UTF8String]); });
   [str release];
 
   __builtin_va_end(args);
@@ -79,12 +91,162 @@ void test2() {
 void test2_b() {
   static int y = 0;
   __block int x;
-  // This is also a bug, but should be found not by checking the value
-  // 'x' is bound at block creation.
-  ^{ y = x + 1; }(); // no-warning
+  ^{ y = x + 1; }(); // expected-warning {{left operand of '+' is a garbage value}}
 }
 
 void test2_c() {
   typedef void (^myblock)(void);
   myblock f = ^() { f(); }; // expected-warning{{Variable 'f' is uninitialized when captured by block}}
+}
+
+
+void testMessaging() {
+  // <rdar://problem/12119814>
+  [[^(){} copy] release];
+}
+
+
+@interface rdar12415065 : NSObject
+@end
+
+@implementation rdar12415065
+- (void)test {
+  // At one point this crashed because we created a path note at a
+  // PreStmtPurgeDeadSymbols point but only knew how to deal with PostStmt
+  // points. <rdar://problem/12687586>
+
+  extern dispatch_queue_t queue;
+
+  if (!queue)
+    return;
+
+  // This previously was a false positive with 'x' being flagged as being
+  // uninitialized when captured by the exterior block (when it is only
+  // captured by the interior block).
+  dispatch_async(queue, ^{
+    double x = 0.0;
+    if (24.0f < x) {
+      dispatch_async(queue, ^{ (void)x; });
+      [self test];
+    }
+  });
+}
+@end
+
+void testReturnVariousSignatures() {
+  (void)^int(){
+    return 42;
+  }();
+
+  (void)^int{
+    return 42;
+  }();
+
+  (void)^(){
+    return 42;
+  }();
+
+  (void)^{
+    return 42;
+  }();
+}
+
+// This test used to cause infinite loop in the region invalidation.
+void blockCapturesItselfInTheLoop(int x, int m) {
+  void (^assignData)(int) = ^(int x){
+    x++;
+  };
+  while (m < 0) {
+    void (^loop)(int);
+    loop = ^(int x) {
+      assignData(x);
+    };
+    assignData = loop;
+    m++;
+  }
+  assignData(x);
+}
+
+// Blocks that called the function they were contained in that also have
+// static locals caused crashes.
+// rdar://problem/21698099
+void takeNonnullBlock(void (^)(void)) __attribute__((nonnull));
+void takeNonnullIntBlock(int (^)(void)) __attribute__((nonnull));
+
+void testCallContainingWithSignature1()
+{
+  takeNonnullBlock(^{
+    static const char str[] = "Lost connection to sharingd";
+    testCallContainingWithSignature1();
+  });
+}
+
+void testCallContainingWithSignature2()
+{
+  takeNonnullBlock(^void{
+    static const char str[] = "Lost connection to sharingd";
+    testCallContainingWithSignature2();
+  });
+}
+
+void testCallContainingWithSignature3()
+{
+  takeNonnullBlock(^void(){
+    static const char str[] = "Lost connection to sharingd";
+    testCallContainingWithSignature3();
+  });
+}
+
+void testCallContainingWithSignature4()
+{
+  takeNonnullBlock(^void(void){
+    static const char str[] = "Lost connection to sharingd";
+    testCallContainingWithSignature4();
+  });
+}
+
+void testCallContainingWithSignature5()
+{
+  takeNonnullIntBlock(^{
+    static const char str[] = "Lost connection to sharingd";
+    testCallContainingWithSignature5();
+    return 0;
+  });
+}
+
+__attribute__((objc_root_class))
+@interface SuperClass
+- (void)someMethod;
+@end
+
+@interface SomeClass : SuperClass
+@end
+
+// Make sure to properly handle super-calls when a block captures
+// a local variable named 'self'.
+@implementation SomeClass
+-(void)foo; {
+  /*__weak*/ SomeClass *weakSelf = self;
+  (void)(^(void) {
+    SomeClass *self = weakSelf;
+    (void)(^(void) {
+      (void)self;
+      [super someMethod]; // no-warning
+    });
+  });
+}
+@end
+
+// The incorrect block variable initialization below is a hard compile-time
+// error in C++.
+#if !defined(__cplusplus)
+void call_block_with_fewer_arguments() {
+  void (^b)() = ^(int a) { };
+  b(); // expected-warning {{Block taking 1 argument is called with fewer (0)}}
+}
+#endif
+
+int getBlockFlags() {
+  int x = 0;
+  return ((struct Block_layout *)^{ (void)x; })->flags; // no-warning
 }

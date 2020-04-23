@@ -3,7 +3,7 @@ template<int N> struct A; // expected-note 5{{template parameter is declared her
 
 A<0> *a0;
 
-A<int()> *a1; // expected-error{{template argument for non-type template parameter is treated as type 'int ()'}}
+A<int()> *a1; // expected-error{{template argument for non-type template parameter is treated as function type 'int ()'}}
 
 A<int> *a2; // expected-error{{template argument for non-type template parameter must be an expression}}
 
@@ -75,11 +75,14 @@ struct Z {
 
   int int_member;
   float float_member;
+  union {
+    int union_member;
+  };
 };
 template<int (Z::*pmf)(int)> struct A6; // expected-note{{template parameter is declared here}}
 A6<&Z::foo> *a17_1;
 A6<&Z::bar> *a17_2;
-A6<&Z::baz> *a17_3; // expected-error{{non-type template argument of type 'double (Z::*)(double)' cannot be converted to a value of type 'int (Z::*)(int)'}}
+A6<&Z::baz> *a17_3; // expected-error-re{{non-type template argument of type 'double (Z::*)(double){{( __attribute__\(\(thiscall\)\))?}}' cannot be converted to a value of type 'int (Z::*)(int){{( __attribute__\(\(thiscall\)\))?}}'}}
 
 
 template<int Z::*pm> struct A7;  // expected-note{{template parameter is declared here}}
@@ -88,6 +91,7 @@ A7<&Z::int_member> *a18_1;
 A7c<&Z::int_member> *a18_2;
 A7<&Z::float_member> *a18_3; // expected-error{{non-type template argument of type 'float Z::*' cannot be converted to a value of type 'int Z::*'}}
 A7c<(&Z::int_member)> *a18_4; // expected-warning{{address non-type template argument cannot be surrounded by parentheses}}
+A7c<&Z::union_member> *a18_5;
 
 template<unsigned char C> struct Overflow; // expected-note{{template parameter is declared here}}
 
@@ -169,12 +173,16 @@ namespace pr6249 {
 }
 
 namespace PR6723 {
-  template<unsigned char C> void f(int (&a)[C]); // expected-note {{candidate template ignored}} \
-  // expected-note{{substitution failure [with C = '\x00']}}
+  template<unsigned char C> void f(int (&a)[C]); // expected-note 3{{candidate template ignored: substitution failure [with C = '\x00']}}
+  // expected-note@-1 {{not viable: no known conversion from 'int [512]' to 'int (&)[0]'}}
   void g() {
     int arr512[512];
     f(arr512); // expected-error{{no matching function for call}}
     f<512>(arr512); // expected-error{{no matching function for call}}
+
+    int arr0[0];
+    f(arr0); // expected-error{{no matching function for call}}
+    f<0>(arr0); // expected-error{{no matching function for call}}
   }
 }
 
@@ -252,16 +260,16 @@ namespace PR8372 {
 
 namespace PR9227 {
   template <bool B> struct enable_if_bool { };
-  template <> struct enable_if_bool<true> { typedef int type; };
-  void test_bool() { enable_if_bool<false>::type i; } // expected-error{{enable_if_bool<false>}}
+  template <> struct enable_if_bool<true> { typedef int type; }; // expected-note{{'enable_if_bool<true>::type' declared here}}
+  void test_bool() { enable_if_bool<false>::type i; } // expected-error{{enable_if_bool<false>'; did you mean 'enable_if_bool<true>::type'?}}
 
   template <char C> struct enable_if_char { };
-  template <> struct enable_if_char<'a'> { typedef int type; };
-  void test_char_0() { enable_if_char<0>::type i; } // expected-error{{enable_if_char<'\x00'>}}
-  void test_char_b() { enable_if_char<'b'>::type i; } // expected-error{{enable_if_char<'b'>}}
-  void test_char_possibly_negative() { enable_if_char<'\x02'>::type i; } // expected-error{{enable_if_char<'\x02'>}}
-  void test_char_single_quote() { enable_if_char<'\''>::type i; } // expected-error{{enable_if_char<'\''>}}
-  void test_char_backslash() { enable_if_char<'\\'>::type i; } // expected-error{{enable_if_char<'\\'>}}
+  template <> struct enable_if_char<'a'> { typedef int type; }; // expected-note 5{{'enable_if_char<'a'>::type' declared here}}
+  void test_char_0() { enable_if_char<0>::type i; } // expected-error{{enable_if_char<'\x00'>'; did you mean 'enable_if_char<'a'>::type'?}}
+  void test_char_b() { enable_if_char<'b'>::type i; } // expected-error{{enable_if_char<'b'>'; did you mean 'enable_if_char<'a'>::type'?}}
+  void test_char_possibly_negative() { enable_if_char<'\x02'>::type i; } // expected-error{{enable_if_char<'\x02'>'; did you mean 'enable_if_char<'a'>::type'?}}
+  void test_char_single_quote() { enable_if_char<'\''>::type i; } // expected-error{{enable_if_char<'\''>'; did you mean 'enable_if_char<'a'>::type'?}}
+  void test_char_backslash() { enable_if_char<'\\'>::type i; } // expected-error{{enable_if_char<'\\'>'; did you mean 'enable_if_char<'a'>::type'?}}
 }
 
 namespace PR10579 {
@@ -323,3 +331,178 @@ namespace PR10579 {
 
 template <int& I> struct PR10766 { static int *ip; };
 template <int& I> int* PR10766<I>::ip = &I;
+
+namespace rdar13000548 {
+  template<typename R, typename U, R F>
+  U f() { return &F; } // expected-error{{cannot take the address of an rvalue of type 'int (*)(int)'}} expected-error{{cannot take the address of an rvalue of type 'int *'}}
+
+  int g(int);
+  int y[3];
+  void test()
+  {
+    f<int(int), int (*)(int), g>(); // expected-note{{in instantiation of}}
+    f<int[3], int*, y>(); // expected-note{{in instantiation of}}
+  }
+
+}
+
+namespace rdar13806270 {
+  template <unsigned N> class X { };
+  const unsigned value = 32;
+  struct Y {
+    X<value + 1> x;
+  };
+  void foo() {}
+}
+
+namespace PR17696 {
+  struct a {
+    union {
+      int i;
+    };
+  };
+
+  template <int (a::*p)> struct b : a {
+    b() { this->*p = 0; }
+  };
+
+  b<&a::i> c; // okay
+}
+
+namespace partial_order_different_types {
+  template<int, int, typename T, typename, T> struct A;
+  template<int N, typename T, typename U, T V> struct A<0, N, T, U, V>; // expected-note {{matches}}
+  // FIXME: It appears that this partial specialization should be ill-formed as
+  // it is not more specialized than the primary template. V is not deducible
+  // because it does not have the same type as the corresponding parameter.
+  template<int N, typename T, typename U, U V> struct A<0, N, T, U, V> {}; // expected-note {{matches}}
+  A<0, 0, int, int, 0> a; // expected-error {{ambiguous}}
+}
+
+namespace partial_order_references {
+  // FIXME: The standard does not appear to consider the second specialization
+  // to be more more specialized than the first! The problem is that deducing
+  // an 'int&' parameter from an argument 'R' results in a type mismatch,
+  // because the parameter has a reference type and the argument is an
+  // expression and thus does not have reference type. We resolve this by
+  // matching the type of an expression corresponding to the parameter rather
+  // than matching the parameter itself.
+  template <int, int, int &> struct A {};
+  template <int N, int &R> struct A<N, 0, R> {};
+  template <int &R> struct A<0, 0, R> {};
+  int N;
+  A<0, 0, N> a;
+
+  template<int, int &R> struct B; // expected-note 2{{template}}
+  template<const int &R> struct B<0, R> {};
+  // expected-error@-1 {{not more specialized than the primary}}
+  // expected-note@-2 {{'const int' vs 'int &'}}
+  B<0, N> b; // expected-error {{undefined}}
+
+  template<int, const int &R> struct C; // expected-note 2{{template}}
+  template<int &R> struct C<0, R> {};
+  // expected-error@-1 {{not more specialized than the primary}}
+  // expected-note@-2 {{'int' vs 'const int &'}}
+  C<0, N> c; // expected-error {{undefined}}
+
+  template<int, const int &R> struct D; // expected-note 2{{template}}
+  template<int N> struct D<0, N> {};
+  // expected-error@-1 {{not more specialized than the primary}}
+  // expected-note@-2 {{'int' vs 'const int &'}}
+  extern const int K = 5;
+  D<0, K> d; // expected-error {{undefined}}
+}
+
+namespace dependent_nested_partial_specialization {
+  template<typename> using X = int; // expected-warning {{C++11}}
+  template<typename T> using Y = T*; // expected-warning {{C++11}}
+  int n;
+
+  template<template<typename> class X> struct A {
+    template<typename T, X<T> N> struct B; // expected-note 2{{here}}
+    template<typename T> struct B<T, 0> {}; // expected-error {{specializes a template parameter with dependent type 'Y<T>'}}
+  };
+  A<X>::B<int, 0> ax;
+  A<Y>::B<int, &n> ay; // expected-error {{undefined}} expected-note {{instantiation of}}
+
+  template<template<typename> class X> struct C {
+    template<typename T, int N, int M> struct D; // expected-note {{here}}
+    template<typename T, X<T> N> struct D<T*, N, N + 1> {}; // expected-error {{type of specialized non-type template argument depends on}}
+  };
+  C<X>::D<int*, 0, 1> cx;
+  C<Y>::D<int*, 0, 1> cy; // expected-error {{undefined}} expected-note {{instantiation of}}
+
+  template<typename T> struct E {
+    template<typename U, U V> struct F; // expected-note {{template}}
+    template<typename W, T V> struct F<W, V> {}; // expected-error {{not more specialized than the primary}}
+  };
+  E<int>::F<int, 0> e1; // expected-note {{instantiation of}}
+}
+
+namespace nondependent_default_arg_ordering {
+  int n, m;
+  template<typename A, A B = &n> struct X {};
+  template<typename A> void f(X<A>); // expected-note {{candidate}}
+  template<typename A> void f(X<A, &m>); // expected-note {{candidate}}
+  template<typename A, A B> void f(X<A, B>); // expected-note 2{{candidate}}
+  template<template<typename U, U> class T, typename A, int *B> void f(T<A, B>);
+  void g() {
+    // FIXME: The first and second function templates above should be
+    // considered more specialized than the third, but during partial
+    // ordering we fail to check that we actually deduced template arguments
+    // that make the deduced A identical to A.
+    X<int *, &n> x; f(x); // expected-error {{ambiguous}}
+    X<int *, &m> y; f(y); // expected-error {{ambiguous}}
+  }
+}
+
+namespace pointer_to_char_array {
+  typedef char T[4];
+  template<T *P> struct A { void f(); };
+  template<T *P> void A<P>::f() {}
+  T foo = "foo";
+  void g() { A<&foo>().f(); }
+}
+
+namespace dependent_backreference {
+  struct Incomplete; // expected-note 2{{forward declaration}}
+  Incomplete f(int); // expected-note 2{{here}}
+  int f(short);
+
+  template<typename T, T Value, int(*)[sizeof(f(Value))]> struct X {}; // expected-error 2{{incomplete}}
+  int arr[sizeof(int)];
+  // When checking this template-id, we must not treat 'Value' as having type
+  // 'int'; its type is the dependent type 'T'.
+  template<typename T> void f() { X<T, 0, &arr> x; } // expected-note {{substituting}}
+  void g() { f<short>(); }
+  void h() { f<int>(); } // expected-note {{instantiation}}
+
+  // The second of these is OK to diagnose eagerly because 'Value' has the
+  // non-dependent type 'int'.
+  template<short S> void a() { X<short, S, &arr> x; }
+  template<short S> void b() { X<int, S, &arr> x; } // expected-note {{substituting}}
+}
+
+namespace instantiation_dependent {
+  template<typename T, __typeof(sizeof(T))> void f(int);
+  template<typename T, __typeof(sizeof(0))> int &f(...);
+  int &rf = f<struct incomplete, 0>(0);
+
+  int arr[sizeof(sizeof(int))];
+  template<typename T, int (*)[sizeof(sizeof(T))]> void g(int);
+  template<typename T, int (*)[sizeof(sizeof(int))]> int &g(...);
+  int &rg = g<struct incomplete, &arr>(0);
+}
+
+namespace complete_array_from_incomplete {
+  template <typename T, const char* const A[static_cast<int>(T::kNum)]>
+  class Base {};
+  template <class T, const char* const A[]>
+  class Derived : public Base<T, A> {};
+
+  struct T {
+    static const int kNum = 3;
+  };
+  extern const char *const kStrs[3] = {};
+  Derived<T, kStrs> d;
+}

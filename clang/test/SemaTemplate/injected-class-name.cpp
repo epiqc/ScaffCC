@@ -11,7 +11,10 @@ struct X<int***> {
   typedef X<int***> *ptr;
 };
 
-X<float>::X<int> xi = x; // expected-error{{qualified reference to 'X' is a constructor name rather than a template name wherever a constructor can be declared}}
+X<float>::X<int> xi = x; // expected-error{{qualified reference to 'X' is a constructor name rather than a template name}}
+void f() {
+  X<float>::X<int> xi = x; // expected-error{{qualified reference to 'X' is a constructor name rather than a template name}}
+}
 
 // [temp.local]p1:
 
@@ -58,5 +61,11 @@ namespace ForwardDecls {
     typedef T foo;
     typedef X<T> xt;
     typename xt::foo *t;
+  };
+}
+
+namespace ConflictingRedecl {
+  template<typename> struct Nested {
+    template<typename> struct Nested; // expected-error {{member 'Nested' has the same name as its class}}
   };
 }

@@ -1,9 +1,8 @@
-//===--- TransZeroOutPropsInDealloc.cpp - Tranformations to ARC mode ------===//
+//===--- TransZeroOutPropsInDealloc.cpp - Transformations to ARC mode -----===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -15,6 +14,7 @@
 
 #include "Transforms.h"
 #include "Internals.h"
+#include "clang/AST/ASTContext.h"
 
 using namespace clang;
 using namespace arcmt;
@@ -34,7 +34,7 @@ class ZeroOutInDeallocRemover :
   Selector FinalizeSel;
 
 public:
-  ZeroOutInDeallocRemover(MigrationPass &pass) : Pass(pass), SelfD(0) {
+  ZeroOutInDeallocRemover(MigrationPass &pass) : Pass(pass), SelfD(nullptr) {
     FinalizeSel =
         Pass.Ctx.Selectors.getNullarySelector(&Pass.Ctx.Idents.get("finalize"));
   }
@@ -55,7 +55,7 @@ public:
 
     bool BackedBySynthesizeSetter = false;
     for (llvm::DenseMap<ObjCPropertyDecl*, ObjCPropertyImplDecl*>::iterator
-         P = SynthesizedProperties.begin(), 
+         P = SynthesizedProperties.begin(),
          E = SynthesizedProperties.end(); P != E; ++P) {
       ObjCPropertyDecl *PropDecl = P->first;
       if (PropDecl->getSetterName() == ME->getSelector()) {
@@ -65,11 +65,11 @@ public:
     }
     if (!BackedBySynthesizeSetter)
       return true;
-    
+
     // Remove the setter message if RHS is null
     Transaction Trans(TA);
     Expr *RHS = ME->getArg(0);
-    bool RHSIsNull = 
+    bool RHSIsNull =
       RHS->isNullPointerConstant(Ctx,
                                  Expr::NPC_ValueDependentIsNull);
     if (RHSIsNull && isRemovable(ME))
@@ -112,23 +112,21 @@ public:
 
     // For a 'dealloc' method use, find all property implementations in
     // this class implementation.
-    for (ObjCImplDecl::propimpl_iterator
-           I = IMD->propimpl_begin(), EI = IMD->propimpl_end(); I != EI; ++I) {
-        ObjCPropertyImplDecl *PID = *I;
-        if (PID->getPropertyImplementation() ==
-            ObjCPropertyImplDecl::Synthesize) {
-          ObjCPropertyDecl *PD = PID->getPropertyDecl();
-          ObjCMethodDecl *setterM = PD->getSetterMethodDecl();
-          if (!(setterM && setterM->isDefined())) {
-            ObjCPropertyDecl::PropertyAttributeKind AttrKind = 
-              PD->getPropertyAttributes();
-              if (AttrKind & 
-                  (ObjCPropertyDecl::OBJC_PR_retain | 
-                   ObjCPropertyDecl::OBJC_PR_copy   |
-                   ObjCPropertyDecl::OBJC_PR_strong))
-                SynthesizedProperties[PD] = PID;
-          }
+    for (auto *PID : IMD->property_impls()) {
+      if (PID->getPropertyImplementation() ==
+          ObjCPropertyImplDecl::Synthesize) {
+        ObjCPropertyDecl *PD = PID->getPropertyDecl();
+        ObjCMethodDecl *setterM = PD->getSetterMethodDecl();
+        if (!(setterM && setterM->isDefined())) {
+          ObjCPropertyDecl::PropertyAttributeKind AttrKind =
+            PD->getPropertyAttributes();
+            if (AttrKind &
+                (ObjCPropertyDecl::OBJC_PR_retain |
+                  ObjCPropertyDecl::OBJC_PR_copy   |
+                  ObjCPropertyDecl::OBJC_PR_strong))
+              SynthesizedProperties[PD] = PID;
         }
+      }
     }
 
     // Now, remove all zeroing of ivars etc.
@@ -136,7 +134,7 @@ public:
 
     // clear out for next method.
     SynthesizedProperties.clear();
-    SelfD = 0;
+    SelfD = nullptr;
     Removables.clear();
     return true;
   }
@@ -174,7 +172,7 @@ private:
         return false;
       bool IvarBacksPropertySynthesis = false;
       for (llvm::DenseMap<ObjCPropertyDecl*, ObjCPropertyImplDecl*>::iterator
-           P = SynthesizedProperties.begin(), 
+           P = SynthesizedProperties.begin(),
            E = SynthesizedProperties.end(); P != E; ++P) {
         ObjCPropertyImplDecl *PropImpDecl = P->second;
         if (PropImpDecl && PropImpDecl->getPropertyIvarDecl() == IVDecl) {

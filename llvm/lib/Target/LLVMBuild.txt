@@ -1,9 +1,8 @@
 ;===- ./lib/Target/LLVMBuild.txt -------------------------------*- Conf -*--===;
 ;
-;                     The LLVM Compiler Infrastructure
-;
-; This file is distributed under the University of Illinois Open Source
-; License. See LICENSE.TXT for details.
+; Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+; See https://llvm.org/LICENSE.txt for license information.
+; SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 ;
 ;===------------------------------------------------------------------------===;
 ;
@@ -15,8 +14,29 @@
 ;
 ;===------------------------------------------------------------------------===;
 
+; Please keep these as one per line so that out-of-tree merges
+; will typically require only insertion of a line.
 [common]
-subdirectories = ARM CellSPU CppBackend Hexagon MBlaze MSP430 Mips PTX PowerPC Sparc X86 XCore
+subdirectories =
+ AMDGPU
+ ARC
+ ARM
+ AArch64
+ AVR
+ BPF
+ Lanai
+ Hexagon
+ MSP430
+ NVPTX
+ Mips
+ PowerPC
+ RISCV
+ Sparc
+ SystemZ
+ WebAssembly
+ X86
+ XCore
+ VE
 
 ; This is a special group whose required libraries are extended (by llvm-build)
 ; with the best execution engine (the native JIT, if available, or the
@@ -45,7 +65,7 @@ parent = Libraries
 type = Library
 name = Target
 parent = Libraries
-required_libraries = Core MC Support
+required_libraries = Analysis Core MC Support
 
 ; This is a special group whose required libraries are extended (by llvm-build)
 ; with every built target, which makes it easy for tools to include every

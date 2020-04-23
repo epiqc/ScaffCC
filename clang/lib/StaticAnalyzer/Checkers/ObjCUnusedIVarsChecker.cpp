@@ -1,9 +1,8 @@
 //==- ObjCUnusedIVarsChecker.cpp - Check for unused ivars --------*- C++ -*-==//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,15 +12,16 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "ClangSACheckers.h"
-#include "clang/StaticAnalyzer/Core/Checker.h"
-#include "clang/StaticAnalyzer/Core/BugReporter/PathDiagnostic.h"
-#include "clang/StaticAnalyzer/Core/BugReporter/BugReporter.h"
-#include "clang/AST/ExprObjC.h"
-#include "clang/AST/Expr.h"
+#include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
+#include "clang/Analysis/PathDiagnostic.h"
+#include "clang/AST/Attr.h"
 #include "clang/AST/DeclObjC.h"
+#include "clang/AST/Expr.h"
+#include "clang/AST/ExprObjC.h"
 #include "clang/Basic/LangOptions.h"
 #include "clang/Basic/SourceManager.h"
+#include "clang/StaticAnalyzer/Core/BugReporter/BugReporter.h"
+#include "clang/StaticAnalyzer/Core/Checker.h"
 
 using namespace clang;
 using namespace ento;
@@ -47,8 +47,17 @@ static void Scan(IvarUsageMap& M, const Stmt *S) {
     return;
   }
 
-  for (Stmt::const_child_iterator I=S->child_begin(),E=S->child_end(); I!=E;++I)
-    Scan(M, *I);
+  if (const PseudoObjectExpr *POE = dyn_cast<PseudoObjectExpr>(S))
+    for (PseudoObjectExpr::const_semantics_iterator
+        i = POE->semantics_begin(), e = POE->semantics_end(); i != e; ++i) {
+      const Expr *sub = *i;
+      if (const OpaqueValueExpr *OVE = dyn_cast<OpaqueValueExpr>(sub))
+        sub = OVE->getSourceExpr();
+      Scan(M, sub);
+    }
+
+  for (const Stmt *SubStmt : S->children())
+    Scan(M, SubStmt);
 }
 
 static void Scan(IvarUsageMap& M, const ObjCPropertyImplDecl *D) {
@@ -67,62 +76,54 @@ static void Scan(IvarUsageMap& M, const ObjCPropertyImplDecl *D) {
 
 static void Scan(IvarUsageMap& M, const ObjCContainerDecl *D) {
   // Scan the methods for accesses.
-  for (ObjCContainerDecl::instmeth_iterator I = D->instmeth_begin(),
-       E = D->instmeth_end(); I!=E; ++I)
-    Scan(M, (*I)->getBody());
+  for (const auto *I : D->instance_methods())
+    Scan(M, I->getBody());
 
   if (const ObjCImplementationDecl *ID = dyn_cast<ObjCImplementationDecl>(D)) {
     // Scan for @synthesized property methods that act as setters/getters
     // to an ivar.
-    for (ObjCImplementationDecl::propimpl_iterator I = ID->propimpl_begin(),
-         E = ID->propimpl_end(); I!=E; ++I)
-      Scan(M, *I);
+    for (const auto *I : ID->property_impls())
+      Scan(M, I);
 
     // Scan the associated categories as well.
-    for (const ObjCCategoryDecl *CD =
-          ID->getClassInterface()->getCategoryList(); CD ;
-          CD = CD->getNextClassCategory()) {
-      if (const ObjCCategoryImplDecl *CID = CD->getImplementation())
+    for (const auto *Cat : ID->getClassInterface()->visible_categories()) {
+      if (const ObjCCategoryImplDecl *CID = Cat->getImplementation())
         Scan(M, CID);
     }
   }
 }
 
 static void Scan(IvarUsageMap &M, const DeclContext *C, const FileID FID,
-                 SourceManager &SM) {
-  for (DeclContext::decl_iterator I=C->decls_begin(), E=C->decls_end();
-       I!=E; ++I)
-    if (const FunctionDecl *FD = dyn_cast<FunctionDecl>(*I)) {
-      SourceLocation L = FD->getLocStart();
+                 const SourceManager &SM) {
+  for (const auto *I : C->decls())
+    if (const auto *FD = dyn_cast<FunctionDecl>(I)) {
+      SourceLocation L = FD->getBeginLoc();
       if (SM.getFileID(L) == FID)
         Scan(M, FD->getBody());
     }
 }
 
 static void checkObjCUnusedIvar(const ObjCImplementationDecl *D,
-                                BugReporter &BR) {
+                                BugReporter &BR,
+                                const CheckerBase *Checker) {
 
   const ObjCInterfaceDecl *ID = D->getClassInterface();
   IvarUsageMap M;
 
   // Iterate over the ivars.
-  for (ObjCInterfaceDecl::ivar_iterator I=ID->ivar_begin(),
-        E=ID->ivar_end(); I!=E; ++I) {
-
-    const ObjCIvarDecl *ID = *I;
-
+  for (const auto *Ivar : ID->ivars()) {
     // Ignore ivars that...
     // (a) aren't private
     // (b) explicitly marked unused
     // (c) are iboutlets
     // (d) are unnamed bitfields
-    if (ID->getAccessControl() != ObjCIvarDecl::Private ||
-        ID->getAttr<UnusedAttr>() || ID->getAttr<IBOutletAttr>() ||
-        ID->getAttr<IBOutletCollectionAttr>() ||
-        ID->isUnnamedBitfield())
+    if (Ivar->getAccessControl() != ObjCIvarDecl::Private ||
+        Ivar->hasAttr<UnusedAttr>() || Ivar->hasAttr<IBOutletAttr>() ||
+        Ivar->hasAttr<IBOutletCollectionAttr>() ||
+        Ivar->isUnnamedBitfield())
       continue;
 
-    M[ID] = Unused;
+    M[Ivar] = Unused;
   }
 
   if (M.empty())
@@ -147,7 +148,7 @@ static void checkObjCUnusedIvar(const ObjCImplementationDecl *D,
   // FIXME: In the future hopefully we can just use the lexical DeclContext
   // to go from the ObjCImplementationDecl to the lexically "nested"
   // C functions.
-  SourceManager &SM = BR.getSourceManager();
+  const SourceManager &SM = BR.getSourceManager();
   Scan(M, D->getDeclContext(), SM.getFileID(D->getLocation()), SM);
 
   // Find ivars that are unused.
@@ -161,7 +162,7 @@ static void checkObjCUnusedIvar(const ObjCImplementationDecl *D,
 
       PathDiagnosticLocation L =
         PathDiagnosticLocation::create(I->first, BR.getSourceManager());
-      BR.EmitBasicReport(D, "Unused instance variable", "Optimization",
+      BR.EmitBasicReport(D, Checker, "Unused instance variable", "Optimization",
                          os.str(), L);
     }
 }
@@ -176,11 +177,15 @@ class ObjCUnusedIvarsChecker : public Checker<
 public:
   void checkASTDecl(const ObjCImplementationDecl *D, AnalysisManager& mgr,
                     BugReporter &BR) const {
-    checkObjCUnusedIvar(D, BR);
+    checkObjCUnusedIvar(D, BR, this);
   }
 };
 }
 
 void ento::registerObjCUnusedIvarsChecker(CheckerManager &mgr) {
   mgr.registerChecker<ObjCUnusedIvarsChecker>();
+}
+
+bool ento::shouldRegisterObjCUnusedIvarsChecker(const LangOptions &LO) {
+  return true;
 }

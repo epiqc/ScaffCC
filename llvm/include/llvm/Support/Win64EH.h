@@ -1,9 +1,8 @@
 //===-- llvm/Support/Win64EH.h ---Win64 EH Constants-------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -17,6 +16,7 @@
 #define LLVM_SUPPORT_WIN64EH_H
 
 #include "llvm/Support/DataTypes.h"
+#include "llvm/Support/Endian.h"
 
 namespace llvm {
 namespace Win64EH {
@@ -30,20 +30,45 @@ enum UnwindOpcodes {
   UOP_SetFPReg,
   UOP_SaveNonVol,
   UOP_SaveNonVolBig,
-  UOP_SaveXMM128 = 8,
+  UOP_Epilog,
+  UOP_SpareCode,
+  UOP_SaveXMM128,
   UOP_SaveXMM128Big,
-  UOP_PushMachFrame
+  UOP_PushMachFrame,
+  // The following set of unwind opcodes is for ARM64.  They are documented at
+  // https://docs.microsoft.com/en-us/cpp/build/arm64-exception-handling
+  UOP_AllocMedium,
+  UOP_SaveFPLRX,
+  UOP_SaveFPLR,
+  UOP_SaveReg,
+  UOP_SaveRegX,
+  UOP_SaveRegP,
+  UOP_SaveRegPX,
+  UOP_SaveFReg,
+  UOP_SaveFRegX,
+  UOP_SaveFRegP,
+  UOP_SaveFRegPX,
+  UOP_SetFP,
+  UOP_AddFP,
+  UOP_Nop,
+  UOP_End
 };
 
 /// UnwindCode - This union describes a single operation in a function prolog,
 /// or part thereof.
 union UnwindCode {
   struct {
-    uint8_t codeOffset;
-    uint8_t unwindOp:4,
-            opInfo:4;
+    uint8_t CodeOffset;
+    uint8_t UnwindOpAndOpInfo;
   } u;
-  uint16_t frameOffset;
+  support::ulittle16_t FrameOffset;
+
+  uint8_t getUnwindOp() const {
+    return u.UnwindOpAndOpInfo & 0x0F;
+  }
+  uint8_t getOpInfo() const {
+    return (u.UnwindOpAndOpInfo >> 4) & 0x0F;
+  }
 };
 
 enum {
@@ -60,36 +85,76 @@ enum {
 
 /// RuntimeFunction - An entry in the table of functions with unwind info.
 struct RuntimeFunction {
-  uint64_t startAddress;
-  uint64_t endAddress;
-  uint64_t unwindInfoOffset;
+  support::ulittle32_t StartAddress;
+  support::ulittle32_t EndAddress;
+  support::ulittle32_t UnwindInfoOffset;
 };
 
 /// UnwindInfo - An entry in the exception table.
 struct UnwindInfo {
-  uint8_t version:3,
-          flags:5;
-  uint8_t prologSize;
-  uint8_t numCodes;
-  uint8_t frameRegister:4,
-          frameOffset:4;
-  UnwindCode unwindCodes[1];
+  uint8_t VersionAndFlags;
+  uint8_t PrologSize;
+  uint8_t NumCodes;
+  uint8_t FrameRegisterAndOffset;
+  UnwindCode UnwindCodes[1];
 
+  uint8_t getVersion() const {
+    return VersionAndFlags & 0x07;
+  }
+  uint8_t getFlags() const {
+    return (VersionAndFlags >> 3) & 0x1f;
+  }
+  uint8_t getFrameRegister() const {
+    return FrameRegisterAndOffset & 0x0f;
+  }
+  uint8_t getFrameOffset() const {
+    return (FrameRegisterAndOffset >> 4) & 0x0f;
+  }
+
+  // The data after unwindCodes depends on flags.
+  // If UNW_ExceptionHandler or UNW_TerminateHandler is set then follows
+  // the address of the language-specific exception handler.
+  // If UNW_ChainInfo is set then follows a RuntimeFunction which defines
+  // the chained unwind info.
+  // For more information please see MSDN at:
+  // http://msdn.microsoft.com/en-us/library/ddssxxy8.aspx
+
+  /// Return pointer to language specific data part of UnwindInfo.
   void *getLanguageSpecificData() {
-    return reinterpret_cast<void *>(&unwindCodes[(numCodes+1) & ~1]);
+    return reinterpret_cast<void *>(&UnwindCodes[(NumCodes+1) & ~1]);
   }
-  uint64_t getLanguageSpecificHandlerOffset() {
-    return *reinterpret_cast<uint64_t *>(getLanguageSpecificData());
+
+  /// Return pointer to language specific data part of UnwindInfo.
+  const void *getLanguageSpecificData() const {
+    return reinterpret_cast<const void *>(&UnwindCodes[(NumCodes + 1) & ~1]);
   }
-  void setLanguageSpecificHandlerOffset(uint64_t offset) {
-    *reinterpret_cast<uint64_t *>(getLanguageSpecificData()) = offset;
+
+  /// Return image-relative offset of language-specific exception handler.
+  uint32_t getLanguageSpecificHandlerOffset() const {
+    return *reinterpret_cast<const support::ulittle32_t *>(
+               getLanguageSpecificData());
   }
+
+  /// Set image-relative offset of language-specific exception handler.
+  void setLanguageSpecificHandlerOffset(uint32_t offset) {
+    *reinterpret_cast<support::ulittle32_t *>(getLanguageSpecificData()) =
+        offset;
+  }
+
+  /// Return pointer to exception-specific data.
+  void *getExceptionData() {
+    return reinterpret_cast<void *>(reinterpret_cast<uint32_t *>(
+                                                  getLanguageSpecificData())+1);
+  }
+
+  /// Return pointer to chained unwind info.
   RuntimeFunction *getChainedFunctionEntry() {
     return reinterpret_cast<RuntimeFunction *>(getLanguageSpecificData());
   }
-  void *getExceptionData() {
-    return reinterpret_cast<void *>(reinterpret_cast<uint64_t *>(
-                                                  getLanguageSpecificData())+1);
+
+  /// Return pointer to chained unwind info.
+  const RuntimeFunction *getChainedFunctionEntry() const {
+    return reinterpret_cast<const RuntimeFunction *>(getLanguageSpecificData());
   }
 };
 

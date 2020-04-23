@@ -1,42 +1,87 @@
 set(LLVM_LINK_COMPONENTS support)
 
-# We need to generate the BuildVariables.inc file containing values which are
-# only defined when under certain build modes. Unfortunately, that precludes
-# doing this inside CMake so we have to shell out to sed. For now, that means we
-# can't expect to build llvm-config on Window.s
 set(BUILDVARIABLES_SRCPATH ${CMAKE_CURRENT_SOURCE_DIR}/BuildVariables.inc.in)
 set(BUILDVARIABLES_OBJPATH ${CMAKE_CURRENT_BINARY_DIR}/BuildVariables.inc)
-set(SEDSCRIPT_OBJPATH ${CMAKE_CURRENT_BINARY_DIR}/BuildVariables.configure.sed)
-
-# Compute the substitution values for various items.
-get_system_libs(LLVM_SYSTEM_LIBS_LIST)
-foreach(l ${LLVM_SYSTEM_LIBS_LIST})
-  set(SYSTEM_LIBS ${SYSTEM_LIBS} "-l${l}")
-endforeach()
-set(C_FLGS "${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_${uppercase_CMAKE_BUILD_TYPE}} ${LLVM_DEFINITIONS}")
-set(CXX_FLGS "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_${uppercase_CMAKE_BUILD_TYPE}} ${LLVM_DEFINITIONS}")
-set(CPP_FLGS "${CMAKE_CPP_FLAGS} ${CMAKE_CPP_FLAGS_${uppercase_CMAKE_BUILD_TYPE}} ${LLVM_DEFINITIONS}")
-
-add_custom_command(OUTPUT ${BUILDVARIABLES_OBJPATH}
-  COMMAND echo s!@LLVM_SRC_ROOT@!${LLVM_MAIN_SRC_DIR}! > ${SEDSCRIPT_OBJPATH}
-  COMMAND echo s!@LLVM_OBJ_ROOT@!${LLVM_BINARY_DIR}! >> ${SEDSCRIPT_OBJPATH}
-  COMMAND echo s!@LLVM_CPPFLAGS@!${CPP_FLGS}! >> ${SEDSCRIPT_OBJPATH}
-  COMMAND echo s!@LLVM_CFLAGS@!${C_FLGS}! >> ${SEDSCRIPT_OBJPATH}
-  COMMAND echo s!@LLVM_CXXFLAGS@!${CXX_FLGS}! >> ${SEDSCRIPT_OBJPATH}
-  # TODO: Use general flags for linking! not just for shared libs:
-  COMMAND echo s!@LLVM_LDFLAGS@!${CMAKE_SHARED_LINKER_FLAGS}! >> ${SEDSCRIPT_OBJPATH}
-  COMMAND echo s!@LLVM_BUILDMODE@!${CMAKE_BUILD_TYPE}! >> ${SEDSCRIPT_OBJPATH}
-  COMMAND echo s!@LLVM_SYSTEM_LIBS@!${SYSTEM_LIBS}! >> ${SEDSCRIPT_OBJPATH}
-  COMMAND echo s!@LLVM_TARGETS_BUILT@!${LLVM_TARGETS_TO_BUILD}! >> ${SEDSCRIPT_OBJPATH}
-  COMMAND sed -f ${SEDSCRIPT_OBJPATH} < ${BUILDVARIABLES_SRCPATH} > ${BUILDVARIABLES_OBJPATH}
-  VERBATIM
-  COMMENT "Building BuildVariables.inc include."
-  )
 
 # Add the llvm-config tool.
 add_llvm_tool(llvm-config
   llvm-config.cpp
   )
 
+# Compute the substitution values for various items.
+get_property(SUPPORT_SYSTEM_LIBS TARGET LLVMSupport PROPERTY LLVM_SYSTEM_LIBS)
+get_property(WINDOWSMANIFEST_SYSTEM_LIBS TARGET LLVMWindowsManifest PROPERTY LLVM_SYSTEM_LIBS)
+foreach(l ${SUPPORT_SYSTEM_LIBS} ${WINDOWSMANIFEST_SYSTEM_LIBS})
+  if(MSVC)
+    set(SYSTEM_LIBS ${SYSTEM_LIBS} "${l}.lib")
+  else()
+    if (l MATCHES "^-")
+      # If it's an option, pass it without changes.
+      set(SYSTEM_LIBS ${SYSTEM_LIBS} "${l}")
+    else()
+      # Otherwise assume it's a library name we need to link with.
+      if(IS_ABSOLUTE ${l})
+        set(SYSTEM_LIBS ${SYSTEM_LIBS} "${l}")
+      else()
+        set(SYSTEM_LIBS ${SYSTEM_LIBS} "-l${l}")
+      endif()
+    endif()
+  endif()
+endforeach()
+string(REPLACE ";" " " SYSTEM_LIBS "${SYSTEM_LIBS}")
+
+# Fetch target specific compile options, e.g. RTTI option
+get_property(COMPILE_FLAGS TARGET llvm-config PROPERTY COMPILE_FLAGS)
+
+# NOTE: We don't want to start extracting any random C/CXX flags that the
+# user may add that could affect the ABI.  We only want to extract flags
+# that have been added by the LLVM build system.
+string(REGEX MATCH "-stdlib=[^ ]+" LLVM_CXX_STDLIB_FLAG ${CMAKE_CXX_FLAGS})
+string(REGEX MATCH "-std=[^ ]+" LLVM_C_STD_FLAG ${CMAKE_C_FLAGS})
+
+# Use configure_file to create BuildVariables.inc.
+set(LLVM_SRC_ROOT ${LLVM_MAIN_SRC_DIR})
+set(LLVM_OBJ_ROOT ${LLVM_BINARY_DIR})
+set(LLVM_CPPFLAGS "${LLVM_DEFINITIONS}")
+set(LLVM_CFLAGS "${LLVM_C_STD_FLAG} ${LLVM_DEFINITIONS}")
+# The language standard potentially affects the ABI/API of LLVM, so we want
+# to make sure it is reported by llvm-config.
+set(LLVM_CXXFLAGS "${CMAKE_CXX${CMAKE_CXX_STANDARD}_STANDARD_COMPILE_OPTION} ${LLVM_CXX_STDLIB_FLAG} ${COMPILE_FLAGS} ${LLVM_DEFINITIONS}")
+set(LLVM_BUILD_SYSTEM cmake)
+set(LLVM_HAS_RTTI ${LLVM_CONFIG_HAS_RTTI})
+set(LLVM_DYLIB_VERSION "${LLVM_VERSION_MAJOR}${LLVM_VERSION_SUFFIX}")
+set(LLVM_HAS_GLOBAL_ISEL "ON")
+
+# Use the C++ link flags, since they should be a superset of C link flags.
+set(LLVM_LDFLAGS "${CMAKE_CXX_LINK_FLAGS}")
+set(LLVM_BUILDMODE ${CMAKE_BUILD_TYPE})
+set(LLVM_SYSTEM_LIBS ${SYSTEM_LIBS})
+string(REPLACE ";" " " LLVM_TARGETS_BUILT "${LLVM_TARGETS_TO_BUILD}")
+llvm_canonicalize_cmake_booleans(
+  LLVM_BUILD_LLVM_DYLIB
+  LLVM_LINK_LLVM_DYLIB
+  LLVM_HAS_RTTI
+  LLVM_HAS_GLOBAL_ISEL
+  BUILD_SHARED_LIBS)
+llvm_expand_pseudo_components(LLVM_DYLIB_COMPONENTS_expanded "${LLVM_DYLIB_COMPONENTS}")
+configure_file(${BUILDVARIABLES_SRCPATH} ${BUILDVARIABLES_OBJPATH} @ONLY)
+
+# Set build-time environment(s).
+add_definitions(-DCMAKE_CFG_INTDIR="${CMAKE_CFG_INTDIR}")
+
+if(LLVM_ENABLE_MODULES)
+  target_compile_options(llvm-config PUBLIC
+    "-fmodules-ignore-macro=CMAKE_CFG_INTDIR"
+    )
+endif()
+
 # Add the dependency on the generation step.
 add_file_dependencies(${CMAKE_CURRENT_SOURCE_DIR}/llvm-config.cpp ${BUILDVARIABLES_OBJPATH})
+
+if(CMAKE_CROSSCOMPILING AND NOT LLVM_CONFIG_PATH)
+  build_native_tool(llvm-config LLVM_CONFIG_PATH)
+  set(LLVM_CONFIG_PATH "${LLVM_CONFIG_PATH}" CACHE STRING "")
+
+  add_custom_target(NativeLLVMConfig DEPENDS ${LLVM_CONFIG_PATH})
+  add_dependencies(llvm-config NativeLLVMConfig)
+endif()

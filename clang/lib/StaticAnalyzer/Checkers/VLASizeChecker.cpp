@@ -1,56 +1,58 @@
 //=== VLASizeChecker.cpp - Undefined dereference checker --------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
-// This defines VLASizeChecker, a builtin check in ExprEngine that 
+// This defines VLASizeChecker, a builtin check in ExprEngine that
 // performs checks for declaration of VLA of undefined or zero size.
 // In addition, VLASizeChecker is responsible for defining the extent
 // of the MemRegion that represents a VLA.
 //
 //===----------------------------------------------------------------------===//
 
-#include "ClangSACheckers.h"
+#include "Taint.h"
+#include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
+#include "clang/AST/CharUnits.h"
+#include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
 #include "clang/StaticAnalyzer/Core/Checker.h"
 #include "clang/StaticAnalyzer/Core/CheckerManager.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
-#include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
-#include "clang/AST/CharUnits.h"
-#include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallString.h"
+#include "llvm/Support/raw_ostream.h"
 
 using namespace clang;
 using namespace ento;
+using namespace taint;
 
 namespace {
 class VLASizeChecker : public Checker< check::PreStmt<DeclStmt> > {
-  mutable OwningPtr<BugType> BT;
-  enum VLASize_Kind { VLA_Garbage, VLA_Zero, VLA_Tainted };
+  mutable std::unique_ptr<BugType> BT;
+  enum VLASize_Kind { VLA_Garbage, VLA_Zero, VLA_Tainted, VLA_Negative };
 
-  void reportBug(VLASize_Kind Kind,
-                 const Expr *SizeE,
-                 ProgramStateRef State,
-                 CheckerContext &C) const;
+  void reportBug(VLASize_Kind Kind, const Expr *SizeE, ProgramStateRef State,
+                 CheckerContext &C,
+                 std::unique_ptr<BugReporterVisitor> Visitor = nullptr) const;
+
 public:
   void checkPreStmt(const DeclStmt *DS, CheckerContext &C) const;
 };
 } // end anonymous namespace
 
-void VLASizeChecker::reportBug(VLASize_Kind Kind,
-                               const Expr *SizeE,
-                               ProgramStateRef State,
-                               CheckerContext &C) const {
+void VLASizeChecker::reportBug(
+    VLASize_Kind Kind, const Expr *SizeE, ProgramStateRef State,
+    CheckerContext &C, std::unique_ptr<BugReporterVisitor> Visitor) const {
   // Generate an error node.
-  ExplodedNode *N = C.generateSink(State);
+  ExplodedNode *N = C.generateErrorNode(State);
   if (!N)
     return;
 
   if (!BT)
-    BT.reset(new BuiltinBug("Dangerous variable-length array (VLA) declaration"));
+    BT.reset(new BuiltinBug(
+        this, "Dangerous variable-length array (VLA) declaration"));
 
   SmallString<256> buf;
   llvm::raw_svector_ostream os(buf);
@@ -65,20 +67,22 @@ void VLASizeChecker::reportBug(VLASize_Kind Kind,
   case VLA_Tainted:
     os << "has tainted size";
     break;
+  case VLA_Negative:
+    os << "has negative size";
+    break;
   }
 
-  BugReport *report = new BugReport(*BT, os.str(), N);
+  auto report = std::make_unique<PathSensitiveBugReport>(*BT, os.str(), N);
+  report->addVisitor(std::move(Visitor));
   report->addRange(SizeE->getSourceRange());
-  report->addVisitor(bugreporter::getTrackNullOrUndefValueVisitor(N, SizeE,
-                                                                  report));
-  C.EmitReport(report);
-  return;
+  bugreporter::trackExpressionValue(N, SizeE, *report);
+  C.emitReport(std::move(report));
 }
 
 void VLASizeChecker::checkPreStmt(const DeclStmt *DS, CheckerContext &C) const {
   if (!DS->isSingleDecl())
     return;
-  
+
   const VarDecl *VD = dyn_cast<VarDecl>(DS->getSingleDecl());
   if (!VD)
     return;
@@ -91,7 +95,7 @@ void VLASizeChecker::checkPreStmt(const DeclStmt *DS, CheckerContext &C) const {
   // FIXME: Handle multi-dimensional VLAs.
   const Expr *SE = VLA->getSizeExpr();
   ProgramStateRef state = C.getState();
-  SVal sizeV = state->getSVal(SE, C.getLocationContext());
+  SVal sizeV = C.getSVal(SE);
 
   if (sizeV.isUndef()) {
     reportBug(VLA_Garbage, SE, state, C);
@@ -102,24 +106,25 @@ void VLASizeChecker::checkPreStmt(const DeclStmt *DS, CheckerContext &C) const {
   // warned about that already.
   if (sizeV.isUnknown())
     return;
-  
+
   // Check if the size is tainted.
-  if (state->isTainted(sizeV)) {
-    reportBug(VLA_Tainted, SE, 0, C);
+  if (isTainted(state, sizeV)) {
+    reportBug(VLA_Tainted, SE, nullptr, C,
+              std::make_unique<TaintBugVisitor>(sizeV));
     return;
   }
 
   // Check if the size is zero.
-  DefinedSVal sizeD = cast<DefinedSVal>(sizeV);
+  DefinedSVal sizeD = sizeV.castAs<DefinedSVal>();
 
   ProgramStateRef stateNotZero, stateZero;
-  llvm::tie(stateNotZero, stateZero) = state->assume(sizeD);
+  std::tie(stateNotZero, stateZero) = state->assume(sizeD);
 
   if (stateZero && !stateNotZero) {
     reportBug(VLA_Zero, SE, stateZero, C);
     return;
   }
- 
+
   // From this point on, assume that the size is not zero.
   state = stateNotZero;
 
@@ -127,25 +132,44 @@ void VLASizeChecker::checkPreStmt(const DeclStmt *DS, CheckerContext &C) const {
   // declared. We do this by multiplying the array length by the element size,
   // then matching that with the array region's extent symbol.
 
-  // Convert the array length to size_t.
+  // Check if the size is negative.
   SValBuilder &svalBuilder = C.getSValBuilder();
+
+  QualType Ty = SE->getType();
+  DefinedOrUnknownSVal Zero = svalBuilder.makeZeroVal(Ty);
+
+  SVal LessThanZeroVal = svalBuilder.evalBinOp(state, BO_LT, sizeD, Zero, Ty);
+  if (Optional<DefinedSVal> LessThanZeroDVal =
+        LessThanZeroVal.getAs<DefinedSVal>()) {
+    ConstraintManager &CM = C.getConstraintManager();
+    ProgramStateRef StatePos, StateNeg;
+
+    std::tie(StateNeg, StatePos) = CM.assumeDual(state, *LessThanZeroDVal);
+    if (StateNeg && !StatePos) {
+      reportBug(VLA_Negative, SE, state, C);
+      return;
+    }
+    state = StatePos;
+  }
+
+  // Convert the array length to size_t.
   QualType SizeTy = Ctx.getSizeType();
-  NonLoc ArrayLength = cast<NonLoc>(svalBuilder.evalCast(sizeD, SizeTy, 
-                                                         SE->getType()));
+  NonLoc ArrayLength =
+      svalBuilder.evalCast(sizeD, SizeTy, SE->getType()).castAs<NonLoc>();
 
   // Get the element size.
   CharUnits EleSize = Ctx.getTypeSizeInChars(VLA->getElementType());
   SVal EleSizeVal = svalBuilder.makeIntVal(EleSize.getQuantity(), SizeTy);
 
   // Multiply the array length by the element size.
-  SVal ArraySizeVal = svalBuilder.evalBinOpNN(state, BO_Mul, ArrayLength,
-                                              cast<NonLoc>(EleSizeVal), SizeTy);
+  SVal ArraySizeVal = svalBuilder.evalBinOpNN(
+      state, BO_Mul, ArrayLength, EleSizeVal.castAs<NonLoc>(), SizeTy);
 
   // Finally, assume that the array's extent matches the given size.
   const LocationContext *LC = C.getLocationContext();
   DefinedOrUnknownSVal Extent =
     state->getRegion(VD, LC)->getExtent(svalBuilder);
-  DefinedOrUnknownSVal ArraySize = cast<DefinedOrUnknownSVal>(ArraySizeVal);
+  DefinedOrUnknownSVal ArraySize = ArraySizeVal.castAs<DefinedOrUnknownSVal>();
   DefinedOrUnknownSVal sizeIsKnown =
     svalBuilder.evalEQ(state, Extent, ArraySize);
   state = state->assume(sizeIsKnown, true);
@@ -159,4 +183,8 @@ void VLASizeChecker::checkPreStmt(const DeclStmt *DS, CheckerContext &C) const {
 
 void ento::registerVLASizeChecker(CheckerManager &mgr) {
   mgr.registerChecker<VLASizeChecker>();
+}
+
+bool ento::shouldRegisterVLASizeChecker(const LangOptions &LO) {
+  return true;
 }

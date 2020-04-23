@@ -1,9 +1,8 @@
 //===-- MipsMCAsmInfo.h - Mips Asm Info ------------------------*- C++ -*--===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,20 +10,21 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef MIPSTARGETASMINFO_H
-#define MIPSTARGETASMINFO_H
+#ifndef LLVM_LIB_TARGET_MIPS_MCTARGETDESC_MIPSMCASMINFO_H
+#define LLVM_LIB_TARGET_MIPS_MCTARGETDESC_MIPSMCASMINFO_H
 
-#include "llvm/MC/MCAsmInfo.h"
+#include "llvm/MC/MCAsmInfoELF.h"
 
 namespace llvm {
-  class StringRef;
-  class Target;
+class Triple;
 
-  class MipsMCAsmInfo : public MCAsmInfo {
-    virtual void anchor();
-  public:
-    explicit MipsMCAsmInfo(const Target &T, StringRef TT);
-  };
+class MipsMCAsmInfo : public MCAsmInfoELF {
+  void anchor() override;
+
+public:
+  explicit MipsMCAsmInfo(const Triple &TheTriple,
+                         const MCTargetOptions &Options);
+};
 
 } // namespace llvm
 

@@ -110,7 +110,7 @@ namespace optional {
     }
 
     explicit operator bool() const { return has; }
-    T &operator*() const { return value; }
+    T &operator*() { return value; }
   };
 
   optional<non_trivial> o1;
@@ -121,4 +121,26 @@ namespace optional {
       o1 = o2;
     o2 = optional<non_trivial>();
   }
+}
+
+namespace pr16061 {
+  struct X { X(); };
+
+  template<typename T> struct Test1 {
+    union {
+      struct {
+        X x;
+      };
+    };
+  };
+
+  template<typename T> struct Test2 {
+    union {
+      struct {  // expected-note {{default constructor of 'Test2<pr16061::X>' is implicitly deleted because variant field '' has a non-trivial default constructor}}
+        T x;
+      };
+    };
+  };
+
+  Test2<X> t2x;  // expected-error {{call to implicitly-deleted default constructor of 'Test2<pr16061::X>'}}
 }

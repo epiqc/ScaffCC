@@ -1,9 +1,8 @@
-//===-- Redeclarable.h - Base for Decls that can be redeclared -*- C++ -*-====//
+//===- Redeclarable.h - Base for Decls that can be redeclared --*- C++ -*-====//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -14,42 +13,168 @@
 #ifndef LLVM_CLANG_AST_REDECLARABLE_H
 #define LLVM_CLANG_AST_REDECLARABLE_H
 
-#include "llvm/ADT/PointerIntPair.h"
+#include "clang/AST/ExternalASTSource.h"
+#include "llvm/ADT/DenseMapInfo.h"
+#include "llvm/ADT/PointerUnion.h"
+#include "llvm/ADT/iterator_range.h"
 #include "llvm/Support/Casting.h"
+#include <cassert>
+#include <cstddef>
 #include <iterator>
 
 namespace clang {
 
-/// \brief Provides common interface for the Decls that can be redeclared.
+class ASTContext;
+class Decl;
+
+// Some notes on redeclarables:
+//
+//  - Every redeclarable is on a circular linked list.
+//
+//  - Every decl has a pointer to the first element of the chain _and_ a
+//    DeclLink that may point to one of 3 possible states:
+//      - the "previous" (temporal) element in the chain
+//      - the "latest" (temporal) element in the chain
+//      - the "uninitialized-latest" value (when newly-constructed)
+//
+//  - The first element is also often called the canonical element. Every
+//    element has a pointer to it so that "getCanonical" can be fast.
+//
+//  - Most links in the chain point to previous, except the link out of
+//    the first; it points to latest.
+//
+//  - Elements are called "first", "previous", "latest" or
+//    "most-recent" when referring to temporal order: order of addition
+//    to the chain.
+//
+//  - It's easiest to just ignore the implementation of DeclLink when making
+//    sense of the redeclaration chain.
+//
+//  - There's also a "definition" link for several types of
+//    redeclarable, where only one definition should exist at any given
+//    time (and the defn pointer is stored in the decl's "data" which
+//    is copied to every element on the chain when it's changed).
+//
+//    Here is some ASCII art:
+//
+//      "first"                                     "latest"
+//      "canonical"                                 "most recent"
+//      +------------+         first                +--------------+
+//      |            | <--------------------------- |              |
+//      |            |                              |              |
+//      |            |                              |              |
+//      |            |       +--------------+       |              |
+//      |            | first |              |       |              |
+//      |            | <---- |              |       |              |
+//      |            |       |              |       |              |
+//      | @class A   |  link | @interface A |  link | @class A     |
+//      | seen first | <---- | seen second  | <---- | seen third   |
+//      |            |       |              |       |              |
+//      +------------+       +--------------+       +--------------+
+//      | data       | defn  | data         |  defn | data         |
+//      |            | ----> |              | <---- |              |
+//      +------------+       +--------------+       +--------------+
+//        |                     |     ^                  ^
+//        |                     |defn |                  |
+//        | link                +-----+                  |
+//        +-->-------------------------------------------+
+
+/// Provides common interface for the Decls that can be redeclared.
 template<typename decl_type>
 class Redeclarable {
-
 protected:
-  // FIXME: PointerIntPair is a value class that should not be inherited from.
-  // This should change to using containment.
-  struct DeclLink : public llvm::PointerIntPair<decl_type *, 1, bool> {
-    DeclLink(decl_type *D, bool isLatest)
-      : llvm::PointerIntPair<decl_type *, 1, bool>(D, isLatest) { }
+  class DeclLink {
+    /// A pointer to a known latest declaration, either statically known or
+    /// generationally updated as decls are added by an external source.
+    using KnownLatest =
+        LazyGenerationalUpdatePtr<const Decl *, Decl *,
+                                  &ExternalASTSource::CompleteRedeclChain>;
 
-    typedef llvm::PointerIntPair<decl_type *, 1, bool> base_type;
+    /// We store a pointer to the ASTContext in the UninitializedLatest
+    /// pointer, but to avoid circular type dependencies when we steal the low
+    /// bits of this pointer, we use a raw void* here.
+    using UninitializedLatest = const void *;
 
-    bool NextIsPrevious() const { return base_type::getInt() == false; }
-    bool NextIsLatest() const { return base_type::getInt() == true; }
-    decl_type *getNext() const { return base_type::getPointer(); }
+    using Previous = Decl *;
+
+    /// A pointer to either an uninitialized latest declaration (where either
+    /// we've not yet set the previous decl or there isn't one), or to a known
+    /// previous declaration.
+    using NotKnownLatest = llvm::PointerUnion<Previous, UninitializedLatest>;
+
+    mutable llvm::PointerUnion<NotKnownLatest, KnownLatest> Link;
+
+  public:
+    enum PreviousTag { PreviousLink };
+    enum LatestTag { LatestLink };
+
+    DeclLink(LatestTag, const ASTContext &Ctx)
+        : Link(NotKnownLatest(reinterpret_cast<UninitializedLatest>(&Ctx))) {}
+    DeclLink(PreviousTag, decl_type *D) : Link(NotKnownLatest(Previous(D))) {}
+
+    bool isFirst() const {
+      return Link.is<KnownLatest>() ||
+             // FIXME: 'template' is required on the next line due to an
+             // apparent clang bug.
+             Link.get<NotKnownLatest>().template is<UninitializedLatest>();
+    }
+
+    decl_type *getPrevious(const decl_type *D) const {
+      if (Link.is<NotKnownLatest>()) {
+        NotKnownLatest NKL = Link.get<NotKnownLatest>();
+        if (NKL.is<Previous>())
+          return static_cast<decl_type*>(NKL.get<Previous>());
+
+        // Allocate the generational 'most recent' cache now, if needed.
+        Link = KnownLatest(*reinterpret_cast<const ASTContext *>(
+                               NKL.get<UninitializedLatest>()),
+                           const_cast<decl_type *>(D));
+      }
+
+      return static_cast<decl_type*>(Link.get<KnownLatest>().get(D));
+    }
+
+    void setPrevious(decl_type *D) {
+      assert(!isFirst() && "decl became non-canonical unexpectedly");
+      Link = Previous(D);
+    }
+
+    void setLatest(decl_type *D) {
+      assert(isFirst() && "decl became canonical unexpectedly");
+      if (Link.is<NotKnownLatest>()) {
+        NotKnownLatest NKL = Link.get<NotKnownLatest>();
+        Link = KnownLatest(*reinterpret_cast<const ASTContext *>(
+                               NKL.get<UninitializedLatest>()),
+                           D);
+      } else {
+        auto Latest = Link.get<KnownLatest>();
+        Latest.set(D);
+        Link = Latest;
+      }
+    }
+
+    void markIncomplete() { Link.get<KnownLatest>().markIncomplete(); }
+
+    Decl *getLatestNotUpdated() const {
+      assert(isFirst() && "expected a canonical decl");
+      if (Link.is<NotKnownLatest>())
+        return nullptr;
+      return Link.get<KnownLatest>().getNotUpdated();
+    }
   };
 
-  struct PreviousDeclLink : public DeclLink {
-    PreviousDeclLink(decl_type *D) : DeclLink(D, false) { }
-  };
+  static DeclLink PreviousDeclLink(decl_type *D) {
+    return DeclLink(DeclLink::PreviousLink, D);
+  }
 
-  struct LatestDeclLink : public DeclLink {
-    LatestDeclLink(decl_type *D) : DeclLink(D, true) { }
-  };
+  static DeclLink LatestDeclLink(const ASTContext &Ctx) {
+    return DeclLink(DeclLink::LatestLink, Ctx);
+  }
 
-  /// \brief Points to the next redeclaration in the chain.
+  /// Points to the next redeclaration in the chain.
   ///
-  /// If NextIsPrevious() is true, this is a link to the previous declaration
-  /// of this same Decl. If NextIsLatest() is true, this is the first
+  /// If isFirst() is false, this is a link to the previous declaration
+  /// of this same Decl. If isFirst() is true, this is the first
   /// declaration and Link points to the latest declaration. For example:
   ///
   ///  #1 int f(int x, int y = 1); // <pointer to #3, true>
@@ -59,75 +184,73 @@ protected:
   /// If there is only one declaration, it is <pointer to self, true>
   DeclLink RedeclLink;
 
-public:
-  Redeclarable() : RedeclLink(LatestDeclLink(static_cast<decl_type*>(this))) { }
+  decl_type *First;
 
-  /// \brief Return the previous declaration of this declaration or NULL if this
+  decl_type *getNextRedeclaration() const {
+    return RedeclLink.getPrevious(static_cast<const decl_type *>(this));
+  }
+
+public:
+  friend class ASTDeclReader;
+  friend class ASTDeclWriter;
+
+  Redeclarable(const ASTContext &Ctx)
+      : RedeclLink(LatestDeclLink(Ctx)),
+        First(static_cast<decl_type *>(this)) {}
+
+  /// Return the previous declaration of this declaration or NULL if this
   /// is the first declaration.
   decl_type *getPreviousDecl() {
-    if (RedeclLink.NextIsPrevious())
-      return RedeclLink.getNext();
-    return 0;
+    if (!RedeclLink.isFirst())
+      return getNextRedeclaration();
+    return nullptr;
   }
   const decl_type *getPreviousDecl() const {
     return const_cast<decl_type *>(
                  static_cast<const decl_type*>(this))->getPreviousDecl();
   }
 
-  /// \brief Return the first declaration of this declaration or itself if this
+  /// Return the first declaration of this declaration or itself if this
   /// is the only declaration.
-  decl_type *getFirstDeclaration() {
-    decl_type *D = static_cast<decl_type*>(this);
-    while (D->getPreviousDecl())
-      D = D->getPreviousDecl();
-    return D;
-  }
+  decl_type *getFirstDecl() { return First; }
 
-  /// \brief Return the first declaration of this declaration or itself if this
+  /// Return the first declaration of this declaration or itself if this
   /// is the only declaration.
-  const decl_type *getFirstDeclaration() const {
-    const decl_type *D = static_cast<const decl_type*>(this);
-    while (D->getPreviousDecl())
-      D = D->getPreviousDecl();
-    return D;
-  }
+  const decl_type *getFirstDecl() const { return First; }
 
-  /// \brief Returns true if this is the first declaration.
-  bool isFirstDeclaration() const {
-    return RedeclLink.NextIsLatest();
-  }
+  /// True if this is the first declaration in its redeclaration chain.
+  bool isFirstDecl() const { return RedeclLink.isFirst(); }
 
-  /// \brief Returns the most recent (re)declaration of this declaration.
+  /// Returns the most recent (re)declaration of this declaration.
   decl_type *getMostRecentDecl() {
-    return getFirstDeclaration()->RedeclLink.getNext();
+    return getFirstDecl()->getNextRedeclaration();
   }
 
-  /// \brief Returns the most recent (re)declaration of this declaration.
+  /// Returns the most recent (re)declaration of this declaration.
   const decl_type *getMostRecentDecl() const {
-    return getFirstDeclaration()->RedeclLink.getNext();
+    return getFirstDecl()->getNextRedeclaration();
   }
-  
-  /// \brief Set the previous declaration. If PrevDecl is NULL, set this as the
-  /// first and only declaration.
-  void setPreviousDeclaration(decl_type *PrevDecl);
 
-  /// \brief Iterates through all the redeclarations of the same decl.
+  /// Set the previous declaration. If PrevDecl is NULL, set this as the
+  /// first and only declaration.
+  void setPreviousDecl(decl_type *PrevDecl);
+
+  /// Iterates through all the redeclarations of the same decl.
   class redecl_iterator {
     /// Current - The current declaration.
-    decl_type *Current;
+    decl_type *Current = nullptr;
     decl_type *Starter;
-    bool PassedFirst;
+    bool PassedFirst = false;
 
   public:
-    typedef decl_type*                value_type;
-    typedef decl_type*                reference;
-    typedef decl_type*                pointer;
-    typedef std::forward_iterator_tag iterator_category;
-    typedef std::ptrdiff_t            difference_type;
+    using value_type = decl_type *;
+    using reference = decl_type *;
+    using pointer = decl_type *;
+    using iterator_category = std::forward_iterator_tag;
+    using difference_type = std::ptrdiff_t;
 
-    redecl_iterator() : Current(0) { }
-    explicit redecl_iterator(decl_type *C)
-      : Current(C), Starter(C), PassedFirst(false) { }
+    redecl_iterator() = default;
+    explicit redecl_iterator(decl_type *C) : Current(C), Starter(C) {}
 
     reference operator*() const { return Current; }
     pointer operator->() const { return Current; }
@@ -135,18 +258,18 @@ public:
     redecl_iterator& operator++() {
       assert(Current && "Advancing while iterator has reached end");
       // Sanity check to avoid infinite loop on invalid redecl chain.
-      if (Current->isFirstDeclaration()) {
+      if (Current->isFirstDecl()) {
         if (PassedFirst) {
           assert(0 && "Passed first decl twice, invalid redecl chain!");
-          Current = 0;
+          Current = nullptr;
           return *this;
         }
         PassedFirst = true;
       }
 
       // Get either previous decl or latest decl.
-      decl_type *Next = Current->RedeclLink.getNext();
-      Current = (Next != Starter ? Next : 0);
+      decl_type *Next = Current->getNextRedeclaration();
+      Current = (Next != Starter) ? Next : nullptr;
       return *this;
     }
 
@@ -164,18 +287,126 @@ public:
     }
   };
 
-  /// \brief Returns iterator for all the redeclarations of the same decl.
-  /// It will iterate at least once (when this decl is the only one).
-  redecl_iterator redecls_begin() const {
-    return redecl_iterator(const_cast<decl_type*>(
-                                          static_cast<const decl_type*>(this)));
-  }
-  redecl_iterator redecls_end() const { return redecl_iterator(); }
+  using redecl_range = llvm::iterator_range<redecl_iterator>;
 
-  friend class ASTDeclReader;
-  friend class ASTDeclWriter;
+  /// Returns an iterator range for all the redeclarations of the same
+  /// decl. It will iterate at least once (when this decl is the only one).
+  redecl_range redecls() const {
+    return redecl_range(redecl_iterator(const_cast<decl_type *>(
+                            static_cast<const decl_type *>(this))),
+                        redecl_iterator());
+  }
+
+  redecl_iterator redecls_begin() const { return redecls().begin(); }
+  redecl_iterator redecls_end() const { return redecls().end(); }
 };
 
-}
+/// Get the primary declaration for a declaration from an AST file. That
+/// will be the first-loaded declaration.
+Decl *getPrimaryMergedDecl(Decl *D);
 
-#endif
+/// Provides common interface for the Decls that cannot be redeclared,
+/// but can be merged if the same declaration is brought in from multiple
+/// modules.
+template<typename decl_type>
+class Mergeable {
+public:
+  Mergeable() = default;
+
+  /// Return the first declaration of this declaration or itself if this
+  /// is the only declaration.
+  decl_type *getFirstDecl() {
+    auto *D = static_cast<decl_type *>(this);
+    if (!D->isFromASTFile())
+      return D;
+    return cast<decl_type>(getPrimaryMergedDecl(const_cast<decl_type*>(D)));
+  }
+
+  /// Return the first declaration of this declaration or itself if this
+  /// is the only declaration.
+  const decl_type *getFirstDecl() const {
+    const auto *D = static_cast<const decl_type *>(this);
+    if (!D->isFromASTFile())
+      return D;
+    return cast<decl_type>(getPrimaryMergedDecl(const_cast<decl_type*>(D)));
+  }
+
+  /// Returns true if this is the first declaration.
+  bool isFirstDecl() const { return getFirstDecl() == this; }
+};
+
+/// A wrapper class around a pointer that always points to its canonical
+/// declaration.
+///
+/// CanonicalDeclPtr<decl_type> behaves just like decl_type*, except we call
+/// decl_type::getCanonicalDecl() on construction.
+///
+/// This is useful for hashtables that you want to be keyed on a declaration's
+/// canonical decl -- if you use CanonicalDeclPtr as the key, you don't need to
+/// remember to call getCanonicalDecl() everywhere.
+template <typename decl_type> class CanonicalDeclPtr {
+public:
+  CanonicalDeclPtr() = default;
+  CanonicalDeclPtr(decl_type *Ptr)
+      : Ptr(Ptr ? Ptr->getCanonicalDecl() : nullptr) {}
+  CanonicalDeclPtr(const CanonicalDeclPtr &) = default;
+  CanonicalDeclPtr &operator=(const CanonicalDeclPtr &) = default;
+
+  operator decl_type *() { return Ptr; }
+  operator const decl_type *() const { return Ptr; }
+
+  decl_type *operator->() { return Ptr; }
+  const decl_type *operator->() const { return Ptr; }
+
+  decl_type &operator*() { return *Ptr; }
+  const decl_type &operator*() const { return *Ptr; }
+
+  friend bool operator==(CanonicalDeclPtr LHS, CanonicalDeclPtr RHS) {
+    return LHS.Ptr == RHS.Ptr;
+  }
+  friend bool operator!=(CanonicalDeclPtr LHS, CanonicalDeclPtr RHS) {
+    return LHS.Ptr != RHS.Ptr;
+  }
+
+private:
+  friend struct llvm::DenseMapInfo<CanonicalDeclPtr<decl_type>>;
+
+  decl_type *Ptr = nullptr;
+};
+
+} // namespace clang
+
+namespace llvm {
+
+template <typename decl_type>
+struct DenseMapInfo<clang::CanonicalDeclPtr<decl_type>> {
+  using CanonicalDeclPtr = clang::CanonicalDeclPtr<decl_type>;
+  using BaseInfo = DenseMapInfo<decl_type *>;
+
+  static CanonicalDeclPtr getEmptyKey() {
+    // Construct our CanonicalDeclPtr this way because the regular constructor
+    // would dereference P.Ptr, which is not allowed.
+    CanonicalDeclPtr P;
+    P.Ptr = BaseInfo::getEmptyKey();
+    return P;
+  }
+
+  static CanonicalDeclPtr getTombstoneKey() {
+    CanonicalDeclPtr P;
+    P.Ptr = BaseInfo::getTombstoneKey();
+    return P;
+  }
+
+  static unsigned getHashValue(const CanonicalDeclPtr &P) {
+    return BaseInfo::getHashValue(P);
+  }
+
+  static bool isEqual(const CanonicalDeclPtr &LHS,
+                      const CanonicalDeclPtr &RHS) {
+    return BaseInfo::isEqual(LHS, RHS);
+  }
+};
+
+} // namespace llvm
+
+#endif // LLVM_CLANG_AST_REDECLARABLE_H

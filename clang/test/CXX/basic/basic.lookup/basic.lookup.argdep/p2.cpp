@@ -5,7 +5,7 @@ namespace N {
   
   X operator+(X, X);
 
-  void f(X);
+  void f(X); // expected-note 2 {{'N::f' declared here}}
   void g(X); // expected-note{{candidate function}}
 
   void test_multiadd(X x) {
@@ -17,7 +17,7 @@ namespace M {
   struct Y : N::X { };
 }
 
-void f(); // expected-note 2 {{'f' declared here}}
+void f();
 
 void test_operator_adl(N::X x, M::Y y) {
   (void)(x + x);
@@ -27,8 +27,8 @@ void test_operator_adl(N::X x, M::Y y) {
 void test_func_adl(N::X x, M::Y y) {
   f(x);
   f(y);
-  (f)(x); // expected-error{{too many arguments to function call}}
-  ::f(x); // expected-error{{too many arguments to function call}}
+  (f)(x); // expected-error{{too many arguments to function call, expected 0, have 1; did you mean 'N::f'?}}
+  ::f(x); // expected-error{{too many arguments to function call, expected 0, have 1; did you mean 'N::f'?}}
 }
 
 namespace N {
@@ -72,7 +72,7 @@ namespace O {
 }
 
 extern "C" {
-  struct L { };
+  struct L { int x; };
 }
 
 void h(L); // expected-note{{candidate function}}
@@ -106,5 +106,45 @@ namespace test6 {
   void test() {
     __builtin_va_list args;
     test6_function(args);
+  }
+}
+
+// PR13682: we might need to instantiate class temploids.
+namespace test7 {
+  namespace inner {
+    class A {};
+    void test7_function(A &);
+  }
+  template <class T> class B : public inner::A {};
+
+  void test(B<int> &ref) {
+    test7_function(ref);
+  }
+}
+
+// Like test7, but ensure we don't complain if the type is properly
+// incomplete.
+namespace test8 {
+  template <class T> class B;
+  void test8_function(B<int> &);
+
+  void test(B<int> &ref) {
+    test8_function(ref);
+  }
+}
+
+
+
+// [...] Typedef names and using-declarations used to specify the types
+// do not contribute to this set.
+namespace typedef_names_and_using_declarations {
+  namespace N { struct S {}; void f(S); }
+  namespace M { typedef N::S S; void g1(S); } // expected-note {{declared here}}
+  namespace L { using N::S; void g2(S); } // expected-note {{declared here}}
+  void test() {
+	  M::S s;
+    f(s);    // ok
+    g1(s);   // expected-error {{use of undeclared}}
+    g2(s);   // expected-error {{use of undeclared}}
   }
 }

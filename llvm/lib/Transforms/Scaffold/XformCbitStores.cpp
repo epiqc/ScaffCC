@@ -10,15 +10,15 @@
 
 
 #include "llvm/ADT/ArrayRef.h"
-#include "llvm/Constants.h"
-#include "llvm/Function.h"
-#include "llvm/Instructions.h"
-#include "llvm/Intrinsics.h"
-#include "llvm/LLVMContext.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/LLVMContext.h"
 #include "llvm/Pass.h"
-#include "llvm/Support/InstIterator.h"
+#include "llvm/IR/InstIterator.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/InstVisitor.h"
+#include "llvm/IR/InstVisitor.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 
@@ -37,19 +37,19 @@ namespace {
       string dummyFuncName = "store_cbit";
 
       vector<Type*> dummyFuncArgs;
-      dummyFuncArgs.push_back(Type::getInt1Ty(getGlobalContext()));
-      dummyFuncArgs.push_back(Type::getInt1PtrTy(getGlobalContext()));
+      dummyFuncArgs.push_back(Type::getInt1Ty(M.getContext()));
+      dummyFuncArgs.push_back(Type::getInt1PtrTy(M.getContext()));
       ArrayRef<Type*> dummyFuncArgsRef(dummyFuncArgs);
 
       FunctionType *dummyFuncType = FunctionType::get(
-						      Type::getVoidTy(getGlobalContext()),
+						      Type::getVoidTy(M.getContext()),
 						      dummyFuncArgsRef,
 						      false);      
       
       Function* dummy_store_func = Function::Create(dummyFuncType, GlobalVariable::ExternalLinkage,dummyFuncName, &M);      
       
       for(Module::iterator F = M.begin(), E = M.end(); F!= E; ++F){
-	for(inst_iterator I = inst_begin(F), IE = inst_end(F); I != IE; ++I){
+	for(inst_iterator I = inst_begin(&(*F)), IE = inst_end(&(*F)); I != IE; ++I){
 	  
 	  Instruction *pInst = &*I;
 	  

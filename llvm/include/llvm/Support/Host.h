@@ -1,9 +1,8 @@
 //===- llvm/Support/Host.h - Host machine characteristics --------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,27 +10,15 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_SYSTEM_HOST_H
-#define LLVM_SYSTEM_HOST_H
+#ifndef LLVM_SUPPORT_HOST_H
+#define LLVM_SUPPORT_HOST_H
 
 #include "llvm/ADT/StringMap.h"
+
 #include <string>
 
 namespace llvm {
 namespace sys {
-
-  inline bool isLittleEndianHost() {
-    union {
-      int i;
-      char c;
-    };
-    i = 1;
-    return c;
-  }
-
-  inline bool isBigEndianHost() {
-    return !isLittleEndianHost();
-  }
 
   /// getDefaultTargetTriple() - Return the default target triple the compiler
   /// has been configured to produce code for.
@@ -42,12 +29,16 @@ namespace sys {
   ///   CPU_TYPE-VENDOR-KERNEL-OPERATING_SYSTEM
   std::string getDefaultTargetTriple();
 
+  /// getProcessTriple() - Return an appropriate target triple for generating
+  /// code to be loaded into the current process, e.g. when using the JIT.
+  std::string getProcessTriple();
+
   /// getHostCPUName - Get the LLVM name for the host CPU. The particular format
   /// of the name is target dependent, and suitable for passing as -mcpu to the
   /// target which matches the host.
   ///
   /// \return - The host CPU name, or empty if the CPU could not be determined.
-  std::string getHostCPUName();
+  StringRef getHostCPUName();
 
   /// getHostCPUFeatures - Get the LLVM names for the host CPU features.
   /// The particular format of the names are target dependent, and suitable for
@@ -60,6 +51,19 @@ namespace sys {
   ///
   /// \return - True on success.
   bool getHostCPUFeatures(StringMap<bool> &Features);
+
+  /// Get the number of physical cores (as opposed to logical cores returned
+  /// from thread::hardware_concurrency(), which includes hyperthreads).
+  /// Returns -1 if unknown for the current host system.
+  int getHostNumPhysicalCores();
+
+  namespace detail {
+  /// Helper functions to extract HostCPUName from /proc/cpuinfo on linux.
+  StringRef getHostCPUNameForPowerPC(StringRef ProcCpuinfoContent);
+  StringRef getHostCPUNameForARM(StringRef ProcCpuinfoContent);
+  StringRef getHostCPUNameForS390x(StringRef ProcCpuinfoContent);
+  StringRef getHostCPUNameForBPF();
+  }
 }
 }
 

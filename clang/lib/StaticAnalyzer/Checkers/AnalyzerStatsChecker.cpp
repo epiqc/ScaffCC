@@ -1,30 +1,29 @@
 //==--AnalyzerStatsChecker.cpp - Analyzer visitation statistics --*- C++ -*-==//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 // This file reports various statistics about analyzer visitation.
 //===----------------------------------------------------------------------===//
-#define DEBUG_TYPE "StatsChecker"
-
-#include "ClangSACheckers.h"
+#include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
+#include "clang/AST/DeclObjC.h"
+#include "clang/Basic/SourceManager.h"
+#include "clang/StaticAnalyzer/Core/BugReporter/BugReporter.h"
 #include "clang/StaticAnalyzer/Core/Checker.h"
 #include "clang/StaticAnalyzer/Core/CheckerManager.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/ExplodedGraph.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/ExprEngine.h"
-#include "clang/StaticAnalyzer/Core/BugReporter/BugReporter.h"
-
-#include "clang/AST/DeclObjC.h"
-#include "clang/Basic/SourceManager.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/Statistic.h"
+#include "llvm/Support/raw_ostream.h"
 
 using namespace clang;
 using namespace ento;
+
+#define DEBUG_TYPE "StatsChecker"
 
 STATISTIC(NumBlocks,
           "The # of blocks in top level functions");
@@ -41,9 +40,9 @@ public:
 void AnalyzerStatsChecker::checkEndAnalysis(ExplodedGraph &G,
                                             BugReporter &B,
                                             ExprEngine &Eng) const {
-  const CFG *C  = 0;
+  const CFG *C = nullptr;
   const SourceManager &SM = B.getSourceManager();
-  llvm::SmallPtrSet<const CFGBlock*, 256> reachable;
+  llvm::SmallPtrSet<const CFGBlock*, 32> reachable;
 
   // Root node should have the location context of the top most function.
   const ExplodedNode *GraphRoot = *G.roots_begin();
@@ -60,7 +59,7 @@ void AnalyzerStatsChecker::checkEndAnalysis(ExplodedGraph &G,
     if (D != P.getLocationContext()->getDecl())
       continue;
 
-    if (const BlockEntrance *BE = dyn_cast<BlockEntrance>(&P)) {
+    if (Optional<BlockEntrance> BE = P.getAs<BlockEntrance>()) {
       const CFGBlock *CB = BE->getBlock();
       reachable.insert(CB);
     }
@@ -101,7 +100,7 @@ void AnalyzerStatsChecker::checkEndAnalysis(ExplodedGraph &G,
   else if (isa<BlockDecl>(D)) {
     output << "block(line:" << Loc.getLine() << ":col:" << Loc.getColumn();
   }
-  
+
   NumBlocksUnreachable += unreachable;
   NumBlocks += total;
   std::string NameOfRootFunction = output.str();
@@ -112,7 +111,7 @@ void AnalyzerStatsChecker::checkEndAnalysis(ExplodedGraph &G,
       << " | Empty WorkList: "
       << (Eng.hasEmptyWorkList() ? "yes" : "no");
 
-  B.EmitBasicReport(D, "Analyzer Statistics", "Internal Statistics",
+  B.EmitBasicReport(D, this, "Analyzer Statistics", "Internal Statistics",
                     output.str(), PathDiagnosticLocation(D, SM));
 
   // Emit warning for each block we bailed out on.
@@ -122,19 +121,25 @@ void AnalyzerStatsChecker::checkEndAnalysis(ExplodedGraph &G,
       E = CE.blocks_exhausted_end(); I != E; ++I) {
     const BlockEdge &BE =  I->first;
     const CFGBlock *Exit = BE.getDst();
+    if (Exit->empty())
+      continue;
     const CFGElement &CE = Exit->front();
-    if (const CFGStmt *CS = dyn_cast<CFGStmt>(&CE)) {
+    if (Optional<CFGStmt> CS = CE.getAs<CFGStmt>()) {
       SmallString<128> bufI;
       llvm::raw_svector_ostream outputI(bufI);
       outputI << "(" << NameOfRootFunction << ")" <<
                  ": The analyzer generated a sink at this point";
-      B.EmitBasicReport(D, "Sink Point", "Internal Statistics", outputI.str(),
-                        PathDiagnosticLocation::createBegin(CS->getStmt(),
-                                                            SM, LC));
+      B.EmitBasicReport(
+          D, this, "Sink Point", "Internal Statistics", outputI.str(),
+          PathDiagnosticLocation::createBegin(CS->getStmt(), SM, LC));
     }
   }
 }
 
 void ento::registerAnalyzerStatsChecker(CheckerManager &mgr) {
   mgr.registerChecker<AnalyzerStatsChecker>();
+}
+
+bool ento::shouldRegisterAnalyzerStatsChecker(const LangOptions &LO) {
+  return true;
 }

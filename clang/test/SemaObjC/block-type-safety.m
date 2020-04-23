@@ -23,6 +23,7 @@ void r1(Sub* (^f)()) { // expected-note{{passing argument to parameter 'f' here}
 }
 
 @protocol NSObject;
+@class NSObject;
 
 void r2 (id<NSObject> (^f) (void)) {
   id o = f();
@@ -132,9 +133,20 @@ int test4 () {
 @end
 
 int test5() {
+    // Returned value is used outside of a block, so error on changing
+    // a return type to a more general than expected.
     NSAllArray *(^block)(id);
     id <Foo> (^genericBlock)(id);
     genericBlock = block;
+    block = genericBlock; // expected-error {{incompatible block pointer types assigning to 'NSAllArray *(^)(id)' from 'id<Foo> (^)(id)'}}
+
+    // A parameter is used inside a block, so error on changing a parameter type
+    // to a more specific than an argument type it will be called with.
+    // rdar://problem/52788423
+    void (^blockWithParam)(NSAllArray *);
+    void (^genericBlockWithParam)(id<Foo>);
+    genericBlockWithParam = blockWithParam; // expected-error {{incompatible block pointer types assigning to 'void (^)(id<Foo>)' from 'void (^)(NSAllArray *)'}}
+    blockWithParam = genericBlockWithParam;
     return 0;
 }
 
@@ -154,4 +166,54 @@ void f() {
    [f sortUsingComparator:^(id a, id b) {
         return NSOrderedSame;
    }];
+}
+
+// rdar://16739120
+@protocol P1 @end
+@protocol P2 @end
+
+void Test() {
+void (^aBlock)();
+id anId = aBlock;  // OK
+
+id<P1,P2> anQualId = aBlock;  // expected-error {{initializing 'id<P1,P2>' with an expression of incompatible type 'void (^)()'}}
+
+NSArray* anArray = aBlock; // expected-error {{initializing 'NSArray *' with an expression of incompatible type 'void (^)()'}}
+
+aBlock = anId; // OK
+
+id<P1,P2> anQualId1;
+aBlock = anQualId1; // expected-error {{assigning to 'void (^)()' from incompatible type 'id<P1,P2>'}}
+
+NSArray* anArray1;
+aBlock = anArray1; // expected-error {{assigning to 'void (^)()' from incompatible type 'NSArray *'}}
+}
+
+void Test2() {
+  void (^aBlock)();
+  id<NSObject> anQualId1 = aBlock; // Ok
+  id<NSObject, NSCopying> anQualId2 = aBlock; // Ok
+  id<NSObject, NSCopying, NSObject, NSCopying> anQualId3 = aBlock; // Ok
+  id <P1>  anQualId4  = aBlock; // expected-error {{initializing 'id<P1>' with an expression of incompatible type 'void (^)()'}}
+  id<NSObject, P1, NSCopying> anQualId5 = aBlock; // expected-error {{initializing 'id<NSObject,P1,NSCopying>' with an expression of incompatible type 'void (^)()'}}
+  id<NSCopying> anQualId6 = aBlock; // Ok
+}
+
+void Test3() {
+  void (^aBlock)();
+  NSObject *NSO = aBlock; // Ok
+  NSObject<NSObject> *NSO1 = aBlock; // Ok
+  NSObject<NSObject, NSCopying> *NSO2 = aBlock; // Ok
+  NSObject<NSObject, NSCopying, NSObject, NSCopying> *NSO3 = aBlock; // Ok
+  NSObject <P1>  *NSO4  = aBlock; // expected-error {{initializing 'NSObject<P1> *' with an expression of incompatible type 'void (^)()'}}
+  NSObject<NSObject, P1, NSCopying> *NSO5 = aBlock; // expected-error {{initializing 'NSObject<NSObject,P1,NSCopying> *' with an expression of incompatible type 'void (^)()'}}
+  NSObject<NSCopying> *NSO6 = aBlock; // Ok
+}
+
+// rdar://problem/19420731
+typedef NSObject<P1> NSObject_P1;
+typedef NSObject_P1<P2> NSObject_P1_P2;
+
+void Test4(void (^handler)(NSObject_P1_P2 *p)) {
+  Test4(^(NSObject<P2> *p) { });
 }

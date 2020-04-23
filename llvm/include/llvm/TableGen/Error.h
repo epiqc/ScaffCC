@@ -1,9 +1,8 @@
 //===- llvm/TableGen/Error.h - tblgen error handling helpers ----*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -19,29 +18,23 @@
 
 namespace llvm {
 
-class TGError {
-  SMLoc Loc;
-  std::string Message;
-public:
-  TGError(SMLoc loc, const std::string &message) : Loc(loc), Message(message) {}
+void PrintNote(const Twine &Msg);
+void PrintNote(ArrayRef<SMLoc> NoteLoc, const Twine &Msg);
 
-  SMLoc getLoc() const { return Loc; }
-  const std::string &getMessage() const { return Message; }
-};
-
-void PrintWarning(SMLoc WarningLoc, const Twine &Msg);
+void PrintWarning(ArrayRef<SMLoc> WarningLoc, const Twine &Msg);
 void PrintWarning(const char *Loc, const Twine &Msg);
 void PrintWarning(const Twine &Msg);
-void PrintWarning(const TGError &Warning);
 
-void PrintError(SMLoc ErrorLoc, const Twine &Msg);
+void PrintError(ArrayRef<SMLoc> ErrorLoc, const Twine &Msg);
 void PrintError(const char *Loc, const Twine &Msg);
 void PrintError(const Twine &Msg);
-void PrintError(const TGError &Error);
 
+LLVM_ATTRIBUTE_NORETURN void PrintFatalError(const Twine &Msg);
+LLVM_ATTRIBUTE_NORETURN void PrintFatalError(ArrayRef<SMLoc> ErrorLoc,
+                                             const Twine &Msg);
 
 extern SourceMgr SrcMgr;
-
+extern unsigned ErrorsPrinted;
 
 } // end namespace "llvm"
 

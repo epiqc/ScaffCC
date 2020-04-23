@@ -1,4 +1,5 @@
 // RUN: %clang_cc1 -fsyntax-only -verify %s
+// expected-no-diagnostics
 
 template <class T> struct A {
   static T cond;
@@ -9,6 +10,7 @@ template <class T> struct A {
     }
   };
 };
+extern template bool A<bool>::cond;
 
 int foo() {
   A<bool>::cond = true;

@@ -1,12 +1,12 @@
-// RUN: %clang_cc1 -triple x86_64-apple-darwin11 -fobjc-runtime-has-weak -fsyntax-only -fobjc-arc -fblocks -verify -Wno-objc-root-class %s
+// RUN: %clang_cc1 -triple x86_64-apple-darwin11 -fobjc-runtime-has-weak -fsyntax-only -fobjc-arc -fblocks -fobjc-exceptions -verify -Wno-objc-root-class %s
 // rdar://9309489
 
 @interface MyClass {
-        id __weak myString;
+        id __weak myString; // expected-error {{existing instance variable 'myString' for strong property 'myString' may not be __weak}}
         id StrongIvar;
-        id __weak myString2;
+        id __weak myString2; // expected-error {{existing instance variable 'myString2' for strong property 'myString2' may not be __weak}}
         id __weak myString3;
-        id StrongIvar5;
+        id StrongIvar5; // expected-error {{existing instance variable 'StrongIvar5' for __weak property 'myString5' must be __weak}}
 }
 @property (strong) id myString; // expected-note {{property declared here}}
 @property (strong) id myString1;
@@ -18,22 +18,22 @@
 @end
 
 @implementation MyClass
-@synthesize myString; // expected-error {{existing ivar 'myString' for strong property 'myString' may not be __weak}}
+@synthesize myString; // expected-note {{property synthesized here}}
 @synthesize myString1 = StrongIvar; // OK
-@synthesize myString2 = myString2; // expected-error {{existing ivar 'myString2' for strong property 'myString2' may not be __weak}}
+@synthesize myString2 = myString2; // expected-note {{property synthesized here}}
 //
 @synthesize myString3; // OK
 @synthesize myString4; // OK
-@synthesize myString5 = StrongIvar5; // expected-error {{existing ivar 'StrongIvar5' for __weak property 'myString5' must be __weak}}
+@synthesize myString5 = StrongIvar5; // expected-note {{property synthesized here}}
 
 @end
 
 // rdar://9340692
 @interface Foo {
 @public
-    id __unsafe_unretained x;   // should be __weak
-    id __strong y;
-    id __autoreleasing z; // expected-error {{ivars cannot have __autoreleasing ownership}}
+    id __unsafe_unretained x; // expected-error {{existing instance variable 'x' for __weak property 'x' must be __weak}}
+    id __strong y;  // expected-error {{existing instance variable 'y' for __weak property 'y' must be __weak}}
+    id __autoreleasing z; // expected-error {{instance variables cannot have __autoreleasing ownership}}
 }
 @property(weak) id x; // expected-note {{property declared here}}
 @property(weak) id y; // expected-note {{property declared here}}
@@ -41,8 +41,8 @@
 @end
 
 @implementation Foo
-@synthesize x;	// expected-error {{existing ivar 'x' for __weak property 'x' must be __weak}}
-@synthesize y;	// expected-error {{existing ivar 'y' for __weak property 'y' must be __weak}}
+@synthesize x; // expected-note {{property synthesized here}}
+@synthesize y; // expected-note {{property synthesized here}}
 @synthesize z;  // suppressed
 @end
 
@@ -55,3 +55,11 @@
 @implementation Test2
 @synthesize test2;
 @end
+
+// rdar://problem/11144407
+@interface Test3
+@property (strong) id exception;
+@end
+void test3(Test3 *t3) {
+  @throw t3.exception;
+}

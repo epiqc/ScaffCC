@@ -1,9 +1,8 @@
 //= llvm/Support/Win32/ThreadLocal.inc - Win32 Thread Local Data -*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -16,38 +15,36 @@
 //===          is guaranteed to work on *all* Win32 variants.
 //===----------------------------------------------------------------------===//
 
-#include "Windows.h"
+#include "llvm/Support/Windows/WindowsSupport.h"
 #include "llvm/Support/ThreadLocal.h"
 
 namespace llvm {
-using namespace sys;
 
-ThreadLocalImpl::ThreadLocalImpl() {
-  DWORD* tls = new DWORD;
+sys::ThreadLocalImpl::ThreadLocalImpl() : data() {
+  static_assert(sizeof(DWORD) <= sizeof(data), "size too big");
+  DWORD* tls = reinterpret_cast<DWORD*>(&data);
   *tls = TlsAlloc();
   assert(*tls != TLS_OUT_OF_INDEXES);
-  data = tls;
 }
 
-ThreadLocalImpl::~ThreadLocalImpl() {
-  DWORD* tls = static_cast<DWORD*>(data);
+sys::ThreadLocalImpl::~ThreadLocalImpl() {
+  DWORD* tls = reinterpret_cast<DWORD*>(&data);
   TlsFree(*tls);
-  delete tls;
 }
 
-const void* ThreadLocalImpl::getInstance() {
-  DWORD* tls = static_cast<DWORD*>(data);
+void *sys::ThreadLocalImpl::getInstance() {
+  DWORD* tls = reinterpret_cast<DWORD*>(&data);
   return TlsGetValue(*tls);
 }
 
-void ThreadLocalImpl::setInstance(const void* d){
-  DWORD* tls = static_cast<DWORD*>(data);
+void sys::ThreadLocalImpl::setInstance(const void* d){
+  DWORD* tls = reinterpret_cast<DWORD*>(&data);
   int errorcode = TlsSetValue(*tls, const_cast<void*>(d));
   assert(errorcode != 0);
   (void)errorcode;
 }
 
-void ThreadLocalImpl::removeInstance() {
+void sys::ThreadLocalImpl::removeInstance() {
   setInstance(0);
 }
 

@@ -1,5 +1,5 @@
-// RUN: %clang_cc1 -triple i386-apple-darwin10 -analyze -analyzer-checker=core,deadcode,experimental.deadcode.IdempotentOperations,experimental.core -std=gnu99 -analyzer-store=region -analyzer-constraints=range -analyzer-purge=none -verify %s -Wno-error=return-type
-// RUN: %clang_cc1 -triple i386-apple-darwin10 -analyze -analyzer-checker=core,deadcode,experimental.deadcode.IdempotentOperations,experimental.core -std=gnu99 -analyzer-store=region -analyzer-constraints=range -verify %s -Wno-error=return-type 
+// RUN: %clang_analyze_cc1 -triple i386-apple-darwin10 -Wno-tautological-constant-compare -Wtautological-unsigned-zero-compare -analyzer-checker=core,deadcode,alpha.core -std=gnu99 -analyzer-store=region -analyzer-purge=none -verify %s -Wno-error=return-type
+// RUN: %clang_analyze_cc1 -triple i386-apple-darwin10 -Wno-tautological-constant-compare -Wtautological-unsigned-zero-compare -analyzer-checker=core,deadcode,alpha.core -std=gnu99 -analyzer-store=region -verify %s -Wno-error=return-type
 
 typedef unsigned uintptr_t;
 
@@ -64,7 +64,7 @@ int f4_b() {
   short *p = x; // expected-warning{{incompatible integer to pointer conversion}}
 
   // The following branch should be infeasible.
-  if (!(p == &array[0])) { // expected-warning{{Both operands to '==' always have the same value}}
+  if (!(p == &array[0])) {
     p = 0;
     *p = 1; // no-warning
   }
@@ -88,21 +88,21 @@ int f5() {
 int bar(int* p, int q) __attribute__((nonnull));
 
 int f6(int *p) { 
-  return !p ? bar(p, 1) // expected-warning {{Null pointer passed as an argument to a 'nonnull' parameter}}
+  return !p ? bar(p, 1) // expected-warning {{Null pointer passed to 1st parameter expecting 'nonnull'}}
          : bar(p, 0);   // no-warning
 }
 
 int bar2(int* p, int q) __attribute__((nonnull(1)));
 
 int f6b(int *p) { 
-  return !p ? bar2(p, 1) // expected-warning {{Null pointer passed as an argument to a 'nonnull' parameter}}
+  return !p ? bar2(p, 1) // expected-warning {{Null pointer passed to 1st parameter expecting 'nonnull'}}
          : bar2(p, 0);   // no-warning
 }
 
 int bar3(int*p, int q, int *r) __attribute__((nonnull(1,3)));
 
 int f6c(int *p, int *q) {
-   return !p ? bar3(q, 2, p) // expected-warning {{Null pointer passed as an argument to a 'nonnull' parameter}}
+   return !p ? bar3(q, 2, p) // expected-warning {{Null pointer passed to 3rd parameter expecting 'nonnull'}}
              : bar3(p, 2, q); // no-warning
 }
 
@@ -286,7 +286,7 @@ void pr4759_aux(int *p) __attribute__((nonnull));
 
 void pr4759() {
   int *p;
-  pr4759_aux(p); // expected-warning{{Function call argument is an uninitialized value}}
+  pr4759_aux(p); // expected-warning{{1st function call argument is an uninitialized value}}
 }
 
 // Relax function call arguments invalidation to be aware of const
@@ -297,7 +297,7 @@ typedef void (*NoConstType)(int*);
 int foo10595327(int b) {
   void (*fp)(int *);
   // We use path sensitivity to get the function declaration. Even when the
-  // function pointer is cast to non pointer-to-const parameter type, we can
+  // function pointer is cast to non-pointer-to-const parameter type, we can
   // find the right function declaration.
   if (b > 5)
     fp = (NoConstType)ttt2;
@@ -310,4 +310,22 @@ int foo10595327(int b) {
   if (x == y)
       return *p; // no-warning
   return 0;
+}
+
+#define AS_ATTRIBUTE volatile __attribute__((address_space(256)))
+#define _get_base() ((void * AS_ATTRIBUTE *)0)
+void* test_address_space_array(unsigned long slot) {
+  return _get_base()[slot]; // no-warning
+}
+void test_address_space_condition(int AS_ATTRIBUTE *cpu_data) {
+   if (cpu_data == 0) {
+    *cpu_data = 3; // no-warning
+  }
+}
+struct X { int member; };
+int test_address_space_member() {
+  struct X AS_ATTRIBUTE *data = (struct X AS_ATTRIBUTE *)0UL;
+  int ret;
+  ret = data->member; // no-warning
+  return ret;
 }

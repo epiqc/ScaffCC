@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -analyze -analyzer-checker=experimental.core -analyzer-checker=deadcode.DeadStores,osx.cocoa.RetainCount -fblocks -verify -Wno-objc-root-class %s
+// RUN: %clang_analyze_cc1 -analyzer-checker=core,alpha.core -analyzer-checker=deadcode.DeadStores,osx.cocoa.RetainCount -fblocks -verify -Wno-objc-root-class %s
 
 typedef signed char BOOL;
 typedef unsigned int NSUInteger;
@@ -27,7 +27,7 @@ extern NSString *NSAlignmentBinding;
 // This test case was reported as a false positive due to a bug in the
 // LiveVariables <-> deadcode.DeadStores interplay.  We should not flag a warning
 // here.  The test case was reported in:
-//  http://lists.cs.uiuc.edu/pipermail/cfe-dev/2008-July/002157.html
+//  http://lists.llvm.org/pipermail/cfe-dev/2008-July/002157.html
 void DeadStoreTest(NSObject *anObject) {
   NSArray *keys;
   if ((keys = [anObject exposedBindings]) &&   // no-warning
@@ -71,7 +71,8 @@ void foo_rdar8527823();
 
 @implementation Rdar7947686_B
 - (id) init {
-  id x = (self = [super init]); // no-warning
+  id x = (self = [super init]);
+  // expected-warning@-1 {{Although the value stored to 'self'}}
   return x;
 }
 @end
@@ -87,4 +88,32 @@ RDar10591355 *rdar10591355_aux();
 void rdar10591355() {
   RDar10591355 *p = rdar10591355_aux();
   ^{ (void) p.x; }();
+}
+
+@interface Radar11059352_1 {
+@private
+    int *_pathString;
+}
+@property int *pathString;
+@end
+@interface Radar11059352 {
+@private
+Radar11059352_1 *_Path;
+}
+@end
+@implementation Radar11059352
+
+- (int*)usePath {
+    Radar11059352_1 *xxxxx = _Path; // no warning
+    int *wp = xxxxx.pathString;
+    return wp;
+}
+@end
+
+id test_objc_precise_lifetime_foo();
+void test_objc_precise_lifetime() {
+  __attribute__((objc_precise_lifetime)) id dead = test_objc_precise_lifetime_foo(); // no-warning
+  dead = 0;
+  dead = test_objc_precise_lifetime_foo(); // no-warning
+  dead = 0;
 }

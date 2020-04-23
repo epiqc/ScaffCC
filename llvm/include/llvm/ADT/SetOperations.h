@@ -1,9 +1,8 @@
 //===-- llvm/ADT/SetOperations.h - Generic Set Operations -------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -39,7 +38,7 @@ bool set_union(S1Ty &S1, const S2Ty &S2) {
 template <class S1Ty, class S2Ty>
 void set_intersect(S1Ty &S1, const S2Ty &S2) {
    for (typename S1Ty::iterator I = S1.begin(); I != S1.end();) {
-     const typename S1Ty::key_type &E = *I;
+     const auto &E = *I;
      ++I;
      if (!S2.count(E)) S1.erase(E);   // Erase element if not in S2
    }

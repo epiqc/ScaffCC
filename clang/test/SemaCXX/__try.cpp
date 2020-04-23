@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -fsyntax-only -verify -fborland-extensions -fcxx-exceptions %s
+// RUN: %clang_cc1 -triple x86_64-windows -fsyntax-only -verify -fborland-extensions -fcxx-exceptions %s
 
 // This test is from http://docwiki.embarcadero.com/RADStudio/en/Try
 
@@ -55,4 +55,35 @@ int main()
     puts("C++ allows __finally too!");
   }
   return e;
+}
+
+namespace PR17584 {
+template <typename>
+void Except() {
+  __try {
+  } __except(true) {
+  }
+}
+
+template <typename>
+void Finally() {
+  __try {
+  } __finally {
+  }
+}
+
+template void Except<void>();
+template void Finally<void>();
+
+}
+
+void test___leave() {
+  // Most tests are in __try.c.
+
+  // Clang accepts try with __finally. MSVC doesn't. (Maybe a Borland thing?)
+  // __leave in mixed blocks isn't supported.
+  try {
+    __leave; // expected-error{{'__leave' statement not in __try block}}
+  } __finally {
+  }
 }

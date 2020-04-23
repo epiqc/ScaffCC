@@ -1,17 +1,16 @@
 //===-- PHIEliminationUtils.cpp - Helper functions for PHI elimination ----===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
 #include "PHIEliminationUtils.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
-#include "llvm/ADT/SmallPtrSet.h"
 using namespace llvm;
 
 // findCopyInsertPoint - Find a safe place in MBB to insert a copy from SrcReg
@@ -28,17 +27,15 @@ llvm::findPHICopyInsertPoint(MachineBasicBlock* MBB, MachineBasicBlock* SuccMBB,
   // Usually, we just want to insert the copy before the first terminator
   // instruction. However, for the edge going to a landing pad, we must insert
   // the copy before the call/invoke instruction.
-  if (!SuccMBB->isLandingPad())
+  if (!SuccMBB->isEHPad())
     return MBB->getFirstTerminator();
 
   // Discover any defs/uses in this basic block.
   SmallPtrSet<MachineInstr*, 8> DefUsesInMBB;
   MachineRegisterInfo& MRI = MBB->getParent()->getRegInfo();
-  for (MachineRegisterInfo::reg_iterator RI = MRI.reg_begin(SrcReg),
-         RE = MRI.reg_end(); RI != RE; ++RI) {
-    MachineInstr* DefUseMI = &*RI;
-    if (DefUseMI->getParent() == MBB)
-      DefUsesInMBB.insert(DefUseMI);
+  for (MachineInstr &RI : MRI.reg_instructions(SrcReg)) {
+    if (RI.getParent() == MBB)
+      DefUsesInMBB.insert(&RI);
   }
 
   MachineBasicBlock::iterator InsertPoint;
@@ -56,6 +53,7 @@ llvm::findPHICopyInsertPoint(MachineBasicBlock* MBB, MachineBasicBlock* SuccMBB,
     ++InsertPoint;
   }
 
-  // Make sure the copy goes after any phi nodes however.
+  // Make sure the copy goes after any phi nodes but before
+  // any debug nodes.
   return MBB->SkipPHIsAndLabels(InsertPoint);
 }

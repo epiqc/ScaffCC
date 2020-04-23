@@ -1,23 +1,26 @@
 //===--- Util.h - Common Driver Utilities -----------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CLANG_DRIVER_UTIL_H_
-#define CLANG_DRIVER_UTIL_H_
+#ifndef LLVM_CLANG_DRIVER_UTIL_H
+#define LLVM_CLANG_DRIVER_UTIL_H
 
 #include "clang/Basic/LLVM.h"
+#include "llvm/ADT/DenseMap.h"
 
 namespace clang {
+class DiagnosticsEngine;
+
 namespace driver {
   class Action;
+  class JobAction;
 
-  /// ArgStringList - Type used for constructing argv lists for subprocesses.
-  typedef SmallVector<const char*, 16> ArgStringList;
+  /// ArgStringMap - Type used to map a JobAction to its result file.
+  typedef llvm::DenseMap<const JobAction*, const char*> ArgStringMap;
 
   /// ActionList - Type used for lists of actions.
   typedef SmallVector<Action*, 3> ActionList;

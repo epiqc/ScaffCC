@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -fsyntax-only -Wdangling-field -verify %s
+// RUN: %clang_cc1 -fsyntax-only -Wdangling-field -verify -std=c++11 %s
 
 struct X {
   X(int);
@@ -20,7 +20,7 @@ struct S {
 
 struct S2 {
   const X &x; // expected-note {{reference member declared here}}
-  S2(int i) : x(i) {} // expected-warning {{binding reference member 'x' to a temporary}}
+  S2(int i) : x(i) {} // expected-error {{member 'x' binds to a temporary}}
 };
 
 struct S3 {
@@ -35,3 +35,22 @@ template <typename T> struct S4 {
 
 template struct S4<int>; // no warning from this instantiation
 template struct S4<int&>; // expected-note {{in instantiation}}
+
+struct S5 {
+  const X &x; // expected-note {{here}}
+};
+S5 s5 = { 0 }; // ok, lifetime-extended
+
+struct S6 {
+  S5 s5; // expected-note {{here}}
+  S6() : s5 { 0 } {} // expected-error {{reference subobject of member 's5' binds to a temporary}}
+};
+
+struct S7 : S5 {
+  S7() : S5 { 0 } {} // expected-error {{reference member 'x' binds to a temporary}}
+};
+
+struct S8 {
+  int *p;
+  S8(int *a) : p(&a[0]) {}
+};

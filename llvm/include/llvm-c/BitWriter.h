@@ -1,9 +1,9 @@
 /*===-- llvm-c/BitWriter.h - BitWriter Library C Interface ------*- C++ -*-===*\
 |*                                                                            *|
-|*                     The LLVM Compiler Infrastructure                       *|
-|*                                                                            *|
-|* This file is distributed under the University of Illinois Open Source      *|
-|* License. See LICENSE.TXT for details.                                      *|
+|* Part of the LLVM Project, under the Apache License v2.0 with LLVM          *|
+|* Exceptions.                                                                *|
+|* See https://llvm.org/LICENSE.txt for license information.                  *|
+|* SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception                    *|
 |*                                                                            *|
 |*===----------------------------------------------------------------------===*|
 |*                                                                            *|
@@ -16,14 +16,13 @@
 |*                                                                            *|
 \*===----------------------------------------------------------------------===*/
 
-#ifndef LLVM_C_BITCODEWRITER_H
-#define LLVM_C_BITCODEWRITER_H
+#ifndef LLVM_C_BITWRITER_H
+#define LLVM_C_BITWRITER_H
 
-#include "llvm-c/Core.h"
+#include "llvm-c/ExternC.h"
+#include "llvm-c/Types.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+LLVM_C_EXTERN_C_BEGIN
 
 /**
  * @defgroup LLVMCBitWriter Bit Writer
@@ -34,7 +33,7 @@ extern "C" {
 
 /*===-- Operations on modules ---------------------------------------------===*/
 
-/** Writes a module to the specified path. Returns 0 on success. */ 
+/** Writes a module to the specified path. Returns 0 on success. */
 int LLVMWriteBitcodeToFile(LLVMModuleRef M, const char *Path);
 
 /** Writes a module to an open file descriptor. Returns 0 on success. */
@@ -42,15 +41,16 @@ int LLVMWriteBitcodeToFD(LLVMModuleRef M, int FD, int ShouldClose,
                          int Unbuffered);
 
 /** Deprecated for LLVMWriteBitcodeToFD. Writes a module to an open file
-    descriptor. Returns 0 on success. Closes the Handle. */ 
+    descriptor. Returns 0 on success. Closes the Handle. */
 int LLVMWriteBitcodeToFileHandle(LLVMModuleRef M, int Handle);
+
+/** Writes a module to a new memory buffer and returns it. */
+LLVMMemoryBufferRef LLVMWriteBitcodeToMemoryBuffer(LLVMModuleRef M);
 
 /**
  * @}
  */
 
-#ifdef __cplusplus
-}
-#endif
+LLVM_C_EXTERN_C_END
 
 #endif

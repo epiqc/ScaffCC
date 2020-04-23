@@ -24,9 +24,9 @@ extern void (*r4)() throw(...);
 extern void (*r5)() throw(int); // expected-note {{previous declaration}}
 extern void (*r5)(); // expected-error {{exception specification in declaration does not match}}
 
-// For functions, we accept this with a warning.
+// throw(int) and no spec are not compatible
 extern void f5() throw(int); // expected-note {{previous declaration}}
-extern void f5(); // expected-warning {{missing exception specification}}
+extern void f5(); // expected-error {{missing exception specification}}
 
 // Different types are not compatible.
 extern void (*r7)() throw(int); // expected-note {{previous declaration}}
@@ -104,3 +104,13 @@ void* operator new(mysize_t);
 void* operator new[](mysize_t);
 void* operator new[](mysize_t) throw(std::bad_alloc);
 
+template<bool X> void equivalent() noexcept (X);
+template<bool X> void equivalent() noexcept (X);
+
+template<bool X, bool Y> void not_equivalent() noexcept (X); // expected-note {{previous}}
+template<bool X, bool Y> void not_equivalent() noexcept (Y); // expected-error {{does not match}}
+
+template<bool X> void missing() noexcept (X); // expected-note {{previous}}
+// FIXME: The missing exception specification that we report here doesn't make
+// sense in the context of this declaration.
+template<bool P> void missing(); // expected-error {{missing exception specification 'noexcept(X)'}}

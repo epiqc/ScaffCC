@@ -21,7 +21,7 @@ void r() {
 
 class PD {
   friend struct A;
-  ~PD(); // expected-note 4{{here}}
+  ~PD(); // expected-note 5{{here}}
 public:
   typedef int n;
 };
@@ -30,21 +30,33 @@ struct DD {
   typedef int n;
 };
 
+PD pd();
+DD dd();
+
 struct A {
-  decltype(PD()) s; // ok
-  decltype(PD())::n n; // ok
-  decltype(DD()) *p = new decltype(DD()); // ok
+  decltype(pd()) s; // ok
+  decltype(pd())::n n; // ok
+  decltype(dd()) *p = new decltype(dd()); // ok
 };
+A a();
 
 // Two errors here: one for the decltype, one for the variable.
-decltype(PD(), PD()) pd1; // expected-error 2{{private destructor}}
-decltype(DD(), DD()) dd1; // expected-error 2{{deleted function}}
+decltype(
+    pd(), // expected-error {{private destructor}}
+    pd()) pd1; // expected-error {{private destructor}}
+decltype(dd(), // expected-error {{deleted function}}
+         dd()) dd1;
+decltype(a(),
+         dd()) dd2; // expected-error {{deleted function}}
+decltype(
+    pd(), // expected-error {{temporary of type 'PD' has private destructor}}
+    0) pd2;
 
-decltype(((13, ((DD())))))::n dd_parens; // ok
-decltype(((((42)), PD())))::n pd_parens_comma; // ok
+decltype(((13, ((dd())))))::n dd_parens; // ok
+decltype(((((42)), pd())))::n pd_parens_comma; // ok
 
 // Ensure parens aren't stripped from a decltype node.
-extern decltype(PD()) pd_ref; // ok
+extern decltype(pd()) pd_ref; // ok
 decltype((pd_ref)) pd_ref3 = pd_ref; // ok, PD &
 decltype(pd_ref) pd_ref2 = pd_ref; // expected-error {{private destructor}}
 
@@ -70,7 +82,7 @@ namespace libcxx_example {
   template<typename T> struct swappable {
     typedef decltype(swap(declval<T&>(), declval<T&>())) type;
     static const bool value = !is_same<type, nat>::value;
-    constexpr operator bool() { return value; }
+    constexpr operator bool() const { return value; }
   };
 
   static_assert(swappable<int>(), "");
@@ -99,7 +111,7 @@ namespace RequireCompleteType {
 
 namespace Overload {
   DD operator+(PD &a, PD &b);
-  decltype(PD()) *pd_ptr;
+  decltype(pd()) *pd_ptr;
   decltype(*pd_ptr + *pd_ptr) *dd_ptr; // ok
 
   decltype(0, *pd_ptr) pd_ref2 = pd_ref; // ok

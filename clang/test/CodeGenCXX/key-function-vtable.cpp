@@ -1,4 +1,5 @@
-// RUN: %clang_cc1 %s -emit-llvm -o - | FileCheck %s
+// RUN: %clang_cc1 -triple x86_64-none-linux-gnu %s -emit-llvm -o - | FileCheck %s
+// RUN: %clang_cc1 -triple arm-apple-darwin %s -emit-llvm -o - | FileCheck %s
 
 // Simple key function test
 struct testa { virtual void a(); };
@@ -40,13 +41,11 @@ struct X1 : X0 {
 
 inline void X1::f() { }
 
-void use_X1(X1 *x1) { x1->f(); }
+void use_X1() { X1 x1; }
 
-// FIXME: The checks are extremely difficult to get right when the globals
-// aren't alphabetized
-// CHECK: @_ZTV2X1 = linkonce_odr unnamed_addr constant
-// CHECK: @_ZTV5testa = unnamed_addr constant [3 x i8*] [i8* null
-// CHECK: @_ZTV5testc = linkonce_odr unnamed_addr constant [3 x i8*] [i8* null
-// CHECK: @_ZTVN12_GLOBAL__N_15testgE = internal unnamed_addr constant [3 x i8*] [i8* null
-// CHECK: @_ZTV5teste = linkonce_odr unnamed_addr constant [3 x i8*] [i8* null
-// CHECK: @_ZTV5testb = linkonce_odr unnamed_addr constant [3 x i8*] [i8* null
+// CHECK-DAG: @_ZTV2X1 = linkonce_odr unnamed_addr constant
+// CHECK-DAG: @_ZTV5testa = unnamed_addr constant { [3 x i8*] } { [3 x i8*] [i8* null
+// CHECK-DAG: @_ZTV5testc = linkonce_odr unnamed_addr constant { [3 x i8*] } { [3 x i8*] [i8* null
+// CHECK-DAG: @_ZTV5testb = linkonce_odr unnamed_addr constant { [3 x i8*] } { [3 x i8*] [i8* null
+// CHECK-DAG: @_ZTV5teste = linkonce_odr unnamed_addr constant { [3 x i8*] } { [3 x i8*] [i8* null
+// CHECK-DAG: @_ZTVN12_GLOBAL__N_15testgE = internal unnamed_addr constant { [3 x i8*] } { [3 x i8*] [i8* null

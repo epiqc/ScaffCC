@@ -9,6 +9,8 @@ struct F : public C1 {};            // Single path to B with virtual.
 struct G1 : public B {};
 struct G2 : public B {};
 struct H : public G1, public G2 {}; // Ambiguous path to B.
+struct I;                           // Incomplete.  expected-note {{'I' is incomplete}}
+struct J;                           // Incomplete.  expected-note {{'J' is incomplete}}
 
 enum Enum { En1, En2 };
 enum Onom { On1, On2 };
@@ -41,11 +43,11 @@ void t_529_2()
   (void)static_cast<void*>((int*)0);
   (void)static_cast<volatile const void*>((const int*)0);
   (void)static_cast<A*>((B*)0);
-  (void)static_cast<A&>(*((B*)0));
+  (void)static_cast<A&>(*((B*)0)); // expected-warning {{binding dereferenced null pointer to reference has undefined behavior}}
   (void)static_cast<const B*>((C1*)0);
-  (void)static_cast<B&>(*((C1*)0));
+  (void)static_cast<B&>(*((C1*)0)); // expected-warning {{binding dereferenced null pointer to reference has undefined behavior}}
   (void)static_cast<A*>((D*)0);
-  (void)static_cast<const A&>(*((D*)0));
+  (void)static_cast<const A&>(*((D*)0)); // expected-warning {{binding dereferenced null pointer to reference has undefined behavior}}
   (void)static_cast<int B::*>((int A::*)0);
   (void)static_cast<void (B::*)()>((void (A::*)())0);
 
@@ -90,8 +92,12 @@ void t_529_5_8()
   (void)static_cast<E&>(*((A*)0)); // expected-error {{cannot cast private base class 'A' to 'E'}}
   (void)static_cast<H*>((A*)0); // expected-error {{ambiguous cast from base 'A' to derived 'H':\n    struct A -> struct B -> struct G1 -> struct H\n    struct A -> struct B -> struct G2 -> struct H}}
   (void)static_cast<H&>(*((A*)0)); // expected-error {{ambiguous cast from base 'A' to derived 'H':\n    struct A -> struct B -> struct G1 -> struct H\n    struct A -> struct B -> struct G2 -> struct H}}
-  (void)static_cast<E*>((B*)0); // expected-error {{static_cast from 'B *' to 'E *' is not allowed}}
+  (void)static_cast<E*>((B*)0); // expected-error {{static_cast from 'B *' to 'E *', which are not related by inheritance, is not allowed}}
   (void)static_cast<E&>(*((B*)0)); // expected-error {{non-const lvalue reference to type 'E' cannot bind to a value of unrelated type 'B'}}
+
+
+  (void)static_cast<E*>((J*)0); // expected-error {{static_cast from 'J *' to 'E *', which are not related by inheritance, is not allowed}}
+  (void)static_cast<I*>((B*)0); // expected-error {{static_cast from 'B *' to 'I *', which are not related by inheritance, is not allowed}}
 
   // TODO: Test inaccessible base in context where it's accessible, i.e.
   // member function and friend.
@@ -131,6 +137,7 @@ void t_529_9()
   // Bad code below
   (void)static_cast<int A::*>((int H::*)0); // expected-error {{ambiguous conversion from pointer to member of derived class 'H' to pointer to member of base class 'A':}}
   (void)static_cast<int A::*>((int F::*)0); // expected-error {{conversion from pointer to member of class 'F' to pointer to member of class 'A' via virtual base 'B' is not allowed}}
+  (void)static_cast<int I::*>((int J::*)0); // expected-error {{static_cast from 'int J::*' to 'int I::*' is not allowed}}
 }
 
 // PR 5261 - static_cast should instantiate template if possible
@@ -192,6 +199,6 @@ namespace PR6072 {
     (void)static_cast<void (A::*)()>(&B::f);
     (void)static_cast<void (B::*)()>(&B::f);
     (void)static_cast<void (C::*)()>(&B::f);
-    (void)static_cast<void (D::*)()>(&B::f); // expected-error{{address of overloaded function 'f' cannot be static_cast to type 'void (PR6072::D::*)()'}}
+    (void)static_cast<void (D::*)()>(&B::f); // expected-error-re{{address of overloaded function 'f' cannot be static_cast to type 'void (PR6072::D::*)(){{( __attribute__\(\(thiscall\)\))?}}'}}
   }
 }

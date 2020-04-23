@@ -17,7 +17,7 @@
 /***********************************************
 * 4-Qubit Toffoli
 ************************************************/
-module C_Toffoli (qbit target, qbit ctrl1, qbit ctrl2, qbit ctrl3)
+scaff_module C_Toffoli (qbit target, qbit ctrl1, qbit ctrl2, qbit ctrl3)
 {
   CNOT ( ctrl2,ctrl1);
   Toffoli ( ctrl3, ctrl1,target);
@@ -27,7 +27,7 @@ module C_Toffoli (qbit target, qbit ctrl1, qbit ctrl2, qbit ctrl3)
 /***********************************************
 * 5-Qubit Toffoli
 ************************************************/
-module C_C_Toffoli (qbit target, qbit ctrl1, qbit ctrl2, qbit ctrl3, qbit ctrl4)
+scaff_module C_C_Toffoli (qbit target, qbit ctrl1, qbit ctrl2, qbit ctrl3, qbit ctrl4)
 {
   CNOT ( ctrl2,ctrl1);
   Toffoli ( ctrl3, ctrl1,target);
@@ -35,9 +35,9 @@ module C_C_Toffoli (qbit target, qbit ctrl1, qbit ctrl2, qbit ctrl3, qbit ctrl4)
 }
 
 /***********************************************
-* Controlled Version of the C_EvaluateOR module
+* Controlled Version of the C_EvaluateOR scaff_module
 ************************************************/
-module C_EvaluateOR(qbit target, qbit ctr2, qbit ctr1, qbit ctrl)
+scaff_module C_EvaluateOR(qbit target, qbit ctr2, qbit ctr1, qbit ctrl)
 {
 	CNOT( ctrl,ctr1);
 	CNOT( ctrl,ctr2);
@@ -46,9 +46,9 @@ module C_EvaluateOR(qbit target, qbit ctr2, qbit ctr1, qbit ctrl)
 }
 
 /*************************************************
-* Controlled Version of the C_InvEvaluateOR module
+* Controlled Version of the C_InvEvaluateOR scaff_module
 **************************************************/
-module C_InvEvaluateOR(qbit target, qbit ctr2, qbit ctr1, qbit ctrl)
+scaff_module C_InvEvaluateOR(qbit target, qbit ctr2, qbit ctr1, qbit ctrl)
 {
 	CNOT( ctrl,target);
 	C_Toffoli(target, ctr2, ctr1, ctrl);
@@ -57,9 +57,9 @@ module C_InvEvaluateOR(qbit target, qbit ctr2, qbit ctr1, qbit ctrl)
 }
 
 /***********************************************
-* Controlled Version of the C_EvaluateOR module
+* Controlled Version of the C_EvaluateOR scaff_module
 ************************************************/
-module C_C_EvaluateOR(qbit target, qbit ctr2, qbit ctr1, qbit ctrl1, qbit ctrl2)
+scaff_module C_C_EvaluateOR(qbit target, qbit ctr2, qbit ctr1, qbit ctrl1, qbit ctrl2)
 {
 	Toffoli( ctrl2, ctrl1,ctr1);
 	Toffoli( ctrl2, ctrl1,ctr2);
@@ -68,9 +68,9 @@ module C_C_EvaluateOR(qbit target, qbit ctr2, qbit ctr1, qbit ctrl1, qbit ctrl2)
 }
 
 /***********************************************
-* Controlled Version of the C_EvaluateOR module
+* Controlled Version of the C_EvaluateOR scaff_module
 ************************************************/
-module C_C_InvEvaluateOR(qbit target, qbit ctr2, qbit ctr1, qbit ctrl1, qbit ctrl2)
+scaff_module C_C_InvEvaluateOR(qbit target, qbit ctr2, qbit ctr1, qbit ctrl1, qbit ctrl2)
 {
 	Toffoli( ctrl2, ctrl1,target);
 	C_C_Toffoli(target, ctr2, ctr1, ctrl1, ctrl2);
@@ -79,9 +79,9 @@ module C_C_InvEvaluateOR(qbit target, qbit ctr2, qbit ctr1, qbit ctrl1, qbit ctr
 }
 
 /***********************************************
-* Controlled version of the ADD module
+* Controlled version of the ADD scaff_module
 ************************************************/
-module C_ADD (qbit x[cn], qbit y[cn], qbit s[cn], qbit ctrl)
+scaff_module C_ADD (qbit x[cn], qbit y[cn], qbit s[cn], qbit ctrl)
 {
 	// workspace registers
 	qbit c1[cn+1];
@@ -211,9 +211,9 @@ module C_ADD (qbit x[cn], qbit y[cn], qbit s[cn], qbit ctrl)
 
 
 /***********************************************
-* Controlled version of the C_ADD module
+* Controlled version of the C_ADD scaff_module
 ************************************************/
-module C_C_ADD (qbit x[cn], qbit y[cn], qbit s[cn], qbit ctrl1, qbit ctrl2)
+scaff_module C_C_ADD (qbit x[cn], qbit y[cn], qbit s[cn], qbit ctrl1, qbit ctrl2)
 {
 	// workspace registers
 	qbit c1[cn+1];
@@ -342,9 +342,9 @@ module C_C_ADD (qbit x[cn], qbit y[cn], qbit s[cn], qbit ctrl1, qbit ctrl2)
 }
 
 /***********************************************
-* Controlled Version of the MUL module
+* Controlled Version of the MUL scaff_module
 ************************************************/
-module C_MUL (qbit x[cn], qbit y[cn], qbit p[cn], qbit ctrl)
+scaff_module C_MUL (qbit x[cn], qbit y[cn], qbit p[cn], qbit ctrl)
 {
 	qbit tmp[cn];
 	qbit wrk[cn];
@@ -434,9 +434,9 @@ module C_MUL (qbit x[cn], qbit y[cn], qbit p[cn], qbit ctrl)
 }
 
 /***********************************************
-* Controlled Version of the unMul module
+* Controlled Version of the unMul scaff_module
 ************************************************/
-module C_unMUL (qbit x[cn], qbit y[cn], qbit p[cn], qbit ctrl) 
+scaff_module C_unMUL (qbit x[cn], qbit y[cn], qbit p[cn], qbit ctrl) 
 {
 	qbit tmp[cn];
 	qbit wrk[cn];
@@ -465,7 +465,7 @@ module C_unMUL (qbit x[cn], qbit y[cn], qbit p[cn], qbit ctrl)
 			{
 				/****************************************************
 				* uncompute tp back to all 0 register
-				* same reasoning as given in MUL module
+				* same reasoning as given in MUL scaff_module
 				****************************************************/
 				for(i = 0; i < k; i++)
 				{
@@ -514,7 +514,7 @@ module C_unMUL (qbit x[cn], qbit y[cn], qbit p[cn], qbit ctrl)
 
 				/****************************************************
 				* uncompute tp back to all 0 register
-				* same reasoning as given in MUL module
+				* same reasoning as given in MUL scaff_module
 				****************************************************/
 				for(i = 0; i < k; i++)
 				{
@@ -562,16 +562,16 @@ module C_unMUL (qbit x[cn], qbit y[cn], qbit p[cn], qbit ctrl)
 }
 
 /**************************************************************
-* 	Useful Ancillary Modules (used by Oracle and Algorithm)
+* 	Useful Ancillary scaff_modules (used by Oracle and Algorithm)
 ***************************************************************/
-module Swap(qbit q1, qbit q2)
+scaff_module Swap(qbit q1, qbit q2)
 {
 	CNOT(q1,q2);
 	CNOT(q2,q1);
 	CNOT(q1,q2);
 }
 
-module ctrSwap(qbit q1,qbit q2, qbit q3)
+scaff_module ctrSwap(qbit q1,qbit q2, qbit q3)
 {
 	Toffoli( q3,q1,q2);
 	Toffoli( q3,q2,q1);
@@ -581,7 +581,7 @@ module ctrSwap(qbit q1,qbit q2, qbit q3)
 /***********************************************************
 *	target[0] = OR(ctr2[0] , ctr1[0])
 ************************************************************/
-module EvaluateOR(qbit target, qbit ctr2, qbit ctr1)
+scaff_module EvaluateOR(qbit target, qbit ctr2, qbit ctr1)
 {
 	X(ctr1);
 	X(ctr2);
@@ -589,7 +589,7 @@ module EvaluateOR(qbit target, qbit ctr2, qbit ctr1)
 	X(target);
 }
 
-module InvEvaluateOR(qbit target, qbit ctr2, qbit ctr1)
+scaff_module InvEvaluateOR(qbit target, qbit ctr2, qbit ctr1)
 {
 	X(target);
 	Toffoli( ctr1, ctr2,target);
@@ -598,9 +598,9 @@ module InvEvaluateOR(qbit target, qbit ctr2, qbit ctr1)
 }
 
 /*******************************************************
-* The following auxillary module(s) are used in Oracle
+* The following auxillary scaff_module(s) are used in Oracle
 ********************************************************/
-module equalquInt2(qbit x[2], qbit y[2], qbit equal)
+scaff_module equalquInt2(qbit x[2], qbit y[2], qbit equal)
 {
 	int i = 0;
 	qbit dum[2];
@@ -621,7 +621,7 @@ module equalquInt2(qbit x[2], qbit y[2], qbit equal)
 
 
 /*********************************************************************
-* The following module(s) listed in the GFI document
+* The following scaff_module(s) listed in the GFI document
 * They are summoned by the main oracle function EdgeOracle
 * The apperance order is  6, 2, 3, 7, 8, 4, 5, and 1 (the EdgeOracle).
 ***********************************************************************/
@@ -636,7 +636,7 @@ module equalquInt2(qbit x[2], qbit y[2], qbit equal)
 * 	by ConvertNODE and y is hn, which is 2^(n-1). Hence,
 * 	all y_i are all 0 except at y_(n-1).
 **************************************************************/
-module SUB(qbit x[cn], int y, qbit d[cn])
+scaff_module SUB(qbit x[cn], int y, qbit d[cn])
 {
 	qbit c1[cn+1];
 	qbit c2[cn+1];
@@ -816,7 +816,7 @@ module SUB(qbit x[cn], int y, qbit d[cn])
 *	      uint: qbit[cn]
 *		  int: hn
 **************************************************************/
-module ConvertNode(qbit u[], int uoffset, qbit uint[cn], int hn)
+scaff_module ConvertNode(qbit u[], int uoffset, qbit uint[cn], int hn)
 {
 	qbit w[cn];
 	int i = 0;
@@ -845,7 +845,7 @@ module ConvertNode(qbit u[], int uoffset, qbit uint[cn], int hn)
 
 	/***********************************************************************
 	* Uncomputation process: w register
-	* just need to run the loop again because w is not modify by SUB module
+	* just need to run the loop again because w is not modify by SUB scaff_module
 	************************************************************************/
 	for( i = 0; i < cn; i++)
 	{
@@ -868,7 +868,7 @@ module ConvertNode(qbit u[], int uoffset, qbit uint[cn], int hn)
 *		  y: qbit[cn]
 *		  t: qbit
 **************************************************************/
-module TestEqual(qbit x[cn], qbit y[cn], qbit t)
+scaff_module TestEqual(qbit x[cn], qbit y[cn], qbit t)
 {
 	qbit dum[cn];
 	qbit dum2[cn];
@@ -923,7 +923,7 @@ module TestEqual(qbit x[cn], qbit y[cn], qbit t)
 * 	If s is dirty (got dirty from previous ADD(x, y, clean s), then
 *	the doing process again would undo the assignment done in ADD(x, y, clean s).
 **************************************************************************/
-module ADD(qbit x[cn], qbit y[cn], qbit s[cn])
+scaff_module ADD(qbit x[cn], qbit y[cn], qbit s[cn])
 {
 	// workspace registers
 	qbit c1[cn+1];
@@ -1059,7 +1059,7 @@ module ADD(qbit x[cn], qbit y[cn], qbit s[cn])
 *		  p: qbit[cn] (suppose to be clean to be passed in)
 *		  notice that cn and n are defined globally
 **************************************************************/
-module MUL(qbit x[cn], qbit y[cn], qbit p[cn])
+scaff_module MUL(qbit x[cn], qbit y[cn], qbit p[cn])
 {
 	qbit tmp[cn];
 	qbit wrk[cn];
@@ -1156,11 +1156,11 @@ module MUL(qbit x[cn], qbit y[cn], qbit p[cn])
 *		  notice that cn and n are defined globally
 *	The idea is similar to ADD in a sense that if we do this process again
 *	we can reset the dirty bits of p back to 0. However, we need to
-*	have an extra local register tp to behave as the clean p in MUL module
+*	have an extra local register tp to behave as the clean p in MUL scaff_module
 *	then use the result in tp to reset p. And the final stage of the iteration
 *	needs to be a bit different in order to uncompute all registers.
 *********************************************************************************/
-module unMUL(qbit x[cn], qbit y[cn], qbit p[cn])
+scaff_module unMUL(qbit x[cn], qbit y[cn], qbit p[cn])
 {
 	qbit tmp[cn];
 	qbit wrk[cn];
@@ -1189,7 +1189,7 @@ module unMUL(qbit x[cn], qbit y[cn], qbit p[cn])
 			{
 				/****************************************************
 				* uncompute tp back to all 0 register
-				* same reasoning as given in MUL module
+				* same reasoning as given in MUL scaff_module
 				****************************************************/
 				for(i = 0; i < k; i++)
 				{
@@ -1238,7 +1238,7 @@ module unMUL(qbit x[cn], qbit y[cn], qbit p[cn])
 
 				/****************************************************
 				* uncompute tp back to all 0 register
-				* same reasoning as given in MUL module
+				* same reasoning as given in MUL scaff_module
 				****************************************************/
 				for(i = 0; i < k; i++)
 				{
@@ -1290,13 +1290,13 @@ module unMUL(qbit x[cn], qbit y[cn], qbit p[cn])
 *		  y: qbit[cn]
 *		  flg[1]: qbit of size 1 used for determing for computing or uncomputing
 **************************************************************/
-module Pow17(qbit x[cn], qbit x17[cn], qbit flg)
+scaff_module Pow17(qbit x[cn], qbit x17[cn], qbit flg)
 {
 	/************************************************************************
 	* Clean registers to be passed to MUL for computation when flg[0] is 0.
 	* By doing so, we do not have to force setting dirty registers
 	* back to 0 in MUL, which is important because if we do the enforcement,
-	* entanglement might occur and it might result in irreversible modules
+	* entanglement might occur and it might result in irreversible scaff_modules
 	**************************************************************************/
 	qbit w[cn];
 	qbit alpha[cn];
@@ -1304,7 +1304,7 @@ module Pow17(qbit x[cn], qbit x17[cn], qbit flg)
 	qbit gamma[cn];
 
 	/***************************************************************************
-	* x17 is clean when Pow17 is summoned in EdgeORACLE module with flg[0] = 0
+	* x17 is clean when Pow17 is summoned in EdgeORACLE scaff_module with flg[0] = 0
 	* But we want it to remain clean till the very last function call
 	* in Pow17. The reason for this is because
 	* at MUL, the first prcoess is forcing the 3rd parameter to 0. We do
@@ -1354,7 +1354,7 @@ module Pow17(qbit x[cn], qbit x17[cn], qbit flg)
 *		  m: qbit[2] (array of size 2)
 *	     Return:
 **************************************************************/
-module MOD3(qbit x[cn], qbit m[2])
+scaff_module MOD3(qbit x[cn], qbit m[2])
 {
 
 	/***********************
@@ -1386,7 +1386,7 @@ module MOD3(qbit x[cn], qbit m[2])
 		******************************************************************/
 		// if(x[j]==1)
 		// {
-			// I think it would be nice to write a module to do this repetitive procedure
+			// I think it would be nice to write a scaff_module to do this repetitive procedure
 			// compute s5[4]
 			C_Toffoli(tmp[0], s5[2], s5[3], x[j]);
 			C_Toffoli(tmp[1], s5[1], tmp[0], x[j]);
@@ -1539,7 +1539,7 @@ module MOD3(qbit x[cn], qbit m[2])
 
 
 		/*****************************************************************************************
-		* m is of type qbit[2] and when it is passed into this module, it is either u3 or v3
+		* m is of type qbit[2] and when it is passed into this scaff_module, it is either u3 or v3
 		* their value (at the moment of being passed in) is still the instantiated value (i.e. 00)
 		* Hence, it is ok to assign via cnot for assignment.
 		* However, if the values of v3, u3 are dirty, doing this would reset the dirty bits back to 00
@@ -1715,7 +1715,7 @@ module MOD3(qbit x[cn], qbit m[2])
 *	      v a qbit array of size n
 *		  edge a qbit; is 1 when u and v are connected
 **************************************************************/
-module EdgeORACLE(qbit u[], int uoffset, qbit v[], int voffset, qbit edge)
+scaff_module EdgeORACLE(qbit u[], int uoffset, qbit v[], int voffset, qbit edge)
 {
 
 	int i;
@@ -1959,7 +1959,7 @@ module EdgeORACLE(qbit u[], int uoffset, qbit v[], int voffset, qbit edge)
 
 	/*******************************************************************************************************
 	* Uncompute vint, uint: same reasoning. Running ConvertNode again will uncompute uint and vint back to 0
-	* since we are passing the same parameter (but uint and vint). Please see the explanation in module SUB
+	* since we are passing the same parameter (but uint and vint). Please see the explanation in scaff_module SUB
 	*******************************************************************************************************/
 	ConvertNode(u, uoffset, uint, hn);
 	ConvertNode(v, voffset, vint, hn);

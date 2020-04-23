@@ -37,11 +37,22 @@ void f0() {
 
 // rdar://problem/8962770
 void test4() {
-  int (^f)() = ^((x)) { }; // expected-error {{expected ')'}} expected-warning {{type specifier missing}} expected-note {{to match this}}
+  int (^f)() = ^((x)) { }; // expected-warning {{type specifier missing}} expected-error {{type-id cannot have a name}}
 }
 
 // rdar://problem/9170609
 void test5_helper(void (^)(int, int[*]));
 void test5(void) {
   test5_helper(^(int n, int array[n]) {});
+}
+
+// Reduced from a problem on platforms where va_list is an array.
+struct tag {
+  int x;
+};
+typedef struct tag array_ty[1];
+void test6(void) {
+  void (^block)(array_ty) = ^(array_ty arr) { };
+  array_ty arr;
+  block(arr);
 }

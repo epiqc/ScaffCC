@@ -1,9 +1,8 @@
 //===--- ARCMTActions.cpp - ARC Migrate Tool Frontend Actions ---*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -16,6 +15,7 @@ using namespace arcmt;
 
 bool CheckAction::BeginInvocation(CompilerInstance &CI) {
   if (arcmt::checkForManualIssues(CI.getInvocation(), getCurrentInput(),
+                                  CI.getPCHContainerOperations(),
                                   CI.getDiagnostics().getClient()))
     return false; // errors, stop the action.
 
@@ -24,24 +24,23 @@ bool CheckAction::BeginInvocation(CompilerInstance &CI) {
   return true;
 }
 
-CheckAction::CheckAction(FrontendAction *WrappedAction)
-  : WrapperFrontendAction(WrappedAction) {}
+CheckAction::CheckAction(std::unique_ptr<FrontendAction> WrappedAction)
+  : WrapperFrontendAction(std::move(WrappedAction)) {}
 
 bool ModifyAction::BeginInvocation(CompilerInstance &CI) {
   return !arcmt::applyTransformations(CI.getInvocation(), getCurrentInput(),
+                                      CI.getPCHContainerOperations(),
                                       CI.getDiagnostics().getClient());
 }
 
-ModifyAction::ModifyAction(FrontendAction *WrappedAction)
-  : WrapperFrontendAction(WrappedAction) {}
+ModifyAction::ModifyAction(std::unique_ptr<FrontendAction> WrappedAction)
+  : WrapperFrontendAction(std::move(WrappedAction)) {}
 
 bool MigrateAction::BeginInvocation(CompilerInstance &CI) {
-  if (arcmt::migrateWithTemporaryFiles(CI.getInvocation(),
-                                       getCurrentInput(),
-                                       CI.getDiagnostics().getClient(),
-                                       MigrateDir,
-                                       EmitPremigrationARCErros,
-                                       PlistOut))
+  if (arcmt::migrateWithTemporaryFiles(
+          CI.getInvocation(), getCurrentInput(), CI.getPCHContainerOperations(),
+          CI.getDiagnostics().getClient(), MigrateDir, EmitPremigrationARCErros,
+          PlistOut))
     return false; // errors, stop the action.
 
   // We only want to see diagnostics emitted by migrateWithTemporaryFiles.
@@ -49,11 +48,11 @@ bool MigrateAction::BeginInvocation(CompilerInstance &CI) {
   return true;
 }
 
-MigrateAction::MigrateAction(FrontendAction *WrappedAction,
+MigrateAction::MigrateAction(std::unique_ptr<FrontendAction> WrappedAction,
                              StringRef migrateDir,
                              StringRef plistOut,
                              bool emitPremigrationARCErrors)
-  : WrapperFrontendAction(WrappedAction), MigrateDir(migrateDir),
+  : WrapperFrontendAction(std::move(WrappedAction)), MigrateDir(migrateDir),
     PlistOut(plistOut), EmitPremigrationARCErros(emitPremigrationARCErrors) {
   if (MigrateDir.empty())
     MigrateDir = "."; // user current directory if none is given.

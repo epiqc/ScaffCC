@@ -1,241 +1,237 @@
 //=======- VirtualCallChecker.cpp --------------------------------*- C++ -*-==//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
-//  This file defines a checker that checks virtual function calls during 
+//  This file defines a checker that checks virtual method calls during
 //  construction or destruction of C++ objects.
 //
 //===----------------------------------------------------------------------===//
 
-#include "ClangSACheckers.h"
+#include "clang/AST/Attr.h"
 #include "clang/AST/DeclCXX.h"
-#include "clang/AST/StmtVisitor.h"
-#include "llvm/Support/SaveAndRestore.h"
-#include "clang/StaticAnalyzer/Core/PathSensitive/AnalysisManager.h"
-#include "clang/StaticAnalyzer/Core/Checker.h"
+#include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugReporter.h"
-#include "llvm/ADT/SmallString.h"
+#include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
+#include "clang/StaticAnalyzer/Core/Checker.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/CallEvent.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/ProgramStateTrait.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/SValBuilder.h"
 
 using namespace clang;
 using namespace ento;
 
 namespace {
+enum class ObjectState : bool { CtorCalled, DtorCalled };
+} // end namespace
+  // FIXME: Ascending over StackFrameContext maybe another method.
 
-class WalkAST : public StmtVisitor<WalkAST> {
-  BugReporter &BR;
-  AnalysisDeclContext *AC;
-
-  typedef const CallExpr * WorkListUnit;
-  typedef SmallVector<WorkListUnit, 20> DFSWorkList;
-
-  /// A vector representing the worklist which has a chain of CallExprs.
-  DFSWorkList WList;
-  
-  // PreVisited : A CallExpr to this FunctionDecl is in the worklist, but the
-  // body has not been visited yet.
-  // PostVisited : A CallExpr to this FunctionDecl is in the worklist, and the
-  // body has been visited.
-  enum Kind { NotVisited,
-              PreVisited,  /**< A CallExpr to this FunctionDecl is in the 
-                                worklist, but the body has not yet been
-                                visited. */
-              PostVisited  /**< A CallExpr to this FunctionDecl is in the
-                                worklist, and the body has been visited. */
-  } K;
-
-  /// A DenseMap that records visited states of FunctionDecls.
-  llvm::DenseMap<const FunctionDecl *, Kind> VisitedFunctions;
-
-  /// The CallExpr whose body is currently being visited.  This is used for
-  /// generating bug reports.  This is null while visiting the body of a
-  /// constructor or destructor.
-  const CallExpr *visitingCallExpr;
-  
-public:
-  WalkAST(BugReporter &br, AnalysisDeclContext *ac)
-    : BR(br),
-      AC(ac),
-      visitingCallExpr(0) {}
-  
-  bool hasWork() const { return !WList.empty(); }
-
-  /// This method adds a CallExpr to the worklist and marks the callee as
-  /// being PreVisited.
-  void Enqueue(WorkListUnit WLUnit) {
-    const FunctionDecl *FD = WLUnit->getDirectCallee();
-    if (!FD || !FD->getBody())
-      return;    
-    Kind &K = VisitedFunctions[FD];
-    if (K != NotVisited)
-      return;
-    K = PreVisited;
-    WList.push_back(WLUnit);
+namespace llvm {
+template <> struct FoldingSetTrait<ObjectState> {
+  static inline void Profile(ObjectState X, FoldingSetNodeID &ID) {
+    ID.AddInteger(static_cast<int>(X));
   }
-
-  /// This method returns an item from the worklist without removing it.
-  WorkListUnit Dequeue() {
-    assert(!WList.empty());
-    return WList.back();    
-  }
-  
-  void Execute() {
-    while (hasWork()) {
-      WorkListUnit WLUnit = Dequeue();
-      const FunctionDecl *FD = WLUnit->getDirectCallee();
-      assert(FD && FD->getBody());
-
-      if (VisitedFunctions[FD] == PreVisited) {
-        // If the callee is PreVisited, walk its body.
-        // Visit the body.
-        SaveAndRestore<const CallExpr *> SaveCall(visitingCallExpr, WLUnit);
-        Visit(FD->getBody());
-        
-        // Mark the function as being PostVisited to indicate we have
-        // scanned the body.
-        VisitedFunctions[FD] = PostVisited;
-        continue;
-      }
-
-      // Otherwise, the callee is PostVisited.
-      // Remove it from the worklist.
-      assert(VisitedFunctions[FD] == PostVisited);
-      WList.pop_back();
-    }
-  }
-
-  // Stmt visitor methods.
-  void VisitCallExpr(CallExpr *CE);
-  void VisitCXXMemberCallExpr(CallExpr *CE);
-  void VisitStmt(Stmt *S) { VisitChildren(S); }
-  void VisitChildren(Stmt *S);
-  
-  void ReportVirtualCall(const CallExpr *CE, bool isPure);
-
 };
-} // end anonymous namespace
-
-//===----------------------------------------------------------------------===//
-// AST walking.
-//===----------------------------------------------------------------------===//
-
-void WalkAST::VisitChildren(Stmt *S) {
-  for (Stmt::child_iterator I = S->child_begin(), E = S->child_end(); I!=E; ++I)
-    if (Stmt *child = *I)
-      Visit(child);
-}
-
-void WalkAST::VisitCallExpr(CallExpr *CE) {
-  VisitChildren(CE);
-  Enqueue(CE);
-}
-
-void WalkAST::VisitCXXMemberCallExpr(CallExpr *CE) {
-  VisitChildren(CE);
-  bool callIsNonVirtual = false;
-  
-  // Several situations to elide for checking.
-  if (MemberExpr *CME = dyn_cast<MemberExpr>(CE->getCallee())) {
-    // If the member access is fully qualified (i.e., X::F), then treat
-    // this as a non-virtual call and do not warn.
-    if (CME->getQualifier())
-      callIsNonVirtual = true;
-
-    // Elide analyzing the call entirely if the base pointer is not 'this'.
-    if (Expr *base = CME->getBase()->IgnoreImpCasts())
-      if (!isa<CXXThisExpr>(base))
-        return;
-  }
-
-  // Get the callee.
-  const CXXMethodDecl *MD = dyn_cast<CXXMethodDecl>(CE->getDirectCallee());
-  if (MD && MD->isVirtual() && !callIsNonVirtual)
-    ReportVirtualCall(CE, MD->isPure());
-
-  Enqueue(CE);
-}
-
-void WalkAST::ReportVirtualCall(const CallExpr *CE, bool isPure) {
-  SmallString<100> buf;
-  llvm::raw_svector_ostream os(buf);
-  
-  os << "Call Path : ";
-  // Name of current visiting CallExpr.
-  os << *CE->getDirectCallee();
-
-  // Name of the CallExpr whose body is current walking.
-  if (visitingCallExpr)
-    os << " <-- " << *visitingCallExpr->getDirectCallee();
-  // Names of FunctionDecls in worklist with state PostVisited.
-  for (SmallVectorImpl<const CallExpr *>::iterator I = WList.end(),
-         E = WList.begin(); I != E; --I) {
-    const FunctionDecl *FD = (*(I-1))->getDirectCallee();
-    assert(FD);
-    if (VisitedFunctions[FD] == PostVisited)
-      os << " <-- " << *FD;
-  }
-
-  PathDiagnosticLocation CELoc =
-    PathDiagnosticLocation::createBegin(CE, BR.getSourceManager(), AC);
-  SourceRange R = CE->getCallee()->getSourceRange();
-  
-  if (isPure) {
-    os << "\n" <<  "Call pure virtual functions during construction or "
-       << "destruction may leads undefined behaviour";
-    BR.EmitBasicReport(AC->getDecl(),
-                       "Call pure virtual function during construction or "
-                       "Destruction",
-                       "Cplusplus",
-                       os.str(), CELoc, &R, 1);
-    return;
-  }
-  else {
-    os << "\n" << "Call virtual functions during construction or "
-       << "destruction will never go to a more derived class";
-    BR.EmitBasicReport(AC->getDecl(),
-                       "Call virtual function during construction or "
-                       "Destruction",
-                       "Cplusplus",
-                       os.str(), CELoc, &R, 1);
-    return;
-  }
-}
-
-//===----------------------------------------------------------------------===//
-// VirtualCallChecker
-//===----------------------------------------------------------------------===//
+} // end namespace llvm
 
 namespace {
-class VirtualCallChecker : public Checker<check::ASTDecl<CXXRecordDecl> > {
+class VirtualCallChecker
+    : public Checker<check::BeginFunction, check::EndFunction, check::PreCall> {
 public:
-  void checkASTDecl(const CXXRecordDecl *RD, AnalysisManager& mgr,
-                    BugReporter &BR) const {
-    WalkAST walker(BR, mgr.getAnalysisDeclContext(RD));
+  // These are going to be null if the respective check is disabled.
+  mutable std::unique_ptr<BugType> BT_Pure, BT_Impure;
+  bool ShowFixIts = false;
 
-    // Check the constructors.
-    for (CXXRecordDecl::ctor_iterator I = RD->ctor_begin(), E = RD->ctor_end();
-         I != E; ++I) {
-      if (!I->isCopyOrMoveConstructor())
-        if (Stmt *Body = I->getBody()) {
-          walker.Visit(Body);
-          walker.Execute();
-        }
-    }
+  void checkBeginFunction(CheckerContext &C) const;
+  void checkEndFunction(const ReturnStmt *RS, CheckerContext &C) const;
+  void checkPreCall(const CallEvent &Call, CheckerContext &C) const;
 
-    // Check the destructor.
-    if (CXXDestructorDecl *DD = RD->getDestructor())
-      if (Stmt *Body = DD->getBody()) {
-        walker.Visit(Body);
-        walker.Execute();
-      }
-  }
+private:
+  void registerCtorDtorCallInState(bool IsBeginFunction,
+                                   CheckerContext &C) const;
 };
+} // end namespace
+
+// GDM (generic data map) to the memregion of this for the ctor and dtor.
+REGISTER_MAP_WITH_PROGRAMSTATE(CtorDtorMap, const MemRegion *, ObjectState)
+
+// The function to check if a callexpr is a virtual method call.
+static bool isVirtualCall(const CallExpr *CE) {
+  bool CallIsNonVirtual = false;
+
+  if (const MemberExpr *CME = dyn_cast<MemberExpr>(CE->getCallee())) {
+    // The member access is fully qualified (i.e., X::F).
+    // Treat this as a non-virtual call and do not warn.
+    if (CME->getQualifier())
+      CallIsNonVirtual = true;
+
+    if (const Expr *Base = CME->getBase()) {
+      // The most derived class is marked final.
+      if (Base->getBestDynamicClassType()->hasAttr<FinalAttr>())
+        CallIsNonVirtual = true;
+    }
+  }
+
+  const CXXMethodDecl *MD =
+      dyn_cast_or_null<CXXMethodDecl>(CE->getDirectCallee());
+  if (MD && MD->isVirtual() && !CallIsNonVirtual && !MD->hasAttr<FinalAttr>() &&
+      !MD->getParent()->hasAttr<FinalAttr>())
+    return true;
+  return false;
 }
 
-void ento::registerVirtualCallChecker(CheckerManager &mgr) {
-  mgr.registerChecker<VirtualCallChecker>();
+// The BeginFunction callback when enter a constructor or a destructor.
+void VirtualCallChecker::checkBeginFunction(CheckerContext &C) const {
+  registerCtorDtorCallInState(true, C);
+}
+
+// The EndFunction callback when leave a constructor or a destructor.
+void VirtualCallChecker::checkEndFunction(const ReturnStmt *RS,
+                                          CheckerContext &C) const {
+  registerCtorDtorCallInState(false, C);
+}
+
+void VirtualCallChecker::checkPreCall(const CallEvent &Call,
+                                      CheckerContext &C) const {
+  const auto MC = dyn_cast<CXXMemberCall>(&Call);
+  if (!MC)
+    return;
+
+  const CXXMethodDecl *MD = dyn_cast_or_null<CXXMethodDecl>(Call.getDecl());
+  if (!MD)
+    return;
+
+  ProgramStateRef State = C.getState();
+  // Member calls are always represented by a call-expression.
+  const auto *CE = cast<CallExpr>(Call.getOriginExpr());
+  if (!isVirtualCall(CE))
+    return;
+
+  const MemRegion *Reg = MC->getCXXThisVal().getAsRegion();
+  const ObjectState *ObState = State->get<CtorDtorMap>(Reg);
+  if (!ObState)
+    return;
+
+  bool IsPure = MD->isPure();
+
+  // At this point we're sure that we're calling a virtual method
+  // during construction or destruction, so we'll emit a report.
+  SmallString<128> Msg;
+  llvm::raw_svector_ostream OS(Msg);
+  OS << "Call to ";
+  if (IsPure)
+    OS << "pure ";
+  OS << "virtual method '" << MD->getParent()->getNameAsString()
+     << "::" << MD->getNameAsString() << "' during ";
+  if (*ObState == ObjectState::CtorCalled)
+    OS << "construction ";
+  else
+    OS << "destruction ";
+  if (IsPure)
+    OS << "has undefined behavior";
+  else
+    OS << "bypasses virtual dispatch";
+
+  ExplodedNode *N =
+      IsPure ? C.generateErrorNode() : C.generateNonFatalErrorNode();
+  if (!N)
+    return;
+
+  const std::unique_ptr<BugType> &BT = IsPure ? BT_Pure : BT_Impure;
+  if (!BT) {
+    // The respective check is disabled.
+    return;
+  }
+
+  auto Report = std::make_unique<PathSensitiveBugReport>(*BT, OS.str(), N);
+
+  if (ShowFixIts && !IsPure) {
+    // FIXME: These hints are valid only when the virtual call is made
+    // directly from the constructor/destructor. Otherwise the dispatch
+    // will work just fine from other callees, and the fix may break
+    // the otherwise correct program.
+    FixItHint Fixit = FixItHint::CreateInsertion(
+        CE->getBeginLoc(), MD->getParent()->getNameAsString() + "::");
+    Report->addFixItHint(Fixit);
+  }
+
+  C.emitReport(std::move(Report));
+}
+
+void VirtualCallChecker::registerCtorDtorCallInState(bool IsBeginFunction,
+                                                     CheckerContext &C) const {
+  const auto *LCtx = C.getLocationContext();
+  const auto *MD = dyn_cast_or_null<CXXMethodDecl>(LCtx->getDecl());
+  if (!MD)
+    return;
+
+  ProgramStateRef State = C.getState();
+  auto &SVB = C.getSValBuilder();
+
+  // Enter a constructor, set the corresponding memregion be true.
+  if (isa<CXXConstructorDecl>(MD)) {
+    auto ThiSVal =
+        State->getSVal(SVB.getCXXThis(MD, LCtx->getStackFrame()));
+    const MemRegion *Reg = ThiSVal.getAsRegion();
+    if (IsBeginFunction)
+      State = State->set<CtorDtorMap>(Reg, ObjectState::CtorCalled);
+    else
+      State = State->remove<CtorDtorMap>(Reg);
+
+    C.addTransition(State);
+    return;
+  }
+
+  // Enter a Destructor, set the corresponding memregion be true.
+  if (isa<CXXDestructorDecl>(MD)) {
+    auto ThiSVal =
+        State->getSVal(SVB.getCXXThis(MD, LCtx->getStackFrame()));
+    const MemRegion *Reg = ThiSVal.getAsRegion();
+    if (IsBeginFunction)
+      State = State->set<CtorDtorMap>(Reg, ObjectState::DtorCalled);
+    else
+      State = State->remove<CtorDtorMap>(Reg);
+
+    C.addTransition(State);
+    return;
+  }
+}
+
+void ento::registerVirtualCallModeling(CheckerManager &Mgr) {
+  Mgr.registerChecker<VirtualCallChecker>();
+}
+
+void ento::registerPureVirtualCallChecker(CheckerManager &Mgr) {
+  auto *Chk = Mgr.getChecker<VirtualCallChecker>();
+  Chk->BT_Pure = std::make_unique<BugType>(Mgr.getCurrentCheckerName(),
+                                           "Pure virtual method call",
+                                           categories::CXXObjectLifecycle);
+}
+
+void ento::registerVirtualCallChecker(CheckerManager &Mgr) {
+  auto *Chk = Mgr.getChecker<VirtualCallChecker>();
+  if (!Mgr.getAnalyzerOptions().getCheckerBooleanOption(
+          Mgr.getCurrentCheckerName(), "PureOnly")) {
+    Chk->BT_Impure = std::make_unique<BugType>(
+        Mgr.getCurrentCheckerName(), "Unexpected loss of virtual dispatch",
+        categories::CXXObjectLifecycle);
+    Chk->ShowFixIts = Mgr.getAnalyzerOptions().getCheckerBooleanOption(
+        Mgr.getCurrentCheckerName(), "ShowFixIts");
+  }
+}
+
+bool ento::shouldRegisterVirtualCallModeling(const LangOptions &LO) {
+  return LO.CPlusPlus;
+}
+
+bool ento::shouldRegisterPureVirtualCallChecker(const LangOptions &LO) {
+  return LO.CPlusPlus;
+}
+
+bool ento::shouldRegisterVirtualCallChecker(const LangOptions &LO) {
+  return LO.CPlusPlus;
 }

@@ -1,20 +1,22 @@
 set(LLVM_LINK_COMPONENTS support)
 
-set(LLVM_USED_LIBS clangBasic clangLex clangAST clangFrontend clangRewrite)
-
 add_clang_library(clangStaticAnalyzerCore
+  APSIntType.cpp
   AnalysisManager.cpp
-  BasicConstraintManager.cpp
+  AnalyzerOptions.cpp
   BasicValueFactory.cpp
   BlockCounter.cpp
   BugReporter.cpp
   BugReporterVisitors.cpp
+  CallEvent.cpp
   Checker.cpp
   CheckerContext.cpp
   CheckerHelpers.cpp
   CheckerManager.cpp
-  CheckerRegistry.cpp
+  CommonBugCategories.cpp
+  ConstraintManager.cpp
   CoreEngine.cpp
+  DynamicType.cpp
   Environment.cpp
   ExplodedGraph.cpp
   ExprEngine.cpp
@@ -24,22 +26,34 @@ add_clang_library(clangStaticAnalyzerCore
   ExprEngineObjC.cpp
   FunctionSummary.cpp
   HTMLDiagnostics.cpp
+  IssueHash.cpp
+  LoopUnrolling.cpp
+  LoopWidening.cpp
   MemRegion.cpp
-  ObjCMessage.cpp
-  PathDiagnostic.cpp
   PlistDiagnostics.cpp
   ProgramState.cpp
   RangeConstraintManager.cpp
+  RangedConstraintManager.cpp
   RegionStore.cpp
-  SValBuilder.cpp
-  SVals.cpp
+  SarifDiagnostics.cpp
   SimpleConstraintManager.cpp
   SimpleSValBuilder.cpp
+  SMTConstraintManager.cpp
   Store.cpp
   SubEngine.cpp
+  SValBuilder.cpp
+  SVals.cpp
   SymbolManager.cpp
-  TextPathDiagnostics.cpp
+  WorkList.cpp
+
+  LINK_LIBS
+  clangAST
+  clangASTMatchers
+  clangAnalysis
+  clangBasic
+  clangCrossTU
+  clangFrontend
+  clangLex
+  clangRewrite
   )
 
-add_dependencies(clangStaticAnalyzerCore ClangAttrClasses ClangAttrList ClangDeclNodes
-                 ClangStmtNodes)

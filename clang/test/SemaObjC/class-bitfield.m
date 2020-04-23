@@ -1,11 +1,11 @@
-// RUN: %clang_cc1 %s -fobjc-fragile-abi -fsyntax-only -verify 
+// RUN: %clang_cc1 %s -fobjc-runtime=macosx-fragile-10.5 -fsyntax-only -verify 
 
 @interface X 
 {
   int a : -1; // expected-error{{bit-field 'a' has negative width}}
 
   // rdar://6081627
-  int b : 33; // expected-error{{size of bit-field 'b' (33 bits) exceeds size of its type (32 bits)}}
+  int b : 33; // expected-error{{width of bit-field 'b' (33 bits) exceeds width of its type (32 bits)}}
 
   int c : (1 + 0.25); // expected-error{{expression is not an integer constant expression}}
   int d : (int)(1 + 0.25); 

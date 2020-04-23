@@ -115,7 +115,7 @@ namespace map_range {
   }
 }
 
-#define assert(b) if (!b) { return 1; }
+#define assert(b) if (!(b)) { return 1; }
 int main() {
   int total = 0;
 
@@ -176,7 +176,98 @@ namespace test4 {
 
     // Make sure these don't crash. Better diagnostics would be nice.
     for (: {1, 2, 3}) {} // expected-error {{expected expression}} expected-error {{expected ';'}}
-    for (x : {1, 2, 3}) {} // expected-error {{undeclared identifier}} expected-error {{expected ';'}}
-    for (y : {1, 2, 3}) {} // expected-error {{must declare a variable}} expected-warning {{result unused}}
+    for (1 : {1, 2, 3}) {} // expected-error {{must declare a variable}}
+    for (+x : {1, 2, 3}) {} // expected-error {{undeclared identifier}} expected-error {{expected ';'}}
+    for (+y : {1, 2, 3}) {} // expected-error {{must declare a variable}}
   }
+}
+
+namespace test5 {
+  // Test error-recovery.
+  void f() {
+    for (auto x : undeclared_identifier) // expected-error {{undeclared identifier}}
+      for (auto y : x->foo)
+        y->bar();
+    for (auto x : 123) // expected-error {{no viable 'begin'}}
+      x->foo();
+  }
+}
+
+namespace test6 {
+  void foo(int arr[]) {  // expected-note {{declared here}}
+    for (auto i : arr) { }
+      // expected-error@-1 {{cannot build range expression with array function parameter 'arr' since parameter with array type 'int []' is treated as pointer type 'int *'}}
+  }
+
+  struct vector {
+    int *begin() { return 0; }
+    int *end() { return 0; }
+  };
+
+  void foo(vector arr[]) {  // expected-note {{declared here}}
+    // Don't suggest to dereference arr.
+    for (auto i : arr) { }
+      // expected-error@-1 {{cannot build range expression with array function parameter 'arr' since parameter with array type 'test6::vector []' is treated as pointer type 'test6::vector *'}}
+  }
+}
+
+namespace test7 {
+  void f() {
+    int arr[5], b;
+    for (a : arr) {} // expected-error {{requires type for loop variable}}
+    // FIXME: Give a different error in this case?
+    for (b : arr) {} // expected-error {{requires type for loop variable}}
+    for (arr : arr) {} // expected-error {{requires type for loop variable}}
+    for (c alignas(8) : arr) { // expected-error {{requires type for loop variable}}
+      static_assert(alignof(c) == 8, ""); // expected-warning {{extension}}
+    }
+    for (d alignas(1) : arr) {} // expected-error {{requested alignment is less than minimum}} expected-error {{requires type for loop variable}}
+    for (e [[deprecated]] : arr) { e = 0; } // expected-warning {{deprecated}} expected-note {{here}} expected-error {{requires type for loop variable}}
+  }
+}
+
+namespace pr18587 {
+  class Arg {};
+  struct Cont {
+    int *begin();
+    int *end();
+  };
+  void AddAllArgs(Cont &x) {
+    for (auto Arg: x) {
+    }
+  }
+}
+
+namespace PR32933 {
+// https://bugs.llvm.org/show_bug.cgi?id=32933
+void foo ()
+{ 
+  int b = 1, a[b];
+  a[0] = 0;
+  [&] { for (int c : a) 0; } (); // expected-warning {{expression result unused}}
+}
+
+
+int foo(int b) {
+  int varr[b][(b+=8)];
+  b = 15; 
+  [&] {
+    int i = 0;
+    for (auto &c : varr) 
+    {
+      c[0] = ++b;
+    }
+    [&] {
+      int i = 0;
+      for (auto &c : varr) {
+        int j = 0;
+        for(auto &c2 : c) {
+          ++j;
+        }
+        ++i;
+      }
+    }();
+  }();
+  return b;
+}
 }

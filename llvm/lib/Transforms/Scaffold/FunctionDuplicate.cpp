@@ -8,25 +8,27 @@
 
 #define DEBUG_TYPE "FunctionDuplicate"
 #include <sstream>
+#include <cstring>
+#include <cstdlib>
 #include "llvm/Pass.h"
-#include "llvm/Function.h"
-#include "llvm/Module.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/Module.h"
 #include "llvm/Transforms/Utils/Cloning.h"
-#include "llvm/BasicBlock.h"
-#include "llvm/Instruction.h"
-#include "llvm/Instructions.h"
+#include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Instruction.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/ADT/Statistic.h"
-#include "llvm/Support/InstIterator.h"
+#include "llvm/IR/InstIterator.h"
 #include "llvm/PassAnalysisSupport.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
-#include "llvm/Support/CallSite.h"
-#include "llvm/LLVMContext.h"
+#include "llvm/IR/CallSite.h"
+#include "llvm/IR/LLVMContext.h"
 #include "llvm/Analysis/CallGraph.h"
-#include "llvm/Support/CFG.h"
+#include "llvm/IR/CFG.h"
 #include "llvm/ADT/SCCIterator.h"
 
 // DEBUG switch
@@ -54,12 +56,12 @@ namespace {
     static char ID; // Pass identification
 
     //external instrumentation function
-    Function* qasmResSum; 
-    Function* memoize; 
+    FunctionCallee qasmResSum; 
+    FunctionCallee memoize; 
     
     FunctionDuplicate() : ModulePass(ID) {}
 
-    Function *CloneFunctionInfo(const Function *F, ValueMap<const Value*, WeakVH> &VMap, Module *M);
+    Function *CloneFunctionInfo(const Function *F, ValueMap<const Value*, WeakTrackingVH> &VMap, Module *M);
 
     ArrayRef<Value*> getMemoizeArgs(Function* F, Instruction* I);    
 
@@ -71,7 +73,7 @@ namespace {
 
     virtual void getAnalysisUsage(AnalysisUsage &AU) const {
         AU.setPreservesAll();  
-        AU.addRequired<CallGraph>();
+        AU.addRequired<CallGraphWrapperPass>();
     }
 
   }; // End of struct FunctionDuplicate
@@ -82,7 +84,7 @@ char FunctionDuplicate::ID = 0;
 static RegisterPass<FunctionDuplicate> X("FunctionDuplicate", "Function Duplicating Pass", false, false);
 
 
-Function *FunctionDuplicate::CloneFunctionInfo(const Function *F, ValueMap<const Value*, WeakVH> &VMap, Module *M) {
+Function *FunctionDuplicate::CloneFunctionInfo(const Function *F, ValueMap<const Value*, WeakTrackingVH> &VMap, Module *M) {
   std::vector<Type*> ArgTypes;
   // the user might be deleting arguments to the function by specifying them in the VMap.
   // If so, we need to not add the arguments to the ArgTypes vector
@@ -103,7 +105,7 @@ Function *FunctionDuplicate::CloneFunctionInfo(const Function *F, ValueMap<const
   for (Function::const_arg_iterator I = F->arg_begin(), E = F->arg_end(); I!=E; ++I)
     if (VMap.count(I) == 0) {     // is this argument preserved?
       DestI->setName(I->getName());   // copy the name over..
-      WeakVH wval(DestI++);
+      WeakTrackingVH wval(DestI++);
       VMap[I] = wval;          // add mapping to VMap
     }
   return NewF;
@@ -117,12 +119,12 @@ ArrayRef<Value*> FunctionDuplicate::getMemoizeArgs(Function* F, Instruction* I) 
 
   Constant *StrConstant = ConstantDataArray::getString(I->getContext(), F->getName());           
   ArrayType* strTy = cast<ArrayType>(StrConstant->getType());
-  AllocaInst* strAlloc = new AllocaInst(strTy,"",&*it);
-  new StoreInst(StrConstant,strAlloc,"",&*it);	  	  
+  AllocaInst* strAlloc = new AllocaInst(strTy,0,"",&*it);
+  new StoreInst(StrConstant,strAlloc,false,&*it);	  	  
   Value* Idx[2];	  
   Idx[0] = Constant::getNullValue(Type::getInt32Ty(I->getContext()));  
   Idx[1] = ConstantInt::get(Type::getInt32Ty(I->getContext()),0);
-  GetElementPtrInst* strPtr = GetElementPtrInst::Create(strAlloc, Idx, "", &*it);
+  GetElementPtrInst* strPtr = GetElementPtrInst::Create(strTy, strAlloc, Idx, "", &*it);
   
   Value *intArgPtr;
   vector<Value*> vIntArgs;
@@ -160,28 +162,28 @@ ArrayRef<Value*> FunctionDuplicate::getMemoizeArgs(Function* F, Instruction* I) 
   }
   
   ArrayType *intArrTy = ArrayType::get(Type::getInt32Ty(I->getContext()), num_ints);
-  AllocaInst *intArrAlloc = new AllocaInst(intArrTy, "", &*it);
+  AllocaInst *intArrAlloc = new AllocaInst(intArrTy, 0, "", &*it);
   for (unsigned i=0; i<num_ints; i++) {
     Value *Int = vIntArgs[i];        
     Idx[1] = ConstantInt::get(Type::getInt32Ty(I->getContext()),i);        
     Value *intPtr = GetElementPtrInst::CreateInBounds(intArrAlloc, Idx, "", &*it);        
-    new StoreInst(Int, intPtr, "", &*it);
+    new StoreInst(Int, intPtr, false, &*it);
   }
   Idx[1] = ConstantInt::get(Type::getInt32Ty(I->getContext()),0);        
   GetElementPtrInst* intArrPtr = GetElementPtrInst::CreateInBounds(intArrAlloc, Idx, "", &*it);
 
-  ArrayType *doubleArrTy = ArrayType::get(Type::getDoubleTy(getGlobalContext()), num_doubles);        
-  AllocaInst *doubleArrAlloc = new AllocaInst(doubleArrTy,"", &*it);
+  ArrayType *doubleArrTy = ArrayType::get(Type::getDoubleTy(I->getContext()), num_doubles);        
+  AllocaInst *doubleArrAlloc = new AllocaInst(doubleArrTy,0,"", &*it);
   for (unsigned i=0; i<num_doubles; i++) {
     Value *Double = vDoubleArgs[i];     
-    Idx[1] = ConstantInt::get(Type::getInt32Ty(getGlobalContext()),i);        
+    Idx[1] = ConstantInt::get(Type::getInt32Ty(I->getContext()),i);        
     Value *doublePtr = GetElementPtrInst::CreateInBounds(doubleArrAlloc, Idx, "", &*it);        
-    new StoreInst(Double, doublePtr, "", &*it);          
+    new StoreInst(Double, doublePtr, false, &*it);          
   }
   GetElementPtrInst* doubleArrPtr = GetElementPtrInst::CreateInBounds(doubleArrAlloc, Idx, "", &*it);
 
-  Constant *IntNumConstant = ConstantInt::get(Type::getInt32Ty(getGlobalContext()) , num_ints, false);       
-  Constant *DoubleNumConstant = ConstantInt::get(Type::getInt32Ty(getGlobalContext()) , num_doubles, false);          
+  Constant *IntNumConstant = ConstantInt::get(Type::getInt32Ty(I->getContext()) , num_ints, false);       
+  Constant *DoubleNumConstant = ConstantInt::get(Type::getInt32Ty(I->getContext()) , num_doubles, false);          
 
   vectCallArgs.push_back(cast<Value>(strPtr));
   vectCallArgs.push_back(cast<Value>(intArrPtr));
@@ -197,17 +199,29 @@ void FunctionDuplicate::visitFunction(Function &F) {
   // insert initialization and termination functions in "main"
   if(F.getName() == "main"){
     BasicBlock* BB_last = &(F.back());
-    TerminatorInst *BBTerm = BB_last->getTerminator();
+    Instruction *BBTerm = BB_last->getTerminator();
     CallInst::Create(qasmResSum, "",(Instruction*)BBTerm);	
     return;
   }
 }
 
 bool FunctionDuplicate::runOnModule (Module &M) {
+
+  const char *debug_val = getenv("DEBUG_FUNCTIONDUPLICATE");
+  if(debug_val){
+    if(!strncmp(debug_val, "1", 1)) debugDuplicate = true;
+    else debugDuplicate = false;
+  }
+
+  debug_val = getenv("DEBUG_SCAFFOLD");
+  if(debug_val && !debugDuplicate){
+    if(!strncmp(debug_val, "1", 1)) debugDuplicate = true;
+    else debugDuplicate = false;
+  }
     
   //void qasm_resource_summary ()
-  qasmResSum = cast<Function>(M.getOrInsertFunction("summary", Type::getVoidTy(M.getContext()), (Type*)0));
-  
+  qasmResSum = M.getOrInsertFunction("summary", Type::getVoidTy(M.getContext()), (Type*)0);
+
   // int memoize (char*, int*, unsigned, double*, unsigned)
   vector <Type*> vectParamTypes2;
   vectParamTypes2.push_back(Type::getInt8Ty(M.getContext())->getPointerTo());      
@@ -217,21 +231,29 @@ bool FunctionDuplicate::runOnModule (Module &M) {
   vectParamTypes2.push_back(Type::getInt32Ty(M.getContext()));
   ArrayRef<Type*> Param_Types2(vectParamTypes2);
   Type* Result_Type2 = Type::getInt32Ty(M.getContext());
-  memoize = cast<Function> (  
-      M.getOrInsertFunction(
+  memoize =  M.getOrInsertFunction(
         "memoize",                          /* Name of Function */
         FunctionType::get(                  /* Type of Function */
           Result_Type2,                     /* Result */
           Param_Types2,                     /* Params */
           false                             /* isVarArg */
           )
-        )
-      );
+        );
 
   
   // iterate over all functions, and over all instructions in those functions
   // find call sites that have constant integer or double values. In Post-Order.
-  CallGraphNode* rootNode = getAnalysis<CallGraph>().getRoot();
+  CallGraph cg = CallGraph(M);
+
+  CallGraphNode *rootNode = nullptr;
+
+  for(auto it = cg.begin();it != cg.end();it++){
+    if(!(it->second->getFunction())) continue;
+    if(it->second->getFunction()->getName() == "main"){
+      rootNode = &(*it->second);
+      break;
+    }
+  }
   
   std::vector<Function*> vectPostOrder;
   
@@ -277,7 +299,7 @@ bool FunctionDuplicate::runOnModule (Module &M) {
     ss << "_qtm";
     std::string specializedName = F->getName().str() + ss.str();
 
-    ValueMap<const Value*, WeakVH> VMap;
+    ValueMap<const Value*, WeakTrackingVH> VMap;
     Function *specializedFunction = CloneFunctionInfo(F, VMap, &M); 
     specializedFunction->setName(specializedName);
 
@@ -311,12 +333,12 @@ bool FunctionDuplicate::runOnModule (Module &M) {
 
       Constant *StrConstant = ConstantDataArray::getString(myI->getContext(), F->getName());           
       ArrayType* strTy = cast<ArrayType>(StrConstant->getType());
-      AllocaInst* strAlloc = new AllocaInst(strTy,"",&*it);
-      new StoreInst(StrConstant,strAlloc,"",&*it);    
+      AllocaInst* strAlloc = new AllocaInst(strTy,0,"",&*it);
+      new StoreInst(StrConstant,strAlloc,false,&*it);    
       Value* Idx[2];  
       Idx[0] = Constant::getNullValue(Type::getInt32Ty(myI->getContext()));  
       Idx[1] = ConstantInt::get(Type::getInt32Ty(myI->getContext()),0);
-      GetElementPtrInst* strPtr = GetElementPtrInst::Create(strAlloc, Idx, "", &*it);
+      GetElementPtrInst* strPtr = GetElementPtrInst::Create(strTy, strAlloc, Idx, "", &*it);
   
       Value *intArgPtr;
       vector<Value*> vIntArgs;
@@ -354,28 +376,28 @@ bool FunctionDuplicate::runOnModule (Module &M) {
       }
   
       ArrayType *intArrTy = ArrayType::get(Type::getInt32Ty(myI->getContext()), num_ints);
-      AllocaInst *intArrAlloc = new AllocaInst(intArrTy, "", &*it);
+      AllocaInst *intArrAlloc = new AllocaInst(intArrTy,0,"", &*it);
       for (unsigned i=0; i<num_ints; i++) {
 	Value *Int = vIntArgs[i];        
 	Idx[1] = ConstantInt::get(Type::getInt32Ty(myI->getContext()),i);        
 	Value *intPtr = GetElementPtrInst::CreateInBounds(intArrAlloc, Idx, "", &*it);        
-	new StoreInst(Int, intPtr, "", &*it);
+	new StoreInst(Int, intPtr, false, &*it);
       }
       Idx[1] = ConstantInt::get(Type::getInt32Ty(myI->getContext()),0);        
       GetElementPtrInst* intArrPtr = GetElementPtrInst::CreateInBounds(intArrAlloc, Idx, "", &*it);
 
-      ArrayType *doubleArrTy = ArrayType::get(Type::getDoubleTy(getGlobalContext()), num_doubles);        
-      AllocaInst *doubleArrAlloc = new AllocaInst(doubleArrTy,"", &*it);
+      ArrayType *doubleArrTy = ArrayType::get(Type::getDoubleTy(M.getContext()), num_doubles);        
+      AllocaInst *doubleArrAlloc = new AllocaInst(doubleArrTy,0,"", &*it);
       for (unsigned i=0; i<num_doubles; i++) {
 	Value *Double = vDoubleArgs[i];     
-	Idx[1] = ConstantInt::get(Type::getInt32Ty(getGlobalContext()),i);        
+	Idx[1] = ConstantInt::get(Type::getInt32Ty(M.getContext()),i);        
 	Value *doublePtr = GetElementPtrInst::CreateInBounds(doubleArrAlloc, Idx, "", &*it);        
-	new StoreInst(Double, doublePtr, "", &*it);          
+	new StoreInst(Double, doublePtr, false, &*it);          
       }
       GetElementPtrInst* doubleArrPtr = GetElementPtrInst::CreateInBounds(doubleArrAlloc, Idx, "", &*it);
 
-      Constant *IntNumConstant = ConstantInt::get(Type::getInt32Ty(getGlobalContext()) , num_ints, false);       
-      Constant *DoubleNumConstant = ConstantInt::get(Type::getInt32Ty(getGlobalContext()) , num_doubles, false);          
+      Constant *IntNumConstant = ConstantInt::get(Type::getInt32Ty(M.getContext()) , num_ints, false);       
+      Constant *DoubleNumConstant = ConstantInt::get(Type::getInt32Ty(M.getContext()) , num_doubles, false);          
 
       vectCallArgs.push_back(cast<Value>(strPtr));
       vectCallArgs.push_back(cast<Value>(intArrPtr));

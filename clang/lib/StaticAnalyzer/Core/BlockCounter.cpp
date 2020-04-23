@@ -1,9 +1,8 @@
 //==- BlockCounter.h - ADT for counting block visits -------------*- C++ -*-//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -26,7 +25,7 @@ class CountKey {
   unsigned BlockID;
 
 public:
-  CountKey(const StackFrameContext *CS, unsigned ID) 
+  CountKey(const StackFrameContext *CS, unsigned ID)
     : CallSite(CS), BlockID(ID) {}
 
   bool operator==(const CountKey &RHS) const {
@@ -34,8 +33,7 @@ public:
   }
 
   bool operator<(const CountKey &RHS) const {
-    return (CallSite == RHS.CallSite) ? (BlockID < RHS.BlockID) 
-                                      : (CallSite < RHS.CallSite);
+    return std::tie(CallSite, BlockID) < std::tie(RHS.CallSite, RHS.BlockID);
   }
 
   void Profile(llvm::FoldingSetNodeID &ID) const {
@@ -56,7 +54,7 @@ static inline CountMap::Factory& GetFactory(void *F) {
   return *static_cast<CountMap::Factory*>(F);
 }
 
-unsigned BlockCounter::getNumVisited(const StackFrameContext *CallSite, 
+unsigned BlockCounter::getNumVisited(const StackFrameContext *CallSite,
                                        unsigned BlockID) const {
   CountMap M = GetMap(Data);
   CountMap::data_type* T = M.lookup(CountKey(CallSite, BlockID));
@@ -72,10 +70,10 @@ BlockCounter::Factory::~Factory() {
 }
 
 BlockCounter
-BlockCounter::Factory::IncrementCount(BlockCounter BC, 
+BlockCounter::Factory::IncrementCount(BlockCounter BC,
                                         const StackFrameContext *CallSite,
                                         unsigned BlockID) {
-  return BlockCounter(GetFactory(F).add(GetMap(BC.Data), 
+  return BlockCounter(GetFactory(F).add(GetMap(BC.Data),
                                           CountKey(CallSite, BlockID),
                              BC.getNumVisited(CallSite, BlockID)+1).getRoot());
 }

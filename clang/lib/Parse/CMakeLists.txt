@@ -1,4 +1,9 @@
-set(LLVM_USED_LIBS clangBasic clangAST clangLex clangSema)
+set(LLVM_LINK_COMPONENTS
+  FrontendOpenMP
+  MC
+  MCParser
+  Support
+  )
 
 add_clang_library(clangParse
   ParseAST.cpp
@@ -9,11 +14,17 @@ add_clang_library(clangParse
   ParseExprCXX.cpp
   ParseInit.cpp
   ParseObjc.cpp
+  ParseOpenMP.cpp
   ParsePragma.cpp
   ParseStmt.cpp
+  ParseStmtAsm.cpp
   ParseTemplate.cpp
   ParseTentative.cpp
   Parser.cpp
-  )
 
-add_dependencies(clangParse ClangAttrClasses ClangAttrList ClangDeclNodes ClangDiagnosticParse ClangStmtNodes ClangAttrLateParsed)
+  LINK_LIBS
+  clangAST
+  clangBasic
+  clangLex
+  clangSema
+  )

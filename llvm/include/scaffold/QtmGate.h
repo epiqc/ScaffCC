@@ -157,7 +157,6 @@ bool QtmInst::backtraceOperand(Value* opd, int opOrIndex)
 	    //For multi-dimensional qubit array, we may need to backtrace multiple pointer values
 	    for(unsigned iop=1;iop<numOps;iop++){ //first opd was already backtraced
 	      backtraceOperand(pInst->getOperand(iop),0);
-
 	    }*/
 	  return true;
 	}

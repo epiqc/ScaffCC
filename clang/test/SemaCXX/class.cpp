@@ -1,7 +1,13 @@
 // RUN: %clang_cc1 -fsyntax-only -verify -Wc++11-compat %s 
+// RUN: %clang_cc1 -fsyntax-only -verify -Wc++11-compat %s -std=c++98
 class C {
 public:
-  auto int errx; // expected-error {{storage class specified for a member declaration}} expected-warning {{'auto' storage class specifier is redundant}}
+  auto int errx; // expected-error {{storage class specified for a member declaration}}
+#if __cplusplus <= 199711L
+  // expected-warning@-2 {{'auto' storage class specifier is redundant}}
+#else
+  // expected-warning@-4 {{'auto' storage class specifier is not permitted in C++11, and will not be supported in future releases}}
+#endif
   register int erry; // expected-error {{storage class specified for a member declaration}}
   extern int errz; // expected-error {{storage class specified for a member declaration}}
 
@@ -36,12 +42,18 @@ public:
 
   enum E1 { en1, en2 };
 
-  int i = 0; // expected-warning {{in-class initialization of non-static data member is a C++11 extension}}
+  int i = 0;
+#if __cplusplus <= 199711L
+  // expected-warning@-2 {{in-class initialization of non-static data member is a C++11 extension}}
+#endif
   static int si = 0; // expected-error {{non-const static data member must be initialized out of line}}
   static const NestedC ci = 0; // expected-error {{static data member of type 'const C::NestedC' must be initialized out of line}}
   static const int nci = vs; // expected-error {{in-class initializer for static data member is not a constant expression}}
   static const int vi = 0;
   static const volatile int cvi = 0; // ok, illegal in C++11
+#if __cplusplus >= 201103L
+  // expected-error@-2 {{static const volatile data member must be initialized out of line}}
+#endif
   static const E evi = 0;
 
   void m() {
@@ -119,19 +131,15 @@ struct C4 {
 // PR5415 - don't hang!
 struct S
 {
-  void f(); // expected-note 1 {{previous declaration}}
-  void S::f() {} // expected-warning {{extra qualification on member}} expected-error {{class member cannot be redeclared}} expected-note {{previous declaration}} expected-note {{previous definition}}
-  void f() {} // expected-error {{class member cannot be redeclared}} expected-error {{redefinition}}
+  void f(); // expected-note 1 {{previous declaration}} expected-note {{previous declaration}}
+  void S::f() {} // expected-error {{extra qualification on member}} expected-error {{class member cannot be redeclared}}
+  void f() {} // expected-error {{class member cannot be redeclared}}
 };
 
 // Don't crash on this bogus code.
 namespace pr6629 {
-  // TODO: most of these errors are spurious
   template<class T1, class T2> struct foo :
-    bogus<foo<T1,T2> > // expected-error {{unknown template name 'bogus'}} \
-                       // BOGUS expected-error {{expected '{' after base class list}} \
-                       // BOGUS expected-error {{expected ';' after struct}} \
-                       // BOGUS expected-error {{expected unqualified-id}}
+    bogus<foo<T1,T2> > // expected-error {{no template named 'bogus'}}
   { };
 
   template<> struct foo<unknown,unknown> { // expected-error {{undeclared identifier 'unknown'}}
@@ -173,10 +181,18 @@ namespace rdar8066414 {
 
 namespace rdar8367341 {
   float foo();
+#if __cplusplus >= 201103L
+  // expected-note@-2 {{declared here}}
+#endif
 
   struct A {
+#if __cplusplus <= 199711L
     static const float x = 5.0f; // expected-warning {{in-class initializer for static data member of type 'const float' is a GNU extension}}
     static const float y = foo(); // expected-warning {{in-class initializer for static data member of type 'const float' is a GNU extension}} expected-error {{in-class initializer for static data member is not a constant expression}}
+#else
+    static constexpr float x = 5.0f;
+    static constexpr float y = foo(); // expected-error {{constexpr variable 'y' must be initialized by a constant expression}} expected-note {{non-constexpr function 'foo' cannot be used in a constant expression}}
+#endif
   };
 }
 

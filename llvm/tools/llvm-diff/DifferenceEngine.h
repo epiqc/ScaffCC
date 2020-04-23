@@ -1,9 +1,8 @@
 //===-- DifferenceEngine.h - Module comparator ------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -12,14 +11,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef _LLVM_DIFFERENCE_ENGINE_H_
-#define _LLVM_DIFFERENCE_ENGINE_H_
+#ifndef LLVM_TOOLS_LLVM_DIFF_DIFFERENCEENGINE_H
+#define LLVM_TOOLS_LLVM_DIFF_DIFFERENCEENGINE_H
 
-#include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/StringRef.h"
-#include "DiffLog.h"
 #include "DiffConsumer.h"
-
+#include "DiffLog.h"
+#include "llvm/ADT/StringRef.h"
 #include <utility>
 
 namespace llvm {
@@ -59,8 +56,8 @@ namespace llvm {
       virtual ~Oracle() {}
     };
 
-    DifferenceEngine(LLVMContext &context, Consumer &consumer)
-      : context(context), consumer(consumer), globalValueOracle(0) {}
+    DifferenceEngine(Consumer &consumer)
+      : consumer(consumer), globalValueOracle(nullptr) {}
 
     void diff(Module *L, Module *R);
     void diff(Function *L, Function *R);
@@ -84,7 +81,6 @@ namespace llvm {
     bool equivalentAsOperands(GlobalValue *L, GlobalValue *R);
 
   private:
-    LLVMContext &context;
     Consumer &consumer;
     Oracle *globalValueOracle;
   };

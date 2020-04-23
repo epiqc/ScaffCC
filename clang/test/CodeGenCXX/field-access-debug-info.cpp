@@ -1,8 +1,12 @@
-// RUN: %clang_cc1 -g -S -masm-verbose -o - %s | FileCheck %s
+// RUN: %clang -g -S -emit-llvm %s -o - | FileCheck %s
 
-// CHECK: abbrev_begin:
-// CHECK: DW_AT_accessibility
-// CHECK-NEXT: DW_FORM_data1
+// CHECK: !DIDerivedType(tag: DW_TAG_member, name: "p"
+// CHECK-SAME:           baseType: ![[INT:[0-9]+]]
+// CHECK-SAME:           DIFlagPublic
+// CHECK: ![[INT]] = !DIBasicType(name: "int"
+// CHECK: !DIDerivedType(tag: DW_TAG_member, name: "pr"
+// CHECK-NOT:            flags:
+// CHECK-SAME:           baseType: ![[INT]]
 
 class A {
 public:

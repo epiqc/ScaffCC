@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -std=c++11 -fblocks %s -verify
+// RUN: %clang_cc1 -triple i686-pc-linux -std=c++11 -fblocks %s -verify
 
 void block_capture_errors() {
   __block int var; // expected-note 2{{'var' declared here}}
@@ -50,6 +50,13 @@ void nesting() {
     [=] () mutable {
       ^ {
         int i = array[2]; // expected-error{{cannot refer to declaration with an array type inside block}}
+        i += array[3];
+      }();
+    }();
+
+    [=] () mutable {
+      ^ {
+        int i = 0;
         i += array[3]; // expected-error{{cannot refer to declaration with an array type inside block}}
       }();
     }();
@@ -84,5 +91,61 @@ namespace overloading {
 
   void call_with_lambda() {
     int &ir = accept_lambda_conv([](int x) { return x + 1; });
+  }
+
+  template<typename T> using id = T;
+
+  auto a = [](){};
+  struct C : decltype(a) {
+    using decltype(a)::operator id<void(*)()>;
+  private:
+    using decltype(a)::operator id<void(^)()>;
+  } extern c;
+
+  struct D : decltype(a) {
+    using decltype(a)::operator id<void(^)()>;
+  private:
+    using decltype(a)::operator id<void(*)()>; // expected-note {{here}}
+  } extern d;
+
+  bool r1 = c;
+  bool r2 = d; // expected-error {{private}}
+}
+
+namespace PR13117 {
+  struct A {
+    template<typename ... Args> static void f(Args...);
+
+    template<typename ... Args> static void f1()
+    {
+      (void)^(Args args) { // expected-error{{block contains unexpanded parameter pack 'Args'}}
+      };
+    }
+
+    template<typename ... Args> static void f2()
+    {
+      // FIXME: Allow this.
+      f(
+        ^(Args args) // expected-error{{block contains unexpanded parameter pack 'Args'}}
+        { }
+        ... // expected-error{{pack expansion does not contain any unexpanded parameter packs}}
+      );
+    }
+
+    template<typename ... Args> static void f3()
+    {
+      (void)[](Args args) { // expected-error{{expression contains unexpanded parameter pack 'Args'}}
+      };
+    }
+
+    template<typename ... Args> static void f4()
+    {
+      f([](Args args) { } ...);
+    }
+  };
+
+  void g() {
+    A::f1<int, int>();
+    A::f2<int, int>();
   }
 }

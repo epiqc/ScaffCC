@@ -1,9 +1,8 @@
 //===-- Valgrind.cpp - Implement Valgrind communication ---------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -15,6 +14,7 @@
 
 #include "llvm/Support/Valgrind.h"
 #include "llvm/Config/config.h"
+#include <cstddef>
 
 #if HAVE_VALGRIND_VALGRIND_H
 #include <valgrind/valgrind.h>
@@ -52,16 +52,3 @@ void llvm::sys::ValgrindDiscardTranslations(const void *Addr, size_t Len) {
 }
 
 #endif  // !HAVE_VALGRIND_VALGRIND_H
-
-#if LLVM_ENABLE_THREADS != 0 && !defined(NDEBUG)
-// These functions require no implementation, tsan just looks at the arguments
-// they're called with.
-extern "C" {
-void AnnotateHappensBefore(const char *file, int line,
-                           const volatile void *cv) {}
-void AnnotateHappensAfter(const char *file, int line,
-                          const volatile void *cv) {}
-void AnnotateIgnoreWritesBegin(const char *file, int line) {}
-void AnnotateIgnoreWritesEnd(const char *file, int line) {}
-}
-#endif

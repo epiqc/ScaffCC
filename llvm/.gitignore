@@ -16,28 +16,69 @@
 # Byte compiled python modules.
 *.pyc
 # vim swap files
-.*.swp
+.*.sw?
+.sw?
+#OS X specific files.
+.DS_store
+
+# Nested build directory
+/build
 
 #==============================================================================#
 # Explicit files to ignore (only matches one).
 #==============================================================================#
+# Various tag programs
+/tags
+/TAGS
+/GPATH
+/GRTAGS
+/GSYMS
+/GTAGS
 .gitusers
 autom4te.cache
 cscope.files
 cscope.out
 autoconf/aclocal.m4
 autoconf/autom4te.cache
+/compile_commands.json
+# Visual Studio built-in CMake configuration
+/CMakeSettings.json
+# CLion project configuration
+/.idea
+# Qt Creator project configuration
+/CMakeLists.txt.user
 
 #==============================================================================#
 # Directories to ignore (do not add trailing '/'s, they skip symlinks).
 #==============================================================================#
 # External projects that are tracked independently.
 projects/*
-!projects/sample
-!projects/LLVMBuild.txt
-!projects/CMakeLists.txt
+!projects/*.*
 !projects/Makefile
+runtimes/*
+!runtimes/*.*
 # Clang, which is tracked independently.
 tools/clang
 # LLDB, which is tracked independently.
 tools/lldb
+# lld, which is tracked independently.
+tools/lld
+# llgo, which is tracked independently.
+tools/llgo
+# Polly, which is tracked independently.
+tools/polly
+# avrlit, which is tracked independently.
+tools/avrlit
+# Sphinx build tree, if building in-source dir.
+docs/_build
+# VS2017 and VSCode config files.
+.vscode
+.vs
+# clangd index
+.clangd
+
+#==============================================================================#
+# Files created in tree by the Go bindings.
+#==============================================================================#
+bindings/go/llvm/llvm_config.go
+bindings/go/llvm/workdir

@@ -40,7 +40,7 @@ _Complex double test1() {
 }
 
 _Complex double test2() {
-  return 1.0if;    // expected-warning {{imaginary constants are an extension}}
+  return 1.0if;    // expected-warning {{imaginary constants are a GNU extension}}
 }
 
 // rdar://6097308
@@ -94,9 +94,10 @@ int test8(void) {
 struct f { int x : 4;  float y[]; };
 int test9(struct f *P) {
   int R;
-  R = __alignof(P->x);  // expected-error {{invalid application of '__alignof' to bit-field}}
+  R = __alignof(P->x);  // expected-error {{invalid application of 'alignof' to bit-field}}
   R = __alignof(P->y);   // ok.
   R = sizeof(P->x); // expected-error {{invalid application of 'sizeof' to bit-field}}
+  __extension__ ({ R = (__typeof__(P->x)) 2; }); // expected-error {{invalid application of 'typeof' to bit-field}}
   return R;
 }
 
@@ -118,7 +119,7 @@ void test11(struct mystruct P, float F) {
 
 // PR3753
 int test12(const char *X) {
-  return X == "foo";  // expected-warning {{comparison against a string literal is unspecified (use strncmp instead)}}
+  return X == "foo";  // expected-warning {{comparison against a string literal is unspecified (use an explicit string comparison function instead)}}
 }
 
 int test12b(const char *X) {
@@ -162,24 +163,43 @@ void test17(int x) {
   x = sizeof(x/0);  // no warning.
 }
 
-// PR6501
+// PR6501 & PR11857
 void test18_a(int a); // expected-note 2 {{'test18_a' declared here}}
+void test18_b(int); // expected-note {{'test18_b' declared here}}
+void test18_c(int a, int b); // expected-note 2 {{'test18_c' declared here}}
+void test18_d(int a, ...); // expected-note {{'test18_d' declared here}}
+void test18_e(int a, int b, ...); // expected-note {{'test18_e' declared here}}
 void test18(int b) {
-  test18_a(b, b); // expected-error {{too many arguments to function call, expected 1, have 2}}
-  test18_a(); // expected-error {{too few arguments to function call, expected 1, have 0}}
+  test18_a(b, b); // expected-error {{too many arguments to function call, expected single argument 'a', have 2}}
+  test18_a(); // expected-error {{too few arguments to function call, single argument 'a' was not specified}}
+  test18_b(); // expected-error {{too few arguments to function call, expected 1, have 0}}
+  test18_c(b); // expected-error {{too few arguments to function call, expected 2, have 1}}
+  test18_c(b, b, b); // expected-error {{too many arguments to function call, expected 2, have 3}}
+  test18_d(); // expected-error {{too few arguments to function call, at least argument 'a' must be specified}}
+  test18_e(); // expected-error {{too few arguments to function call, expected at least 2, have 0}}
 }
 
+typedef int __attribute__((address_space(256))) int_AS256;
 // PR7569
 void test19() {
-  *(int*)0 = 0;   // expected-warning {{indirection of non-volatile null pointer}} \
+  *(int *)0 = 0;                                     // expected-warning {{indirection of non-volatile null pointer}} \
                   // expected-note {{consider using __builtin_trap}}
-  *(volatile int*)0 = 0;  // Ok.
+  *(volatile int *)0 = 0;                            // Ok.
+  *(int __attribute__((address_space(256))) *)0 = 0; // Ok.
+  *(int __attribute__((address_space(0))) *)0 = 0;   // expected-warning {{indirection of non-volatile null pointer}} \
+                     // expected-note {{consider using __builtin_trap}}
+  *(int_AS256 *)0 = 0;                               // Ok.
 
   // rdar://9269271
-  int x = *(int*)0;  // expected-warning {{indirection of non-volatile null pointer}} \
+  int x = *(int *)0;                                                                          // expected-warning {{indirection of non-volatile null pointer}} \
                      // expected-note {{consider using __builtin_trap}}
-  int x2 = *(volatile int*)0; // Ok.
-  int *p = &(*(int*)0); // Ok;
+  int x2 = *(volatile int *)0;                                                                // Ok.
+  int x3 = *(int __attribute__((address_space(0))) *)0;                                       // expected-warning {{indirection of non-volatile null pointer}} \
+                     // expected-note {{consider using __builtin_trap}}
+  int x4 = *(int_AS256 *)0;                                                                   // Ok.
+  int *p = &(*(int *)0);                                                                      // Ok.
+  int_AS256 *p1 = &(*(int __attribute__((address_space(256))) *)0);                           // Ok.
+  int __attribute__((address_space(0))) *p2 = &(*(int __attribute__((address_space(0))) *)0); // Ok.
 }
 
 int test20(int x) {
@@ -235,6 +255,10 @@ void test22() {
   if ("help")
     (void) 0;
 
-  if (test22)
+  if (test22) // expected-warning {{address of function 'test22' will always evaluate to 'true'}} \
+	      // expected-note {{prefix with the address-of operator to silence this warning}}
+    (void) 0;
+
+  if (&test22)
     (void) 0;
 }

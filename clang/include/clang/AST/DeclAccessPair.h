@@ -1,9 +1,8 @@
 //===--- DeclAccessPair.h - A decl bundled with its path access -*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -19,6 +18,7 @@
 #define LLVM_CLANG_AST_DECLACCESSPAIR_H
 
 #include "clang/Basic/Specifiers.h"
+#include "llvm/Support/DataTypes.h"
 
 namespace clang {
 
@@ -27,7 +27,7 @@ class NamedDecl;
 /// A POD class for pairing a NamedDecl* with an access specifier.
 /// Can be put into unions.
 class DeclAccessPair {
-  NamedDecl *Ptr; // we'd use llvm::PointerUnion, but it isn't trivial
+  uintptr_t Ptr; // we'd use llvm::PointerUnion, but it isn't trivial
 
   enum { Mask = 0x3 };
 
@@ -39,10 +39,10 @@ public:
   }
 
   NamedDecl *getDecl() const {
-    return (NamedDecl*) (~Mask & (uintptr_t) Ptr);
+    return reinterpret_cast<NamedDecl*>(~Mask & Ptr);
   }
   AccessSpecifier getAccess() const {
-    return AccessSpecifier(Mask & (uintptr_t) Ptr);
+    return AccessSpecifier(Mask & Ptr);
   }
 
   void setDecl(NamedDecl *D) {
@@ -52,20 +52,11 @@ public:
     set(getDecl(), AS);
   }
   void set(NamedDecl *D, AccessSpecifier AS) {
-    Ptr = reinterpret_cast<NamedDecl*>(uintptr_t(AS) |
-                                       reinterpret_cast<uintptr_t>(D));
+    Ptr = uintptr_t(AS) | reinterpret_cast<uintptr_t>(D);
   }
 
   operator NamedDecl*() const { return getDecl(); }
   NamedDecl *operator->() const { return getDecl(); }
-};
-}
-
-// Take a moment to tell SmallVector that DeclAccessPair is POD.
-namespace llvm {
-template<typename> struct isPodLike;
-template<> struct isPodLike<clang::DeclAccessPair> {
-   static const bool value = true;
 };
 }
 

@@ -1,24 +1,8 @@
 /*===---- limits.h - Standard header for integer sizes --------------------===*\
  *
- * Copyright (c) 2009 Chris Lattner
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
+ * Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+ * See https://llvm.org/LICENSE.txt for license information.
+ * SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
  *
 \*===----------------------------------------------------------------------===*/
 
@@ -33,8 +17,7 @@
 
 /* System headers include a number of constants from POSIX in <limits.h>.
    Include it if we're hosted. */
-#if __STDC_HOSTED__ && \
-    defined(__has_include_next) && __has_include_next(<limits.h>)
+#if __STDC_HOSTED__ && __has_include_next(<limits.h>)
 #include_next <limits.h>
 #endif
 
@@ -87,8 +70,10 @@
 #define CHAR_MAX __SCHAR_MAX__
 #endif
 
-/* C99 5.2.4.2.1: Added long long. */
-#if __STDC_VERSION__ >= 199901
+/* C99 5.2.4.2.1: Added long long.
+   C++11 18.3.3.2: same contents as the Standard C Library header <limits.h>.
+ */
+#if __STDC_VERSION__ >= 199901L || __cplusplus >= 201103L
 
 #undef  LLONG_MIN
 #undef  LLONG_MAX

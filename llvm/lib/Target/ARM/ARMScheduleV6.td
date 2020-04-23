@@ -1,9 +1,8 @@
 //===-- ARMScheduleV6.td - ARM v6 Scheduling Definitions ---*- tablegen -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -93,7 +92,7 @@ def ARMV6Itineraries : ProcessorItineraries<
   InstrItinData<IIC_iMAC32   , [InstrStage<2, [V6_Pipe]>], [5, 1, 1, 2]>,
   InstrItinData<IIC_iMUL64   , [InstrStage<3, [V6_Pipe]>], [6, 1, 1]>,
   InstrItinData<IIC_iMAC64   , [InstrStage<3, [V6_Pipe]>], [6, 1, 1, 2]>,
-  
+
   // Integer load pipeline
   //
   // Immediate offset
@@ -181,7 +180,7 @@ def ARMV6Itineraries : ProcessorItineraries<
   //
   // Store multiple + update
   InstrItinData<IIC_iStore_mu , [InstrStage<3, [V6_Pipe]>], [2]>,
-  
+
   // Branch
   //
   // no delay slots, so the latency of a branch is unimportant

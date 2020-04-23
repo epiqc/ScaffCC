@@ -1,9 +1,8 @@
-//===-- llvm/Support/DotGraphTraits.h - Customize .dot output ---*- C++ -*-===//
+//===-- llvm/Support/DOTGraphTraits.h - Customize .dot output ---*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -72,11 +71,17 @@ public:
     return "";
   }
 
-  /// hasNodeAddressLabel - If this method returns true, the address of the node
-  /// is added to the label of the node.
+  // getNodeIdentifierLabel - Returns a string representing the
+  // address or other unique identifier of the node. (Only used if
+  // non-empty.)
+  template <typename GraphType>
+  static std::string getNodeIdentifierLabel(const void *, const GraphType &) {
+    return "";
+  }
+
   template<typename GraphType>
-  static bool hasNodeAddressLabel(const void *, const GraphType &) {
-    return false;
+  static std::string getNodeDescription(const void *, const GraphType &) {
+    return "";
   }
 
   /// If you want to specify custom node attributes, this is the place to do so

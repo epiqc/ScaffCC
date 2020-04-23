@@ -1,9 +1,8 @@
-//===--- DeclGroup.cpp - Classes for representing groups of Decls -*- C++ -*-==//
+//===- DeclGroup.cpp - Classes for representing groups of Decls -----------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -12,15 +11,16 @@
 //===----------------------------------------------------------------------===//
 
 #include "clang/AST/DeclGroup.h"
-#include "clang/AST/Decl.h"
 #include "clang/AST/ASTContext.h"
-#include "llvm/Support/Allocator.h"
+#include <cassert>
+#include <memory>
+
 using namespace clang;
 
 DeclGroup* DeclGroup::Create(ASTContext &C, Decl **Decls, unsigned NumDecls) {
   assert(NumDecls > 1 && "Invalid DeclGroup");
-  unsigned Size = sizeof(DeclGroup) + sizeof(Decl*) * NumDecls;
-  void* Mem = C.Allocate(Size, llvm::AlignOf<DeclGroup>::Alignment);
+  unsigned Size = totalSizeToAlloc<Decl *>(NumDecls);
+  void *Mem = C.Allocate(Size, alignof(DeclGroup));
   new (Mem) DeclGroup(NumDecls, Decls);
   return static_cast<DeclGroup*>(Mem);
 }
@@ -28,5 +28,6 @@ DeclGroup* DeclGroup::Create(ASTContext &C, Decl **Decls, unsigned NumDecls) {
 DeclGroup::DeclGroup(unsigned numdecls, Decl** decls) : NumDecls(numdecls) {
   assert(numdecls > 0);
   assert(decls);
-  memcpy(this+1, decls, numdecls * sizeof(*decls));
+  std::uninitialized_copy(decls, decls + numdecls,
+                          getTrailingObjects<Decl *>());
 }

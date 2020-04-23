@@ -1,11 +1,31 @@
-// RUN: %clang_cc1  -fsyntax-only -fblocks -verify %s
+// RUN: %clang_cc1  -fsyntax-only -fblocks -triple x86_64-apple-darwin10 -verify %s
 // rdar://10111397
 
 #if __LP64__
 typedef unsigned long NSUInteger;
+typedef long NSInteger;
 #else
 typedef unsigned int NSUInteger;
+typedef int NSInteger;
 #endif
+
+void checkNSNumberUnavailableDiagnostic() {
+  id num = @1000; // expected-error {{definition of class NSNumber must be available to use Objective-C numeric literals}}
+
+  int x = 1000;
+  id num1 = @(x); // expected-error {{definition of class NSNumber must be available to use Objective-C numeric literals}}\
+                  // expected-error {{illegal type 'int' used in a boxed expression}}
+}
+
+@class NSNumber; // expected-note 2 {{forward declaration of class here}}
+
+void checkNSNumberFDDiagnostic() {
+  id num = @1000; // expected-error {{definition of class NSNumber must be available to use Objective-C numeric literals}}
+
+  int x = 1000;
+  id num1 = @(x); // expected-error {{definition of class NSNumber must be available to use Objective-C numeric literals}}\
+                  // expected-error {{illegal type 'int' used in a boxed expression}}
+}
 
 @interface NSObject
 + (NSObject*)nsobject;
@@ -13,10 +33,23 @@ typedef unsigned int NSUInteger;
 
 @interface NSNumber : NSObject
 + (NSNumber *)numberWithChar:(char)value;
++ (NSNumber *)numberWithUnsignedChar:(unsigned char)value;
++ (NSNumber *)numberWithShort:(short)value;
++ (NSNumber *)numberWithUnsignedShort:(unsigned short)value;
 + (NSNumber *)numberWithInt:(int)value;
++ (NSNumber *)numberWithUnsignedInt:(unsigned int)value;
++ (NSNumber *)numberWithLong:(long)value;
++ (NSNumber *)numberWithUnsignedLong:(unsigned long)value;
++ (NSNumber *)numberWithLongLong:(long long)value;
++ (NSNumber *)numberWithUnsignedLongLong:(unsigned long long)value;
 + (NSNumber *)numberWithFloat:(float)value;
++ (NSNumber *)numberWithInteger:(NSInteger)value ;
++ (NSNumber *)numberWithUnsignedInteger:(NSUInteger)value ;
 @end
 
+// rdar://16417427
+int big = 1391126400;
+int thousand = 1000;
 int main() {
   NSNumber * N = @3.1415926535;  // expected-error {{declaration of 'numberWithDouble:' is missing in NSNumber class}}
   NSNumber *noNumber = @__objc_yes; // expected-error {{declaration of 'numberWithBool:' is missing in NSNumber class}}
@@ -32,13 +65,16 @@ int main() {
   int five = 5;
   @-five; // expected-error{{@- must be followed by a number to form an NSNumber object}}
   @+five; // expected-error{{@+ must be followed by a number to form an NSNumber object}}
+  NSNumber *av = @(1391126400000);
+  NSNumber *bv = @(1391126400 * 1000); // expected-warning {{overflow in expression; result is -443003904 with type 'int'}}
+  NSNumber *cv = @(big * thousand);
 }
 
 // Dictionary test
-@class NSDictionary;
+@class NSDictionary;  // expected-note {{forward declaration of class here}}
 
 NSDictionary *err() {
-  return @{@"name" : @"value"}; // expected-error {{declaration of 'dictionaryWithObjects:forKeys:count:' is missing in NSDictionary class}}
+  return @{@"name" : @"value"}; // expected-error {{definition of class NSDictionary must be available to use Objective-C dictionary literals}}
 }
 
 @interface NSDate : NSObject
@@ -82,4 +118,8 @@ typedef float BOOL;
 
 BOOL radar11231426() {
         return __objc_yes;
+}
+
+id stringBoxingNoSuchMethod(const char *str) {
+  return @(str); // expected-error {{declaration of 'stringWithUTF8String:' is missing in NSString class}}
 }

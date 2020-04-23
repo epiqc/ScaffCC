@@ -9,15 +9,20 @@
 
 struct foo {
   foo() = default;
-  void bar() = delete; // expected-note{{deleted here}}
+  void bar() = delete;
 };
 
 struct baz {
-  ~baz() = delete; // expected-note{{deleted here}}
+  ~baz() = delete;
 };
 
 class quux {
-  ~quux() = default; // expected-note{{private here}}
+  ~quux() = default;
+};
+
+struct A {
+  A(const A&) = default;
+  template<typename T> A(T&&);
 };
 
 #else
@@ -25,10 +30,17 @@ class quux {
 foo::foo() { } // expected-error{{definition of explicitly defaulted default constructor}}
 foo f;
 void fn() {
-  f.bar(); // expected-error{{deleted function}}
+  f.bar(); // expected-error{{deleted function}} expected-note@12{{deleted here}}
 }
 
-baz bz; // expected-error{{deleted function}}
-quux qx; // expected-error{{private destructor}}
+baz bz; // expected-error{{deleted function}} expected-note@16{{deleted here}}
+quux qx; // expected-error{{private destructor}} expected-note@20{{private here}}
+
+struct B { A a; };
+struct C { mutable A a; };
+static_assert(__is_trivially_constructible(B, const B&), "");
+static_assert(!__is_trivially_constructible(B, B&&), "");
+static_assert(!__is_trivially_constructible(C, const C&), "");
+static_assert(!__is_trivially_constructible(C, C&&), "");
 
 #endif

@@ -1,9 +1,8 @@
 //===-- llvm/ADT/IntEqClasses.h - Equiv. Classes of Integers ----*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -53,10 +52,10 @@ public:
     NumClasses = 0;
   }
 
-  /// join - Join the equivalence classes of a and b. After joining classes,
-  /// findLeader(a) == findLeader(b).
-  /// This requires an uncompressed map.
-  void join(unsigned a, unsigned b);
+  /// Join the equivalence classes of a and b. After joining classes,
+  /// findLeader(a) == findLeader(b). This requires an uncompressed map.
+  /// Returns the new leader.
+  unsigned join(unsigned a, unsigned b);
 
   /// findLeader - Compute the leader of a's equivalence class. This is the
   /// smallest member of the class.

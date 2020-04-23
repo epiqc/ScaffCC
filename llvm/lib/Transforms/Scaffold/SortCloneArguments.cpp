@@ -10,24 +10,26 @@
 #include <sstream>
 #include <iostream>
 #include <iomanip>
+#include <cstring>
+#include <cstdlib>
 #include "llvm/Pass.h"
-#include "llvm/Function.h"
-#include "llvm/Module.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/Module.h"
 #include "llvm/Transforms/Utils/Cloning.h"
-#include "llvm/BasicBlock.h"
-#include "llvm/Instruction.h"
-#include "llvm/Instructions.h"
+#include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Instruction.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/ADT/Statistic.h"
-#include "llvm/Support/InstIterator.h"
+#include "llvm/IR/InstIterator.h"
 #include "llvm/PassAnalysisSupport.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
-#include "llvm/Support/CallSite.h"
+#include "llvm/IR/CallSite.h"
 #include "llvm/Analysis/CallGraph.h"
-#include "llvm/Support/CFG.h"
+#include "llvm/IR/CFG.h"
 #include "llvm/ADT/SCCIterator.h"
 
 #define _MAX_FUNCTION_NAME 32
@@ -52,7 +54,7 @@ namespace {
 
     virtual void getAnalysisUsage(AnalysisUsage &AU) const {
         AU.setPreservesAll();  
-        AU.addRequired<CallGraph>();
+        AU.addRequired<CallGraphWrapperPass>();
     }
 
   }; // End of struct SortCloneArguments
@@ -63,6 +65,17 @@ char SortCloneArguments::ID = 0;
 static RegisterPass<SortCloneArguments> X("SortCloneArguments", "Sorting Arguments of Cloned Function", false, false);
 
 bool SortCloneArguments::runOnModule (Module &M) {
+  const char *debug_val = getenv("DEBUG_SORTCLONEARGUMENTS");
+  if(debug_val){
+    if(!strncmp(debug_val, "1", 1)) debugSortArgs = true;
+    else debugSortArgs = false;
+  }
+
+  debug_val = getenv("DEBUG_SCAFFOLD");
+  if(debug_val && !debugSortArgs){
+    if(!strncmp(debug_val, "1", 1)) debugSortArgs = true;
+    else debugSortArgs = false;
+  }
    
   for (Module::iterator F = M.begin(); F != M.end(); ++F) {
     if(F->isIntrinsic() || F->isDeclaration() || F->getName()=="main")

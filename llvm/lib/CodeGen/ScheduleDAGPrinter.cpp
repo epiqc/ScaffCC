@@ -1,9 +1,8 @@
 //===-- ScheduleDAGPrinter.cpp - Implement ScheduleDAG::viewGraph() -------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,21 +10,15 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/Constants.h"
-#include "llvm/Function.h"
-#include "llvm/Assembly/Writer.h"
-#include "llvm/CodeGen/ScheduleDAG.h"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/CodeGen/MachineConstantPool.h"
 #include "llvm/CodeGen/MachineFunction.h"
-#include "llvm/CodeGen/MachineModuleInfo.h"
-#include "llvm/Target/TargetRegisterInfo.h"
-#include "llvm/Target/TargetMachine.h"
+#include "llvm/CodeGen/ScheduleDAG.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
+#include "llvm/IR/Constants.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/GraphWriter.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/ADT/DenseSet.h"
-#include "llvm/ADT/StringExtras.h"
-#include <fstream>
 using namespace llvm;
 
 namespace llvm {
@@ -35,16 +28,23 @@ namespace llvm {
   DOTGraphTraits (bool isSimple=false) : DefaultDOTGraphTraits(isSimple) {}
 
     static std::string getGraphName(const ScheduleDAG *G) {
-      return G->MF.getFunction()->getName();
+      return G->MF.getName();
     }
 
     static bool renderGraphFromBottomUp() {
       return true;
     }
 
-    static bool hasNodeAddressLabel(const SUnit *Node,
-                                    const ScheduleDAG *Graph) {
-      return true;
+    static bool isNodeHidden(const SUnit *Node) {
+      return (Node->NumPreds > 10 || Node->NumSuccs > 10);
+    }
+
+    static std::string getNodeIdentifierLabel(const SUnit *Node,
+                                              const ScheduleDAG *Graph) {
+      std::string R;
+      raw_string_ostream OS(R);
+      OS << static_cast<const void *>(Node);
+      return R;
     }
 
     /// If you want to override the dot attributes printed for a particular
@@ -60,7 +60,7 @@ namespace llvm {
     }
 
 
-    std::string getNodeLabel(const SUnit *Node, const ScheduleDAG *Graph);
+    std::string getNodeLabel(const SUnit *SU, const ScheduleDAG *Graph);
     static std::string getNodeAttributes(const SUnit *N,
                                          const ScheduleDAG *Graph) {
       return "shape=Mrecord";

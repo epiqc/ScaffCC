@@ -7,22 +7,24 @@
 //===----------------------------------------------------------------------===//
 
 #include <sstream>
-#include "llvm/Argument.h"
+#include <cstring>
+#include <cstdlib>
+#include "llvm/IR/Argument.h"
 #include "llvm/Pass.h"
-#include "llvm/Module.h"
-#include "llvm/Function.h"
-#include "llvm/BasicBlock.h"
-#include "llvm/Instruction.h"
-#include "llvm/Instructions.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Instruction.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/Analysis/CallGraph.h"
-#include "llvm/Support/InstIterator.h"
-#include "llvm/Support/CFG.h"
+#include "llvm/IR/InstIterator.h"
+#include "llvm/IR/CFG.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/ADT/SCCIterator.h"
 #include "llvm/ADT/ilist.h"
-#include "llvm/Constants.h"
-#include "llvm/Analysis/DebugInfo.h"
-#include "llvm/IntrinsicInst.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/DebugInfo.h"
+#include "llvm/IR/IntrinsicInst.h"
 
 using namespace llvm;
 using namespace std;
@@ -145,7 +147,7 @@ namespace {
     // getAnalysisUsage - This pass requires the CallGraph.
     virtual void getAnalysisUsage(AnalysisUsage &AU) const {
       AU.setPreservesAll();
-      AU.addRequired<CallGraph>();
+      AU.addRequired<CallGraphWrapperPass>();
     }
   };
 }
@@ -921,7 +923,29 @@ void GenQASMLoops::getFunctionArguments(Function* F)
 
 // run - Find datapaths for qubits
 bool GenQASMLoops::runOnModule(Module &M) {
-  CallGraphNode* rootNode = getAnalysis<CallGraph>().getRoot();
+  const char *debug_val = getenv("DEBUG_GENQASMLOOPS");
+  if(debug_val){
+    if(!strncmp(debug_val, "1", 1)) debugGenQASMLoops = true;
+    else debugGenQASMLoops = false;
+  }
+
+  debug_val = getenv("DEBUG_SCAFFOLD");
+  if(debug_val && !debugGenQASMLoops){
+    if(!strncmp(debug_val, "1", 1)) debugGenQASMLoops = true;
+    else debugGenQASMLoops = false;
+  }
+
+  CallGraph cg = CallGraph(M);
+
+  CallGraphNode *rootNode = nullptr;
+
+  for(auto it = cg.begin();it != cg.end();it++){
+    if(!(it->second->getFunction())) continue;
+    if(it->second->getFunction()->getName() == "main"){
+      rootNode = &(*it->second);
+      break;
+    }
+  }
   unsigned sccNum = 0;
   forallStr = "";
 

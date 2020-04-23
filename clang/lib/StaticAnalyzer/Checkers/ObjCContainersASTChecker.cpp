@@ -1,9 +1,8 @@
 //== ObjCContainersASTChecker.cpp - CoreFoundation containers API *- C++ -*-==//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,12 +10,12 @@
 // 'CFDictionary', 'CFSet' APIs.
 //
 //===----------------------------------------------------------------------===//
-#include "ClangSACheckers.h"
-#include "clang/Analysis/AnalysisContext.h"
+#include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
 #include "clang/AST/StmtVisitor.h"
+#include "clang/Analysis/AnalysisDeclContext.h"
 #include "clang/Basic/TargetInfo.h"
-#include "clang/StaticAnalyzer/Core/Checker.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugReporter.h"
+#include "clang/StaticAnalyzer/Core/Checker.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/AnalysisManager.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/Support/raw_ostream.h"
@@ -27,11 +26,10 @@ using namespace ento;
 namespace {
 class WalkAST : public StmtVisitor<WalkAST> {
   BugReporter &BR;
+  const CheckerBase *Checker;
   AnalysisDeclContext* AC;
   ASTContext &ASTC;
   uint64_t PtrWidth;
-
-  static const unsigned InvalidArgIndex = UINT_MAX;
 
   /// Check if the type has pointer size (very conservative).
   inline bool isPointerSize(const Type *T) {
@@ -67,15 +65,14 @@ class WalkAST : public StmtVisitor<WalkAST> {
     // The type must be an array/pointer type.
 
     // This could be a null constant, which is allowed.
-    if (E->isNullPointerConstant(ASTC, Expr::NPC_ValueDependentIsNull))
-      return true;
-    return false;
+    return static_cast<bool>(
+        E->isNullPointerConstant(ASTC, Expr::NPC_ValueDependentIsNull));
   }
 
 public:
-  WalkAST(BugReporter &br, AnalysisDeclContext* ac)
-  : BR(br), AC(ac), ASTC(AC->getASTContext()),
-    PtrWidth(ASTC.getTargetInfo().getPointerWidth(0)) {}
+  WalkAST(BugReporter &br, const CheckerBase *checker, AnalysisDeclContext *ac)
+      : BR(br), Checker(checker), AC(ac), ASTC(AC->getASTContext()),
+        PtrWidth(ASTC.getTargetInfo().getPointerWidth(0)) {}
 
   // Statement visitor methods.
   void VisitChildren(Stmt *S);
@@ -101,17 +98,19 @@ void WalkAST::VisitCallExpr(CallExpr *CE) {
   if (Name.empty())
     return;
 
-  const Expr *Arg = 0;
-  unsigned ArgNum = InvalidArgIndex;
+  const Expr *Arg = nullptr;
+  unsigned ArgNum;
 
   if (Name.equals("CFArrayCreate") || Name.equals("CFSetCreate")) {
+    if (CE->getNumArgs() != 4)
+      return;
     ArgNum = 1;
     Arg = CE->getArg(ArgNum)->IgnoreParenCasts();
     if (hasPointerToPointerSizedType(Arg))
         return;
-  }
-
-  if (Arg == 0 && Name.equals("CFDictionaryCreate")) {
+  } else if (Name.equals("CFDictionaryCreate")) {
+    if (CE->getNumArgs() != 6)
+      return;
     // Check first argument.
     ArgNum = 1;
     Arg = CE->getArg(ArgNum)->IgnoreParenCasts();
@@ -125,26 +124,26 @@ void WalkAST::VisitCallExpr(CallExpr *CE) {
     }
   }
 
-  if (ArgNum != InvalidArgIndex) {
+  if (Arg) {
     assert(ArgNum == 1 || ArgNum == 2);
 
-    SmallString<256> BufName;
+    SmallString<64> BufName;
     llvm::raw_svector_ostream OsName(BufName);
-    assert(ArgNum == 1 || ArgNum == 2);
     OsName << " Invalid use of '" << Name << "'" ;
 
     SmallString<256> Buf;
     llvm::raw_svector_ostream Os(Buf);
-    Os << " The "<< ((ArgNum == 1) ? "first" : "second") << " argument to '"
+    // Use "second" and "third" since users will expect 1-based indexing
+    // for parameter names when mentioned in prose.
+    Os << " The "<< ((ArgNum == 1) ? "second" : "third") << " argument to '"
         << Name << "' must be a C array of pointer-sized values, not '"
         << Arg->getType().getAsString() << "'";
 
-    SourceRange R = Arg->getSourceRange();
     PathDiagnosticLocation CELoc =
         PathDiagnosticLocation::createBegin(CE, BR.getSourceManager(), AC);
-    BR.EmitBasicReport(AC->getDecl(),
-                       OsName.str(), categories::CoreFoundationObjectiveC,
-                       Os.str(), CELoc, &R, 1);
+    BR.EmitBasicReport(AC->getDecl(), Checker, OsName.str(),
+                       categories::CoreFoundationObjectiveC, Os.str(), CELoc,
+                       Arg->getSourceRange());
   }
 
   // Recurse and check children.
@@ -152,9 +151,9 @@ void WalkAST::VisitCallExpr(CallExpr *CE) {
 }
 
 void WalkAST::VisitChildren(Stmt *S) {
-  for (Stmt::child_iterator I = S->child_begin(), E = S->child_end(); I!=E; ++I)
-    if (Stmt *child = *I)
-      Visit(child);
+  for (Stmt *Child : S->children())
+    if (Child)
+      Visit(Child);
 }
 
 namespace {
@@ -163,7 +162,7 @@ public:
 
   void checkASTCodeBody(const Decl *D, AnalysisManager& Mgr,
                         BugReporter &BR) const {
-    WalkAST walker(BR, Mgr.getAnalysisDeclContext(D));
+    WalkAST walker(BR, this, Mgr.getAnalysisDeclContext(D));
     walker.Visit(D->getBody());
   }
 };
@@ -171,4 +170,8 @@ public:
 
 void ento::registerObjCContainersASTChecker(CheckerManager &mgr) {
   mgr.registerChecker<ObjCContainersASTChecker>();
+}
+
+bool ento::shouldRegisterObjCContainersASTChecker(const LangOptions &LO) {
+  return true;
 }

@@ -1,6 +1,6 @@
 -------QASM Generation Pass:
 
-module assign_value_of_0_to_a_i16_i32_impl ( qbit target , int size  ,  ) {
+module assign_value_of_0_to_a_i16_impl(qbit target, int size){
  	qbit ancilla_zero_zero[1];
 	qbit ancilla_zero_garbage[1];
 	CNOT ( target , ancilla_zero_garbage[0] );
@@ -8,7 +8,7 @@ module assign_value_of_0_to_a_i16_i32_impl ( qbit target , int size  ,  ) {
  	CNOT ( ancilla_zero_zero[0] , target );
  }
 
-module assign_value_of_1_to_a_i16_i32_impl ( qbit target , int size  ,  ) {
+module assign_value_of_1_to_a_i16_impl(qbit target, int size){
  	qbit ancilla_one_one[1];
 	qbit ancilla_zero_garbage[1];
 	CNOT ( target , ancilla_zero_garbage[0] );
@@ -16,20 +16,20 @@ module assign_value_of_1_to_a_i16_i32_impl ( qbit target , int size  ,  ) {
  	CNOT ( ancilla_one_one[0] , target );
  }
 
-module assign_value_of_b_to_a_i16_i16_i32_impl ( qbit target , qbit control ,  ) {
+module assign_value_of_b_to_a_i16_i16_impl(qbit target, qbit control){
  	qbit ancilla_zg[1];
 	CNOT ( target , ancilla_zg[0] );
  	CNOT ( ancilla_zg[0] , target );
  	CNOT ( control , target );
  }
 
-module a_swap_b_i16_i16_i32_impl ( qbit target0 , qbit target1 ,  ) {
+module a_swap_b_i16_i16_impl(qbit target0, qbit target1){
  	CNOT ( target0 , target1 );
  	CNOT ( target1 , target0 );
  	CNOT ( target0 , target1 );
  }
 
-module ToffoliImpl_Q_A_Q ( qbit control1 , qbit control2 , qbit target ,  ) {
+module ToffoliImpl_Q_A_Q(qbit control1, qbit control2, qbit target){
  	H ( target );
  	T ( control1 );
  	T ( control2 );
@@ -48,7 +48,7 @@ module ToffoliImpl_Q_A_Q ( qbit control1 , qbit control2 , qbit target ,  ) {
  	H ( target );
  }
 
-module a_eq_a_plus_b_i16_i16_i32_impl ( qbit target , qbit control , int size  ,  ) {
+module a_eq_a_plus_b_i16_i16_impl(qbit target, qbit control, int size){
  	qbit ancilla_zg[1];
 	qbit ancilla_zz[1];
 	CNOT ( target , ancilla_zg[0] );
@@ -65,20 +65,20 @@ module a_eq_a_plus_b_i16_i16_i32_impl ( qbit target , qbit control , int size  ,
  	CNOT ( ancilla_zg[0] , target );
  }
 
-module allLibraryFuncs ( qbit* a ,  ) {
- 	assign_value_of_0_to_a_i16_i32_impl ( a[0] , 1 );
- 	assign_value_of_1_to_a_i16_i32_impl ( a[0] , 1 );
- 	assign_value_of_b_to_a_i16_i16_i32_impl ( a[0] , a[1] );
- 	a_swap_b_i16_i16_i32_impl ( a[1] , a[0] );
- 	a_eq_a_plus_b_i16_i16_i32_impl ( a[1] , a[0] , 1 );
- 	assign_value_of_0_to_a_i16_i32_impl ( a[0] , 1 );
- 	assign_value_of_1_to_a_i16_i32_impl ( a[1] , 1 );
- 	assign_value_of_b_to_a_i16_i16_i32_impl ( a[1] , a[2] );
- 	a_swap_b_i16_i16_i32_impl ( a[2] , a[1] );
- 	a_eq_a_plus_b_i16_i16_i32_impl ( a[2] , a[1] , 1 );
+module allLibraryFuncs(qbit *a){
+ 	assign_value_of_0_to_a_i16_impl ( a[0] , 1 );
+ 	assign_value_of_1_to_a_i16_impl ( a[0] , 1 );
+ 	assign_value_of_b_to_a_i16_i16_impl ( a[0] , a[1] );
+ 	a_swap_b_i16_i16_impl ( a[1] , a[0] );
+ 	a_eq_a_plus_b_i16_i16_impl ( a[1] , a[0] , 1 );
+ 	assign_value_of_0_to_a_i16_impl ( a[0] , 1 );
+ 	assign_value_of_1_to_a_i16_impl ( a[1] , 1 );
+ 	assign_value_of_b_to_a_i16_i16_impl ( a[1] , a[2] );
+ 	a_swap_b_i16_i16_impl ( a[2] , a[1] );
+ 	a_eq_a_plus_b_i16_i16_impl ( a[2] , a[1] , 1 );
  }
 
-module main (  ) {
+module main(){
  	qbit h0[32];
 	allLibraryFuncs ( h0 );
  }

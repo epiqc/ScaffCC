@@ -1,4 +1,9 @@
-// RUN: %clang_cc1 -analyze -analyzer-checker=core,experimental.unix,core.uninitialized -analyzer-store=region -verify %s
+// RUN: %clang_analyze_cc1 -analyzer-store=region -verify %s \
+// RUN:   -analyzer-checker=core \
+// RUN:   -analyzer-checker=unix \
+// RUN:   -analyzer-checker=core.uninitialized \
+// RUN:   -analyzer-config unix.DynamicMemoryModeling:Optimistic=true
+
 typedef __typeof(sizeof(int)) size_t;
 void *malloc(size_t);
 void free(void *);

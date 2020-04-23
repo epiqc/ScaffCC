@@ -1,9 +1,8 @@
 //===-- PPCPerfectShuffle.h - Altivec Perfect Shuffle Table -----*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,6 +10,9 @@
 // for the optimal way to build a perfect shuffle without using vperm.
 //
 //===----------------------------------------------------------------------===//
+
+#ifndef LLVM_LIB_TARGET_POWERPC_PPCPERFECTSHUFFLE_H
+#define LLVM_LIB_TARGET_POWERPC_PPCPERFECTSHUFFLE_H
 
 // 31 entries have cost 0
 // 292 entries have cost 1
@@ -6584,3 +6586,5 @@ static const unsigned PerfectShuffleTable[6561+1] = {
   835584U,	// <u,u,u,u>: Cost 0 copy LHS
   0
 };
+
+#endif

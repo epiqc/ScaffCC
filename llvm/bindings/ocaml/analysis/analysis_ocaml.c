@@ -1,13 +1,13 @@
-/*===-- analysis_ocaml.c - LLVM Ocaml Glue ----------------------*- C++ -*-===*\
+/*===-- analysis_ocaml.c - LLVM OCaml Glue ----------------------*- C++ -*-===*\
 |*                                                                            *|
-|*                     The LLVM Compiler Infrastructure                       *|
-|*                                                                            *|
-|* This file is distributed under the University of Illinois Open Source      *|
-|* License. See LICENSE.TXT for details.                                      *|
+|* Part of the LLVM Project, under the Apache License v2.0 with LLVM          *|
+|* Exceptions.                                                                *|
+|* See https://llvm.org/LICENSE.txt for license information.                  *|
+|* SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception                    *|
 |*                                                                            *|
 |*===----------------------------------------------------------------------===*|
 |*                                                                            *|
-|* This file glues LLVM's ocaml interface to its C interface. These functions *|
+|* This file glues LLVM's OCaml interface to its C interface. These functions *|
 |* are by and large transparent wrappers to the corresponding C functions.    *|
 |*                                                                            *|
 |* Note that these functions intentionally take liberties with the CAMLparamX *|
@@ -16,19 +16,19 @@
 \*===----------------------------------------------------------------------===*/
 
 #include "llvm-c/Analysis.h"
+#include "llvm-c/Core.h"
 #include "caml/alloc.h"
 #include "caml/mlvalues.h"
 #include "caml/memory.h"
-
 
 /* Llvm.llmodule -> string option */
 CAMLprim value llvm_verify_module(LLVMModuleRef M) {
   CAMLparam0();
   CAMLlocal2(String, Option);
-  
+
   char *Message;
   int Result = LLVMVerifyModule(M, LLVMReturnStatusAction, &Message);
-  
+
   if (0 == Result) {
     Option = Val_int(0);
   } else {
@@ -36,9 +36,9 @@ CAMLprim value llvm_verify_module(LLVMModuleRef M) {
     String = copy_string(Message);
     Store_field(Option, 0, String);
   }
-  
+
   LLVMDisposeMessage(Message);
-  
+
   CAMLreturn(Option);
 }
 

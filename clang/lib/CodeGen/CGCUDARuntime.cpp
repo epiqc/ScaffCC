@@ -1,9 +1,8 @@
 //===----- CGCUDARuntime.cpp - Interface to CUDA Runtimes -----------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -14,10 +13,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "CGCUDARuntime.h"
-#include "clang/AST/Decl.h"
-#include "clang/AST/ExprCXX.h"
 #include "CGCall.h"
 #include "CodeGenFunction.h"
+#include "clang/AST/Decl.h"
+#include "clang/AST/ExprCXX.h"
 
 using namespace clang;
 using namespace CodeGen;
@@ -31,25 +30,16 @@ RValue CGCUDARuntime::EmitCUDAKernelCallExpr(CodeGenFunction &CGF,
   llvm::BasicBlock *ContBlock = CGF.createBasicBlock("kcall.end");
 
   CodeGenFunction::ConditionalEvaluation eval(CGF);
-  CGF.EmitBranchOnBoolExpr(E->getConfig(), ContBlock, ConfigOKBlock);
+  CGF.EmitBranchOnBoolExpr(E->getConfig(), ContBlock, ConfigOKBlock,
+                           /*TrueCount=*/0);
 
   eval.begin(CGF);
   CGF.EmitBlock(ConfigOKBlock);
-
-  const Decl *TargetDecl = 0;
-  if (const ImplicitCastExpr *CE = dyn_cast<ImplicitCastExpr>(E->getCallee())) {
-    if (const DeclRefExpr *DRE = dyn_cast<DeclRefExpr>(CE->getSubExpr())) {
-      TargetDecl = DRE->getDecl();
-    }
-  }
-
-  llvm::Value *Callee = CGF.EmitScalarExpr(E->getCallee());
-  CGF.EmitCall(E->getCallee()->getType(), Callee, ReturnValue,
-               E->arg_begin(), E->arg_end(), TargetDecl);
+  CGF.EmitSimpleCallExpr(E, ReturnValue);
   CGF.EmitBranch(ContBlock);
 
   CGF.EmitBlock(ContBlock);
   eval.end(CGF);
 
-  return RValue::get(0);
+  return RValue::get(nullptr);
 }

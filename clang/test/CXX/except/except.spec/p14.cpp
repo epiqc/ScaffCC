@@ -39,3 +39,116 @@ struct IC1 {
 // we cannot currently compute the set of thrown types.
 static_assert(noexcept(IC0()), "IC0() does not throw");
 static_assert(!noexcept(IC1()), "IC1() throws");
+
+namespace PR13381 {
+  struct NoThrowMove {
+    NoThrowMove(const NoThrowMove &);
+    NoThrowMove(NoThrowMove &&) noexcept;
+    NoThrowMove &operator=(const NoThrowMove &) const;
+    NoThrowMove &operator=(NoThrowMove &&) const noexcept;
+  };
+  struct NoThrowMoveOnly {
+    NoThrowMoveOnly(NoThrowMoveOnly &&) noexcept;
+    NoThrowMoveOnly &operator=(NoThrowMoveOnly &&) noexcept;
+  };
+  struct X {
+    const NoThrowMove a;
+    NoThrowMoveOnly b;
+
+    static X val();
+    static X &ref();
+  };
+  // These both perform a move, but that copy might throw, because it calls
+  // NoThrowMove's copy constructor (because PR13381::a is const).
+  static_assert(!noexcept(X(X::val())), "");
+  static_assert(!noexcept(X::ref() = X::val()), "");
+}
+
+namespace PR14141 {
+  // Part of DR1351: the implicit exception-specification is noexcept(false) if
+  // the set of potential exceptions of the special member function contains
+  // "any". Hence it is compatible with noexcept(false).
+  struct ThrowingBase {
+    ThrowingBase() noexcept(false);
+    ThrowingBase(const ThrowingBase&) noexcept(false);
+    ThrowingBase(ThrowingBase&&) noexcept(false);
+    ThrowingBase &operator=(const ThrowingBase&) noexcept(false);
+    ThrowingBase &operator=(ThrowingBase&&) noexcept(false);
+    ~ThrowingBase() noexcept(false);
+  };
+  struct Derived : ThrowingBase {
+    Derived() noexcept(false) = default;
+    Derived(const Derived&) noexcept(false) = default;
+    Derived(Derived&&) noexcept(false) = default;
+    Derived &operator=(const Derived&) noexcept(false) = default;
+    Derived &operator=(Derived&&) noexcept(false) = default;
+    ~Derived() noexcept(false) = default;
+  } d1;
+  static_assert(!noexcept(Derived()), "");
+  static_assert(!noexcept(Derived(static_cast<Derived&&>(d1))), "");
+  static_assert(!noexcept(Derived(d1)), "");
+  static_assert(!noexcept(d1 = static_cast<Derived&&>(d1)), "");
+  static_assert(!noexcept(d1 = d1), "");
+  struct Derived2 : ThrowingBase {
+    Derived2() = default;
+    Derived2(const Derived2&) = default;
+    Derived2(Derived2&&) = default;
+    Derived2 &operator=(const Derived2&) = default;
+    Derived2 &operator=(Derived2&&) = default;
+    ~Derived2() = default;
+  } d2;
+  static_assert(!noexcept(Derived2()), "");
+  static_assert(!noexcept(Derived2(static_cast<Derived2&&>(d2))), "");
+  static_assert(!noexcept(Derived2(d2)), "");
+  static_assert(!noexcept(d2 = static_cast<Derived2&&>(d2)), "");
+  static_assert(!noexcept(d2 = d2), "");
+  struct Derived3 : ThrowingBase {
+    Derived3() noexcept(true) = default;
+    Derived3(const Derived3&) noexcept(true) = default;
+    Derived3(Derived3&&) noexcept(true) = default;
+    Derived3 &operator=(const Derived3&) noexcept(true) = default;
+    Derived3 &operator=(Derived3&&) noexcept(true) = default;
+    ~Derived3() noexcept(true) = default;
+  } d3;
+  static_assert(noexcept(Derived3(), Derived3(Derived3()), Derived3(d3), d3 = Derived3(), d3 = d3), "");
+}
+
+namespace rdar13017229 {
+  struct Base {
+    virtual ~Base() {}
+  };
+  
+  struct Derived : Base {
+    virtual ~Derived();
+    Typo foo(); // expected-error{{unknown type name 'Typo'}}
+  };
+}
+
+namespace InhCtor {
+  template<int> struct X {};
+  struct Base {
+    Base(X<0>) noexcept(true);
+    Base(X<1>) noexcept(false);
+    Base(X<2>) throw(X<2>);
+    template<typename T> Base(T) throw(T);
+  };
+  template<typename T> struct Throw {
+    Throw() throw(T);
+  };
+  struct Derived1 : Base, X<5> {
+    using Base::Base;
+    int n;
+  };
+  struct Derived2 : Base, Throw<X<3>> {
+    using Base::Base;
+  };
+  struct Derived3 : Base {
+    using Base::Base;
+    Throw<X<4>> x;
+  };
+  static_assert(noexcept(Derived1(X<0>())), "");
+  static_assert(!noexcept(Derived1(X<1>())), "");
+  static_assert(!noexcept(Derived1(X<2>())), "");
+  static_assert(!noexcept(Derived2(X<0>())), "");
+  static_assert(!noexcept(Derived3(X<0>())), "");
+}

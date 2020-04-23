@@ -1,9 +1,8 @@
 //===- MCDirectives.h - Enums for directives on various targets -*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -20,6 +19,7 @@ enum MCSymbolAttr {
   MCSA_Invalid = 0,    ///< Not a valid directive.
 
   // Various directives in alphabetical order.
+  MCSA_Cold,                ///< .cold (MachO)
   MCSA_ELF_TypeFunction,    ///< .type _foo, STT_FUNC  # aka @function
   MCSA_ELF_TypeIndFunction, ///< .type _foo, STT_GNU_IFUNC
   MCSA_ELF_TypeObject,      ///< .type _foo, STT_OBJECT  # aka @object
@@ -28,6 +28,7 @@ enum MCSymbolAttr {
   MCSA_ELF_TypeNoType,      ///< .type _foo, STT_NOTYPE  # aka @notype
   MCSA_ELF_TypeGnuUniqueObject, /// .type _foo, @gnu_unique_object
   MCSA_Global,              ///< .globl
+  MCSA_LGlobal,             ///< .lglobl (XCOFF)
   MCSA_Hidden,              ///< .hidden (ELF)
   MCSA_IndirectSymbol,      ///< .indirect_symbol (MachO)
   MCSA_Internal,            ///< .internal (ELF)
@@ -35,6 +36,7 @@ enum MCSymbolAttr {
   MCSA_Local,               ///< .local (ELF)
   MCSA_NoDeadStrip,         ///< .no_dead_strip (MachO)
   MCSA_SymbolResolver,      ///< .symbol_resolver (MachO)
+  MCSA_AltEntry,            ///< .alt_entry (MachO)
   MCSA_PrivateExtern,       ///< .private_extern (MachO)
   MCSA_Protected,           ///< .protected (ELF)
   MCSA_Reference,           ///< .reference (MachO)
@@ -50,6 +52,21 @@ enum MCAssemblerFlag {
   MCAF_Code16,                ///< .code16 (X86) / .code 16 (ARM)
   MCAF_Code32,                ///< .code32 (X86) / .code 32 (ARM)
   MCAF_Code64                 ///< .code64 (X86)
+};
+
+enum MCDataRegionType {
+  MCDR_DataRegion,            ///< .data_region
+  MCDR_DataRegionJT8,         ///< .data_region jt8
+  MCDR_DataRegionJT16,        ///< .data_region jt16
+  MCDR_DataRegionJT32,        ///< .data_region jt32
+  MCDR_DataRegionEnd          ///< .end_data_region
+};
+
+enum MCVersionMinType {
+  MCVM_IOSVersionMin,         ///< .ios_version_min
+  MCVM_OSXVersionMin,         ///< .macosx_version_min
+  MCVM_TvOSVersionMin,        ///< .tvos_version_min
+  MCVM_WatchOSVersionMin,     ///< .watchos_version_min
 };
 
 } // end namespace llvm

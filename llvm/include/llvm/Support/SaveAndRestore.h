@@ -1,47 +1,36 @@
 //===-- SaveAndRestore.h - Utility  -------------------------------*- C++ -*-=//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-//
-//  This file provides utility classes that uses RAII to save and restore
-//  values.
-//
+///
+/// \file
+/// This file provides utility classes that use RAII to save and restore
+/// values.
+///
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_ADT_SAVERESTORE
-#define LLVM_ADT_SAVERESTORE
+#ifndef LLVM_SUPPORT_SAVEANDRESTORE_H
+#define LLVM_SUPPORT_SAVEANDRESTORE_H
 
 namespace llvm {
 
-// SaveAndRestore - A utility class that uses RAII to save and restore
-//  the value of a variable.
-template<typename T>
-struct SaveAndRestore {
-  SaveAndRestore(T& x) : X(x), old_value(x) {}
-  SaveAndRestore(T& x, const T &new_value) : X(x), old_value(x) {
-    X = new_value;
+/// A utility class that uses RAII to save and restore the value of a variable.
+template <typename T> struct SaveAndRestore {
+  SaveAndRestore(T &X) : X(X), OldValue(X) {}
+  SaveAndRestore(T &X, const T &NewValue) : X(X), OldValue(X) {
+    X = NewValue;
   }
-  ~SaveAndRestore() { X = old_value; }
-  T get() { return old_value; }
+  ~SaveAndRestore() { X = OldValue; }
+  T get() { return OldValue; }
+
 private:
-  T& X;
-  T old_value;
+  T &X;
+  T OldValue;
 };
 
-// SaveOr - Similar to SaveAndRestore.  Operates only on bools; the old
-//  value of a variable is saved, and during the dstor the old value is
-//  or'ed with the new value.
-struct SaveOr {
-  SaveOr(bool& x) : X(x), old_value(x) { x = false; }
-  ~SaveOr() { X |= old_value; }
-private:
-  bool& X;
-  const bool old_value;
-};
+} // namespace llvm
 
-}
 #endif

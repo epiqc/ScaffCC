@@ -1,16 +1,14 @@
 #===- disassembler.py - Python LLVM Bindings -----------------*- python -*--===#
 #
-#                     The LLVM Compiler Infrastructure
-#
-# This file is distributed under the University of Illinois Open Source
-# License. See LICENSE.TXT for details.
+# Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 #
 #===------------------------------------------------------------------------===#
 
 from ctypes import CFUNCTYPE
 from ctypes import POINTER
 from ctypes import addressof
-from ctypes import byref
 from ctypes import c_byte
 from ctypes import c_char_p
 from ctypes import c_int
@@ -31,6 +29,32 @@ __all__ = [
 lib = get_library()
 callbacks = {}
 
+# Constants for set_options
+Option_UseMarkup = 1
+
+
+
+_initialized = False
+_targets = ['AArch64', 'ARM', 'Hexagon', 'MSP430', 'Mips', 'NVPTX', 'PowerPC', 'R600', 'Sparc', 'SystemZ', 'X86', 'XCore']
+def _ensure_initialized():
+    global _initialized
+    if not _initialized:
+        # Here one would want to call the functions
+        # LLVMInitializeAll{TargetInfo,TargetMC,Disassembler}s, but
+        # unfortunately they are only defined as static inline
+        # functions in the header files of llvm-c, so they don't exist
+        # as symbols in the shared library.
+        # So until that is fixed use this hack to initialize them all
+        for tgt in _targets:
+            for initializer in ("TargetInfo", "TargetMC", "Disassembler"):
+                try:
+                    f = getattr(lib, "LLVMInitialize" + tgt + initializer)
+                except AttributeError:
+                    continue
+                f()
+        _initialized = True
+
+
 class Disassembler(LLVMObject):
     """Represents a disassembler instance.
 
@@ -45,9 +69,12 @@ class Disassembler(LLVMObject):
         The triple argument is the triple to create the disassembler for. This
         is something like 'i386-apple-darwin9'.
         """
+
+        _ensure_initialized()
+
         ptr = lib.LLVMCreateDisasm(c_char_p(triple), c_void_p(None), c_int(0),
                 callbacks['op_info'](0), callbacks['symbol_lookup'](0))
-        if not ptr.contents:
+        if not ptr:
             raise Exception('Could not obtain disassembler for triple: %s' %
                             triple)
 
@@ -113,6 +140,10 @@ class Disassembler(LLVMObject):
             address += result
             offset += result
 
+    def set_options(self, options):
+        if not lib.LLVMSetDisasmOptions(self, options):
+            raise Exception('Unable to set all disassembler options in %i' % options)
+
 
 def register_library(library):
     library.LLVMCreateDisasm.argtypes = [c_char_p, c_void_p, c_int,
@@ -124,6 +155,10 @@ def register_library(library):
     library.LLVMDisasmInstruction.argtypes = [Disassembler, POINTER(c_ubyte),
             c_uint64, c_uint64, c_char_p, c_size_t]
     library.LLVMDisasmInstruction.restype = c_size_t
+
+    library.LLVMSetDisasmOptions.argtypes = [Disassembler, c_uint64]
+    library.LLVMSetDisasmOptions.restype = c_int
+
 
 callbacks['op_info'] = CFUNCTYPE(c_int, c_void_p, c_uint64, c_uint64, c_uint64,
                                  c_int, c_void_p)

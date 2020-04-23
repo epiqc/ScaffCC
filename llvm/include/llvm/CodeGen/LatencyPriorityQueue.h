@@ -1,9 +1,8 @@
 //===---- LatencyPriorityQueue.h - A latency-oriented priority queue ------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,20 +12,21 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LATENCY_PRIORITY_QUEUE_H
-#define LATENCY_PRIORITY_QUEUE_H
+#ifndef LLVM_CODEGEN_LATENCYPRIORITYQUEUE_H
+#define LLVM_CODEGEN_LATENCYPRIORITYQUEUE_H
 
 #include "llvm/CodeGen/ScheduleDAG.h"
+#include "llvm/Config/llvm-config.h"
 
 namespace llvm {
   class LatencyPriorityQueue;
 
   /// Sorting functions for the Available queue.
-  struct latency_sort : public std::binary_function<SUnit*, SUnit*, bool> {
+  struct latency_sort {
     LatencyPriorityQueue *PQ;
     explicit latency_sort(LatencyPriorityQueue *pq) : PQ(pq) {}
 
-    bool operator()(const SUnit* left, const SUnit* right) const;
+    bool operator()(const SUnit* LHS, const SUnit* RHS) const;
   };
 
   class LatencyPriorityQueue : public SchedulingPriorityQueue {
@@ -47,22 +47,22 @@ namespace llvm {
     LatencyPriorityQueue() : Picker(this) {
     }
 
-    bool isBottomUp() const { return false; }
+    bool isBottomUp() const override { return false; }
 
-    void initNodes(std::vector<SUnit> &sunits) {
+    void initNodes(std::vector<SUnit> &sunits) override {
       SUnits = &sunits;
       NumNodesSolelyBlocking.resize(SUnits->size(), 0);
     }
 
-    void addNode(const SUnit *SU) {
+    void addNode(const SUnit *SU) override {
       NumNodesSolelyBlocking.resize(SUnits->size(), 0);
     }
 
-    void updateNode(const SUnit *SU) {
+    void updateNode(const SUnit *SU) override {
     }
 
-    void releaseState() {
-      SUnits = 0;
+    void releaseState() override {
+      SUnits = nullptr;
     }
 
     unsigned getLatency(unsigned NodeNum) const {
@@ -75,21 +75,23 @@ namespace llvm {
       return NumNodesSolelyBlocking[NodeNum];
     }
 
-    bool empty() const { return Queue.empty(); }
+    bool empty() const override { return Queue.empty(); }
 
-    virtual void push(SUnit *U);
+    void push(SUnit *U) override;
 
-    virtual SUnit *pop();
+    SUnit *pop() override;
 
-    virtual void remove(SUnit *SU);
+    void remove(SUnit *SU) override;
 
-    virtual void dump(ScheduleDAG* DAG) const;
+#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
+    LLVM_DUMP_METHOD void dump(ScheduleDAG *DAG) const override;
+#endif
 
     // scheduledNode - As nodes are scheduled, we look to see if there are any
     // successor nodes that have a single unscheduled predecessor.  If so, that
     // single predecessor has a higher priority, since scheduling it will make
     // the node available.
-    void scheduledNode(SUnit *Node);
+    void scheduledNode(SUnit *SU) override;
 
 private:
     void AdjustPriorityOfUnscheduledPreds(SUnit *SU);

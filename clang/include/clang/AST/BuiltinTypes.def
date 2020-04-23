@@ -1,9 +1,8 @@
-//===-- BuiltinTypeNodes.def - Metadata about BuiltinTypes ------*- C++ -*-===//
+//===-- BuiltinTypes.def - Metadata about BuiltinTypes ----------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -72,6 +71,9 @@ UNSIGNED_TYPE(UChar, UnsignedCharTy)
 // 'wchar_t' for targets where it's unsigned
 SHARED_SINGLETON_TYPE(UNSIGNED_TYPE(WChar_U, WCharTy))
 
+// 'char8_t' in C++20 (proposed)
+UNSIGNED_TYPE(Char8, Char8Ty)
+
 // 'char16_t' in C++
 UNSIGNED_TYPE(Char16, Char16Ty)
 
@@ -105,12 +107,11 @@ UNSIGNED_TYPE(Qbit, QbitTy)
 // 'qint' in RKQC 
 UNSIGNED_TYPE(Qint, QintTy)
 
-// 'ancilla' in RKQC
+ // 'ancilla' in RKQC
 UNSIGNED_TYPE(zzBit, zzBitTy)
 UNSIGNED_TYPE(zgBit, zgBitTy)
 UNSIGNED_TYPE(ooBit, ooBitTy)
 UNSIGNED_TYPE(ogBit, ogBitTy)
-
 
 //===- Signed Types -------------------------------------------------------===//
 
@@ -138,6 +139,80 @@ SIGNED_TYPE(LongLong, LongLongTy)
 // '__int128_t'
 SIGNED_TYPE(Int128, Int128Ty)
 
+//===- Fixed point types --------------------------------------------------===//
+
+// 'short _Accum'
+SIGNED_TYPE(ShortAccum, ShortAccumTy)
+
+// '_Accum'
+SIGNED_TYPE(Accum, AccumTy)
+
+// 'long _Accum'
+SIGNED_TYPE(LongAccum, LongAccumTy)
+
+// 'unsigned short _Accum'
+UNSIGNED_TYPE(UShortAccum, UnsignedShortAccumTy)
+
+// 'unsigned _Accum'
+UNSIGNED_TYPE(UAccum, UnsignedAccumTy)
+
+// 'unsigned long _Accum'
+UNSIGNED_TYPE(ULongAccum, UnsignedLongAccumTy)
+
+// 'short _Fract'
+SIGNED_TYPE(ShortFract, ShortFractTy)
+
+// '_Fract'
+SIGNED_TYPE(Fract, FractTy)
+
+// 'long _Fract'
+SIGNED_TYPE(LongFract, LongFractTy)
+
+// 'unsigned short _Fract'
+UNSIGNED_TYPE(UShortFract, UnsignedShortFractTy)
+
+// 'unsigned _Fract'
+UNSIGNED_TYPE(UFract, UnsignedFractTy)
+
+// 'unsigned long _Fract'
+UNSIGNED_TYPE(ULongFract, UnsignedLongFractTy)
+
+// '_Sat short _Accum'
+SIGNED_TYPE(SatShortAccum, SatShortAccumTy)
+
+// '_Sat _Accum'
+SIGNED_TYPE(SatAccum, SatAccumTy)
+
+// '_Sat long _Accum'
+SIGNED_TYPE(SatLongAccum, SatLongAccumTy)
+
+// '_Sat unsigned short _Accum'
+UNSIGNED_TYPE(SatUShortAccum, SatUnsignedShortAccumTy)
+
+// '_Sat unsigned _Accum'
+UNSIGNED_TYPE(SatUAccum, SatUnsignedAccumTy)
+
+// '_Sat unsigned long _Accum'
+UNSIGNED_TYPE(SatULongAccum, SatUnsignedLongAccumTy)
+
+// '_Sat short _Fract'
+SIGNED_TYPE(SatShortFract, SatShortFractTy)
+
+// '_Sat _Fract'
+SIGNED_TYPE(SatFract, SatFractTy)
+
+// '_Sat long _Fract'
+SIGNED_TYPE(SatLongFract, SatLongFractTy)
+
+// '_Sat unsigned short _Fract'
+UNSIGNED_TYPE(SatUShortFract, SatUnsignedShortFractTy)
+
+// '_Sat unsigned _Fract'
+UNSIGNED_TYPE(SatUFract, SatUnsignedFractTy)
+
+// '_Sat unsigned long _Fract'
+UNSIGNED_TYPE(SatULongFract, SatUnsignedLongFractTy)
+
 //===- Floating point types -----------------------------------------------===//
 
 // 'half' in OpenCL, '__fp16' in ARM NEON.
@@ -151,6 +226,12 @@ FLOATING_TYPE(Double, DoubleTy)
 
 // 'long double'
 FLOATING_TYPE(LongDouble, LongDoubleTy)
+
+// '_Float16'
+FLOATING_TYPE(Float16, HalfTy)
+
+// '__float128'
+FLOATING_TYPE(Float128, Float128Ty)
 
 //===- Language-specific types --------------------------------------------===//
 
@@ -172,6 +253,21 @@ BUILTIN_TYPE(ObjCClass, ObjCBuiltinClassTy)
 // The primitive Objective C 'SEL' type.  The user-visible 'SEL'
 // type is a typedef of a PointerType to this.
 BUILTIN_TYPE(ObjCSel, ObjCBuiltinSelTy)
+
+// OpenCL sampler_t.
+BUILTIN_TYPE(OCLSampler, OCLSamplerTy)
+
+// OpenCL event_t.
+BUILTIN_TYPE(OCLEvent, OCLEventTy)
+
+// OpenCL clk_event_t.
+BUILTIN_TYPE(OCLClkEvent, OCLClkEventTy)
+
+// OpenCL queue_t.
+BUILTIN_TYPE(OCLQueue, OCLQueueTy)
+
+// OpenCL reserve_id_t.
+BUILTIN_TYPE(OCLReserveID, OCLReserveIDTy)
 
 // This represents the type of an expression whose type is
 // totally unknown, e.g. 'T::foo'.  It is permitted for this to
@@ -225,13 +321,18 @@ PLACEHOLDER_TYPE(PseudoObject, PseudoObjectTy)
 // unknown type, most notably explicit casts.
 PLACEHOLDER_TYPE(UnknownAny, UnknownAnyTy)
 
+PLACEHOLDER_TYPE(BuiltinFn, BuiltinFnTy)
+
 // The type of a cast which, in ARC, would normally require a
 // __bridge, but which might be okay depending on the immediate
 // context.
 PLACEHOLDER_TYPE(ARCUnbridgedCast, ARCUnbridgedCastTy)
 
+// A placeholder type for OpenMP array sections.
+PLACEHOLDER_TYPE(OMPArraySection, OMPArraySectionTy)
+
 #ifdef LAST_BUILTIN_TYPE
-LAST_BUILTIN_TYPE(ARCUnbridgedCast)
+LAST_BUILTIN_TYPE(OMPArraySection)
 #undef LAST_BUILTIN_TYPE
 #endif
 

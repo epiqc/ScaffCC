@@ -6,17 +6,19 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <cstring>
+#include <cstdlib>
 #include "llvm/Pass.h"
-#include "llvm/Module.h"
-#include "llvm/Function.h"
-#include "llvm/BasicBlock.h"
-#include "llvm/Instruction.h"
-#include "llvm/Constants.h"
-#include "llvm/Intrinsics.h"
-#include "llvm/Support/InstVisitor.h" 
-#include "llvm/Support/InstIterator.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Instruction.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/InstVisitor.h" 
+#include "llvm/IR/InstIterator.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Instructions.h"
+#include "llvm/IR/Instructions.h"
 #include <map>
 
 using namespace llvm;
@@ -53,13 +55,13 @@ namespace {
     static char ID;  // Pass identification, replacement for typeid
 
     //external instrumentation functions
-    Function* dcpGate; 
-    Function* dcpGate2;
-    Function* dcpGate3;
-    Function* dcpQbitInit;
-    Function* dcpAncReset;
-    Function* dcpSumm;
-    Function* dcpInitAlgo;
+    FunctionCallee dcpGate; 
+    FunctionCallee dcpGate2;
+    FunctionCallee dcpGate3;
+    FunctionCallee dcpQbitInit;
+    FunctionCallee dcpAncReset;
+    FunctionCallee dcpSumm;
+    FunctionCallee dcpInitAlgo;
 
     map<AllocaInst*, int> mapAllocaInst;
     //bool isMainFunction;
@@ -131,7 +133,7 @@ namespace {
 	SmallVector<Value*,16> idxVect;
 	idxVect.push_back(ConstantInt::get(Type::getInt32Ty(CI->getContext()),0));
 	idxVect.push_back(ConstantInt::get(Type::getInt32Ty(CI->getContext()),0));
-	GetElementPtrInst *arrPtr = GetElementPtrInst::Create((Value*)(*mit).first, idxVect, "", (Instruction*) CI);
+	GetElementPtrInst *arrPtr = GetElementPtrInst::Create((*mit).first->getAllocatedType(), (Value*)(*mit).first, idxVect, "", (Instruction*) CI);
 
 	//generate call inst to external store function
 	SmallVector<Value*,16> call_args;
@@ -145,7 +147,7 @@ namespace {
 
     void resetAncillaData(Function* F){
       BasicBlock* myBB = &(F->back());
-      TerminatorInst *BBTerm = myBB->getTerminator();
+      Instruction *BBTerm = myBB->getTerminator();
 
       for(map<AllocaInst*, int>::iterator mit = mapAllocaInst.begin(); mit!=mapAllocaInst.end(); ++mit){
 	int arrSize = (*mit).second;
@@ -154,7 +156,7 @@ namespace {
 	SmallVector<Value*,16> idxVect;
 	idxVect.push_back(ConstantInt::get(Type::getInt32Ty(BBTerm->getContext()),0));
 	idxVect.push_back(ConstantInt::get(Type::getInt32Ty(BBTerm->getContext()),0));
-	GetElementPtrInst *arrPtr = GetElementPtrInst::Create((Value*)(*mit).first, idxVect, "", (Instruction*)BBTerm);
+	GetElementPtrInst *arrPtr = GetElementPtrInst::Create((*mit).first->getAllocatedType(), (Value*)(*mit).first, idxVect, "", (Instruction*)BBTerm);
 
 	//generate call inst to external store function
 	SmallVector<Value*,16> call_args;
@@ -209,26 +211,38 @@ namespace {
         
     bool runOnModule(Module &M){
 
-      dcpGate = cast<Function>(M.getOrInsertFunction("dcp_qgate", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt16Ty(M.getContext()), (Type*)0));
+      const char *debug_val = getenv("DEBUG_GEN_OPENQASM");
+      if(debug_val){
+        if(!strncmp(debug_val, "1", 1)) debugDynCritPath = true;
+        else debugDynCritPath = false;
+      }
+
+      debug_val = getenv("DEBUG_SCAFFOLD");
+      if(debug_val && !debugDynCritPath){
+        if(!strncmp(debug_val, "1", 1)) debugDynCritPath = true;
+        else debugDynCritPath = false;
+      }
+
+      dcpGate = M.getOrInsertFunction("dcp_qgate", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt16Ty(M.getContext()), (Type*)0);
       
-      dcpGate2 = cast<Function>(M.getOrInsertFunction("dcp_qgate2", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt16Ty(M.getContext()), Type::getInt16Ty(M.getContext()), (Type*)0));
+      dcpGate2 = M.getOrInsertFunction("dcp_qgate2", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt16Ty(M.getContext()), Type::getInt16Ty(M.getContext()), (Type*)0);
 
-      dcpGate3 = cast<Function>(M.getOrInsertFunction("dcp_qgate3", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt16Ty(M.getContext()), Type::getInt16Ty(M.getContext()), Type::getInt16Ty(M.getContext()), (Type*)0));
+      dcpGate3 = M.getOrInsertFunction("dcp_qgate3", Type::getVoidTy(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt16Ty(M.getContext()), Type::getInt16Ty(M.getContext()), Type::getInt16Ty(M.getContext()), (Type*)0);
 
-      dcpQbitInit = cast<Function>(M.getOrInsertFunction("dcp_qbit_init", Type::getVoidTy(M.getContext()), Type::getInt16Ty(M.getContext())->getPointerTo(), Type::getInt32Ty(M.getContext()), (Type*)0));
+      dcpQbitInit = M.getOrInsertFunction("dcp_qbit_init", Type::getVoidTy(M.getContext()), Type::getInt16Ty(M.getContext())->getPointerTo(), Type::getInt32Ty(M.getContext()), (Type*)0);
 
-      dcpAncReset = cast<Function>(M.getOrInsertFunction("dcp_anc_reset", Type::getVoidTy(M.getContext()), Type::getInt16Ty(M.getContext())->getPointerTo(), Type::getInt32Ty(M.getContext()), (Type*)0));
+      dcpAncReset = M.getOrInsertFunction("dcp_anc_reset", Type::getVoidTy(M.getContext()), Type::getInt16Ty(M.getContext())->getPointerTo(), Type::getInt32Ty(M.getContext()), (Type*)0);
       
-      dcpSumm = cast<Function>(M.getOrInsertFunction("dcp_summary", Type::getVoidTy(M.getContext()), (Type*)0));
+      dcpSumm = M.getOrInsertFunction("dcp_summary", Type::getVoidTy(M.getContext()), (Type*)0);
 
-      dcpInitAlgo = cast<Function>(M.getOrInsertFunction("dcp_init_algo", Type::getVoidTy(M.getContext()), (Type*)0));
+      dcpInitAlgo = M.getOrInsertFunction("dcp_init_algo", Type::getVoidTy(M.getContext()), (Type*)0);
         
       for(Module::iterator F = M.begin(); F!=M.end(); ++F){
-	if(F && !F->isDeclaration()){
+	if(!F->isDeclaration()){
 	  //errs() << "Func : " << F->getName() << "\n";	  	  
 
 	  //analyze Alloc Insts first
-	  for(inst_iterator instIb = inst_begin(F); instIb!=inst_end(F); ++instIb){
+	  for(inst_iterator instIb = inst_begin(&(*F)); instIb!=inst_end(&(*F)); ++instIb){
 	    Instruction* pInst = &*instIb;
 	    bool isAlloc = analyzeAllocInst(pInst);
 	    if(!isAlloc){
@@ -246,14 +260,14 @@ namespace {
 	  }
 
 	  //analyze Call insts now
-	  visit(F);
+	  visit(&(*F));
 	  
 	  //reset data for ancilla qubits to save qubits
-	  resetAncillaData(F);
+	  resetAncillaData(&(*F));
 
 	  if(F->getName() == "main"){
 	    BasicBlock* myBB = &(F->back());
-	    TerminatorInst *BBTerm = myBB->getTerminator();
+	    Instruction *BBTerm = myBB->getTerminator();
 	    
 	    CallInst::Create(dcpSumm,"",(Instruction*)BBTerm);
 	  }   	

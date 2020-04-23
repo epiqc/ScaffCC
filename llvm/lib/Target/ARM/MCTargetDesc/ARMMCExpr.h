@@ -1,14 +1,13 @@
 //===-- ARMMCExpr.h - ARM specific MC expression classes --------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef ARMMCEXPR_H
-#define ARMMCEXPR_H
+#ifndef LLVM_LIB_TARGET_ARM_MCTARGETDESC_ARMMCEXPR_H
+#define LLVM_LIB_TARGET_ARM_MCTARGETDESC_ARMMCEXPR_H
 
 #include "llvm/MC/MCExpr.h"
 
@@ -26,22 +25,22 @@ private:
   const VariantKind Kind;
   const MCExpr *Expr;
 
-  explicit ARMMCExpr(VariantKind _Kind, const MCExpr *_Expr)
-    : Kind(_Kind), Expr(_Expr) {}
-  
+  explicit ARMMCExpr(VariantKind Kind, const MCExpr *Expr)
+      : Kind(Kind), Expr(Expr) {}
+
 public:
   /// @name Construction
   /// @{
 
-  static const ARMMCExpr *Create(VariantKind Kind, const MCExpr *Expr,
+  static const ARMMCExpr *create(VariantKind Kind, const MCExpr *Expr,
                                       MCContext &Ctx);
 
-  static const ARMMCExpr *CreateUpper16(const MCExpr *Expr, MCContext &Ctx) {
-    return Create(VK_ARM_HI16, Expr, Ctx);
+  static const ARMMCExpr *createUpper16(const MCExpr *Expr, MCContext &Ctx) {
+    return create(VK_ARM_HI16, Expr, Ctx);
   }
 
-  static const ARMMCExpr *CreateLower16(const MCExpr *Expr, MCContext &Ctx) {
-    return Create(VK_ARM_LO16, Expr, Ctx);
+  static const ARMMCExpr *createLower16(const MCExpr *Expr, MCContext &Ctx) {
+    return create(VK_ARM_LO16, Expr, Ctx);
   }
 
   /// @}
@@ -56,20 +55,23 @@ public:
 
   /// @}
 
-  void PrintImpl(raw_ostream &OS) const;
-  bool EvaluateAsRelocatableImpl(MCValue &Res,
-                                 const MCAsmLayout *Layout) const;
-  void AddValueSymbols(MCAssembler *) const;
-  const MCSection *FindAssociatedSection() const {
-    return getSubExpr()->FindAssociatedSection();
+  void printImpl(raw_ostream &OS, const MCAsmInfo *MAI) const override;
+  bool evaluateAsRelocatableImpl(MCValue &Res,
+                                 const MCAsmLayout *Layout,
+                                 const MCFixup *Fixup) const override {
+    return false;
   }
+  void visitUsedExpr(MCStreamer &Streamer) const override;
+  MCFragment *findAssociatedFragment() const override {
+    return getSubExpr()->findAssociatedFragment();
+  }
+
+  // There are no TLS ARMMCExprs at the moment.
+  void fixELFSymbolsInTLSFixups(MCAssembler &Asm) const override {}
 
   static bool classof(const MCExpr *E) {
     return E->getKind() == MCExpr::Target;
   }
-  
-  static bool classof(const ARMMCExpr *) { return true; }
-
 };
 } // end namespace llvm
 

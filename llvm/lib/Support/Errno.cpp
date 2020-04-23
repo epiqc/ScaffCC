@@ -1,9 +1,8 @@
 //===- Errno.cpp - errno support --------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -12,9 +11,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Support/Errno.h"
-#include "llvm/Config/config.h"     // Get autoconf configuration settings
-
-#if HAVE_STRING_H
+#include "llvm/Config/config.h"
+#include "llvm/Support/raw_ostream.h"
 #include <string.h>
 
 #if HAVE_ERRNO_H
@@ -36,39 +34,42 @@ std::string StrError() {
 #endif  // HAVE_ERRNO_H
 
 std::string StrError(int errnum) {
+  std::string str;
+  if (errnum == 0)
+    return str;
+#if defined(HAVE_STRERROR_R) || HAVE_DECL_STRERROR_S
   const int MaxErrStrLen = 2000;
   char buffer[MaxErrStrLen];
   buffer[0] = '\0';
-  char* str = buffer;
+#endif
+
 #ifdef HAVE_STRERROR_R
   // strerror_r is thread-safe.
-  if (errnum)
-# if defined(__GLIBC__) && defined(_GNU_SOURCE)
-    // glibc defines its own incompatible version of strerror_r
-    // which may not use the buffer supplied.
-    str = strerror_r(errnum,buffer,MaxErrStrLen-1);
-# else
-    strerror_r(errnum,buffer,MaxErrStrLen-1);
-# endif
+#if defined(__GLIBC__) && defined(_GNU_SOURCE)
+  // glibc defines its own incompatible version of strerror_r
+  // which may not use the buffer supplied.
+  str = strerror_r(errnum, buffer, MaxErrStrLen - 1);
+#else
+  strerror_r(errnum, buffer, MaxErrStrLen - 1);
+  str = buffer;
+#endif
 #elif HAVE_DECL_STRERROR_S // "Windows Secure API"
-    if (errnum)
-      strerror_s(buffer, errnum);
+  strerror_s(buffer, MaxErrStrLen - 1, errnum);
+  str = buffer;
 #elif defined(HAVE_STRERROR)
   // Copy the thread un-safe result of strerror into
   // the buffer as fast as possible to minimize impact
   // of collision of strerror in multiple threads.
-  if (errnum)
-    strncpy(buffer,strerror(errnum),MaxErrStrLen-1);
-  buffer[MaxErrStrLen-1] = '\0';
+  str = strerror(errnum);
 #else
   // Strange that this system doesn't even have strerror
   // but, oh well, just use a generic message
-  sprintf(buffer, "Error #%d", errnum);
+  raw_string_ostream stream(str);
+  stream << "Error #" << errnum;
+  stream.flush();
 #endif
   return str;
 }
 
 }  // namespace sys
 }  // namespace llvm
-
-#endif  // HAVE_STRING_H

@@ -10,23 +10,25 @@
 #define DEBUG_TYPE "GetCriticalPath"
 #include <vector>
 #include <limits>
+#include <cstring>
+#include <cstdlib>
 #include "llvm/Pass.h"
-#include "llvm/Function.h"
-#include "llvm/Module.h"
-#include "llvm/BasicBlock.h"
-#include "llvm/Instruction.h"
-#include "llvm/Instructions.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Instruction.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/ADT/Statistic.h"
-#include "llvm/Support/InstIterator.h"
+#include "llvm/IR/InstIterator.h"
 #include "llvm/PassAnalysisSupport.h"
 #include "llvm/Analysis/CallGraph.h"
-#include "llvm/Support/CFG.h"
+#include "llvm/IR/CFG.h"
 #include "llvm/ADT/SCCIterator.h"
-#include "llvm/Argument.h"
+#include "llvm/IR/Argument.h"
 #include "llvm/ADT/ilist.h"
-#include "llvm/Constants.h"
-#include "llvm/IntrinsicInst.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/IntrinsicInst.h"
 
 
 using namespace llvm;
@@ -34,7 +36,7 @@ using namespace std;
 
 #define MAX_GATE_ARGS 30
 #define MAX_BT_COUNT 15 //max backtrace allowed - to avoid infinite recursive loops
-#define NUM_QGATES 17
+#define NUM_QGATES 19
 #define _CNOT 0
 #define _H 1
 #define _S 2
@@ -234,7 +236,7 @@ namespace {
 
     virtual void getAnalysisUsage(AnalysisUsage &AU) const {
       AU.setPreservesAll();  
-      AU.addRequired<CallGraph>();    
+      AU.addRequired<CallGraphWrapperPass>();    
     }
 
   }; // End of struct GetCriticalPath
@@ -1342,11 +1344,33 @@ void GetCriticalPath::analyzeCallInst(Function* F, Instruction* pInst){
 
 
   bool GetCriticalPath::runOnModule (Module &M) {
+    const char *debug_val = getenv("DEBUG_GETCRITICALPATH");
+    if(debug_val){
+      if(!strncmp(debug_val, "1", 1)) debugGetCriticalPath = true;
+      else debugGetCriticalPath = false;
+    }
+
+    debug_val = getenv("DEBUG_SCAFFOLD");
+    if(debug_val && !debugGetCriticalPath){
+      if(!strncmp(debug_val, "1", 1)) debugGetCriticalPath = true;
+      else debugGetCriticalPath = false;
+    }
+
     init_gate_names();
     init_gates_as_functions();
 
     // iterate over all functions, and over all instructions in those functions
-    CallGraphNode* rootNode = getAnalysis<CallGraph>().getRoot();
+    CallGraph cg = CallGraph(M);
+
+    CallGraphNode *rootNode = nullptr;
+
+    for(auto it = cg.begin();it != cg.end();it++){
+      if(!(it->second->getFunction())) continue;
+      if(it->second->getFunction()->getName() == "main"){
+        rootNode = &(*it->second);
+        break;
+      }
+    }
 
     //Post-order
     for (scc_iterator<CallGraphNode*> sccIb = scc_begin(rootNode), E = scc_end(rootNode); sccIb != E; ++sccIb) {

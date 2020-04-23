@@ -9,7 +9,7 @@ struct S {
   int n, m;
 };
 
-constexpr int extract(const S &s) { return s.n; } // expected-note {{read of uninitialized object is not allowed in a constant expression}}
+constexpr int extract(const S &s) { return s.n; } // expected-note {{read of object outside its lifetime is not allowed in a constant expression}}
 
 constexpr S s1; // ok
 void f() {
@@ -41,11 +41,7 @@ expected-error {{constant expression}} \
 expected-note {{in call to 'test_printing(12, 3.976200e+01, 3+4i, 1.290000e+01+3.600000e+00i, &u2.T::arr[4], u2.another.arr[2], {5, 1, 2, 3}, {{{}}, {{}}, &u1.T::arr[2]})'}}
 
 struct V {
-  // FIXME: when we can generate these as constexpr constructors, remove the
-  // explicit definitions.
-  constexpr V() : arr{[255] = 42} {}
-  constexpr V(const V &v) : arr{[255] = 42} {}
-  int arr[256];
+  int arr[256] = {[255] = 42}; // expected-warning {{C99}}
 };
 constexpr V v;
 constexpr int get(const int *p) { return *p; } // expected-note {{read of dereferenced one-past-the-end pointer}}
@@ -90,10 +86,12 @@ constexpr wchar_t wc = get(L"test\0\\\"\t\a\b\234\u1234\xffffffff"); // \
 
 constexpr char32_t c32_err = get(U"\U00110000"); // expected-error {{invalid universal character}}
 
+#define fold(x) (__builtin_constant_p(x) ? (x) : (x))
+
 typedef decltype(sizeof(int)) LabelDiffTy;
 constexpr LabelDiffTy mulBy3(LabelDiffTy x) { return x * 3; } // expected-note {{subexpression}}
 void LabelDiffTest() {
-  static_assert(mulBy3((LabelDiffTy)&&a-(LabelDiffTy)&&b) == 3, ""); // expected-error {{constant expression}} expected-note {{call to 'mulBy3(&&a - &&b)'}}
+  static_assert(mulBy3(fold((LabelDiffTy)&&a-(LabelDiffTy)&&b)) == 3, ""); // expected-error {{constant expression}} expected-note {{call to 'mulBy3(&&a - &&b)'}}
   a:b:return;
 }
 

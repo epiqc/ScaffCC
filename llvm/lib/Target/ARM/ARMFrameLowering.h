@@ -1,77 +1,94 @@
-//==-- ARMTargetFrameLowering.h - Define frame lowering for ARM --*- C++ -*-==//
+//===- ARMTargetFrameLowering.h - Define frame lowering for ARM -*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
-//
-//===----------------------------------------------------------------------===//
-//
-//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef ARM_FRAMEINFO_H
-#define ARM_FRAMEINFO_H
+#ifndef LLVM_LIB_TARGET_ARM_ARMFRAMELOWERING_H
+#define LLVM_LIB_TARGET_ARM_ARMFRAMELOWERING_H
 
-#include "ARM.h"
-#include "ARMSubtarget.h"
-#include "llvm/Target/TargetFrameLowering.h"
+#include "llvm/CodeGen/MachineBasicBlock.h"
+#include "llvm/CodeGen/TargetFrameLowering.h"
+#include <vector>
 
 namespace llvm {
-  class ARMSubtarget;
+
+class ARMSubtarget;
+class CalleeSavedInfo;
+class MachineFunction;
 
 class ARMFrameLowering : public TargetFrameLowering {
 protected:
   const ARMSubtarget &STI;
 
 public:
-  explicit ARMFrameLowering(const ARMSubtarget &sti)
-    : TargetFrameLowering(StackGrowsDown, sti.getStackAlignment(), 0, 4),
-      STI(sti) {
-  }
+  explicit ARMFrameLowering(const ARMSubtarget &sti);
 
   /// emitProlog/emitEpilog - These methods insert prolog and epilog code into
   /// the function.
-  void emitPrologue(MachineFunction &MF) const;
-  void emitEpilogue(MachineFunction &MF, MachineBasicBlock &MBB) const;
+  void emitPrologue(MachineFunction &MF, MachineBasicBlock &MBB) const override;
+  void emitEpilogue(MachineFunction &MF, MachineBasicBlock &MBB) const override;
 
   bool spillCalleeSavedRegisters(MachineBasicBlock &MBB,
                                  MachineBasicBlock::iterator MI,
                                  const std::vector<CalleeSavedInfo> &CSI,
-                                 const TargetRegisterInfo *TRI) const;
+                                 const TargetRegisterInfo *TRI) const override;
 
   bool restoreCalleeSavedRegisters(MachineBasicBlock &MBB,
-                                   MachineBasicBlock::iterator MI,
-                                   const std::vector<CalleeSavedInfo> &CSI,
-                                   const TargetRegisterInfo *TRI) const;
+                                  MachineBasicBlock::iterator MI,
+                                  std::vector<CalleeSavedInfo> &CSI,
+                                  const TargetRegisterInfo *TRI) const override;
 
-  bool hasFP(const MachineFunction &MF) const;
-  bool hasReservedCallFrame(const MachineFunction &MF) const;
-  bool canSimplifyCallFramePseudos(const MachineFunction &MF) const;
+  bool keepFramePointer(const MachineFunction &MF) const override;
+
+  bool enableCalleeSaveSkip(const MachineFunction &MF) const override;
+
+  bool hasFP(const MachineFunction &MF) const override;
+  bool hasReservedCallFrame(const MachineFunction &MF) const override;
+  bool canSimplifyCallFramePseudos(const MachineFunction &MF) const override;
   int getFrameIndexReference(const MachineFunction &MF, int FI,
-                             unsigned &FrameReg) const;
-  int ResolveFrameIndexReference(const MachineFunction &MF,
-                                 int FI,
+                             unsigned &FrameReg) const override;
+  int ResolveFrameIndexReference(const MachineFunction &MF, int FI,
                                  unsigned &FrameReg, int SPAdj) const;
-  int getFrameIndexOffset(const MachineFunction &MF, int FI) const;
 
-  void processFunctionBeforeCalleeSavedScan(MachineFunction &MF,
-                                            RegScavenger *RS) const;
+  void getCalleeSaves(const MachineFunction &MF,
+                      BitVector &SavedRegs) const override;
+  void determineCalleeSaves(MachineFunction &MF, BitVector &SavedRegs,
+                            RegScavenger *RS) const override;
 
- private:
+  void adjustForSegmentedStacks(MachineFunction &MF,
+                                MachineBasicBlock &MBB) const override;
+
+  /// Returns true if the target will correctly handle shrink wrapping.
+  bool enableShrinkWrapping(const MachineFunction &MF) const override {
+    return true;
+  }
+  bool isProfitableForNoCSROpt(const Function &F) const override {
+    // The no-CSR optimisation is bad for code size on ARM, because we can save
+    // many registers with a single PUSH/POP pair.
+    return false;
+  }
+
+private:
   void emitPushInst(MachineBasicBlock &MBB, MachineBasicBlock::iterator MI,
                     const std::vector<CalleeSavedInfo> &CSI, unsigned StmOpc,
                     unsigned StrOpc, bool NoGap,
                     bool(*Func)(unsigned, bool), unsigned NumAlignedDPRCS2Regs,
                     unsigned MIFlags = 0) const;
   void emitPopInst(MachineBasicBlock &MBB, MachineBasicBlock::iterator MI,
-                   const std::vector<CalleeSavedInfo> &CSI, unsigned LdmOpc,
+                   std::vector<CalleeSavedInfo> &CSI, unsigned LdmOpc,
                    unsigned LdrOpc, bool isVarArg, bool NoGap,
                    bool(*Func)(unsigned, bool),
                    unsigned NumAlignedDPRCS2Regs) const;
+
+  MachineBasicBlock::iterator
+  eliminateCallFramePseudoInstr(MachineFunction &MF,
+                                MachineBasicBlock &MBB,
+                                MachineBasicBlock::iterator MI) const override;
 };
 
-} // End llvm namespace
+} // end namespace llvm
 
-#endif
+#endif // LLVM_LIB_TARGET_ARM_ARMFRAMELOWERING_H

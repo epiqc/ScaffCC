@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -fsyntax-only -verify %s
+// RUN: %clang_cc1 -fsyntax-only -verify %s  -triple x86_64-pc-linux-gnu
 template<int I, int J>
 struct Bitfields {
   int simple : I; // expected-error{{bit-field 'simple' has zero width}}
@@ -127,7 +127,7 @@ void test_call_operator(CallOperator call_op, int i, double d) {
 
 template<typename T>
 void test_asm(T t) {
-  asm ("nop" : "=a"(*t) : "r"(*t)); // expected-error {{indirection requires pointer operand ('int' invalid)}}
+  asm ("nop" : "=r"(*t) : "r"(*t)); // expected-error {{indirection requires pointer operand ('int' invalid)}}
 }
 
 void test_asm() {

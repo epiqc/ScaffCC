@@ -1,9 +1,8 @@
-//===-- MCAsmInfoCOFF.cpp - COFF asm properties -----------------*- C++ -*-===//
+//===- MCAsmInfoCOFF.cpp - COFF asm properties ----------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,41 +12,57 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/MC/MCAsmInfoCOFF.h"
+#include "llvm/MC/MCDirectives.h"
+
 using namespace llvm;
 
-void MCAsmInfoCOFF::anchor() { }
+void MCAsmInfoCOFF::anchor() {}
 
 MCAsmInfoCOFF::MCAsmInfoCOFF() {
-  GlobalPrefix = "_";
+  // MingW 4.5 and later support .comm with log2 alignment, but .lcomm uses byte
+  // alignment.
   COMMDirectiveAlignmentIsInBytes = false;
-  LCOMMDirectiveType = LCOMM::ByteAlignment;
+  LCOMMDirectiveAlignmentType = LCOMM::ByteAlignment;
   HasDotTypeDotSizeDirective = false;
-  HasSingleParameterDotFile = false;
-  PrivateGlobalPrefix = "L";  // Prefix for private global symbols
+  HasSingleParameterDotFile = true;
   WeakRefDirective = "\t.weak\t";
-  LinkOnceDirective = "\t.linkonce discard\n";
-  
+  HasLinkOnceDirective = true;
+
   // Doesn't support visibility:
   HiddenVisibilityAttr = HiddenDeclarationVisibilityAttr = MCSA_Invalid;
   ProtectedVisibilityAttr = MCSA_Invalid;
 
   // Set up DWARF directives
-  HasLEB128 = true;  // Target asm supports leb128 directives (little-endian)
   SupportsDebugInformation = true;
-  DwarfSectionOffsetDirective = "\t.secrel32\t";
-  HasMicrosoftFastStdCallMangling = true;
+  NeedsDwarfSectionOffsetDirective = true;
 
-  SupportsDataRegions = false;
+  UseIntegratedAssembler = true;
+
+  // At least MSVC inline-asm does AShr.
+  UseLogicalShr = false;
+
+  // If this is a COFF target, assume that it supports associative comdats. It's
+  // part of the spec.
+  HasCOFFAssociativeComdats = true;
+
+  // We can generate constants in comdat sections that can be shared,
+  // but in order not to create null typed symbols, we actually need to
+  // make them global symbols as well.
+  HasCOFFComdatConstants = true;
 }
 
-void MCAsmInfoMicrosoft::anchor() { }
+void MCAsmInfoMicrosoft::anchor() {}
 
-MCAsmInfoMicrosoft::MCAsmInfoMicrosoft() {
-  AllowQuotesInName = true;
-}
+MCAsmInfoMicrosoft::MCAsmInfoMicrosoft() = default;
 
-void MCAsmInfoGNUCOFF::anchor() { }
+void MCAsmInfoGNUCOFF::anchor() {}
 
 MCAsmInfoGNUCOFF::MCAsmInfoGNUCOFF() {
+  // If this is a GNU environment (mingw or cygwin), don't use associative
+  // comdats for jump tables, unwind information, and other data associated with
+  // a function.
+  HasCOFFAssociativeComdats = false;
 
+  // We don't create constants in comdat sections for MinGW.
+  HasCOFFComdatConstants = false;
 }

@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -fsyntax-only -verify %s -std=c++11
+// RUN: %clang_cc1 -fsyntax-only -triple x86_64-unknown-unknown -verify %s -std=c++11
 
 struct R {
   R(int);
@@ -16,8 +16,7 @@ struct B { // expected-note 3 {{candidate constructor (the implicit copy constru
 int main () {
   B(10);	// expected-error {{no matching conversion for functional-style cast from 'int' to 'B'}}
   (B)10;	// expected-error {{no matching conversion for C-style cast from 'int' to 'B'}}
-  static_cast<B>(10);	// expected-error {{no matching conversion for static_cast from 'int' to 'B'}} \\
-			// expected-warning {{expression result unused}}
+  static_cast<B>(10);	// expected-error {{no matching conversion for static_cast from 'int' to 'B'}}
 }
 
 template<class T>
@@ -45,3 +44,38 @@ protected:
     static_cast<float*>(f0<0>()); // expected-error{{ambiguous}}
   }
 };
+
+void *intToPointer1(short s) {
+  return (void*)s; // expected-warning{{cast to 'void *' from smaller integer type 'short'}}
+}
+
+void *intToPointer2(short s) {
+  return reinterpret_cast<void*>(s);
+}
+
+void *intToPointer3(bool b) {
+  return (void*)b;
+}
+
+void *intToPointer4() {
+  return (void*)(3 + 7);
+}
+
+void *intToPointer5(long l) {
+  return (void*)l;
+}
+
+struct AmbiguousCast {
+  operator int(); // expected-note {{candidate function}}
+  operator unsigned int(); // expected-note {{candidate function}}
+};
+long long AmbiguousCastFunc(AmbiguousCast& a) {
+  return static_cast<long long>(a); // expected-error {{ambiguous conversion for static_cast from 'AmbiguousCast' to 'long long'}}
+}
+
+namespace PR16680 {
+  void f(int (*__pf)());
+  int g() {
+    f(reinterpret_cast<int>(0.0f)); // expected-error {{reinterpret_cast from 'float' to 'int' is not allowed}}
+  }
+}

@@ -60,9 +60,8 @@ void test2(A** ap) {
   bp = ap; // expected-warning{{incompatible pointer types assigning to 'B **' from 'A **'}}
 }
 
-// FIXME: we should either allow overloading here or give a better diagnostic
-int& cv(A*); // expected-note {{previous declaration}} expected-note 2 {{not viable}}
-float& cv(const A*); // expected-error {{cannot be overloaded}}
+int& cv(A*);
+float& cv(const A*);
 
 int& cv2(void*);
 float& cv2(const void*);
@@ -70,22 +69,20 @@ float& cv2(const void*);
 void cv_test(A* a, B* b, const A* ac, const B* bc) {
   int &i1 = cv(a);
   int &i2 = cv(b);
-  float &f1 = cv(ac); // expected-error {{no matching function}}
-  float &f2 = cv(bc); // expected-error {{no matching function}}
+  float &f1 = cv(ac);
+  float &f2 = cv(bc);
   int& i3 = cv2(a);
   float& f3 = cv2(ac);
 }
 
-// We agree with GCC that these can't be overloaded.
-int& qualid(id<P0>); // expected-note {{previous declaration}} expected-note {{not viable}}
-float& qualid(id<P1>); // expected-error {{cannot be overloaded}}
+int& qualid(id<P0>);
+float& qualid(id<P1>);
 
 void qualid_test(A *a, B *b, C *c) {
   int& i1 = qualid(a);
   int& i2 = qualid(b);
 
-  // This doesn't work only because the overload was rejected above.
-  float& f1 = qualid(c); // expected-error {{no matching function}}
+  float& f1 = qualid(c);
 
   id<P0> p1 = 0;
   p1 = 0;
@@ -114,11 +111,11 @@ namespace test5 {
 
 // rdar://problem/8592139
 namespace test6 {
-  void foo(id); // expected-note{{candidate function}}
-  void foo(A*) __attribute__((unavailable)); // expected-note {{explicitly made unavailable}}
+  void foo(id);
+  void foo(A*) __attribute__((unavailable)); // expected-note {{marked unavailable here}}
 
   void test(B *b) {
-    foo(b); // expected-error {{call to unavailable function 'foo'}}
+    foo(b); // expected-error {{'foo' is unavailable}}
   }
 }
 
@@ -176,4 +173,31 @@ namespace class_id {
   // it's okay to overload Class with id.
   void f(Class) { }
   void f(id) { }
+}
+
+@interface NSDictionary<__covariant KeyType, __covariant ObjectType> : A
+@end
+
+@interface NSMutableDictionary<KeyType, ObjectType> : NSDictionary<KeyType, ObjectType>
+@end
+
+namespace rdar20124827 {
+
+int overload(NSDictionary *) { return 1; }
+
+__attribute__((deprecated))  // expected-note {{'overload' has been explicitly marked deprecated here}}
+int overload(NSMutableDictionary *) { return 0; }
+
+__attribute__((deprecated))
+void overload2(NSDictionary *); // expected-note {{candidate function}}
+void overload2(NSDictionary<A *, A *> *); // expected-note {{candidate function}}
+
+void test(NSDictionary *d1, NSDictionary<A *, A *> *d2, NSMutableDictionary<A *, A *> *m1) {
+  overload(d1);
+  overload(d2); // no warning
+  overload(m1); // expected-warning {{'overload' is deprecated}}
+  overload2(d2); // no warning
+  overload2(m1); // expected-error {{call to 'overload2' is ambiguous}}
+}
+
 }

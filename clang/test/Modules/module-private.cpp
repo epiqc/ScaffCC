@@ -1,27 +1,24 @@
 // RUN: rm -rf %t
-// RUN: %clang_cc1 -fmodules -x objective-c++ -fmodule-cache-path %t -fmodule-name=module_private_left -emit-module %S/Inputs/module.map
-// RUN: %clang_cc1 -fmodules -x objective-c++ -fmodule-cache-path %t -fmodule-name=module_private_right -emit-module %S/Inputs/module.map
-// RUN: %clang_cc1 -fmodules -x objective-c++ -fmodule-cache-path %t %s -verify
+// RUN: %clang_cc1 -fmodules -fimplicit-module-maps -x objective-c++ -fmodules-cache-path=%t -fmodule-name=module_private_left -emit-module %S/Inputs/module.map
+// RUN: %clang_cc1 -fmodules -fimplicit-module-maps -x objective-c++ -fmodules-cache-path=%t -fmodule-name=module_private_right -emit-module %S/Inputs/module.map
+// RUN: %clang_cc1 -fmodules -fimplicit-module-maps -x objective-c++ -fmodules-cache-path=%t -I %S/Inputs %s -verify
 // FIXME: When we have a syntax for modules in C++, use that.
 
-@__experimental_modules_import module_private_left;
-@__experimental_modules_import module_private_right;
+@import module_private_left;
+@import module_private_right;
 
 void test() {
   int &ir = f0(1.0); // okay: f0() from 'right' is not visible
 }
 
 int test_broken() {
-  HiddenStruct hidden; // expected-error{{use of undeclared identifier 'HiddenStruct'}}
-
-  Integer i; // expected-error{{use of undeclared identifier 'Integer'}}
+  HiddenStruct hidden; // expected-error{{unknown type name 'HiddenStruct'}}
+  Integer i; // expected-error{{unknown type name 'Integer'}}
 
   int *ip = 0;
   f1(ip); // expected-error{{use of undeclared identifier 'f1'}}
 
-  vector<int> vec; // expected-error{{use of undeclared identifier 'vector'}} \
-  // expected-error{{expected '(' for function-style cast or type construction}} \
-  // expected-error{{use of undeclared identifier 'vec'}}
+  vector<int> vec; // expected-error{{no template named 'vector'}}
 
   VisibleStruct vs;
   vs.field = 0; // expected-error{{no member named 'field' in 'VisibleStruct'}}

@@ -2,19 +2,19 @@
 
 struct X {};
 
-// CHECK: define void @_Z1f1XS_(
+// CHECK-LABEL: define void @_Z1f1XS_(
 void f(X, X) { }
 
-// CHECK: define void @_Z1fR1XS0_(
+// CHECK-LABEL: define void @_Z1fR1XS0_(
 void f(X&, X&) { }
 
-// CHECK: define void @_Z1fRK1XS1_(
+// CHECK-LABEL: define void @_Z1fRK1XS1_(
 void f(const X&, const X&) { }
 
 typedef void T();
 struct S {};
 
-// CHECK: define void @_Z1fPFvvEM1SFvvE(
+// CHECK-LABEL: define void @_Z1fPFvvEM1SFvvE(
 void f(T*, T (S::*)) {}
 
 namespace A {
@@ -22,14 +22,14 @@ namespace A {
   struct B { };
 };
 
-// CHECK: define void @_Z1fN1A1AENS_1BE(
+// CHECK-LABEL: define void @_Z1fN1A1AENS_1BE(
 void f(A::A a, A::B b) { }
 
 struct C {
   struct D { };
 };
 
-// CHECK: define void @_Z1fN1C1DERS_PS_S1_(
+// CHECK-LABEL: define void @_Z1fN1C1DERS_PS_S1_(
 void f(C::D, C&, C*, C&) { }
 
 template<typename T>
@@ -79,4 +79,20 @@ void f(void (B::*)(), A, A) { }
 // CHECK: @_ZN5Test11fEMNS_1BEFvvENS_1AES3_MS0_FvS3_EMS3_FvvE
 void f(void (B::*)(), A, A, void (B::*)(A), void (A::*)()) { }
 
+}
+
+namespace ManglePrefix {
+template <typename>
+struct X {
+  template <typename>
+  struct Y {
+    typedef int type;
+    typedef int type2;
+  };
+};
+template <typename T>
+typename X<T>::template Y<T>::type f(typename X<T>::template Y<T>::type2) { return 0; }
+
+// CHECK: @_ZN12ManglePrefix1fIiEENS_1XIT_E1YIS2_E4typeENS5_5type2E
+template int f<int>(int);
 }

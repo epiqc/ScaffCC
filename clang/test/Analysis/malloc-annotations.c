@@ -1,4 +1,10 @@
-// RUN: %clang_cc1 -analyze -analyzer-checker=core,experimental.deadcode.UnreachableCode,experimental.core.CastSize,experimental.unix.MallocWithAnnotations -analyzer-store=region -verify %s
+// RUN: %clang_analyze_cc1 -analyzer-store=region -verify \
+// RUN:   -analyzer-checker=core \
+// RUN:   -analyzer-checker=alpha.deadcode.UnreachableCode \
+// RUN:   -analyzer-checker=alpha.core.CastSize \
+// RUN:   -analyzer-checker=unix.Malloc \
+// RUN:   -analyzer-config unix.DynamicMemoryModeling:Optimistic=true %s
+
 typedef __typeof(sizeof(int)) size_t;
 void *malloc(size_t);
 void free(void *);
@@ -26,7 +32,7 @@ struct stuff myglobalstuff;
 
 void f1() {
   int *p = malloc(12);
-  return; // expected-warning{{Memory is never released; potential leak}}
+  return; // expected-warning{{Potential leak of memory pointed to by}}
 }
 
 void f2() {
@@ -54,27 +60,26 @@ void naf1() {
 
 void n2af1() {
   int *p = my_malloc2(12);
-  return; // expected-warning{{Memory is never released; potential leak}}
+  return; // expected-warning{{Potential leak of memory pointed to by}}
 }
 
 void af1() {
   int *p = my_malloc(12);
-  return; // expected-warning{{Memory is never released; potential leak}}
+  return; // expected-warning{{Potential leak of memory pointed to by}}
 }
 
 void af1_b() {
-  int *p = my_malloc(12); // expected-warning{{Memory is never released; potential leak}}
-}
+  int *p = my_malloc(12);
+} // expected-warning{{Potential leak of memory pointed to by}}
 
 void af1_c() {
   myglobalpointer = my_malloc(12); // no-warning
 }
 
-// TODO: We will be able to handle this after we add support for tracking allocations stored in struct fields.
 void af1_d() {
   struct stuff mystuff;
-  mystuff.somefield = my_malloc(12); // false negative
-}
+  mystuff.somefield = my_malloc(12);
+} // expected-warning{{Potential leak of memory pointed to by}}
 
 // Test that we can pass out allocated memory via pointer-to-pointer.
 void af1_e(void **pp) {
@@ -123,12 +128,11 @@ void af2e() {
   free(p); // no-warning
 }
 
-// This case would inflict a double-free elsewhere.
-// However, this case is considered an analyzer bug since it causes false-positives.
+// This case inflicts a possible double-free.
 void af3() {
   int *p = my_malloc(12);
   my_hold(p);
-  free(p); // no-warning
+  free(p); // expected-warning{{Attempt to free non-owned memory}}
 }
 
 int * af4() {
@@ -210,11 +214,11 @@ void f7_realloc() {
 }
 
 void PR6123() {
-  int *x = malloc(11); // expected-warning{{Cast a region whose size is not a multiple of the destination type size.}}
+  int *x = malloc(11); // expected-warning{{Cast a region whose size is not a multiple of the destination type size}}
 }
 
 void PR7217() {
-  int *buf = malloc(2); // expected-warning{{Cast a region whose size is not a multiple of the destination type size.}}
+  int *buf = malloc(2); // expected-warning{{Cast a region whose size is not a multiple of the destination type size}}
   buf[1] = 'c'; // not crash
 }
 
@@ -241,7 +245,7 @@ char mallocGarbage () {
 // This tests that calloc() buffers need to be freed
 void callocNoFree () {
   char *buf = calloc(2,2);
-  return; // expected-warning{{never released}}
+  return; // expected-warning{{Potential leak of memory pointed to by}}
 }
 
 // These test that calloc() buffers are zeroed by default
@@ -260,7 +264,7 @@ char callocZeroesBad () {
   if (buf[1] != 0) {
     free(buf); // expected-warning{{never executed}}
   }
-  return result; // expected-warning{{never released}}
+  return result; // expected-warning{{Potential leak of memory pointed to by}}
 }
 
 void testMultipleFreeAnnotations() {

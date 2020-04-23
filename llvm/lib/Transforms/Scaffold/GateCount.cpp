@@ -10,17 +10,17 @@
 #include <vector>
 #include <limits>
 #include "llvm/Pass.h"
-#include "llvm/Function.h"
-#include "llvm/Module.h"
-#include "llvm/BasicBlock.h"
-#include "llvm/Instruction.h"
-#include "llvm/Instructions.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Instruction.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/ADT/Statistic.h"
-#include "llvm/Support/InstIterator.h"
+#include "llvm/IR/InstIterator.h"
 #include "llvm/PassAnalysisSupport.h"
 #include "llvm/Analysis/CallGraph.h"
-#include "llvm/Support/CFG.h"
+#include "llvm/IR/CFG.h"
 #include "llvm/ADT/SCCIterator.h"
 
 
@@ -37,7 +37,7 @@ namespace {
 
     virtual void getAnalysisUsage(AnalysisUsage &AU) const {
       AU.setPreservesAll();  
-      AU.addRequired<CallGraph>();    
+      AU.addRequired<CallGraphWrapperPass>();    
     }
     
     void CountFunctionGates (Function *F, std::map <Function*, unsigned long long* > FunctionGates) const {
@@ -93,7 +93,7 @@ namespace {
 
       // iterate over all functions, and over all instructions in those functions
       // find call sites that have constant integer values. In Post-Order.
-      CallGraphNode* rootNode = getAnalysis<CallGraph>().getRoot();
+      CallGraphNode* rootNode = CallGraph(M).getExternalCallingNode();
       
       //fill in the gate count bottom-up in the call graph
       for (scc_iterator<CallGraphNode*> sccIb = scc_begin(rootNode), E = scc_end(rootNode); sccIb != E; ++sccIb) {

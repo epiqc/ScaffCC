@@ -4,23 +4,24 @@
 
 #include <cstdlib>
 #include <cstdio>
+#include <cstring>
 
 #include "llvm/ADT/ArrayRef.h"
-#include "llvm/Constants.h"
-#include "llvm/Function.h"
-#include "llvm/Instructions.h"
-#include "llvm/Intrinsics.h"
-#include "llvm/LLVMContext.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/LLVMContext.h"
 #include "llvm/Pass.h"
-#include "llvm/Argument.h"
-#include "llvm/Module.h"
+#include "llvm/IR/Argument.h"
+#include "llvm/IR/Module.h"
 
-#include "llvm/Support/CallSite.h"
+#include "llvm/IR/CallSite.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/InstVisitor.h"
+#include "llvm/IR/InstVisitor.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/CommandLine.h"
-#include "llvm/Support/IRBuilder.h"
+#include "llvm/IR/IRBuilder.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 
 using namespace llvm;
@@ -38,24 +39,24 @@ namespace {
 
 			Value* createAncilla(std::string& name, BasicBlock* BB ){
 				std::string anc_name = "ancilla_"+name;
-				Type *abit_type = IntegerType::getInt8Ty(getGlobalContext());
-        		Constant *val = ConstantInt::get(Type::getInt32Ty(getGlobalContext()), 1, false);       
+				Type *abit_type = IntegerType::getInt8Ty(M->getContext());
+        		Constant *val = ConstantInt::get(Type::getInt32Ty(M->getContext()), 1, false);       
 				Value* Idx[2];	  
-				Idx[0] = Constant::getNullValue(Type::getInt32Ty(getGlobalContext()));  
-				Idx[1] = ConstantInt::get(Type::getInt32Ty(getGlobalContext()),0);
+				Idx[0] = Constant::getNullValue(Type::getInt32Ty(M->getContext()));  
+				Idx[1] = ConstantInt::get(Type::getInt32Ty(M->getContext()),0);
 				ArrayType *arrayType = ArrayType::get(abit_type, 1);
-				AllocaInst *anc = new AllocaInst(arrayType,anc_name, BB);
-				anc->setAlignment(8);
+				AllocaInst *anc = new AllocaInst(arrayType,0,anc_name, BB);
+				anc->setAlignment(MaybeAlign(8));
         		Value *intArrPtr = GetElementPtrInst::CreateInBounds(anc,Idx,"",BB);
 				Value *value = new LoadInst(intArrPtr, "", BB);
 				return value;
 			}
 
 			void create_a_swap_b(CallInst& I, Function* RKQC_Func, std::string& rkqcName){
-                if(!RKQC_Func){
+				if(!RKQC_Func){
 					std::vector<Type*> ArgTypes(2);
 					for(int i=0;i<2;i++) ArgTypes[i] = I.getArgOperand(i)->getType();//Type::getInt16Ty(getGlobalContext());
-					FunctionType *FuncType = FunctionType::get(Type::getVoidTy(getGlobalContext()),
+					FunctionType *FuncType = FunctionType::get(Type::getVoidTy(M->getContext()),
 						ArrayRef<Type*>(ArgTypes), false);
 					RKQC_Func = Function::Create(FuncType,GlobalVariable::ExternalLinkage,rkqcName,M);
 					RKQC_Func->addFnAttr(Attribute::AlwaysInline);
@@ -70,8 +71,7 @@ namespace {
 					Target0->setName("target0");
 					Target1->setName("target1");
 
-
-					BasicBlock *BB = BasicBlock::Create(getGlobalContext(), "", RKQC_Func, 0);
+					BasicBlock *BB = BasicBlock::Create(M->getContext(), "", RKQC_Func, 0);
 
 					std::vector<Type*> Types0; Types0.push_back(Type0); Types0.push_back(Type1);
 					std::vector<Type*> Types1; Types1.push_back(Type1); Types1.push_back(Type0);
@@ -85,21 +85,22 @@ namespace {
 					CallInst::Create(gate_CNOT_T1T0, ArrayRef<Value*>(T1T0), "", BB)->setTailCall();
 					CallInst::Create(gate_CNOT_T0T1, ArrayRef<Value*>(T0T1), "", BB)->setTailCall();
 
-					ReturnInst::Create(getGlobalContext(), 0, BB);
+					ReturnInst::Create(M->getContext(), 0, BB);
 				}
 				std::vector<Value*>  Args(2);
 				for (int i=0; i<2; i++) Args[i] = I.getArgOperand(i);
 				BasicBlock::iterator ii(&I);
-				ReplaceInstWithInst(I.getParent()->getInstList(), ii, CallInst::Create(RKQC_Func, ArrayRef<Value*>(Args)));
-            }
+				ReplaceInstWithInst(I.getParent()->getInstList(), ii,
+					CallInst::Create(RKQC_Func, ArrayRef<Value*>(Args)));
+			}
 
 
 			void create_assign_value_of_b_to_a(CallInst& I, Function* RKQC_Func, std::string& rkqcName){
 				if(!RKQC_Func){
 					std::vector<Type*> ArgTypes(2);
-					ArgTypes[0] = Type::getInt16Ty(getGlobalContext());
-					ArgTypes[1] = Type::getInt16Ty(getGlobalContext());
-					FunctionType *FuncType = FunctionType::get(Type::getVoidTy(getGlobalContext()),
+					ArgTypes[0] = Type::getInt16Ty(M->getContext());
+					ArgTypes[1] = Type::getInt16Ty(M->getContext());
+					FunctionType *FuncType = FunctionType::get(Type::getVoidTy(M->getContext()),
 						ArrayRef<Type*>(ArgTypes),false);
 					RKQC_Func = Function::Create(FuncType,GlobalVariable::ExternalLinkage,rkqcName,M);
 					RKQC_Func->addFnAttr(Attribute::AlwaysInline);
@@ -115,7 +116,7 @@ namespace {
 					Control->setName("control");
 
 
-					BasicBlock *BB = BasicBlock::Create(getGlobalContext(), "", RKQC_Func, 0);
+					BasicBlock *BB = BasicBlock::Create(M->getContext(), "", RKQC_Func, 0);
 					std::string name = "zg";
 					Value* ancilla = createAncilla(name,BB);	
 					Type* Type_A = ancilla->getType();
@@ -137,7 +138,7 @@ namespace {
 					CallInst::Create(gate_CNOT_TA, ArrayRef<Value*>(TA), "", BB)->setTailCall();
 					CallInst::Create(gate_CNOT_AT, ArrayRef<Value*>(AT), "", BB)->setTailCall();
 					CallInst::Create(gate_CNOT_BA, ArrayRef<Value*>(BA), "", BB)->setTailCall();
-					ReturnInst::Create(getGlobalContext(), 0, BB);
+					ReturnInst::Create(M->getContext(), 0, BB);
 				}
 				std::vector<Value*>  Args(2);
 				for (int i=0; i<2; i++) Args[i] = I.getArgOperand(i);
@@ -148,9 +149,9 @@ namespace {
 			void create_assign_value_of_0_to_a(CallInst& I, Function* RKQC_Func, std::string& rkqcName){
 				if(!RKQC_Func){
 					std::vector<Type*> ArgTypes(2);
-					ArgTypes[0] = Type::getInt16Ty(getGlobalContext());
-					ArgTypes[1] = Type::getInt32Ty(getGlobalContext());
-					FunctionType *FuncType = FunctionType::get(Type::getVoidTy(getGlobalContext()),
+					ArgTypes[0] = Type::getInt16Ty(M->getContext());
+					ArgTypes[1] = Type::getInt32Ty(M->getContext());
+					FunctionType *FuncType = FunctionType::get(Type::getVoidTy(M->getContext()),
 						ArrayRef<Type*>(ArgTypes),false);
 					RKQC_Func = Function::Create(FuncType,GlobalVariable::ExternalLinkage,rkqcName,M);
 					RKQC_Func->addFnAttr(Attribute::AlwaysInline);
@@ -161,8 +162,13 @@ namespace {
 
 					Target->setName("target");
 
+					arg_it++;
+					Value *size = arg_it;
+					//Type *size_T = arg_it->getType();
 
-					BasicBlock *BB = BasicBlock::Create(getGlobalContext(), "", RKQC_Func, 0);
+					size->setName("size");
+
+					BasicBlock *BB = BasicBlock::Create(M->getContext(), "", RKQC_Func, 0);
 
 					std::string name = "zero_zero";
 					Value* Control = createAncilla(name,BB);	
@@ -188,7 +194,7 @@ namespace {
 					CallInst::Create(gate_CNOT_TA, ArrayRef<Value*>(TA), "", BB)->setTailCall();
 					CallInst::Create(gate_CNOT_AT, ArrayRef<Value*>(AT), "", BB)->setTailCall();
 					CallInst::Create(gate_CNOT_BA, ArrayRef<Value*>(BA), "", BB)->setTailCall();
-					ReturnInst::Create(getGlobalContext(), 0, BB);
+					ReturnInst::Create(M->getContext(), 0, BB);
   				}
 				std::vector<Value*>  Args(2);
 				for (int i=0; i<2; i++) Args[i] = I.getArgOperand(i);
@@ -200,9 +206,9 @@ namespace {
 			void create_assign_value_of_1_to_a(CallInst& I, Function* RKQC_Func, std::string& rkqcName){
 				if(!RKQC_Func){
 					std::vector<Type*> ArgTypes(2);
-					ArgTypes[0] = Type::getInt16Ty(getGlobalContext());
-					ArgTypes[1] = Type::getInt32Ty(getGlobalContext());
-					FunctionType *FuncType = FunctionType::get(Type::getVoidTy(getGlobalContext()),
+					ArgTypes[0] = Type::getInt16Ty(M->getContext());
+					ArgTypes[1] = Type::getInt32Ty(M->getContext());
+					FunctionType *FuncType = FunctionType::get(Type::getVoidTy(M->getContext()),
 						ArrayRef<Type*>(ArgTypes),false);
 					RKQC_Func = Function::Create(FuncType,GlobalVariable::ExternalLinkage,rkqcName,M);
 					RKQC_Func->addFnAttr(Attribute::AlwaysInline);
@@ -213,7 +219,13 @@ namespace {
 
 					Target->setName("target");
 
-					BasicBlock *BB = BasicBlock::Create(getGlobalContext(), "", RKQC_Func, 0);
+					arg_it++;
+					Value *size = arg_it;
+					//Type *size_T = arg_it->getType();
+
+					size->setName("size");
+
+					BasicBlock *BB = BasicBlock::Create(M->getContext(), "", RKQC_Func, 0);
 
 					std::string name = "one_one";
 					Value* Control = createAncilla(name,BB);	
@@ -240,7 +252,7 @@ namespace {
 					CallInst::Create(gate_CNOT_AT, ArrayRef<Value*>(AT), "", BB)->setTailCall();
 					CallInst::Create(gate_CNOT_BA, ArrayRef<Value*>(BA), "", BB)->setTailCall();
 
-					ReturnInst::Create(getGlobalContext(), 0, BB);
+					ReturnInst::Create(M->getContext(), 0, BB);
 				}
 				std::vector<Value*>  Args(2);
 				for (int i=0; i<2; i++) Args[i] = I.getArgOperand(i);
@@ -253,10 +265,10 @@ namespace {
 			void create_a_eq_a_plus_b(CallInst& I, Function* RKQC_Func, std::string& rkqcName){
 				if(!RKQC_Func){
 					std::vector<Type*> ArgTypes(3);
-					ArgTypes[0] = Type::getInt16Ty(getGlobalContext());
-					ArgTypes[1] = Type::getInt16Ty(getGlobalContext());
-					ArgTypes[2] = Type::getInt32Ty(getGlobalContext());
-					FunctionType *FuncType = FunctionType::get(Type::getVoidTy(getGlobalContext()),
+					ArgTypes[0] = Type::getInt16Ty(M->getContext());
+					ArgTypes[1] = Type::getInt16Ty(M->getContext());
+					ArgTypes[2] = Type::getInt32Ty(M->getContext());
+					FunctionType *FuncType = FunctionType::get(Type::getVoidTy(M->getContext()),
 						ArrayRef<Type*>(ArgTypes),false);
 					RKQC_Func = Function::Create(FuncType,GlobalVariable::ExternalLinkage,rkqcName,M);
 					RKQC_Func->addFnAttr(Attribute::AlwaysInline);
@@ -271,7 +283,13 @@ namespace {
 					A->setName("target");
 					B->setName("control");
 
-					BasicBlock *BB = BasicBlock::Create(getGlobalContext(), "", RKQC_Func, 0);
+					arg_it++;
+					Value *size = arg_it;
+					//Type *size_T = arg_it->getType();
+
+					size->setName("size");
+
+					BasicBlock *BB = BasicBlock::Create(M->getContext(), "", RKQC_Func, 0);
 					std::string ancilla_garbage = "zg";
 					std::string ancilla_zero = "zz";
 					Value* ancillaG = createAncilla(ancilla_garbage,BB);	
@@ -323,7 +341,7 @@ namespace {
     				CallInst::Create(gate_CNOT_qbit_anc, ArrayRef<Value*>(AG), "", BB)->setTailCall();
 					CallInst::Create(gate_CNOT_anc_qbit, ArrayRef<Value*>(GA), "", BB)->setTailCall();
 
-					ReturnInst::Create(getGlobalContext(), 0, BB);
+					ReturnInst::Create(M->getContext(), 0, BB);
 				}
 				std::vector<Value*>  Args(3);
 				for (int i=0; i<3; i++) Args[i] = I.getArgOperand(i);
@@ -334,9 +352,9 @@ namespace {
 
 			void visitCallInst(CallInst &I) {
 				// Determine whether this is an RKQC function 
-                Function *CF = I.getCalledFunction();
+				Function *CF = I.getCalledFunction();
 				if (CF->isIntrinsic()){
-                    std::string name = CF->getName();
+					std::string name = CF->getName();
 					if(name.find("rkqc")!=std::string::npos) {
 					// Retrieve name of function
 						std::size_t func_loc = name.find("rkqc");
@@ -351,10 +369,10 @@ namespace {
 						}
 						else if(rkqcFuncName.find( "assign_value_of_b_to_a") != std::string::npos){
 							create_assign_value_of_b_to_a(I, RKQC_Func, rkqcName);
-                        }
+						}
 						else if(rkqcFuncName.find( "a_eq_a_plus_b") != std::string::npos){
     						create_a_eq_a_plus_b(I, RKQC_Func, rkqcName);
-                        }
+    					}
 						else if(rkqcFuncName.find("assign_value_of_0_to_a") != std::string::npos){
 							create_assign_value_of_0_to_a(I, RKQC_Func, rkqcName);
 						}
@@ -401,12 +419,12 @@ namespace {
 						}
 
 					}// endif 'found RKQC'
-				}
+				} 	
 			} // visitCallInst()
 		}; // struct RKQCVisitor
 
 		virtual bool runOnModule(Module &M) {
-            RKQCVisitor RV(&M);
+			RKQCVisitor RV(&M);
 			RV.visit(M);
 			return true;
 		} // runOnModule()

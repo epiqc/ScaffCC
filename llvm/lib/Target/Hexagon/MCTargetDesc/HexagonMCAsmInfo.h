@@ -1,9 +1,8 @@
 //===-- HexagonTargetAsmInfo.h - Hexagon asm properties --------*- C++ -*--===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,19 +10,20 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef HexagonMCASMINFO_H
-#define HexagonMCASMINFO_H
+#ifndef LLVM_LIB_TARGET_HEXAGON_MCTARGETDESC_HEXAGONMCASMINFO_H
+#define LLVM_LIB_TARGET_HEXAGON_MCTARGETDESC_HEXAGONMCASMINFO_H
 
-#include "llvm/ADT/StringRef.h"
-#include "llvm/MC/MCAsmInfo.h"
+#include "llvm/MC/MCAsmInfoELF.h"
 
 namespace llvm {
-  class Target;
+class Triple;
 
-  class HexagonMCAsmInfo : public MCAsmInfo {
-  public:
-    explicit HexagonMCAsmInfo(const Target &T, StringRef TT);
-  };
+class HexagonMCAsmInfo : public MCAsmInfoELF {
+  void anchor() override;
+
+public:
+  explicit HexagonMCAsmInfo(const Triple &TT);
+};
 
 } // namespace llvm
 

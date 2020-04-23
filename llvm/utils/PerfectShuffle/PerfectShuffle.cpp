@@ -1,9 +1,8 @@
 //===-- PerfectShuffle.cpp - Perfect Shuffle Generator --------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -14,11 +13,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include <iostream>
-#include <iomanip>
-#include <vector>
 #include <cassert>
 #include <cstdlib>
+#include <iomanip>
+#include <iostream>
+#include <vector>
 struct Operator;
 
 // Masks are 4-nibble hex numbers.  Values 0-7 in any nibble means that it takes
@@ -85,8 +84,8 @@ static void PrintMask(unsigned i, std::ostream &OS) {
 
 /// ShuffleVal - This represents a shufflevector operation.
 struct ShuffleVal {
-  unsigned Cost;  // Number of instrs used to generate this value.
   Operator *Op;   // The Operation used to generate this value.
+  unsigned Cost;  // Number of instrs used to generate this value.
   unsigned short Arg0, Arg1;  // Input operands for this value.
 
   ShuffleVal() : Cost(1000000) {}
@@ -102,14 +101,14 @@ static std::vector<Operator*> TheOperators;
 
 /// Operator - This is a vector operation that is available for use.
 struct Operator {
+  const char *Name;
   unsigned short ShuffleMask;
   unsigned short OpNum;
-  const char *Name;
   unsigned Cost;
 
   Operator(unsigned short shufflemask, const char *name, unsigned opnum,
            unsigned cost = 1)
-    : ShuffleMask(shufflemask), OpNum(opnum), Name(name), Cost(cost) {
+    :  Name(name), ShuffleMask(shufflemask), OpNum(opnum),Cost(cost) {
     TheOperators.push_back(this);
   }
   ~Operator() {
@@ -219,10 +218,10 @@ static void EvaluateOps(unsigned short Elt, unsigned short Vals[],
 int main() {
   // Seed the table with accesses to the LHS and RHS.
   ShufTab[0x0123].Cost = 0;
-  ShufTab[0x0123].Op = 0;
+  ShufTab[0x0123].Op = nullptr;
   ShufTab[0x0123].Arg0 = 0x0123;
   ShufTab[0x4567].Cost = 0;
-  ShufTab[0x4567].Op = 0;
+  ShufTab[0x4567].Op = nullptr;
   ShufTab[0x4567].Arg0 = 0x4567;
 
   // Seed the first-level of shuffles, shuffles whose inputs are the input to

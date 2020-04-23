@@ -1,9 +1,8 @@
 //===- fpcmp.cpp - A fuzzy "cmp" that permits floating point noise --------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -33,9 +32,8 @@ int main(int argc, char **argv) {
   cl::ParseCommandLineOptions(argc, argv);
 
   std::string ErrorMsg;
-  int DF = DiffFilesWithTolerance(sys::PathWithStatus(File1), 
-                                  sys::PathWithStatus(File2),
-                                  AbsTolerance, RelTolerance, &ErrorMsg);
+  int DF = DiffFilesWithTolerance(File1, File2, AbsTolerance, RelTolerance,
+                                  &ErrorMsg);
   if (!ErrorMsg.empty())
     errs() << argv[0] << ": " << ErrorMsg << "\n";
   return DF;

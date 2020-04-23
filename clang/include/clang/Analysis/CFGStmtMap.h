@@ -1,9 +1,8 @@
 //===--- CFGStmtMap.h - Map from Stmt* to CFGBlock* -----------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -12,27 +11,25 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_CLANG_CFGSTMTMAP_H
-#define LLVM_CLANG_CFGSTMTMAP_H
+#ifndef LLVM_CLANG_ANALYSIS_CFGSTMTMAP_H
+#define LLVM_CLANG_ANALYSIS_CFGSTMTMAP_H
 
 #include "clang/Analysis/CFG.h"
 
 namespace clang {
 
-class CFG;
-class CFGBlock;
 class ParentMap;
 class Stmt;
 
 class CFGStmtMap {
   ParentMap *PM;
   void *M;
-  
+
   CFGStmtMap(ParentMap *pm, void *m) : PM(pm), M(m) {}
-  
+
 public:
   ~CFGStmtMap();
-  
+
   /// Returns a new CFGMap for the given CFG.  It is the caller's
   /// responsibility to 'delete' this object when done using it.
   static CFGStmtMap *Build(CFG* C, ParentMap *PM);

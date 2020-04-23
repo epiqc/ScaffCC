@@ -1,4 +1,5 @@
-// RUN: %clang_cc1 -fsyntax-only -verify %s -std=c++11
+// RUN: %clang_cc1 -fsyntax-only -triple %itanium_abi_triple -verify %s -std=c++11
+// RUN: %clang_cc1 -fsyntax-only -triple %ms_abi_triple -verify %s -std=c++11
 namespace T1 {
 
 class A {
@@ -45,7 +46,7 @@ namespace T4 {
 
 struct a { };
 struct a1 : a { };
-struct b : a, a1 { };
+struct b : a, a1 { }; // expected-warning{{direct base 'T4::a' is inaccessible due to ambiguity:\n    struct T4::b -> struct T4::a\n    struct T4::b -> struct T4::a1 -> struct T4::a}}
   
 class A {
   virtual a* f(); // expected-note{{overridden virtual function is here}}

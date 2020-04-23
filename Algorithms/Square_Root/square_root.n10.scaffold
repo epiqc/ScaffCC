@@ -14,13 +14,13 @@
 
 #define pi 3.141592653589793238462643383279502884197
 
-// Module prototypes
+// scaff_module prototypes
 void diffuse(qbit q[n]);
 void Sqr(qbit a[n], qbit b[n]);
 void EQxMark(qbit b[n], qbit t[1], int tF);
 
 /***************************
- Diffusion Module
+ Diffusion scaff_module
 ***************************/
 void diffuse(qbit q[n]) {
   int j;

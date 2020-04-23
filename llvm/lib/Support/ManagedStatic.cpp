@@ -1,9 +1,8 @@
 //===-- ManagedStatic.cpp - Static Global wrapper -------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,43 +12,46 @@
 
 #include "llvm/Support/ManagedStatic.h"
 #include "llvm/Config/config.h"
-#include "llvm/Support/Atomic.h"
+#include "llvm/Support/Threading.h"
 #include <cassert>
+#include <mutex>
 using namespace llvm;
 
-static const ManagedStaticBase *StaticList = 0;
+static const ManagedStaticBase *StaticList = nullptr;
+static std::recursive_mutex *ManagedStaticMutex = nullptr;
+static llvm::once_flag mutex_init_flag;
+
+static void initializeMutex() {
+  ManagedStaticMutex = new std::recursive_mutex();
+}
+
+static std::recursive_mutex *getManagedStaticMutex() {
+  llvm::call_once(mutex_init_flag, initializeMutex);
+  return ManagedStaticMutex;
+}
 
 void ManagedStaticBase::RegisterManagedStatic(void *(*Creator)(),
                                               void (*Deleter)(void*)) const {
+  assert(Creator);
   if (llvm_is_multithreaded()) {
-    llvm_acquire_global_lock();
+    std::lock_guard<std::recursive_mutex> Lock(*getManagedStaticMutex());
 
-    if (Ptr == 0) {
-      void* tmp = Creator ? Creator() : 0;
+    if (!Ptr.load(std::memory_order_relaxed)) {
+      void *Tmp = Creator();
 
-      TsanHappensBefore(this);
-      sys::MemoryFence();
-
-      // This write is racy against the first read in the ManagedStatic
-      // accessors. The race is benign because it does a second read after a
-      // memory fence, at which point it isn't possible to get a partial value.
-      TsanIgnoreWritesBegin();
-      Ptr = tmp;
-      TsanIgnoreWritesEnd();
+      Ptr.store(Tmp, std::memory_order_release);
       DeleterFn = Deleter;
-      
+
       // Add to list of managed statics.
       Next = StaticList;
       StaticList = this;
     }
-
-    llvm_release_global_lock();
   } else {
-    assert(Ptr == 0 && DeleterFn == 0 && Next == 0 &&
+    assert(!Ptr && !DeleterFn && !Next &&
            "Partially initialized ManagedStatic!?");
-    Ptr = Creator ? Creator() : 0;
+    Ptr = Creator();
     DeleterFn = Deleter;
-  
+
     // Add to list of managed statics.
     Next = StaticList;
     StaticList = this;
@@ -62,20 +64,20 @@ void ManagedStaticBase::destroy() const {
          "Not destroyed in reverse order of construction?");
   // Unlink from list.
   StaticList = Next;
-  Next = 0;
+  Next = nullptr;
 
   // Destroy memory.
   DeleterFn(Ptr);
-  
+
   // Cleanup.
-  Ptr = 0;
-  DeleterFn = 0;
+  Ptr = nullptr;
+  DeleterFn = nullptr;
 }
 
 /// llvm_shutdown - Deallocate and destroy all ManagedStatic variables.
 void llvm::llvm_shutdown() {
+  std::lock_guard<std::recursive_mutex> Lock(*getManagedStaticMutex());
+
   while (StaticList)
     StaticList->destroy();
-
-  if (llvm_is_multithreaded()) llvm_stop_multithreaded();
 }

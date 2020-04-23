@@ -22,6 +22,7 @@ struct X {
 };
 
 void test_unqual_references(struct X x, const struct X xc) {
+  // expected-note@-1 3{{variable 'xc' declared const here}}
   x.i = 0;
   x.f = 0.0;
   x.f2 = x.f;
@@ -29,15 +30,15 @@ void test_unqual_references(struct X x, const struct X xc) {
   x.f3 = 0; // expected-error{{no member named 'f3'}}
   x.a = 0;
 
-  xc.d = 0.0; // expected-error{{read-only variable is not assignable}}
-  xc.f = 0; // expected-error{{read-only variable is not assignable}}
-  xc.a = 0; // expected-error{{read-only variable is not assignable}}
+  xc.d = 0.0; // expected-error{{cannot assign to variable 'xc' with const-qualified type 'const struct X'}}
+  xc.f = 0; // expected-error{{cannot assign to variable 'xc' with const-qualified type 'const struct X'}}
+  xc.a = 0; // expected-error{{cannot assign to variable 'xc' with const-qualified type 'const struct X'}}
 }
 
 
 struct Redecl {
   int x; // expected-note{{previous declaration is here}}
-  struct y { };
+  struct y { }; // expected-warning{{declaration does not declare anything}}
 
   union {
     int x; // expected-error{{member of anonymous union redeclares 'x'}}
@@ -78,7 +79,7 @@ void g() {
 struct s0 { union { int f0; }; };
 
 // <rdar://problem/6481130>
-typedef struct { }; // expected-warning{{declaration does not declare anything}}
+typedef struct { }; // expected-warning{{typedef requires a name}}
 
 // PR3675
 struct s1 {
@@ -108,3 +109,13 @@ struct s {
   struct { int i; };
   int a[];
 };
+
+// PR20930
+struct s3 {
+  struct { int A __attribute__((deprecated)); }; // expected-note {{'A' has been explicitly marked deprecated here}}
+};
+
+void deprecated_anonymous_struct_member(void) {
+  struct s3 s;
+  s.A = 1; // expected-warning {{'A' is deprecated}}
+}

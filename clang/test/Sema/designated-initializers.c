@@ -45,8 +45,8 @@ struct point array[10] = {
 
 struct point array2[10] = {
   [10].x = 2.0, // expected-error{{array designator index (10) exceeds array bounds (10)}}
-  [4 ... 5].y = 2.0,
-  [4 ... 6] = { .x = 3, .y = 4.0 }
+  [4 ... 5].y = 2.0, // expected-note 2 {{previous initialization is here}}
+  [4 ... 6] = { .x = 3, .y = 4.0 }  // expected-warning 2 {{initializer overrides prior initialization of this subobject}}
 };
 
 struct point array3[10] = {
@@ -129,15 +129,14 @@ int get8() { ++counter; return 8; }
 
 void test() {
   struct X xs[] = { 
-    [0] = (struct X){1, 2}, // expected-note{{previous initialization is here}}
-    [0].c = 3,  // expected-warning{{subobject initialization overrides initialization of other fields within its enclosing subobject}}
+    [0] = (struct X){1, 2}, // expected-note 2 {{previous initialization is here}}
+    [0].c = 3,  // expected-warning{{initializer partially overrides prior initialization of this subobject}}
     (struct X) {4, 5, 6}, // expected-note{{previous initialization is here}}
-    [1].b = get8(), // expected-warning{{subobject initialization overrides initialization of other fields within its enclosing subobject}}
-    [0].b = 8
+    [1].b = get8(), // expected-warning{{initializer partially overrides prior initialization of this subobject}}
+    [0].b = 8   // expected-warning{{initializer partially overrides prior initialization of this subobject}}
   };
 }
 
-// FIXME: How do we test that this initializes the long properly?
 union { char c; long l; } u1 = { .l = 0xFFFF };
 
 extern float global_float;
@@ -223,6 +222,55 @@ struct Enigma enigma = {
 };
 
 
+/// PR16644
+typedef union {
+  struct {
+    int zero;
+    int one;
+    int two;
+    int three;
+  } a;
+  int b[4];
+} union_16644_t;
+
+union_16644_t union_16644_instance_0 =
+{
+  .b[0]    = 0, //                               expected-note{{previous}}
+  .a.one   = 1, // expected-warning{{overrides}} expected-note{{previous}}
+  .b[2]    = 2, // expected-warning{{overrides}} expected-note{{previous}}
+  .a.three = 3, // expected-warning{{overrides}}
+};
+
+union_16644_t union_16644_instance_1 =
+{
+  .a.three = 13, //                               expected-note{{previous}}
+  .b[2]    = 12, // expected-warning{{overrides}} expected-note{{previous}}
+  .a.one   = 11, // expected-warning{{overrides}} expected-note{{previous}}
+  .b[0]    = 10, // expected-warning{{overrides}}
+};
+
+union_16644_t union_16644_instance_2 =
+{
+  .a.one   = 21, //                               expected-note{{previous}}
+  .b[1]    = 20, // expected-warning{{overrides}}
+};
+
+union_16644_t union_16644_instance_3 =
+{
+  .b[1]    = 30, //                               expected-note{{previous}}
+  .a = {         // expected-warning{{overrides}}
+    .one = 31
+  }
+};
+
+union_16644_t union_16644_instance_4[2] =
+{
+  [0].a.one  = 2,
+  [1].a.zero = 3,//                               expected-note{{previous}}
+  [0].a.zero = 5,
+  [1].b[1]   = 4 // expected-warning{{overrides}}
+};
+
 /// PR4073
 /// Should use evaluate to fold aggressively and emit a warning if not an ice.
 extern int crazy_x;
@@ -277,3 +325,46 @@ struct ds ds2 = { { {
     .a = 0,
     .b = 1 // expected-error{{field designator 'b' does not refer to any field}}
 } } };
+
+// Check initializer override warnings overriding a character in a string
+struct overwrite_string_struct {
+  char L[6];
+  int M;
+} overwrite_string[] = {
+  { { "foo" }, 1 }, // expected-note{{previous initialization is here}}
+  [0].L[2] = 'x' // expected-warning{{initializer partially overrides prior initialization of this subobject}}
+};
+struct overwrite_string_struct2 {
+  char L[6];
+  int M;
+} overwrite_string2[] = {
+    { { "foo" }, 1 }, // expected-note{{previous initialization is here}}
+    [0].L[4] = 'x' // expected-warning{{initializer partially overrides prior initialization of this subobject}}
+  };
+struct overwrite_string_struct
+overwrite_string3[] = {
+  "foo", 1,           // expected-note{{previous initialization is here}}
+  [0].L[4] = 'x'  // expected-warning{{initializer partially overrides prior initialization of this subobject}}
+};
+struct overwrite_string_struct
+overwrite_string4[] = {
+  { { 'f', 'o', 'o' }, 1 },
+  [0].L[4] = 'x' // no-warning
+};
+
+struct {
+  struct { } s1;
+  union {
+    int a;
+    int b;
+  } u1;
+} s = {
+  .s1 = {
+    .x = 0, // expected-error{{field designator}}
+  },
+
+  .u1 = {
+    .a = 0, // expected-note {{previous initialization is here}}
+    .b = 0, // expected-warning {{initializer overrides prior initialization of this subobject}}
+  },
+};

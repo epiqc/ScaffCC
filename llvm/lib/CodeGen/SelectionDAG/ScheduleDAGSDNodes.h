@@ -1,9 +1,8 @@
 //===---- ScheduleDAGSDNodes.h - SDNode Scheduling --------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -12,13 +11,24 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef SCHEDULEDAGSDNODES_H
-#define SCHEDULEDAGSDNODES_H
+#ifndef LLVM_LIB_CODEGEN_SELECTIONDAG_SCHEDULEDAGSDNODES_H
+#define LLVM_LIB_CODEGEN_SELECTIONDAG_SCHEDULEDAGSDNODES_H
 
+#include "llvm/CodeGen/ISDOpcodes.h"
+#include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/ScheduleDAG.h"
-#include "llvm/CodeGen/SelectionDAG.h"
+#include "llvm/CodeGen/SelectionDAGNodes.h"
+#include "llvm/Support/Casting.h"
+#include "llvm/Support/MachineValueType.h"
+#include <cassert>
+#include <string>
+#include <vector>
 
 namespace llvm {
+
+class AAResults;
+class InstrItineraryData;
+
   /// ScheduleDAGSDNodes - A ScheduleDAG for scheduling SDNode-based DAGs.
   ///
   /// Edges between SUnits are initially based on edges in the SelectionDAG,
@@ -44,7 +54,7 @@ namespace llvm {
 
     explicit ScheduleDAGSDNodes(MachineFunction &mf);
 
-    virtual ~ScheduleDAGSDNodes() {}
+    ~ScheduleDAGSDNodes() override = default;
 
     /// Run - perform scheduling.
     ///
@@ -61,8 +71,10 @@ namespace llvm {
       if (isa<BasicBlockSDNode>(Node))     return true;
       if (isa<FrameIndexSDNode>(Node))     return true;
       if (isa<ConstantPoolSDNode>(Node))   return true;
+      if (isa<TargetIndexSDNode>(Node))    return true;
       if (isa<JumpTableSDNode>(Node))      return true;
       if (isa<ExternalSymbolSDNode>(Node)) return true;
+      if (isa<MCSymbolSDNode>(Node))       return true;
       if (isa<BlockAddressSDNode>(Node))   return true;
       if (Node->getOpcode() == ISD::EntryToken ||
           isa<MDNodeSDNode>(Node)) return true;
@@ -76,19 +88,13 @@ namespace llvm {
     /// Clone - Creates a clone of the specified SUnit. It does not copy the
     /// predecessors / successors info nor the temporary scheduling states.
     ///
-    SUnit *Clone(SUnit *N);
+    SUnit *Clone(SUnit *Old);
 
     /// BuildSchedGraph - Build the SUnit graph from the selection dag that we
     /// are input.  This SUnit graph is similar to the SelectionDAG, but
     /// excludes nodes that aren't interesting to scheduling, and represents
     /// flagged together nodes with a single SUnit.
-    void BuildSchedGraph(AliasAnalysis *AA);
-
-    /// InitVRegCycleFlag - Set isVRegCycle if this node's single use is
-    /// CopyToReg and its only active data operands are CopyFromReg within a
-    /// single block loop.
-    ///
-    void InitVRegCycleFlag(SUnit *SU);
+    void BuildSchedGraph(AAResults *AA);
 
     /// InitNumRegDefsLeft - Determine the # of regs defined by this node.
     ///
@@ -97,12 +103,6 @@ namespace llvm {
     /// computeLatency - Compute node latency.
     ///
     virtual void computeLatency(SUnit *SU);
-
-    /// computeOperandLatency - Override dependence edge latency using
-    /// operand use/def information
-    ///
-    virtual void computeOperandLatency(SUnit *Def, SUnit *Use,
-                                       SDep& dep) const { }
 
     virtual void computeOperandLatency(SDNode *Def, SDNode *Use,
                                        unsigned OpIdx, SDep& dep) const;
@@ -119,15 +119,16 @@ namespace llvm {
     /// EmitSchedule - Insert MachineInstrs into the MachineBasicBlock
     /// according to the order specified in Sequence.
     ///
-    MachineBasicBlock *EmitSchedule(MachineBasicBlock::iterator &InsertPos);
+    virtual MachineBasicBlock*
+    EmitSchedule(MachineBasicBlock::iterator &InsertPos);
 
-    virtual void dumpNode(const SUnit *SU) const;
-
+    void dumpNode(const SUnit &SU) const override;
+    void dump() const override;
     void dumpSchedule() const;
 
-    virtual std::string getGraphNodeLabel(const SUnit *SU) const;
+    std::string getGraphNodeLabel(const SUnit *SU) const override;
 
-    virtual std::string getDAGName() const;
+    std::string getDAGName() const override;
 
     virtual void getCustomGraphFeatures(GraphWriter<ScheduleDAG*> &GW) const;
 
@@ -139,13 +140,14 @@ namespace llvm {
       const SDNode *Node;
       unsigned DefIdx;
       unsigned NodeNumDefs;
-      EVT ValueType;
+      MVT ValueType;
+
     public:
       RegDefIter(const SUnit *SU, const ScheduleDAGSDNodes *SD);
 
-      bool IsValid() const { return Node != NULL; }
+      bool IsValid() const { return Node != nullptr; }
 
-      EVT GetValue() const {
+      MVT GetValue() const {
         assert(IsValid() && "bad iterator");
         return ValueType;
       }
@@ -159,9 +161,16 @@ namespace llvm {
       }
 
       void Advance();
+
     private:
       void InitNodeNumDefs();
     };
+
+  protected:
+    /// ForceUnitLatencies - Return true if all scheduling edges should be given
+    /// a latency value of one.  The default is to return false; schedulers may
+    /// override this as needed.
+    virtual bool forceUnitLatencies() const { return false; }
 
   private:
     /// ClusterNeighboringLoads - Cluster loads from "near" addresses into
@@ -178,6 +187,7 @@ namespace llvm {
     void EmitPhysRegCopy(SUnit *SU, DenseMap<SUnit*, unsigned> &VRBaseMap,
                          MachineBasicBlock::iterator InsertPos);
   };
-}
 
-#endif
+} // end namespace llvm
+
+#endif // LLVM_LIB_CODEGEN_SELECTIONDAG_SCHEDULEDAGSDNODES_H

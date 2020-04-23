@@ -1,9 +1,8 @@
 //===-- InstCount.cpp - Collects the count of all instructions ------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,27 +10,27 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "instcount"
+#include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/Passes.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/InstVisitor.h"
+#include "llvm/InitializePasses.h"
 #include "llvm/Pass.h"
-#include "llvm/Function.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
-#include "llvm/Support/InstVisitor.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/ADT/Statistic.h"
 using namespace llvm;
+
+#define DEBUG_TYPE "instcount"
 
 STATISTIC(TotalInsts , "Number of instructions (of all types)");
 STATISTIC(TotalBlocks, "Number of basic blocks");
 STATISTIC(TotalFuncs , "Number of non-external functions");
-STATISTIC(TotalMemInst, "Number of memory instructions");
 
 #define HANDLE_INST(N, OPCODE, CLASS) \
   STATISTIC(Num ## OPCODE ## Inst, "Number of " #OPCODE " insts");
 
-#include "llvm/Instruction.def"
-
+#include "llvm/IR/Instruction.def"
 
 namespace {
   class InstCount : public FunctionPass, public InstVisitor<InstCount> {
@@ -43,11 +42,11 @@ namespace {
 #define HANDLE_INST(N, OPCODE, CLASS) \
     void visit##OPCODE(CLASS &) { ++Num##OPCODE##Inst; ++TotalInsts; }
 
-#include "llvm/Instruction.def"
+#include "llvm/IR/Instruction.def"
 
     void visitInstruction(Instruction &I) {
       errs() << "Instruction Count does not know about " << I;
-      llvm_unreachable(0);
+      llvm_unreachable(nullptr);
     }
   public:
     static char ID; // Pass identification, replacement for typeid
@@ -55,12 +54,12 @@ namespace {
       initializeInstCountPass(*PassRegistry::getPassRegistry());
     }
 
-    virtual bool runOnFunction(Function &F);
+    bool runOnFunction(Function &F) override;
 
-    virtual void getAnalysisUsage(AnalysisUsage &AU) const {
+    void getAnalysisUsage(AnalysisUsage &AU) const override {
       AU.setPreservesAll();
     }
-    virtual void print(raw_ostream &O, const Module *M) const {}
+    void print(raw_ostream &O, const Module *M) const override {}
 
   };
 }
@@ -75,13 +74,6 @@ FunctionPass *llvm::createInstCountPass() { return new InstCount(); }
 // function.
 //
 bool InstCount::runOnFunction(Function &F) {
-  unsigned StartMemInsts =
-    NumGetElementPtrInst + NumLoadInst + NumStoreInst + NumCallInst +
-    NumInvokeInst + NumAllocaInst;
   visit(F);
-  unsigned EndMemInsts =
-    NumGetElementPtrInst + NumLoadInst + NumStoreInst + NumCallInst +
-    NumInvokeInst + NumAllocaInst;
-  TotalMemInst += EndMemInsts-StartMemInsts;
   return false;
 }

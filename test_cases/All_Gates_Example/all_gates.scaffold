@@ -1,5 +1,5 @@
 int main () {
-    qbit q[3];
+  qbit q[3];
 	cbit c[1];
 
 	X ( q[0] );
@@ -22,6 +22,6 @@ int main () {
 	Toffoli ( q[0], q[1], q[2] );
 	Fredkin ( q[0], q[1], q[2] );
 
-    return 0;
+  return 0;
 }
 

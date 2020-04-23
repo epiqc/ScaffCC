@@ -1,15 +1,23 @@
-// RUN: %clang_cc1 -fsyntax-only -verify -Wno-objc-root-class %s
+// RUN: %clang_cc1 -triple x86_64-apple-darwin9 -fsyntax-only -verify -Wno-objc-root-class %s
 
 @interface I
-- Meth; // expected-note{{method definition for 'Meth' not found}} \
-        // expected-note{{method 'Meth' declared here}}
+- Meth; // expected-note 2 {{method 'Meth' declared here}}
+- unavailableMeth __attribute__((availability(macosx,unavailable)));
+- unavailableMeth2 __attribute__((unavailable));
 @end
 
-@implementation  I  // expected-warning{{incomplete implementation}}
+@implementation  I  // expected-warning {{method definition for 'Meth' not found}}
 @end
 
 @implementation I(CAT)
 - Meth {return 0;} // expected-warning {{category is implementing a method which will also be implemented by its primary class}}
+@end
+
+// rdar://40634455
+@interface MyClass
+-(void)mymeth __attribute__((availability(macos, introduced=100))); // expected-note{{here}}
+@end
+@implementation MyClass // expected-warning{{'mymeth' not found}}
 @end
 
 #pragma GCC diagnostic ignored "-Wincomplete-implementation"
@@ -38,3 +46,29 @@ __attribute__((visibility("default")))
 
 @end
 
+// rdar://15580969
+typedef char BOOL;
+
+@protocol NSObject
+- (BOOL)isEqual:(id)object;
+@end
+
+@interface NSObject <NSObject>
+@end
+
+@protocol NSApplicationDelegate <NSObject>
+- (void)ImpleThisMethod; // expected-note {{method 'ImpleThisMethod' declared here}}
+@end
+
+@interface AppDelegate : NSObject <NSApplicationDelegate>
+@end
+
+@implementation AppDelegate (MRRCategory)
+
+- (BOOL)isEqual:(id)object
+{
+    return __objc_no;
+}
+
+- (void)ImpleThisMethod {} // expected-warning {{category is implementing a method which will also be implemented by its primary class}}
+@end

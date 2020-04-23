@@ -1,9 +1,8 @@
 //===- AsmLexer.h - Lexer for Assembly Files --------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,48 +10,49 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef ASMLEXER_H
-#define ASMLEXER_H
+#ifndef LLVM_MC_MCPARSER_ASMLEXER_H
+#define LLVM_MC_MCPARSER_ASMLEXER_H
 
 #include "llvm/ADT/StringRef.h"
 #include "llvm/MC/MCParser/MCAsmLexer.h"
-#include "llvm/Support/DataTypes.h"
 #include <string>
 
 namespace llvm {
-class MemoryBuffer;
+
 class MCAsmInfo;
 
 /// AsmLexer - Lexer class for assembly files.
 class AsmLexer : public MCAsmLexer {
   const MCAsmInfo &MAI;
 
-  const char *CurPtr;
-  const MemoryBuffer *CurBuf;
-  bool isAtStartOfLine;
-
-  void operator=(const AsmLexer&); // DO NOT IMPLEMENT
-  AsmLexer(const AsmLexer&);       // DO NOT IMPLEMENT
+  const char *CurPtr = nullptr;
+  StringRef CurBuf;
+  bool IsAtStartOfLine = true;
+  bool IsAtStartOfStatement = true;
+  bool IsPeeking = false;
 
 protected:
   /// LexToken - Read the next token and return its code.
-  virtual AsmToken LexToken();
+  AsmToken LexToken() override;
 
 public:
   AsmLexer(const MCAsmInfo &MAI);
-  ~AsmLexer();
+  AsmLexer(const AsmLexer &) = delete;
+  AsmLexer &operator=(const AsmLexer &) = delete;
+  ~AsmLexer() override;
 
-  void setBuffer(const MemoryBuffer *buf, const char *ptr = NULL);
+  void setBuffer(StringRef Buf, const char *ptr = nullptr);
 
-  virtual StringRef LexUntilEndOfStatement();
-  StringRef LexUntilEndOfLine();
+  StringRef LexUntilEndOfStatement() override;
 
-  bool isAtStartOfComment(char Char);
-  bool isAtStatementSeparator(const char *Ptr);
+  size_t peekTokens(MutableArrayRef<AsmToken> Buf,
+                    bool ShouldSkipSpace = true) override;
 
   const MCAsmInfo &getMAI() const { return MAI; }
 
 private:
+  bool isAtStartOfComment(const char *Ptr);
+  bool isAtStatementSeparator(const char *Ptr);
   int getNextChar();
   AsmToken ReturnError(const char *Loc, const std::string &Msg);
 
@@ -63,8 +63,11 @@ private:
   AsmToken LexSingleQuote();
   AsmToken LexQuote();
   AsmToken LexFloatLiteral();
+  AsmToken LexHexFloatLiteral(bool NoIntDigits);
+
+  StringRef LexUntilEndOfLine();
 };
 
 } // end namespace llvm
 
-#endif
+#endif // LLVM_MC_MCPARSER_ASMLEXER_H

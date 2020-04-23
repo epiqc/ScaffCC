@@ -1,7 +1,7 @@
 // doubly - controlled Rz circuit with angle
 // decompose in terms of V = sqrt(U)
 
-module ccRz (
+scaff_module ccRz (
 	qbit ctrl0,
 	qbit ctrl1,
 	qbit target,

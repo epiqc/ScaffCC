@@ -15,6 +15,6 @@ struct S1;
 struct S2;
 struct S2;
 
-#ifdef __cplusplus
-template<typename T> class Vector;
-#endif
+int func1(int);
+
+void eventually_noreturn(void);

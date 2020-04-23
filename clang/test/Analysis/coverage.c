@@ -1,5 +1,5 @@
-// RUN: %clang_cc1 -analyze -analyzer-checker=core,unix.Malloc -analyzer-store=region -analyzer-max-loop 4 -verify %s
-#include "system-header-simulator.h"
+// RUN: %clang_analyze_cc1 -analyzer-checker=core,unix.Malloc -analyzer-store=region -analyzer-max-loop 4 -verify %s
+#include "Inputs/system-header-simulator.h"
 
 typedef __typeof(sizeof(int)) size_t;
 void *malloc(size_t);
@@ -32,27 +32,27 @@ static void function_which_doesnt_give_up_nested(int *x, int *y) {
 
 void coverage1(int *x) {
   function_which_gives_up(x);
-  char *m = (char*)malloc(12); // expected-warning {{potential leak}}
-}
+  char *m = (char*)malloc(12);
+} // expected-warning {{Potential leak of memory pointed to by 'm'}}
 
 void coverage2(int *x) {
   if (x) {
     function_which_gives_up(x);
-    char *m = (char*)malloc(12);// expected-warning {{potential leak}}
+    char *m = (char*)malloc(12);
   }
-}
+} // expected-warning {{Potential leak of memory pointed to by 'm'}}
 
 void coverage3(int *x) {
   x++;
   function_which_gives_up(x);
-  char *m = (char*)malloc(12);// expected-warning {{potential leak}}
-}
+  char *m = (char*)malloc(12);
+} // expected-warning {{Potential leak of memory pointed to by 'm'}}
 
 void coverage4(int *x) {
   *x += another_function(x);
   function_which_gives_up(x);
-  char *m = (char*)malloc(12);// expected-warning {{potential leak}}
-}
+  char *m = (char*)malloc(12);
+} // expected-warning {{Potential leak of memory pointed to by 'm'}}
 
 void coverage5(int *x) {
   for (int i = 0; i<7; ++i)
@@ -65,8 +65,8 @@ void coverage6(int *x) {
   for (int i = 0; i<3; ++i) {
     function_which_gives_up(x);
   }
-  char *m = (char*)malloc(12); // expected-warning {{potential leak}}
-}
+  char *m = (char*)malloc(12);
+} // expected-warning {{Potential leak of memory pointed to by 'm'}}
 
 int coverage7_inline(int *i) {
   function_which_doesnt_give_up(&i);
@@ -77,8 +77,8 @@ void coverage8(int *x) {
   int y;
   function_which_doesnt_give_up_nested(x, &y);
   y = (*x)/y;  // expected-warning {{Division by zero}}
-  char *m = (char*)malloc(12); // expected-warning {{potential leak}}
-}
+  char *m = (char*)malloc(12);
+} // expected-warning {{Potential leak of memory pointed to by 'm'}}
 
 void function_which_gives_up_settonull(int **x) {
   *x = 0;
@@ -91,4 +91,12 @@ void coverage9(int *x) {
   int y = 5;
   function_which_gives_up_settonull(&x);
   y = (*x);  // no warning
+}
+
+static void empty_function(){
+}
+int use_empty_function(int x) {
+    x = 0;
+    empty_function();
+    return 5/x; //expected-warning {{Division by zero}}
 }

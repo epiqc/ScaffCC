@@ -1,10 +1,6 @@
-// RUN: %clang_cc1  -analyze -analyzer-checker=experimental.security.taint,debug.TaintTest %s -verify
+// RUN: %clang_analyze_cc1 -Wno-int-to-pointer-cast -analyzer-checker=alpha.security.taint,debug.TaintTest %s -verify
 
-#include <stdarg.h>
-
-int scanf(const char *restrict format, ...);
-int getchar(void);
-typedef __typeof(sizeof(int)) size_t;
+#include "Inputs/system-header-simulator.h"
 
 #define BUFSIZE 10
 int Buffer[BUFSIZE];
@@ -40,7 +36,7 @@ void taintTracking(int x) {
   // FIXME: We fail to propagate the taint here because RegionStore does not
   // handle ElementRegions with symbolic indexes.
   int addrDeref = *addr; // expected-warning + {{tainted}}
-  int _addrDeref = addrDeref;
+  int _addrDeref = addrDeref; // expected-warning + {{tainted}}
 
   // Tainted struct address, casts.
   struct XYStruct *xyPtr = 0;
@@ -86,15 +82,6 @@ void getenvTest(char *home) {
       char d = home[0]; // expected-warning + {{tainted}}
     }
 }
-
-typedef struct _FILE FILE;
-extern FILE *stdin;
-extern FILE *stdout;
-extern FILE *stderr;
-int fscanf(FILE *restrict stream, const char *restrict format, ...);
-int fprintf(FILE *stream, const char *format, ...);
-int fclose(FILE *stream);
-FILE *fopen(const char *path, const char *mode);
 
 int fscanfTest(void) {
   FILE *fp;
@@ -202,3 +189,10 @@ void atoiTest() {
 
 }
 
+char *pointer1;
+void *pointer2;
+void noCrashTest() {
+  if (!*pointer1) {
+    __builtin___memcpy_chk(pointer2, pointer1, 0, 0); // no-crash
+  }
+}

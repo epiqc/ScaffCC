@@ -1,9 +1,8 @@
 //===-- FileRemapper.h - File Remapping Helper ------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -11,10 +10,10 @@
 #define LLVM_CLANG_ARCMIGRATE_FILEREMAPPER_H
 
 #include "clang/Basic/LLVM.h"
-#include "llvm/ADT/OwningPtr.h"
-#include "llvm/ADT/PointerUnion.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/PointerUnion.h"
 #include "llvm/ADT/StringRef.h"
+#include <memory>
 
 namespace llvm {
   class MemoryBuffer;
@@ -30,7 +29,7 @@ namespace arcmt {
 
 class FileRemapper {
   // FIXME: Reuse the same FileManager for multiple ASTContexts.
-  OwningPtr<FileManager> FileMgr;
+  std::unique_ptr<FileManager> FileMgr;
 
   typedef llvm::PointerUnion<const FileEntry *, llvm::MemoryBuffer *> Target;
   typedef llvm::DenseMap<const FileEntry *, Target> MappingsTy;
@@ -41,7 +40,7 @@ class FileRemapper {
 public:
   FileRemapper();
   ~FileRemapper();
-  
+
   bool initFromDisk(StringRef outputDir, DiagnosticsEngine &Diag,
                     bool ignoreIfFilesChanged);
   bool initFromFile(StringRef filePath, DiagnosticsEngine &Diag,
@@ -52,17 +51,14 @@ public:
   bool overwriteOriginal(DiagnosticsEngine &Diag,
                          StringRef outputDir = StringRef());
 
-  void remap(StringRef filePath, llvm::MemoryBuffer *memBuf);
-  void remap(StringRef filePath, StringRef newPath);
+  void remap(StringRef filePath, std::unique_ptr<llvm::MemoryBuffer> memBuf);
 
   void applyMappings(PreprocessorOptions &PPOpts) const;
-
-  void transferMappingsAndClear(PreprocessorOptions &PPOpts);
 
   void clear(StringRef outputDir = StringRef());
 
 private:
-  void remap(const FileEntry *file, llvm::MemoryBuffer *memBuf);
+  void remap(const FileEntry *file, std::unique_ptr<llvm::MemoryBuffer> memBuf);
   void remap(const FileEntry *file, const FileEntry *newfile);
 
   const FileEntry *getOriginalFile(StringRef filePath);

@@ -1,7 +1,7 @@
-// RUN: %clang_cc1 -triple i686-apple-darwin9 -fobjc-fragile-abi -emit-llvm -o %t %s
+// RUN: %clang_cc1 -triple i686-apple-darwin9 -fobjc-runtime=macosx-fragile-10.5 -emit-llvm -o %t %s
 // RUN: FileCheck < %t %s
 //
-// CHECK: @"\01L_OBJC_METH_VAR_TYPE_34" = internal global [16 x i8] c"v12@0:4[3[4@]]8\00"
+// CHECK: @OBJC_METH_VAR_TYPE_{{.*}} = private unnamed_addr constant [16 x i8] c"v12@0:4[3[4@]]8\00"
 
 @class Int1;
 
@@ -107,7 +107,7 @@ const char g3[] = @encode(const struct S *);
 // CHECK: @g4 = constant [6 x i8] c"{S=i}\00"
 const char g4[] = @encode(const struct S);
 
-// CHECK: @g5 = constant [12 x i8] c"^{Object=#}\00"
+// CHECK: @g5 = constant [2 x i8] c"@\00"
 const char g5[] = @encode(MyObj * const);
 
 ////
@@ -159,9 +159,36 @@ struct f
   int tt;
 };
 
-// CHECK: @g10 = constant [14 x i8] c"{f=i[0{?=}]i}\00"
+// CHECK: @g10 = constant [14 x i8] c"{f=i[4{?=}]i}\00"
 const char g10[] = @encode(struct f);
 
 // rdar://9622422
 // CHECK: @g11 = constant [2 x i8] c"v\00"
 const char g11[] = @encode(void);
+
+// PR14628
+// CHECK: @g12 = constant [3 x i8] c"Ai\00"
+const char g12[] = @encode(_Atomic(int));
+
+// rdar://15824769
+id test_id = 0;
+Class test_class = 0;
+const char g13[] = @encode(__typeof__(*test_class));
+const char g14[] = @encode(__typeof__(*test_id));
+// CHECK: constant [14 x i8] c"{objc_class=}\00"
+// CHECK: constant [15 x i8] c"{objc_object=}\00"
+
+// CHECK: @g15 = constant [2 x i8] c":\00"
+const char g15[] = @encode(SEL);
+
+typedef typeof(sizeof(int)) size_t;
+size_t strlen(const char *s);
+
+// CHECK-LABEL: @test_strlen(
+// CHECK: %[[i:.*]] = alloca i32
+// CHECK: %[[call:.*]] = call i32 @strlen
+// CHECK: store i32 %[[call]], i32* %[[i]]
+void test_strlen() {
+  const char array[] = @encode(int);
+  int i = strlen(array);
+}

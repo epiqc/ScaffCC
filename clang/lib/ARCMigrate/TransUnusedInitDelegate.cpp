@@ -1,9 +1,8 @@
-//===--- TransUnusedInitDelegate.cpp - Tranformations to ARC mode ---------===//
+//===--- TransUnusedInitDelegate.cpp - Transformations to ARC mode --------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 // Transformations:
@@ -22,6 +21,7 @@
 
 #include "Transforms.h"
 #include "Internals.h"
+#include "clang/AST/ASTContext.h"
 #include "clang/Sema/SemaDiagnostic.h"
 
 using namespace clang;
@@ -38,9 +38,9 @@ class UnusedInitRewriter : public RecursiveASTVisitor<UnusedInitRewriter> {
 
 public:
   UnusedInitRewriter(MigrationPass &pass)
-    : Body(0), Pass(pass) { }
+    : Body(nullptr), Pass(pass) { }
 
-  void transformBody(Stmt *body) {
+  void transformBody(Stmt *body, Decl *ParentD) {
     Body = body;
     collectRemovables(body, Removables);
     TraverseStmt(body);
@@ -57,7 +57,7 @@ public:
       SourceRange ExprRange = ME->getSourceRange();
       Pass.TA.insert(ExprRange.getBegin(), "if (!(self = ");
       std::string retStr = ")) return ";
-      retStr += getNilString(Pass.Ctx);
+      retStr += getNilString(Pass);
       Pass.TA.insertAfterToken(ExprRange.getEnd(), retStr);
     }
     return true;

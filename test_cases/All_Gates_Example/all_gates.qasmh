@@ -1,6 +1,6 @@
 -------QASM Generation Pass:
 
-module ToffoliImpl_Q_Q_Q ( qbit control1 , qbit control2 , qbit target ,  ) {
+module ToffoliImpl_Q_Q_Q(qbit control1, qbit control2, qbit target){
  	H ( target );
  	T ( control1 );
  	T ( control2 );
@@ -19,7 +19,7 @@ module ToffoliImpl_Q_Q_Q ( qbit control1 , qbit control2 , qbit target ,  ) {
  	H ( target );
  }
 
-module main (  ) {
+module main(){
  	qbit q[3];
 	cbit c[1];
 	X ( q[0] );

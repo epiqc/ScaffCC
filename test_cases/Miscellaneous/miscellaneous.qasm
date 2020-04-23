@@ -16,4 +16,3 @@ cx qb[1], qb[2];
 h qb[2];
 measure qb[2] -> cb[0];
 measure qb[3] -> cb[1];
-

@@ -1,9 +1,8 @@
 //===- Support/FileUtilities.cpp - File System Utilities ------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,15 +12,21 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Support/FileUtilities.h"
-#include "llvm/Support/MemoryBuffer.h"
-#include "llvm/Support/raw_ostream.h"
-#include "llvm/Support/Path.h"
-#include "llvm/Support/system_error.h"
-#include "llvm/ADT/OwningPtr.h"
+#include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/SmallString.h"
+#include "llvm/Support/Error.h"
+#include "llvm/Support/ErrorOr.h"
+#include "llvm/Support/MemoryBuffer.h"
+#include "llvm/Support/Path.h"
+#include "llvm/Support/raw_ostream.h"
+#include <cctype>
+#include <cmath>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
-#include <cctype>
+#include <memory>
+#include <system_error>
+
 using namespace llvm;
 
 static bool isSignedChar(char C) {
@@ -87,9 +92,9 @@ static bool CompareNumbers(const char *&F1P, const char *&F2P,
 
   // If one of the positions is at a space and the other isn't, chomp up 'til
   // the end of the space.
-  while (isspace(*F1P) && F1P != F1End)
+  while (isspace(static_cast<unsigned char>(*F1P)) && F1P != F1End)
     ++F1P;
-  while (isspace(*F2P) && F2P != F2End)
+  while (isspace(static_cast<unsigned char>(*F2P)) && F2P != F2End)
     ++F2P;
 
   // If we stop on numbers, compare their difference.
@@ -171,55 +176,37 @@ static bool CompareNumbers(const char *&F1P, const char *&F2P,
 /// error occurs, allowing the caller to distinguish between a failed diff and a
 /// file system error.
 ///
-int llvm::DiffFilesWithTolerance(const sys::PathWithStatus &FileA,
-                                 const sys::PathWithStatus &FileB,
+int llvm::DiffFilesWithTolerance(StringRef NameA,
+                                 StringRef NameB,
                                  double AbsTol, double RelTol,
                                  std::string *Error) {
-  const sys::FileStatus *FileAStat = FileA.getFileStatus(false, Error);
-  if (!FileAStat)
-    return 2;
-  const sys::FileStatus *FileBStat = FileB.getFileStatus(false, Error);
-  if (!FileBStat)
-    return 2;
-
-  // Check for zero length files because some systems croak when you try to
-  // mmap an empty file.
-  size_t A_size = FileAStat->getSize();
-  size_t B_size = FileBStat->getSize();
-
-  // If they are both zero sized then they're the same
-  if (A_size == 0 && B_size == 0)
-    return 0;
-
-  // If only one of them is zero sized then they can't be the same
-  if ((A_size == 0 || B_size == 0)) {
-    if (Error)
-      *Error = "Files differ: one is zero-sized, the other isn't";
-    return 1;
-  }
-
   // Now its safe to mmap the files into memory because both files
   // have a non-zero size.
-  OwningPtr<MemoryBuffer> F1;
-  if (error_code ec = MemoryBuffer::getFile(FileA.c_str(), F1)) {
+  ErrorOr<std::unique_ptr<MemoryBuffer>> F1OrErr = MemoryBuffer::getFile(NameA);
+  if (std::error_code EC = F1OrErr.getError()) {
     if (Error)
-      *Error = ec.message();
+      *Error = EC.message();
     return 2;
   }
-  OwningPtr<MemoryBuffer> F2;
-  if (error_code ec = MemoryBuffer::getFile(FileB.c_str(), F2)) {
+  MemoryBuffer &F1 = *F1OrErr.get();
+
+  ErrorOr<std::unique_ptr<MemoryBuffer>> F2OrErr = MemoryBuffer::getFile(NameB);
+  if (std::error_code EC = F2OrErr.getError()) {
     if (Error)
-      *Error = ec.message();
+      *Error = EC.message();
     return 2;
   }
+  MemoryBuffer &F2 = *F2OrErr.get();
 
   // Okay, now that we opened the files, scan them for the first difference.
-  const char *File1Start = F1->getBufferStart();
-  const char *File2Start = F2->getBufferStart();
-  const char *File1End = F1->getBufferEnd();
-  const char *File2End = F2->getBufferEnd();
+  const char *File1Start = F1.getBufferStart();
+  const char *File2Start = F2.getBufferStart();
+  const char *File1End = F1.getBufferEnd();
+  const char *File2End = F2.getBufferEnd();
   const char *F1P = File1Start;
   const char *F2P = File2Start;
+  uint64_t A_size = F1.getBufferSize();
+  uint64_t B_size = F2.getBufferSize();
 
   // Are the buffers identical?  Common case: Handle this efficiently.
   if (A_size == B_size &&
@@ -234,10 +221,12 @@ int llvm::DiffFilesWithTolerance(const sys::PathWithStatus &FileA,
   }
 
   bool CompareFailed = false;
-  while (1) {
+  while (true) {
     // Scan for the end of file or next difference.
-    while (F1P < File1End && F2P < File2End && *F1P == *F2P)
-      ++F1P, ++F2P;
+    while (F1P < File1End && F2P < File2End && *F1P == *F2P) {
+      ++F1P;
+      ++F2P;
+    }
 
     if (F1P >= File1End || F2P >= File2End) break;
 
@@ -278,3 +267,66 @@ int llvm::DiffFilesWithTolerance(const sys::PathWithStatus &FileA,
 
   return CompareFailed;
 }
+
+void llvm::AtomicFileWriteError::log(raw_ostream &OS) const {
+  OS << "atomic_write_error: ";
+  switch (Error) {
+  case atomic_write_error::failed_to_create_uniq_file:
+    OS << "failed_to_create_uniq_file";
+    return;
+  case atomic_write_error::output_stream_error:
+    OS << "output_stream_error";
+    return;
+  case atomic_write_error::failed_to_rename_temp_file:
+    OS << "failed_to_rename_temp_file";
+    return;
+  }
+  llvm_unreachable("unknown atomic_write_error value in "
+                   "failed_to_rename_temp_file::log()");
+}
+
+llvm::Error llvm::writeFileAtomically(StringRef TempPathModel,
+                                      StringRef FinalPath, StringRef Buffer) {
+  return writeFileAtomically(TempPathModel, FinalPath,
+                             [&Buffer](llvm::raw_ostream &OS) {
+                               OS.write(Buffer.data(), Buffer.size());
+                               return llvm::Error::success();
+                             });
+}
+
+llvm::Error llvm::writeFileAtomically(
+    StringRef TempPathModel, StringRef FinalPath,
+    std::function<llvm::Error(llvm::raw_ostream &)> Writer) {
+  SmallString<128> GeneratedUniqPath;
+  int TempFD;
+  if (sys::fs::createUniqueFile(TempPathModel.str(), TempFD,
+                                GeneratedUniqPath)) {
+    return llvm::make_error<AtomicFileWriteError>(
+        atomic_write_error::failed_to_create_uniq_file);
+  }
+  llvm::FileRemover RemoveTmpFileOnFail(GeneratedUniqPath);
+
+  raw_fd_ostream OS(TempFD, /*shouldClose=*/true);
+  if (llvm::Error Err = Writer(OS)) {
+    return Err;
+  }
+
+  OS.close();
+  if (OS.has_error()) {
+    OS.clear_error();
+    return llvm::make_error<AtomicFileWriteError>(
+        atomic_write_error::output_stream_error);
+  }
+
+  if (const std::error_code Error =
+          sys::fs::rename(/*from=*/GeneratedUniqPath.c_str(),
+                          /*to=*/FinalPath.str().c_str())) {
+    return llvm::make_error<AtomicFileWriteError>(
+        atomic_write_error::failed_to_rename_temp_file);
+  }
+
+  RemoveTmpFileOnFail.releaseFile();
+  return Error::success();
+}
+
+char llvm::AtomicFileWriteError::ID;

@@ -1,5 +1,7 @@
-// RUN: %clang_cc1 -analyze -analyzer-checker=core -analyzer-inline-call -analyzer-store region -verify %s
-// XFAIL: *
+// RUN: %clang_analyze_cc1 -analyzer-checker=core,debug.ExprInspection -analyzer-config c++-inlining=constructors -verify %s
+
+void clang_analyzer_eval(bool);
+
 
 struct A {
   int x;
@@ -7,35 +9,39 @@ struct A {
   int getx() const { return x; }
 };
 
+struct B{
+  int x;
+};
+
+void testNullObject(A *a) {
+  clang_analyzer_eval(a); // expected-warning{{UNKNOWN}}
+  (void)a->getx(); // assume we know what we're doing
+  clang_analyzer_eval(a); // expected-warning{{TRUE}}
+}
+
 void f1() {
   A x(3);
-  if (x.getx() == 3) {
-    int *p = 0;
-    *p = 3;  // expected-warning{{Dereference of null pointer}}
-  } else {
-    int *p = 0;
-    *p = 3;  // no-warning
-  }
+  clang_analyzer_eval(x.getx() == 3); // expected-warning{{TRUE}}
 }
 
 void f2() {
   const A &x = A(3);
-  if (x.getx() == 3) {
-    int *p = 0;
-    *p = 3;  // expected-warning{{Dereference of null pointer}}
-  } else {
-    int *p = 0;
-    *p = 3;  // no-warning
-  }
+  clang_analyzer_eval(x.getx() == 3); // expected-warning{{TRUE}}
 }
 
 void f3() {
   const A &x = (A)3;
-  if (x.getx() == 3) {
-    int *p = 0;
-    *p = 3;  // expected-warning{{Dereference of null pointer}}
-  } else {
-    int *p = 0;
-    *p = 3;  // no-warning
-  }
+  clang_analyzer_eval(x.getx() == 3); // expected-warning{{TRUE}}
+}
+
+void f4() {
+  A x = 3;
+  clang_analyzer_eval(x.getx() == 3); // expected-warning{{TRUE}}
+}
+
+void checkThatCopyConstructorDoesNotInvalidateObjectBeingCopied() {
+  B t;
+  t.x = 0;
+  B t2(t);
+  clang_analyzer_eval(t.x == 0); // expected-warning{{TRUE}}
 }

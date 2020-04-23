@@ -1,4 +1,6 @@
 // RUN: %clang_cc1 -fsyntax-only -verify %s
+// RUN: %clang_cc1 -fsyntax-only -verify -std=c++98 %s
+// RUN: %clang_cc1 -fsyntax-only -verify -std=c++11 %s
 
 namespace N { 
   namespace M {
@@ -21,8 +23,15 @@ namespace N {
   }
 
   M::Promote<int>::type *ret_intptr3(int* ip) { return ip; }
-  M::template Promote<int>::type *ret_intptr4(int* ip) { return ip; } // expected-warning{{'template' keyword outside of a template}}
-  M::template Promote<int> pi; // expected-warning{{'template' keyword outside of a template}}
+  M::template Promote<int>::type *ret_intptr4(int* ip) { return ip; } 
+#if __cplusplus <= 199711L
+  // expected-warning@-2 {{'template' keyword outside of a template}}
+#endif
+
+  M::template Promote<int> pi;
+#if __cplusplus <= 199711L
+  // expected-warning@-2 {{'template' keyword outside of a template}}
+#endif
 }
 
 N::M::Promote<int>::type *ret_intptr5(int* ip) { return ip; }
@@ -40,7 +49,7 @@ namespace N {
     struct X;
   };
 
-  struct B;
+  struct B; // expected-note{{declared as a non-template here}}
 }
 
 struct ::N::A<int>::X {
@@ -122,7 +131,7 @@ namespace PR9226 {
 
   template<typename T, typename U>
   struct Y {
-    typedef typename T::template f<U> type; // expected-error{{template name refers to non-type template 'X::f'}}
+    typedef typename T::template f<U> type; // expected-error{{template name refers to non-type template 'X::template f'}}
   };
 
   Y<X, int> yxi; // expected-note{{in instantiation of template class 'PR9226::Y<PR9226::X, int>' requested here}}
@@ -135,7 +144,7 @@ namespace PR9449 {
   template <typename T>
   void f() {
     int s<T>::template n<T>::* f; // expected-error{{implicit instantiation of undefined template 'PR9449::s<int>'}} \
-    // expected-error{{following the 'template' keyword}}
+    // expected-error{{no member named 'n'}}
   }
 
   template void f<int>(); // expected-note{{in instantiation of}}

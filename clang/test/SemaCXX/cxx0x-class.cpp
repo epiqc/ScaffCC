@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -fsyntax-only -verify -std=c++11 %s 
+// RUN: %clang_cc1 -Wno-uninitialized -fsyntax-only -verify -std=c++11 -Wno-error=static-float-init %s 
 
 int vs = 0;
 
@@ -20,8 +20,8 @@ namespace rdar8367341 {
   float foo(); // expected-note {{here}}
 
   struct A {
-    static const float x = 5.0f; // expected-warning {{GNU extension}} expected-note {{use 'constexpr' specifier to silence this warning}}
-    static const float y = foo(); // expected-warning {{GNU extension}} expected-note {{use 'constexpr' specifier to silence this warning}} expected-error {{in-class initializer for static data member is not a constant expression}}
+    static const float x = 5.0f; // expected-warning {{requires 'constexpr'}} expected-note {{add 'constexpr'}}
+    static const float y = foo(); // expected-warning {{requires 'constexpr'}} expected-note {{add 'constexpr'}}
     static constexpr float x2 = 5.0f;
     static constexpr float y2 = foo(); // expected-error {{must be initialized by a constant expression}} expected-note {{non-constexpr function 'foo'}}
   };
@@ -36,4 +36,20 @@ namespace Foo {
     int x;
     int y = x;
   };
+}
+
+// Instantiating another default member initializer while parsing one should
+// not cause us to mess up the 'this' override.
+template<typename> struct DefaultMemberTemplate { int n = 0; };
+class DefaultMemberInitSelf {
+  DefaultMemberTemplate<int> t = {};
+  int *p = &t.n;
+};
+
+namespace composed_templates {
+  // Regression test -- obtaining the type from composed templates should not
+  // require out-of-line definition.
+  template <typename T> struct Zero { static const typename T::type value = 0; };
+  struct Integer { using type = int; };
+  template struct Zero<Integer>;
 }

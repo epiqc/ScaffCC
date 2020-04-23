@@ -55,7 +55,7 @@ namespace noex {
   struct A {};
 
   void g1() noexcept(A()); // expected-error {{not contextually convertible}}
-  void g2(bool b) noexcept(b); // expected-error {{argument to noexcept specifier must be a constant expression}}
+  void g2(bool b) noexcept(b); // expected-error {{argument to noexcept specifier must be a constant expression}} expected-note {{read of non-const variable 'b'}} expected-note {{here}}
 
 }
 
@@ -77,5 +77,21 @@ namespace PR11084 {
     static int f() noexcept(1/X) { return 10; }  // expected-error{{argument to noexcept specifier must be a constant expression}} expected-note{{division by zero}}
   };
 
-  void g() { A<0>::f(); } // expected-note{{in instantiation of exception specification for 'f' requested here}}
+  template<int X> void f() {
+    int (*p)() noexcept(1/X); // expected-error{{argument to noexcept specifier must be a constant expression}} expected-note{{division by zero}}
+  };
+
+  void g() {
+    A<0>::f(); // expected-note{{in instantiation of exception specification for 'f'}}
+    f<0>(); // expected-note{{in instantiation of function template specialization}}
+  }
 }
+
+namespace FuncTmplNoexceptError {
+  int a = 0;
+  // expected-error@+1{{argument to noexcept specifier must be a constant expression}}
+  template <class T> T f() noexcept(a++){ return {};}
+  void g(){
+    f<int>();
+  }
+};

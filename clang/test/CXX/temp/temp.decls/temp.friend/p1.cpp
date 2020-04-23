@@ -174,7 +174,7 @@ namespace test7 {
 
   // This shouldn't crash.
   template <class T> class D {
-    friend class A; // expected-error {{elaborated type refers to a template}}
+    friend class A; // expected-error {{template 'A' cannot be referenced with a class specifier}}
   };
   template class D<int>;
 }
@@ -302,6 +302,7 @@ namespace test14 {
   };
 
   template <class T> class B {
+  public:
     void foo() { return A<long>::foo(); } // expected-error {{'foo' is a private member of 'test14::A<long>'}}
   };
 
@@ -320,10 +321,12 @@ namespace test15 {
   };
 
   template <class T> class B {
+  public:
     void foo() { return A<long>::foo(); } // expected-error {{'foo' is a private member of 'test15::A<long>'}}
   };
 
   template <> class B<float> {
+  public:
     void foo() { return A<float>::foo(); }
     template <class U> void bar(U u) {
       (void) A<float>::foo();
@@ -355,4 +358,32 @@ namespace PR10913 {
   template void f(X<int> *);
   template void f2<int>(X<int> *);
   template void f2<float>(X<int> *); // expected-note{{in instantiation of function template specialization 'PR10913::f2<float, int>' requested here}}
+}
+
+namespace test16 {
+template <class T> struct foo {}; // expected-note{{candidate ignored: not a function template}}
+template <class T> class A {
+  friend void foo<T>(); // expected-error{{no candidate function template was found for dependent friend function template specialization}}
+};
+}
+
+namespace test17 {
+namespace ns {
+template <class T> void foo() {} // expected-note{{candidate ignored: not a member of the enclosing namespace; did you mean to explicitly qualify the specialization?}}
+}
+using ns::foo;
+template <class T> struct A {
+  friend void foo<T>() {} // expected-error{{no candidate function template was found for dependent friend function template specialization}}
+};
+}
+
+namespace test18 {
+namespace ns1 { template <class T> struct foo {}; } // expected-note{{candidate ignored: not a function template}}
+namespace ns2 { void foo() {} } // expected-note{{candidate ignored: not a function template}}
+using ns1::foo; // expected-note {{found by name lookup}}
+using ns2::foo; // expected-note {{found by name lookup}}
+
+template <class T> class A {
+  friend void foo<T>() {} // expected-error {{ambiguous}} expected-error{{no candidate function template was found for dependent friend function template specialization}}
+};
 }

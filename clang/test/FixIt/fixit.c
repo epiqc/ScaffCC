@@ -1,9 +1,8 @@
 // RUN: %clang_cc1 -pedantic -Wunused-label -verify -x c %s
 // RUN: cp %s %t
 // RUN: not %clang_cc1 -pedantic -Wunused-label -fixit -x c %t
-// RUN: grep -v CHECK %t > %t2
 // RUN: %clang_cc1 -pedantic -Wunused-label -Werror -x c %t
-// RUN: FileCheck -input-file=%t2 %t
+// RUN: grep -v CHECK %t | FileCheck %t
 
 /* This is a test of the various code modification hints that are
    provided as part of warning or extension diagnostics. All of the
@@ -81,6 +80,13 @@ void oopsMoreCommas() {
   &a == &b ? oopsMoreCommas() : removeUnusedLabels(a[0]);
 }
 
+int commaAtEndOfStatement() {
+  int a = 1;
+  a = 5, // expected-error {{';'}}
+  int m = 5, // expected-error {{';'}}
+  return 0, // expected-error {{';'}}
+}
+
 int noSemiAfterLabel(int n) {
   switch (n) {
     default:
@@ -100,3 +106,13 @@ int noSemiAfterLabel(int n) {
   }
   return 1;
 }
+
+struct noSemiAfterStruct // expected-error {{expected ';' after struct}}
+struct noSemiAfterStruct {
+  int n // expected-warning {{';'}}
+} // expected-error {{expected ';' after struct}}
+enum noSemiAfterEnum {
+  e1
+} // expected-error {{expected ';' after enum}}
+
+int PR17175 __attribute__((visibility(hidden))); // expected-error {{'visibility' attribute requires a string}}
