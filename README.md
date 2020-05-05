@@ -45,26 +45,26 @@ Getting ScaffCC
 
 1.  Go to https://github.com/epiqc/ScaffCC
 
-2.  For the **Unix build**, download the repository:
+2.  For the **Mac and Unix build**, download the repository:
 
            git clone https://github.com/epiqc/ScaffCC.git [dir]
-
-3.  For the **OS X build**, download the repository:
-
-           git clone -b ScaffCC_OSX https://github.com/epiqc/ScaffCC.git [dir]
 
 Building ScaffCC
 ----------------
 
 ### Prerequisites
 
-#### For OS X build
+#### For macOS build
 
 1.  If not already installed, Xcode command line tool is required in order to build ScaffCC. 
 
             xcode-select --install
 
 2.  Python 2.7/3: Python is usually bundled with macOS. The built-in version should be sufficient.
+
+3.  CMake: Can be downloaded from <https://cmake.org/install> or installed via Homebrew
+
+4.  Ninja: for much faster builds: <https://ninja-build.org>
  
 #### For Unix build
 
