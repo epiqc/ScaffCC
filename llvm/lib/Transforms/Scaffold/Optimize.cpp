@@ -71,6 +71,8 @@ namespace {
     int target;
     int control1;
     int control2;
+    bool hasParam;
+    double param;
   };
 
   struct Optimize : public ModulePass {
@@ -1187,7 +1189,7 @@ void Optimize::optimal_initial(Function * F, vector<string> &B, vector<OpGate> &
         string qName = printVarName((*vvit).argPtr->getName());
         unsigned dMul = 1;
         //flatten multi-array 
-        for(unsigned ndim = 0; ndim < (*vvit).numDim; ndim++){
+        for(int ndim = 0; ndim < (*vvit).numDim; ndim++){
             dMul *= dMul * (*vvit).dimSize[ndim];
          }
         for(unsigned dimIter = 0; dimIter < dMul; dimIter++){
@@ -1198,7 +1200,7 @@ void Optimize::optimal_initial(Function * F, vector<string> &B, vector<OpGate> &
     }
 
     for(unsigned mIndex=0;mIndex<mapFunction.size();mIndex++){
-        OpGate nxtGate = {'\0', 0, 0, 0};
+        OpGate nxtGate = {'\0', 0, 0, 0, 0, 0.0};
 
 	    string fName = mapFunction[mIndex].func->getName();
 
@@ -1216,17 +1218,25 @@ void Optimize::optimal_initial(Function * F, vector<string> &B, vector<OpGate> &
 		// Need a new variable representation for rotations in different axes?
 //      else if(fName.substr(0,2) == "Rx"){ nxtGate.gateTy = 'r';}
 //      else if(fName.substr(0,2) == "Ry"){ nxtGate.gateTy = 'r';}
-        else if(fName.substr(0,2) == "Rz"){ nxtGate.gateTy = 'r';}
+        else if(fName.find("Rz") !=string::npos) { nxtGate.gateTy = 'r';}
         else if(fName.find("X.") !=string::npos){ nxtGate.gateTy = 'x';}
         else if(fName.find("Z.") !=string::npos){ nxtGate.gateTy = 'z';}
        
         unsigned ToC = 0; //target or control
         for(vector<qGateArg>::iterator vpIt=mapFunction[mIndex].qArgs.begin(), vpItE=mapFunction[mIndex].qArgs.end();vpIt!=vpItE;++vpIt){
+           
+           if (!(*vpIt).argPtr){
+            if ((*vpIt).isParam || (*vpIt).isDouble){
+              nxtGate.hasParam = true;
+              nxtGate.param = (double) (*vpIt).val;
+              continue;
+            }
+           }
            string qName = printVarName((*vpIt).argPtr->getName()) ;
            unsigned qInd = 0;
            for(vector<qGateArg>::iterator vvit=qbitsInitInFunc.begin(),vvitE=qbitsInitInFunc.end();vvit!=vvitE;++vvit){
                    if((*vvit).argPtr == (*vpIt).argPtr){
-                       for(unsigned ndim = 0; ndim < (*vpIt).numDim-1; ndim++){
+                       for(int ndim = 0; ndim < (*vpIt).numDim-1; ndim++){
                             qInd += (*vpIt).dimSize[ndim]*(*vvit).dimSize[ndim+1];
                        }
                        qInd += (*vpIt).dimSize[(*vpIt).numDim-1];
@@ -1235,7 +1245,6 @@ void Optimize::optimal_initial(Function * F, vector<string> &B, vector<OpGate> &
            qName = qName + '_' + to_string(qInd);
            bool foundGate = false;
            for(unsigned i = 1; i < B.size(); i++){
-
                if(qName.compare(B[i]) == 0){
                    if(nxtGate.gateTy == 'c'){
                       if(ToC == 0) 
@@ -1278,6 +1287,8 @@ void Optimize::erase_OpGate(OpGate& g){
     g.target = 0;
     g.control1 = 0;
     g.control2 = 0;
+    g.hasParam = 0;
+    g.param = 0.0;
     return;
 }
 void Optimize::optimal(vector<OpGate>& G, vector<unsigned>& M){
@@ -1542,6 +1553,9 @@ bool Optimize::runOnModule(Module &M) {
                 }
                 if(gateList[i].target > 0)
                     {errs()<<bitMap[gateList[i].target];} 
+
+                if(gateList[i].hasParam)
+                    {errs()<<","<<gateList[i].param;} 
 
                 errs()<<"\n";
 
