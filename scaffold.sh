@@ -30,7 +30,7 @@ function show_help {
 }
 
 function show_version {
-    echo "Scaffold - Release 4.1 (June 28, 2018)"
+    echo "Scaffold - Release 5.0 (April 23, 2020)"
 }
 
 # Parse opts
