@@ -28,11 +28,18 @@
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DebugInfo.h"
 #include "llvm/IR/IntrinsicInst.h"
+#include "llvm/Support/CommandLine.h"
 
 using namespace llvm;
 using namespace std;
 
 #define MAX_BACKTRACE_COUNT 150 //max number of backtrace allowed (avoid infinite recursive backtrace)
+
+static cl::opt<bool>
+    UnrollToff("unroll-toffolis-during-qasmgen",
+               cl::desc("Make sure that Toffoli's revealed from other gates "
+                        "are unrolled as well."),
+               cl::Hidden, cl::init(false));
 
 /* Set true if debug mode. */
 bool debugGenOpenQASM = false;
@@ -182,7 +189,9 @@ namespace{
         }
     }
 
-    return ss.str();
+    string retStr = ss.str();
+    std::replace(retStr.begin(), retStr.end(), '.', '_');
+    return retStr;
   }
 
   void dataRepresentation::printDebugMode(){
@@ -746,17 +755,48 @@ void GenQASM::genQASM_block(BasicBlock * blockBlock){
         if(fnCallList[mIndex].qArgs[2].isPtr) fnCallList[mIndex].qArgs[2].isPtr = false;
 
         //Step 1, CNOT(second input, third input)
-        errs() << "cx " << fnCallList[mIndex].qArgs[1].qbitVarString() << ", ";
-        errs() << fnCallList[mIndex].qArgs[2].qbitVarString() << ";\n";
+        errs() << "cx " << fnCallList[mIndex].qArgs[2].qbitVarString() << ", ";
+        errs() << fnCallList[mIndex].qArgs[1].qbitVarString() << ";\n";
 
         //Step 2, Toffoli(first input, third input, second input)
-        errs() << "ccx " << fnCallList[mIndex].qArgs[0].qbitVarString() << ", ";
-        errs() << fnCallList[mIndex].qArgs[1].qbitVarString() << ", ";
-        errs() << fnCallList[mIndex].qArgs[2].qbitVarString() << ";\n";
+        if (UnrollToff) {
+          errs() << "h " << fnCallList[mIndex].qArgs[2].qbitVarString() << "\n";
+          errs() << "cx " << fnCallList[mIndex].qArgs[1].qbitVarString()
+                 << ",  " << fnCallList[mIndex].qArgs[2].qbitVarString()
+                 << "\n";
+
+          errs() << "tdg " << fnCallList[mIndex].qArgs[2].qbitVarString()
+                 << "\n";
+          errs() << "cx " << fnCallList[mIndex].qArgs[0].qbitVarString()
+                 << ",  " << fnCallList[mIndex].qArgs[2].qbitVarString()
+                 << "\n";
+          errs() << "t " << fnCallList[mIndex].qArgs[2].qbitVarString() << "\n";
+          errs() << "cx " << fnCallList[mIndex].qArgs[1].qbitVarString()
+                 << ",  " << fnCallList[mIndex].qArgs[2].qbitVarString()
+                 << "\n";
+          errs() << "tdg " << fnCallList[mIndex].qArgs[2].qbitVarString()
+                 << "\n";
+          errs() << "cx " << fnCallList[mIndex].qArgs[0].qbitVarString()
+                 << ",  " << fnCallList[mIndex].qArgs[2].qbitVarString()
+                 << "\n";
+          errs() << "t " << fnCallList[mIndex].qArgs[1].qbitVarString() << "\n";
+          errs() << "t " << fnCallList[mIndex].qArgs[2].qbitVarString() << "\n";
+          errs() << "h " << fnCallList[mIndex].qArgs[2].qbitVarString() << "\n";
+          errs() << "cx " << fnCallList[mIndex].qArgs[0].qbitVarString()
+                 << ",  " << fnCallList[mIndex].qArgs[1].qbitVarString()
+                 << "\n";
+          errs() << "t " << fnCallList[mIndex].qArgs[0].qbitVarString() << "\n";
+          errs() << "tdg " << fnCallList[mIndex].qArgs[1].qbitVarString()
+                 << "\n";
+        } else {
+          errs() << "ccx " << fnCallList[mIndex].qArgs[0].qbitVarString() << ", ";
+          errs() << fnCallList[mIndex].qArgs[1].qbitVarString() << ", ";
+          errs() << fnCallList[mIndex].qArgs[2].qbitVarString() << ";\n";
+        }
 
         //Step 3, CNOT(second input, third input)
-        errs() << "cx " << fnCallList[mIndex].qArgs[1].qbitVarString() << ", ";
-        errs() << fnCallList[mIndex].qArgs[2].qbitVarString() << ";\n";
+        errs() << "cx " << fnCallList[mIndex].qArgs[2].qbitVarString() << ", ";
+        errs() << fnCallList[mIndex].qArgs[1].qbitVarString() << ";\n";
 
         continue;
       }

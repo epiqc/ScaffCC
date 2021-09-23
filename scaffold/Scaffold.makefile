@@ -219,7 +219,11 @@ $(FILE).qasm: $(FILE)12.ll
 	@echo "[Scaffold.makefile] Flattening modules ..."
 	@$(OPT) -S -load $(SCAFFOLD_LIB) -FlattenModule -all 1 $(FILE)12.ll -o $(FILE)12.inlined.ll 2> /dev/null
 	@echo "[Scaffold.makefile] Generating OpenQASM ..."
-	@$(OPT) -load $(SCAFFOLD_LIB) -gen-openqasm $(FILE)12.inlined.ll 2> $(FILE).qasm > /dev/null
+	@if [ $(TOFF) -eq 1 ]; then \
+  	@$(OPT) -load $(SCAFFOLD_LIB) -gen-openqasm -unroll-toffolis-during-qasmgen $(FILE)12.inlined.ll 2> $(FILE).qasm > /dev/null; \
+	else \
+		@$(OPT) -load $(SCAFFOLD_LIB) -gen-openqasm $(FILE)12.inlined.ll 2> $(FILE).qasm > /dev/null; \
+	fi
 	@echo "[Scaffold.makefile] OpenQASM written to $(FILE).qasm ..."
 
 # Generate optimized QASM
