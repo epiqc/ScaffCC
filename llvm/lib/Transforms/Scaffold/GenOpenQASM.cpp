@@ -189,9 +189,10 @@ namespace{
         }
     }
 
-    string retStr = ss.str();
+    /*string retStr = ss.str();
     std::replace(retStr.begin(), retStr.end(), '.', '_');
-    return retStr;
+    return retStr;*/
+    return ss.str();
   }
 
   void dataRepresentation::printDebugMode(){
@@ -683,7 +684,7 @@ void GenQASM::genQASM_REG(Function* F){
         //std::replace(ss.begin(), ss.end(), '_', 'x');
         errs() << "creg " << ss << "[" << num << "];\n";
       }else{
-        for(int n = 0; n < num/(*vvit).dimSize[numDim-1]; n++){
+        for(int n = 0; n < num/(*vvit).dimSize[numDim - 1]; n++){
           string ss = (*vvit).getName();
           std::replace(ss.begin(), ss.end(), '.', '_');
           //std::replace(ss.begin(), ss.end(), '_', 'x');
